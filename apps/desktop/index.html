@@ -1,0 +1,217 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>AI 工作台</title>
+    <script type="module" src="/src/main.ts"></script>
+  </head>
+  <body>
+    <main class="app-shell">
+      <aside class="sidebar">
+        <section class="sidebar-section">
+          <div class="sidebar-heading">
+            <span>项目</span>
+            <button id="chooseProject" class="icon-button" title="选择本地项目" type="button">＋</button>
+          </div>
+          <div id="projectConversationTree" class="project-tree"></div>
+        </section>
+        <section class="sidebar-section bottom-section">
+          <div class="sidebar-heading">
+            <span>对话</span>
+            <div class="sidebar-tools">
+              <button id="detectProviders" class="icon-button" title="检测 AI 工具" type="button">≡</button>
+              <button id="createAiSession" class="icon-button" title="新建 AI CLI 会话" type="button">✎</button>
+            </div>
+          </div>
+          <p class="muted-line">完整历史保存在本机 SQLite</p>
+        </section>
+      </aside>
+
+      <section class="content">
+        <section class="view" data-view-panel="workspace">
+          <header class="topbar">
+            <div>
+              <h1>工作台首页</h1>
+              <p>先选择本地项目，再创建 AI 会话或接管已有 tmux/screen 会话。</p>
+            </div>
+            <div class="topbar-actions">
+              <button id="refreshWorkspace" class="button secondary" type="button">刷新</button>
+              <button class="button primary narrow" data-view-shortcut="projects" type="button">选择项目</button>
+            </div>
+          </header>
+          <section class="metrics-grid">
+            <article class="metric-card">
+              <p>AI 工具</p>
+              <strong id="providerCount">0</strong>
+              <span id="providerSummary">等待检测</span>
+            </article>
+            <article class="metric-card">
+              <p>项目</p>
+              <strong id="projectCount">0</strong>
+              <span>本地登记项目</span>
+            </article>
+            <article class="metric-card">
+              <p>AI 会话</p>
+              <strong id="aiSessionCount">0</strong>
+              <span>本机本地会话</span>
+            </article>
+          </section>
+          <section class="workspace-grid">
+            <article class="panel">
+              <div class="panel-heading">
+                <div>
+                  <h2>项目入口</h2>
+                  <p>每个项目都可以创建新的 AI 会话，也可以绑定已有 tmux/screen 会话。</p>
+                </div>
+              </div>
+              <div id="workspaceProjects" class="compact-list"></div>
+            </article>
+            <aside class="side-panels">
+              <article class="panel">
+                <h2>AI 工具状态</h2>
+                <div id="workspaceProviders" class="compact-list"></div>
+              </article>
+              <article class="panel">
+                <h2>最近 AI 会话</h2>
+                <div id="workspaceSessions" class="session-list"></div>
+              </article>
+              <article class="panel">
+                <h2>当前项目 Git 摘要</h2>
+                <div id="workspaceGit" class="result-box">添加项目后显示 Git 状态。</div>
+              </article>
+            </aside>
+          </section>
+        </section>
+
+        <section class="view" data-view-panel="projects">
+          <header class="topbar">
+            <div>
+              <h1>项目</h1>
+              <p>选择本机项目，然后创建新 AI 会话或接管已有会话。</p>
+            </div>
+            <button id="chooseProject" class="button primary narrow" type="button">选择本地项目</button>
+          </header>
+          <section class="workspace-grid two-columns">
+            <article class="panel">
+              <h2>添加项目</h2>
+              <label><span>项目目录</span><input id="projectPath" placeholder="点击下方按钮选择本地项目目录" /></label>
+              <div class="button-row">
+                <button id="chooseProjectInPanel" class="button primary narrow" type="button">打开文件夹选择器</button>
+                <button id="addProject" class="button secondary narrow" type="button">手动添加路径</button>
+              </div>
+              <div id="projectResult" class="result-box">请选择一个本机项目目录。</div>
+            </article>
+            <article class="panel">
+              <h2>项目列表</h2>
+              <p class="hint-text">项目是主入口。AI 会话会挂在项目下面，底层 tmux/screen 只作为承载层。</p>
+              <div id="projectList" class="compact-list"></div>
+            </article>
+          </section>
+        </section>
+
+        <section class="view active" data-view-panel="aiSessions">
+          <header class="chat-topbar">
+            <div>
+              <strong id="chatHeaderProject">未选择项目</strong>
+              <span id="chatHeaderMeta">选择项目后开始聊天</span>
+            </div>
+          </header>
+          <section class="chat-workspace">
+            <article class="chat-main-panel">
+              <div id="chatContextBar" class="chat-context-bar">
+                <select id="chatProjectSelect" aria-label="项目"><option value="">先选择本地项目</option></select>
+                <select id="aiSessionSelect" aria-label="已有对话"><option value="">新建会话</option></select>
+                <select id="aiProvider" aria-label="AI 工具"></select>
+                <select id="creationMode" aria-label="创建方式"><option value="auto">新建 CLI 会话</option><option value="attach">接管已有会话</option></select>
+                <select id="terminalSessionId" aria-label="接管目标"><option value="">先刷新会话列表</option></select>
+                <button id="refreshAttachSessions" class="button secondary mini" type="button">刷新会话</button>
+                <input id="aiSessionTitle" value="新的 AI CLI 会话" aria-label="会话标题" />
+                <button id="startAiSession" class="button primary mini" type="button">启动会话</button>
+                <input id="aiProjectPath" type="hidden" />
+              </div>
+              <div class="chat-thread-heading">
+                <h2 id="chatTitle">AI 聊天</h2>
+                <span id="chatStatus" class="badge">未创建</span>
+              </div>
+              <div id="aiChatPreview" class="terminal-preview"></div>
+              <div id="createAiResult" class="chat-toast">选择项目和 AI 工具后，先新建一个真实 CLI 会话，或接管已有 tmux/screen 会话。</div>
+              <div class="chat-composer">
+                <textarea id="chatPrompt" rows="3" placeholder="先新建或接管一个 AI CLI 会话，然后在这里输入 prompt"></textarea>
+                <button id="sendPrompt" class="button primary" type="button">发送</button>
+              </div>
+            </article>
+          </section>
+        </section>
+
+        <section class="view" data-view-panel="providers">
+          <header class="topbar">
+            <div>
+              <h1>AI 工具</h1>
+              <p>检测本机 AI CLI/TUI，配置内置和自定义 Provider。</p>
+            </div>
+            <button id="detectProviders" class="button secondary" type="button">重新检测</button>
+          </header>
+          <article class="panel">
+            <div id="providerList" class="provider-grid"></div>
+          </article>
+        </section>
+
+        <section class="view" data-view-panel="pairing">
+          <header class="topbar">
+            <div>
+              <h1>设备配对</h1>
+              <p>绑定当前桌面到移动端账号。移动端可远程控制 AI 会话。</p>
+            </div>
+          </header>
+          <section class="workspace-grid two-columns">
+            <article class="panel pairing-card">
+              <h2>配对当前桌面</h2>
+              <label><span>服务器地址</span><input data-server-input value="http://127.0.0.1:8080" /></label>
+              <label><span>配对码</span><input data-code-input placeholder="A7K9Q2LM" maxlength="16" /></label>
+              <button data-pair-button class="button primary" type="button">配对这台桌面</button>
+              <div data-pair-result class="result-box large">配对成功后显示 device_id 与 token 摘要。</div>
+            </article>
+            <article class="panel">
+              <h2>同步策略</h2>
+              <dl class="detail-list">
+                <div><dt>云端</dt><dd>只保存元信息和摘要</dd></div>
+                <div><dt>完整历史</dt><dd>本机 SQLite</dd></div>
+                <div><dt>移动端历史</dt><dd>桌面在线时拉取</dd></div>
+                <div><dt>底层承载</dt><dd>tmux / screen</dd></div>
+              </dl>
+            </article>
+          </section>
+        </section>
+
+        <section class="view" data-view-panel="settings">
+          <header class="topbar">
+            <div>
+              <h1>设置</h1>
+              <p>配置云端服务器、设备名称、本地历史和风险保护。</p>
+            </div>
+            <button id="saveSettings" class="button primary narrow" type="button">保存设置</button>
+          </header>
+          <section class="workspace-grid two-columns">
+            <article class="panel">
+              <h2>基础设置</h2>
+              <label><span>服务器地址</span><input id="settingsServer" value="http://127.0.0.1:8080" /></label>
+              <label><span>设备名称</span><input id="settingsDeviceName" value="gl-H610M" /></label>
+              <label><span>本地 SQLite</span><input id="settingsDb" value="~/.ai-workbench/history.db" /></label>
+              <div id="settingsResult" class="result-box">尚未保存</div>
+            </article>
+            <article class="panel">
+              <h2>开关</h2>
+              <div class="setting-list">
+                <label class="switch-row">风险保护<span>高危命令需确认</span><input type="checkbox" checked /></label>
+                <label class="switch-row">自动重连<span>断线后自动恢复</span><input type="checkbox" checked /></label>
+                <label class="switch-row">完整历史<span>仅保存到桌面本地</span><input type="checkbox" checked /></label>
+                <label class="switch-row">保留底层终端<span>显示 tmux/screen 调试信息</span><input type="checkbox" checked /></label>
+              </div>
+            </article>
+          </section>
+        </section>
+      </section>
+    </main>
+  </body>
+</html>

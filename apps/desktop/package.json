@@ -1,0 +1,20 @@
+{
+  "name": "remote-term-desktop",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "tauri dev",
+    "build": "tauri build",
+    "vite:dev": "vite --host 127.0.0.1 --port 1420 --strictPort",
+    "vite:build": "vite build"
+  },
+  "dependencies": {
+    "@tauri-apps/api": "^2.0.0"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "^2.0.0",
+    "vite": "^6.0.0",
+    "typescript": "^5.6.0"
+  }
+}

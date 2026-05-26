@@ -1,0 +1,21 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "AI 工作台",
+  "version": "0.1.0",
+  "identifier": "app.remote-term.desktop",
+  "build": {
+    "beforeDevCommand": "npm run vite:dev",
+    "devUrl": "http://127.0.0.1:1420",
+    "beforeBuildCommand": "npm run vite:build",
+    "frontendDist": "../dist"
+  },
+  "app": {
+    "windows": [
+      {
+        "title": "AI 工作台",
+        "width": 920,
+        "height": 720
+      }
+    ]
+  }
+}
