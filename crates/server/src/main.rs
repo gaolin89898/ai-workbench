@@ -214,10 +214,7 @@ async fn main() -> anyhow::Result<()> {
         .route("/devices", get(list_devices))
         .route("/devices/{device_id}", get(get_device_detail))
         .route("/devices/{device_id}/sessions", get(list_sessions))
-        .route(
-            "/devices/{device_id}/providers",
-            get(list_device_providers),
-        )
+        .route("/devices/{device_id}/providers", get(list_device_providers))
         .route(
             "/devices/{device_id}/projects",
             get(list_projects).post(create_project),
@@ -419,7 +416,9 @@ async fn create_project(
     let user_id = authenticate_headers(&state, &headers)?;
     ensure_device_owner(&state.pool, user_id, device_id).await?;
     if req.name.trim().is_empty() || req.path.trim().is_empty() {
-        return Err(ApiError::BadRequest("project name and path are required".to_string()));
+        return Err(ApiError::BadRequest(
+            "project name and path are required".to_string(),
+        ));
     }
     let row = sqlx::query(
         r#"
@@ -446,7 +445,7 @@ async fn list_ai_sessions(
     let user_id = authenticate_headers(&state, &headers)?;
     ensure_device_owner(&state.pool, user_id, device_id).await?;
     let rows = sqlx::query(
-        "SELECT id, user_id, device_id, project_id, provider_id, terminal_session_id, title, status, summary, updated_at FROM ai_sessions WHERE device_id = $1 AND user_id = $2 ORDER BY updated_at DESC",
+        "SELECT id, user_id, device_id, project_id, provider_id, terminal_session_id, title, status, summary, archived_at, updated_at FROM ai_sessions WHERE device_id = $1 AND user_id = $2 ORDER BY updated_at DESC",
     )
     .bind(device_id)
     .bind(user_id)
@@ -468,16 +467,18 @@ async fn create_ai_session(
     let user_id = authenticate_headers(&state, &headers)?;
     ensure_device_owner(&state.pool, user_id, device_id).await?;
     if req.provider_id.trim().is_empty() || req.title.trim().is_empty() {
-        return Err(ApiError::BadRequest("providerId and title are required".to_string()));
+        return Err(ApiError::BadRequest(
+            "providerId and title are required".to_string(),
+        ));
     }
     if let Some(project_id) = req.project_id {
         ensure_project_owner(&state.pool, device_id, project_id).await?;
     }
     let row = sqlx::query(
         r#"
-        INSERT INTO ai_sessions (user_id, device_id, project_id, provider_id, terminal_session_id, title, status, summary, updated_at)
-        VALUES ($1, $2, $3, $4, $5, $6, 'idle', $7, NOW())
-        RETURNING id, user_id, device_id, project_id, provider_id, terminal_session_id, title, status, summary, updated_at
+        INSERT INTO ai_sessions (user_id, device_id, project_id, provider_id, terminal_session_id, title, status, summary, archived_at, updated_at)
+        VALUES ($1, $2, $3, $4, $5, $6, 'idle', $7, NULL, NOW())
+        RETURNING id, user_id, device_id, project_id, provider_id, terminal_session_id, title, status, summary, archived_at, updated_at
         "#,
     )
     .bind(user_id)
@@ -516,7 +517,7 @@ async fn get_ai_session(
 ) -> Result<Json<AiSession>, ApiError> {
     let user_id = authenticate_headers(&state, &headers)?;
     let row = sqlx::query(
-        "SELECT id, user_id, device_id, project_id, provider_id, terminal_session_id, title, status, summary, updated_at FROM ai_sessions WHERE id = $1 AND user_id = $2",
+        "SELECT id, user_id, device_id, project_id, provider_id, terminal_session_id, title, status, summary, archived_at, updated_at FROM ai_sessions WHERE id = $1 AND user_id = $2",
     )
     .bind(session_id)
     .bind(user_id)
@@ -962,7 +963,10 @@ async fn handle_mobile_message(state: &Arc<AppState>, user_id: Uuid, message: Re
                 .await;
                 return;
             }
-            let body = format!("AI 会话 {ai_session_id}：{}", content.chars().take(160).collect::<String>());
+            let body = format!(
+                "AI 会话 {ai_session_id}：{}",
+                content.chars().take(160).collect::<String>()
+            );
             insert_activity_log(
                 &state.pool,
                 ActivityLogInsert {
@@ -1436,10 +1440,10 @@ async fn upsert_ai_sessions(pool: &PgPool, sessions: &[AiSession]) -> Result<(),
     for session in sessions {
         sqlx::query(
             r#"
-            INSERT INTO ai_sessions (id, user_id, device_id, project_id, provider_id, terminal_session_id, title, status, summary, updated_at)
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+            INSERT INTO ai_sessions (id, user_id, device_id, project_id, provider_id, terminal_session_id, title, status, summary, archived_at, updated_at)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
             ON CONFLICT (id)
-            DO UPDATE SET project_id = EXCLUDED.project_id, provider_id = EXCLUDED.provider_id, terminal_session_id = EXCLUDED.terminal_session_id, title = EXCLUDED.title, status = EXCLUDED.status, summary = EXCLUDED.summary, updated_at = EXCLUDED.updated_at
+            DO UPDATE SET project_id = EXCLUDED.project_id, provider_id = EXCLUDED.provider_id, terminal_session_id = EXCLUDED.terminal_session_id, title = EXCLUDED.title, status = EXCLUDED.status, summary = EXCLUDED.summary, archived_at = EXCLUDED.archived_at, updated_at = EXCLUDED.updated_at
             "#,
         )
         .bind(session.id)
@@ -1451,6 +1455,7 @@ async fn upsert_ai_sessions(pool: &PgPool, sessions: &[AiSession]) -> Result<(),
         .bind(&session.title)
         .bind(serde_json::to_value(&session.status).unwrap().as_str().unwrap())
         .bind(&session.summary)
+        .bind(session.archived_at)
         .bind(session.updated_at)
         .execute(&mut *tx)
         .await?;
@@ -1542,6 +1547,7 @@ fn row_to_ai_session(row: sqlx::postgres::PgRow) -> anyhow::Result<AiSession> {
         title: row.get("title"),
         status: serde_json::from_value(serde_json::Value::String(row.get("status")))?,
         summary: row.get("summary"),
+        archived_at: row.get("archived_at"),
         updated_at: row.get("updated_at"),
     })
 }

@@ -132,6 +132,7 @@ pub struct AiSession {
     pub title: String,
     pub status: AiSessionStatus,
     pub summary: Option<String>,
+    pub archived_at: Option<DateTime<Utc>>,
     pub updated_at: DateTime<Utc>,
 }
 

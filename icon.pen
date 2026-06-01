@@ -1,0 +1,1105 @@
+{
+  "version": "2.13",
+  "children": [
+    {
+      "type": "frame",
+      "id": "bi8Au",
+      "x": 0,
+      "y": 0,
+      "name": "AI Workbench Page Icon Set",
+      "clip": true,
+      "width": 800,
+      "height": 600,
+      "fill": "#F8FAFC",
+      "layout": "none",
+      "children": [
+        {
+          "type": "text",
+          "id": "q6vsG",
+          "x": 44,
+          "y": 32,
+          "name": "Icon Set Title",
+          "fill": "#0F172A",
+          "content": "AI 工作台页面图标",
+          "fontFamily": "Inter",
+          "fontSize": 28,
+          "fontWeight": "800"
+        },
+        {
+          "type": "text",
+          "id": "rZ65D",
+          "x": 44,
+          "y": 70,
+          "name": "Icon Set Subtitle",
+          "fill": "#64748B",
+          "textGrowth": "fixed-width",
+          "width": 520,
+          "content": "用于侧边栏、页面标题、列表操作和状态区。统一 20px 线性风格，默认灰蓝色，当前/主操作使用钴蓝色。",
+          "lineHeight": 1.35,
+          "fontFamily": "Inter",
+          "fontSize": 13,
+          "fontWeight": "600"
+        },
+        {
+          "type": "frame",
+          "id": "geslu",
+          "x": 600,
+          "y": 40,
+          "name": "Icon Tokens",
+          "width": 150,
+          "height": 78,
+          "fill": "#00000000",
+          "layout": "vertical",
+          "gap": 6,
+          "children": [
+            {
+              "type": "text",
+              "id": "fRxRZ",
+              "name": "Token Stroke",
+              "fill": "#64748B",
+              "content": "stroke #64748B",
+              "fontFamily": "Geist Mono",
+              "fontSize": 12,
+              "fontWeight": "normal"
+            },
+            {
+              "type": "text",
+              "id": "lBAlj",
+              "name": "Token Active",
+              "fill": "#2563EB",
+              "content": "active #2563EB",
+              "fontFamily": "Geist Mono",
+              "fontSize": 12,
+              "fontWeight": "normal"
+            },
+            {
+              "type": "text",
+              "id": "d1tlWX",
+              "name": "Token Size",
+              "fill": "#64748B",
+              "content": "20 / 24 / 32px",
+              "fontFamily": "Geist Mono",
+              "fontSize": 12,
+              "fontWeight": "normal"
+            }
+          ]
+        },
+        {
+          "type": "frame",
+          "id": "smpmm",
+          "x": 44,
+          "y": 136,
+          "name": "工作台 Tile",
+          "width": 150,
+          "height": 112,
+          "fill": "#FFFFFF",
+          "cornerRadius": 8,
+          "stroke": "#E2E8F0",
+          "strokeWidth": 1,
+          "layout": "none",
+          "children": [
+            {
+              "type": "frame",
+              "id": "Z3FqV3",
+              "x": 16,
+              "y": 16,
+              "name": "工作台 Icon Frame",
+              "width": 48,
+              "height": 48,
+              "fill": "#EFF6FF",
+              "cornerRadius": 10,
+              "stroke": "#BFDBFE",
+              "strokeWidth": 1,
+              "layout": "none",
+              "children": [
+                {
+                  "type": "path",
+                  "id": "KnwZ9",
+                  "x": 8,
+                  "y": 8,
+                  "name": "Workspace Window",
+                  "geometry": "M4 6.5c0-1.1 0.9-2 2-2h12c1.1 0 2 0.9 2 2v11c0 1.1-0.9 2-2 2h-12c-1.1 0-2-0.9-2-2v-11z m0.5 2.5h15m-11.5 4h3m-3 3h7",
+                  "viewBox": [
+                    0,
+                    0,
+                    24,
+                    24
+                  ],
+                  "fill": "#00000000",
+                  "width": 32,
+                  "height": 32,
+                  "stroke": "#2563EB",
+                  "strokeWidth": 1.8,
+                  "strokeLinejoin": "round",
+                  "strokeLinecap": "round"
+                },
+                {
+                  "type": "ellipse",
+                  "id": "qzqzI",
+                  "x": 34,
+                  "y": 14,
+                  "name": "Workspace Active Dot",
+                  "fill": "#2563EB",
+                  "width": 4,
+                  "height": 4
+                }
+              ]
+            },
+            {
+              "type": "text",
+              "id": "GOjmq",
+              "x": 16,
+              "y": 74,
+              "name": "工作台 Label",
+              "fill": "#0F172A",
+              "textGrowth": "fixed-width",
+              "width": 118,
+              "content": "工作台",
+              "fontFamily": "Inter",
+              "fontSize": 13,
+              "fontWeight": "750"
+            },
+            {
+              "type": "text",
+              "id": "zRZzV",
+              "x": 16,
+              "y": 92,
+              "name": "工作台 Usage",
+              "fill": "#94A3B8",
+              "textGrowth": "fixed-width",
+              "width": 118,
+              "content": "首页 / 总览",
+              "fontFamily": "Inter",
+              "fontSize": 10,
+              "fontWeight": "normal"
+            }
+          ]
+        },
+        {
+          "type": "frame",
+          "id": "xsCYY",
+          "x": 222,
+          "y": 136,
+          "name": "项目 Tile",
+          "width": 150,
+          "height": 112,
+          "fill": "#FFFFFF",
+          "cornerRadius": 8,
+          "stroke": "#E2E8F0",
+          "strokeWidth": 1,
+          "layout": "none",
+          "children": [
+            {
+              "type": "frame",
+              "id": "F6gN5E",
+              "x": 16,
+              "y": 16,
+              "name": "项目 Icon Frame",
+              "width": 48,
+              "height": 48,
+              "fill": "#F8FAFC",
+              "cornerRadius": 10,
+              "stroke": "#E2E8F0",
+              "strokeWidth": 1,
+              "layout": "none",
+              "children": [
+                {
+                  "type": "path",
+                  "id": "tNNmr",
+                  "x": 8,
+                  "y": 8,
+                  "name": "Project Folder",
+                  "geometry": "M4 7c0-1.1 0.9-2 2-2h3.2l2 2h6.8c1.1 0 2 0.9 2 2v8c0 1.1-0.9 2-2 2h-12c-1.1 0-2-0.9-2-2v-10z m0.5 3h15",
+                  "viewBox": [
+                    0,
+                    0,
+                    24,
+                    24
+                  ],
+                  "fill": "#00000000",
+                  "width": 32,
+                  "height": 32,
+                  "stroke": "#64748B",
+                  "strokeWidth": 1.8,
+                  "strokeLinejoin": "round",
+                  "strokeLinecap": "round"
+                }
+              ]
+            },
+            {
+              "type": "text",
+              "id": "oaqPU",
+              "x": 16,
+              "y": 74,
+              "name": "项目 Label",
+              "fill": "#0F172A",
+              "textGrowth": "fixed-width",
+              "width": 118,
+              "content": "项目",
+              "fontFamily": "Inter",
+              "fontSize": 13,
+              "fontWeight": "750"
+            },
+            {
+              "type": "text",
+              "id": "qkb6e",
+              "x": 16,
+              "y": 92,
+              "name": "项目 Usage",
+              "fill": "#94A3B8",
+              "textGrowth": "fixed-width",
+              "width": 118,
+              "content": "项目入口",
+              "fontFamily": "Inter",
+              "fontSize": 10,
+              "fontWeight": "normal"
+            }
+          ]
+        },
+        {
+          "type": "frame",
+          "id": "YH7aA",
+          "x": 400,
+          "y": 136,
+          "name": "AI 会话 Tile",
+          "width": 150,
+          "height": 112,
+          "fill": "#FFFFFF",
+          "cornerRadius": 8,
+          "stroke": "#E2E8F0",
+          "strokeWidth": 1,
+          "layout": "none",
+          "children": [
+            {
+              "type": "frame",
+              "id": "FFN1y",
+              "x": 16,
+              "y": 16,
+              "name": "AI 会话 Icon Frame",
+              "width": 48,
+              "height": 48,
+              "fill": "#EFF6FF",
+              "cornerRadius": 10,
+              "stroke": "#BFDBFE",
+              "strokeWidth": 1,
+              "layout": "none",
+              "children": [
+                {
+                  "type": "path",
+                  "id": "X07MM",
+                  "x": 8,
+                  "y": 8,
+                  "name": "Session Bubble",
+                  "geometry": "M5 6.5c0-1.1 0.9-2 2-2h10c1.1 0 2 0.9 2 2v8c0 1.1-0.9 2-2 2h-7l-3.5 2.5v-2.5c-0.8-0.2-1.5-1-1.5-2v-8z m7 1.7v4.6m-2.3-2.3h4.6",
+                  "viewBox": [
+                    0,
+                    0,
+                    24,
+                    24
+                  ],
+                  "fill": "#00000000",
+                  "width": 32,
+                  "height": 32,
+                  "stroke": "#2563EB",
+                  "strokeWidth": 1.8,
+                  "strokeLinejoin": "round",
+                  "strokeLinecap": "round"
+                }
+              ]
+            },
+            {
+              "type": "text",
+              "id": "IHDes",
+              "x": 16,
+              "y": 74,
+              "name": "AI 会话 Label",
+              "fill": "#0F172A",
+              "textGrowth": "fixed-width",
+              "width": 118,
+              "content": "AI 会话",
+              "fontFamily": "Inter",
+              "fontSize": 13,
+              "fontWeight": "750"
+            },
+            {
+              "type": "text",
+              "id": "bGkTX",
+              "x": 16,
+              "y": 92,
+              "name": "AI 会话 Usage",
+              "fill": "#94A3B8",
+              "textGrowth": "fixed-width",
+              "width": 118,
+              "content": "聊天 / 新建",
+              "fontFamily": "Inter",
+              "fontSize": 10,
+              "fontWeight": "normal"
+            }
+          ]
+        },
+        {
+          "type": "frame",
+          "id": "o8uB3",
+          "x": 578,
+          "y": 136,
+          "name": "AI 工具 Tile",
+          "width": 150,
+          "height": 112,
+          "fill": "#FFFFFF",
+          "cornerRadius": 8,
+          "stroke": "#E2E8F0",
+          "strokeWidth": 1,
+          "layout": "none",
+          "children": [
+            {
+              "type": "frame",
+              "id": "l2bZD",
+              "x": 16,
+              "y": 16,
+              "name": "AI 工具 Icon Frame",
+              "width": 48,
+              "height": 48,
+              "fill": "#F8FAFC",
+              "cornerRadius": 10,
+              "stroke": "#E2E8F0",
+              "strokeWidth": 1,
+              "layout": "none",
+              "children": [
+                {
+                  "type": "path",
+                  "id": "LVo3O",
+                  "x": 8,
+                  "y": 8,
+                  "name": "Provider Nodes",
+                  "geometry": "M12 4.5v4m0 7v4m-7.5-7.5h4m7 0h4m-10.5-3h6v6h-6v-6z m-3-3l3 3m9-3l-3 3m-9 9l3-3m9 3l-3-3",
+                  "viewBox": [
+                    0,
+                    0,
+                    24,
+                    24
+                  ],
+                  "fill": "#00000000",
+                  "width": 32,
+                  "height": 32,
+                  "stroke": "#64748B",
+                  "strokeWidth": 1.8,
+                  "strokeLinejoin": "round",
+                  "strokeLinecap": "round"
+                }
+              ]
+            },
+            {
+              "type": "text",
+              "id": "Sy6or",
+              "x": 16,
+              "y": 74,
+              "name": "AI 工具 Label",
+              "fill": "#0F172A",
+              "textGrowth": "fixed-width",
+              "width": 118,
+              "content": "AI 工具",
+              "fontFamily": "Inter",
+              "fontSize": 13,
+              "fontWeight": "750"
+            },
+            {
+              "type": "text",
+              "id": "C8lTsX",
+              "x": 16,
+              "y": 92,
+              "name": "AI 工具 Usage",
+              "fill": "#94A3B8",
+              "textGrowth": "fixed-width",
+              "width": 118,
+              "content": "Provider",
+              "fontFamily": "Inter",
+              "fontSize": 10,
+              "fontWeight": "normal"
+            }
+          ]
+        },
+        {
+          "type": "frame",
+          "id": "GnDTl",
+          "x": 44,
+          "y": 272,
+          "name": "配对 Tile",
+          "width": 150,
+          "height": 112,
+          "fill": "#FFFFFF",
+          "cornerRadius": 8,
+          "stroke": "#E2E8F0",
+          "strokeWidth": 1,
+          "layout": "none",
+          "children": [
+            {
+              "type": "frame",
+              "id": "twajG",
+              "x": 16,
+              "y": 16,
+              "name": "配对 Icon Frame",
+              "width": 48,
+              "height": 48,
+              "fill": "#F8FAFC",
+              "cornerRadius": 10,
+              "stroke": "#E2E8F0",
+              "strokeWidth": 1,
+              "layout": "none",
+              "children": [
+                {
+                  "type": "path",
+                  "id": "xDNY5",
+                  "x": 8,
+                  "y": 8,
+                  "name": "Pair Devices",
+                  "geometry": "M5 6c0-0.8 0.7-1.5 1.5-1.5h6c0.8 0 1.5 0.7 1.5 1.5v9c0 0.8-0.7 1.5-1.5 1.5h-6c-0.8 0-1.5-0.7-1.5-1.5v-9z m11.5 2h1.5c0.8 0 1.5 0.7 1.5 1.5v8.5c0 0.8-0.7 1.5-1.5 1.5h-6c-0.8 0-1.5-0.7-1.5-1.5v-1m-2.5-4h3m3-1h3",
+                  "viewBox": [
+                    0,
+                    0,
+                    24,
+                    24
+                  ],
+                  "fill": "#00000000",
+                  "width": 32,
+                  "height": 32,
+                  "stroke": "#64748B",
+                  "strokeWidth": 1.8,
+                  "strokeLinejoin": "round",
+                  "strokeLinecap": "round"
+                }
+              ]
+            },
+            {
+              "type": "text",
+              "id": "tqh9w",
+              "x": 16,
+              "y": 74,
+              "name": "配对 Label",
+              "fill": "#0F172A",
+              "textGrowth": "fixed-width",
+              "width": 118,
+              "content": "配对",
+              "fontFamily": "Inter",
+              "fontSize": 13,
+              "fontWeight": "750"
+            },
+            {
+              "type": "text",
+              "id": "UeGHj",
+              "x": 16,
+              "y": 92,
+              "name": "配对 Usage",
+              "fill": "#94A3B8",
+              "textGrowth": "fixed-width",
+              "width": 118,
+              "content": "桌面 / 手机",
+              "fontFamily": "Inter",
+              "fontSize": 10,
+              "fontWeight": "normal"
+            }
+          ]
+        },
+        {
+          "type": "frame",
+          "id": "Q6xXK",
+          "x": 222,
+          "y": 272,
+          "name": "设置 Tile",
+          "width": 150,
+          "height": 112,
+          "fill": "#FFFFFF",
+          "cornerRadius": 8,
+          "stroke": "#E2E8F0",
+          "strokeWidth": 1,
+          "layout": "none",
+          "children": [
+            {
+              "type": "frame",
+              "id": "BK8qW",
+              "x": 16,
+              "y": 16,
+              "name": "设置 Icon Frame",
+              "width": 48,
+              "height": 48,
+              "fill": "#F8FAFC",
+              "cornerRadius": 10,
+              "stroke": "#E2E8F0",
+              "strokeWidth": 1,
+              "layout": "none",
+              "children": [
+                {
+                  "type": "path",
+                  "id": "n0TXu",
+                  "x": 8,
+                  "y": 8,
+                  "name": "Settings Gear",
+                  "geometry": "M12 8.2a3.8 3.8 0 1 1 0 7.6 3.8 3.8 0 0 1 0-7.6z m0-4.4v2.2m0 12v2.2m-7.1-13.1l1.6 1.6m11 6.6l1.6 1.6m-15.3-4.9h2.2m12 0h2.2m-15.3 4.9l1.6-1.6m11-6.6l1.6-1.6",
+                  "viewBox": [
+                    0,
+                    0,
+                    24,
+                    24
+                  ],
+                  "fill": "#00000000",
+                  "width": 32,
+                  "height": 32,
+                  "stroke": "#64748B",
+                  "strokeWidth": 1.8,
+                  "strokeLinejoin": "round",
+                  "strokeLinecap": "round"
+                }
+              ]
+            },
+            {
+              "type": "text",
+              "id": "Q6iYa",
+              "x": 16,
+              "y": 74,
+              "name": "设置 Label",
+              "fill": "#0F172A",
+              "textGrowth": "fixed-width",
+              "width": 118,
+              "content": "设置",
+              "fontFamily": "Inter",
+              "fontSize": 13,
+              "fontWeight": "750"
+            },
+            {
+              "type": "text",
+              "id": "Ffjfz",
+              "x": 16,
+              "y": 92,
+              "name": "设置 Usage",
+              "fill": "#94A3B8",
+              "textGrowth": "fixed-width",
+              "width": 118,
+              "content": "配置",
+              "fontFamily": "Inter",
+              "fontSize": 10,
+              "fontWeight": "normal"
+            }
+          ]
+        },
+        {
+          "type": "frame",
+          "id": "QNGP3",
+          "x": 400,
+          "y": 272,
+          "name": "终端 Tile",
+          "width": 150,
+          "height": 112,
+          "fill": "#FFFFFF",
+          "cornerRadius": 8,
+          "stroke": "#E2E8F0",
+          "strokeWidth": 1,
+          "layout": "none",
+          "children": [
+            {
+              "type": "frame",
+              "id": "jQykq",
+              "x": 16,
+              "y": 16,
+              "name": "终端 Icon Frame",
+              "width": 48,
+              "height": 48,
+              "fill": "#F8FAFC",
+              "cornerRadius": 10,
+              "stroke": "#E2E8F0",
+              "strokeWidth": 1,
+              "layout": "none",
+              "children": [
+                {
+                  "type": "path",
+                  "id": "je8et",
+                  "x": 8,
+                  "y": 8,
+                  "name": "Terminal Prompt",
+                  "geometry": "M4.5 6c0-0.8 0.7-1.5 1.5-1.5h12c0.8 0 1.5 0.7 1.5 1.5v12c0 0.8-0.7 1.5-1.5 1.5h-12c-0.8 0-1.5-0.7-1.5-1.5v-12z m3.5 3l3 3-3 3m4.5 0h3.5",
+                  "viewBox": [
+                    0,
+                    0,
+                    24,
+                    24
+                  ],
+                  "fill": "#00000000",
+                  "width": 32,
+                  "height": 32,
+                  "stroke": "#64748B",
+                  "strokeWidth": 1.8,
+                  "strokeLinejoin": "round",
+                  "strokeLinecap": "round"
+                }
+              ]
+            },
+            {
+              "type": "text",
+              "id": "ltp7t",
+              "x": 16,
+              "y": 74,
+              "name": "终端 Label",
+              "fill": "#0F172A",
+              "textGrowth": "fixed-width",
+              "width": 118,
+              "content": "终端",
+              "fontFamily": "Inter",
+              "fontSize": 13,
+              "fontWeight": "750"
+            },
+            {
+              "type": "text",
+              "id": "Ga0bW",
+              "x": 16,
+              "y": 92,
+              "name": "终端 Usage",
+              "fill": "#94A3B8",
+              "textGrowth": "fixed-width",
+              "width": 118,
+              "content": "tmux/screen",
+              "fontFamily": "Inter",
+              "fontSize": 10,
+              "fontWeight": "normal"
+            }
+          ]
+        },
+        {
+          "type": "frame",
+          "id": "scW1k",
+          "x": 578,
+          "y": 272,
+          "name": "Git 状态 Tile",
+          "width": 150,
+          "height": 112,
+          "fill": "#FFFFFF",
+          "cornerRadius": 8,
+          "stroke": "#E2E8F0",
+          "strokeWidth": 1,
+          "layout": "none",
+          "children": [
+            {
+              "type": "frame",
+              "id": "SN2hA",
+              "x": 16,
+              "y": 16,
+              "name": "Git 状态 Icon Frame",
+              "width": 48,
+              "height": 48,
+              "fill": "#F8FAFC",
+              "cornerRadius": 10,
+              "stroke": "#E2E8F0",
+              "strokeWidth": 1,
+              "layout": "none",
+              "children": [
+                {
+                  "type": "path",
+                  "id": "zFoft",
+                  "x": 8,
+                  "y": 8,
+                  "name": "Git Branch",
+                  "geometry": "M7 5.5a2 2 0 1 1 0 4 2 2 0 0 1 0-4z m0 4v5a2 2 0 1 0 0 4 2 2 0 0 0 0-4z m10-4a2 2 0 1 1 0 4 2 2 0 0 1 0-4z m-10 6.5c4.5 0 4.5-4.5 8-4.5",
+                  "viewBox": [
+                    0,
+                    0,
+                    24,
+                    24
+                  ],
+                  "fill": "#00000000",
+                  "width": 32,
+                  "height": 32,
+                  "stroke": "#64748B",
+                  "strokeWidth": 1.8,
+                  "strokeLinejoin": "round",
+                  "strokeLinecap": "round"
+                }
+              ]
+            },
+            {
+              "type": "text",
+              "id": "fmrFt",
+              "x": 16,
+              "y": 74,
+              "name": "Git 状态 Label",
+              "fill": "#0F172A",
+              "textGrowth": "fixed-width",
+              "width": 118,
+              "content": "Git 状态",
+              "fontFamily": "Inter",
+              "fontSize": 13,
+              "fontWeight": "750"
+            },
+            {
+              "type": "text",
+              "id": "z71RB",
+              "x": 16,
+              "y": 92,
+              "name": "Git 状态 Usage",
+              "fill": "#94A3B8",
+              "textGrowth": "fixed-width",
+              "width": 118,
+              "content": "分支 / 变更",
+              "fontFamily": "Inter",
+              "fontSize": 10,
+              "fontWeight": "normal"
+            }
+          ]
+        },
+        {
+          "type": "frame",
+          "id": "pFr70",
+          "x": 44,
+          "y": 408,
+          "name": "归档 Tile",
+          "width": 150,
+          "height": 112,
+          "fill": "#FFFFFF",
+          "cornerRadius": 8,
+          "stroke": "#E2E8F0",
+          "strokeWidth": 1,
+          "layout": "none",
+          "children": [
+            {
+              "type": "frame",
+              "id": "rqwus",
+              "x": 16,
+              "y": 16,
+              "name": "归档 Icon Frame",
+              "width": 48,
+              "height": 48,
+              "fill": "#F8FAFC",
+              "cornerRadius": 10,
+              "stroke": "#E2E8F0",
+              "strokeWidth": 1,
+              "layout": "none",
+              "children": [
+                {
+                  "type": "path",
+                  "id": "BsWJ4",
+                  "x": 8,
+                  "y": 8,
+                  "name": "Archive Box",
+                  "geometry": "M4.5 5h15v3h-15v-3z m1.5 3v10c0 0.8 0.7 1.5 1.5 1.5h9c0.8 0 1.5-0.7 1.5-1.5v-10m-8.5 4h5",
+                  "viewBox": [
+                    0,
+                    0,
+                    24,
+                    24
+                  ],
+                  "fill": "#00000000",
+                  "width": 32,
+                  "height": 32,
+                  "stroke": "#64748B",
+                  "strokeWidth": 1.8,
+                  "strokeLinejoin": "round",
+                  "strokeLinecap": "round"
+                }
+              ]
+            },
+            {
+              "type": "text",
+              "id": "CojaQ",
+              "x": 16,
+              "y": 74,
+              "name": "归档 Label",
+              "fill": "#0F172A",
+              "textGrowth": "fixed-width",
+              "width": 118,
+              "content": "归档",
+              "fontFamily": "Inter",
+              "fontSize": 13,
+              "fontWeight": "750"
+            },
+            {
+              "type": "text",
+              "id": "hm6Is",
+              "x": 16,
+              "y": 92,
+              "name": "归档 Usage",
+              "fill": "#94A3B8",
+              "textGrowth": "fixed-width",
+              "width": 118,
+              "content": "会话操作",
+              "fontFamily": "Inter",
+              "fontSize": 10,
+              "fontWeight": "normal"
+            }
+          ]
+        },
+        {
+          "type": "frame",
+          "id": "D54O1T",
+          "x": 222,
+          "y": 408,
+          "name": "发送 Tile",
+          "width": 150,
+          "height": 112,
+          "fill": "#FFFFFF",
+          "cornerRadius": 8,
+          "stroke": "#E2E8F0",
+          "strokeWidth": 1,
+          "layout": "none",
+          "children": [
+            {
+              "type": "frame",
+              "id": "GRut6",
+              "x": 16,
+              "y": 16,
+              "name": "发送 Icon Frame",
+              "width": 48,
+              "height": 48,
+              "fill": "#EFF6FF",
+              "cornerRadius": 10,
+              "stroke": "#BFDBFE",
+              "strokeWidth": 1,
+              "layout": "none",
+              "children": [
+                {
+                  "type": "path",
+                  "id": "RlSPy",
+                  "x": 8,
+                  "y": 8,
+                  "name": "Send Arrow",
+                  "geometry": "M4.5 19.5l15.5-7.5-15.5-7.5 2.5 7.3 7 0.2-7 0.2-2.5 7.3z",
+                  "viewBox": [
+                    0,
+                    0,
+                    24,
+                    24
+                  ],
+                  "fill": "#00000000",
+                  "width": 32,
+                  "height": 32,
+                  "stroke": "#2563EB",
+                  "strokeWidth": 1.8,
+                  "strokeLinejoin": "round",
+                  "strokeLinecap": "round"
+                }
+              ]
+            },
+            {
+              "type": "text",
+              "id": "VFL8O",
+              "x": 16,
+              "y": 74,
+              "name": "发送 Label",
+              "fill": "#0F172A",
+              "textGrowth": "fixed-width",
+              "width": 118,
+              "content": "发送",
+              "fontFamily": "Inter",
+              "fontSize": 13,
+              "fontWeight": "750"
+            },
+            {
+              "type": "text",
+              "id": "kPh5p",
+              "x": 16,
+              "y": 92,
+              "name": "发送 Usage",
+              "fill": "#94A3B8",
+              "textGrowth": "fixed-width",
+              "width": 118,
+              "content": "Prompt",
+              "fontFamily": "Inter",
+              "fontSize": 10,
+              "fontWeight": "normal"
+            }
+          ]
+        },
+        {
+          "type": "frame",
+          "id": "ryrz8",
+          "x": 400,
+          "y": 408,
+          "name": "刷新 Tile",
+          "width": 150,
+          "height": 112,
+          "fill": "#FFFFFF",
+          "cornerRadius": 8,
+          "stroke": "#E2E8F0",
+          "strokeWidth": 1,
+          "layout": "none",
+          "children": [
+            {
+              "type": "frame",
+              "id": "GLKwe",
+              "x": 16,
+              "y": 16,
+              "name": "刷新 Icon Frame",
+              "width": 48,
+              "height": 48,
+              "fill": "#F8FAFC",
+              "cornerRadius": 10,
+              "stroke": "#E2E8F0",
+              "strokeWidth": 1,
+              "layout": "none",
+              "children": [
+                {
+                  "type": "path",
+                  "id": "D3KaU",
+                  "x": 8,
+                  "y": 8,
+                  "name": "Refresh Loop",
+                  "geometry": "M19 8.5c-1.2-2.3-3.6-3.9-6.3-3.9-4 0-7.2 3.2-7.2 7.2m-0.5 3.7c1.2 2.3 3.6 3.9 6.3 3.9 4 0 7.2-3.2 7.2-7.2m0.5-7.4v3.7h-3.7m-10.3 10.7v-3.7h3.7",
+                  "viewBox": [
+                    0,
+                    0,
+                    24,
+                    24
+                  ],
+                  "fill": "#00000000",
+                  "width": 32,
+                  "height": 32,
+                  "stroke": "#64748B",
+                  "strokeWidth": 1.8,
+                  "strokeLinejoin": "round",
+                  "strokeLinecap": "round"
+                }
+              ]
+            },
+            {
+              "type": "text",
+              "id": "fiLlF",
+              "x": 16,
+              "y": 74,
+              "name": "刷新 Label",
+              "fill": "#0F172A",
+              "textGrowth": "fixed-width",
+              "width": 118,
+              "content": "刷新",
+              "fontFamily": "Inter",
+              "fontSize": 13,
+              "fontWeight": "750"
+            },
+            {
+              "type": "text",
+              "id": "YKzih",
+              "x": 16,
+              "y": 92,
+              "name": "刷新 Usage",
+              "fill": "#94A3B8",
+              "textGrowth": "fixed-width",
+              "width": 118,
+              "content": "检测 / 同步",
+              "fontFamily": "Inter",
+              "fontSize": 10,
+              "fontWeight": "normal"
+            }
+          ]
+        },
+        {
+          "type": "frame",
+          "id": "NdgiP",
+          "x": 578,
+          "y": 408,
+          "name": "风险保护 Tile",
+          "width": 150,
+          "height": 112,
+          "fill": "#FFFFFF",
+          "cornerRadius": 8,
+          "stroke": "#E2E8F0",
+          "strokeWidth": 1,
+          "layout": "none",
+          "children": [
+            {
+              "type": "frame",
+              "id": "OllyI",
+              "x": 16,
+              "y": 16,
+              "name": "风险保护 Icon Frame",
+              "width": 48,
+              "height": 48,
+              "fill": "#F8FAFC",
+              "cornerRadius": 10,
+              "stroke": "#E2E8F0",
+              "strokeWidth": 1,
+              "layout": "none",
+              "children": [
+                {
+                  "type": "path",
+                  "id": "dscWI",
+                  "x": 8,
+                  "y": 8,
+                  "name": "Risk Shield",
+                  "geometry": "M12 4.2l6 2.4v4.8c0 3.8-2.5 6.9-6 8.4-3.5-1.5-6-4.6-6-8.4v-4.8l6-2.4z m-2.6 7.9l1.8 1.8 3.7-3.8",
+                  "viewBox": [
+                    0,
+                    0,
+                    24,
+                    24
+                  ],
+                  "fill": "#00000000",
+                  "width": 32,
+                  "height": 32,
+                  "stroke": "#64748B",
+                  "strokeWidth": 1.8,
+                  "strokeLinejoin": "round",
+                  "strokeLinecap": "round"
+                }
+              ]
+            },
+            {
+              "type": "text",
+              "id": "MsNZx",
+              "x": 16,
+              "y": 74,
+              "name": "风险保护 Label",
+              "fill": "#0F172A",
+              "textGrowth": "fixed-width",
+              "width": 118,
+              "content": "风险保护",
+              "fontFamily": "Inter",
+              "fontSize": 13,
+              "fontWeight": "750"
+            },
+            {
+              "type": "text",
+              "id": "ugFzG",
+              "x": 16,
+              "y": 92,
+              "name": "风险保护 Usage",
+              "fill": "#94A3B8",
+              "textGrowth": "fixed-width",
+              "width": 118,
+              "content": "高危确认",
+              "fontFamily": "Inter",
+              "fontSize": 10,
+              "fontWeight": "normal"
+            }
+          ]
+        },
+        {
+          "type": "frame",
+          "id": "makq1",
+          "x": 44,
+          "y": 552,
+          "name": "Implementation Hint",
+          "width": 706,
+          "height": 26,
+          "fill": "#00000000",
+          "gap": 10,
+          "alignItems": "center",
+          "children": [
+            {
+              "type": "rectangle",
+              "cornerRadius": 2,
+              "id": "G7Is6e",
+              "name": "Hint Accent",
+              "fill": "#2563EB",
+              "width": 4,
+              "height": 20
+            },
+            {
+              "type": "text",
+              "id": "ctp8k",
+              "name": "Hint Text",
+              "fill": "#475569",
+              "content": "建议导出为 20x20 SVG，替换文字按钮：＋、≡、✎、AI，并统一侧边栏项目 / 会话 / 归档图标。",
+              "fontFamily": "Inter",
+              "fontSize": 12,
+              "fontWeight": "650"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

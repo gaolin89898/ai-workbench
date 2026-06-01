@@ -47,6 +47,7 @@ CREATE TABLE ai_sessions (
   title TEXT NOT NULL,
   status TEXT NOT NULL DEFAULT 'idle',
   summary TEXT,
+  archived_at TIMESTAMPTZ,
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );

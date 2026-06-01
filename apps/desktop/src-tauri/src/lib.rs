@@ -204,6 +204,7 @@ async fn create_ai_session(req: CreateAiSessionRequest) -> Result<AiSession, Str
         title: req.title,
         status: AiSessionStatus::Running,
         summary: Some(req.project_path),
+        archived_at: None,
         updated_at: chrono::Utc::now(),
     };
     save_local_session(&session).map_err(|error| error.to_string())?;
@@ -255,6 +256,14 @@ async fn list_local_ai_sessions() -> Result<Vec<AiSession>, String> {
     load_local_sessions().map_err(|error| error.to_string())
 }
 
+#[tauri::command]
+async fn archive_local_ai_session(
+    ai_session_id: Uuid,
+    archived: bool,
+) -> Result<AiSession, String> {
+    set_local_session_archived(ai_session_id, archived).map_err(|error| error.to_string())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -271,7 +280,8 @@ pub fn run() {
             append_local_ai_message,
             send_ai_prompt,
             list_local_ai_history,
-            list_local_ai_sessions
+            list_local_ai_sessions,
+            archive_local_ai_session
         ])
         .setup(|app| {
             app.manage(());
@@ -309,12 +319,11 @@ async fn list_tmux_sessions() -> Result<Vec<TerminalSession>, String> {
             } else {
                 format!("{session_name}/{window_name}")
             };
-            let detection_text = format!("{target} {session_name} {window_name} {command}");
             Some(TerminalSession {
                 session_id: format!("tmux:{target}"),
                 name: display_name,
                 backend: TerminalBackend::Tmux,
-                tool: detect_ai_tool(&detection_text),
+                tool: detect_ai_tool(command),
                 status: SessionStatus::Running,
                 cwd: (!cwd.is_empty()).then_some(cwd.to_string()),
                 recent_output: (!command.is_empty()).then_some(format!("当前命令：{command}")),
@@ -448,10 +457,7 @@ fn is_substantive_ai_output(output: &str) -> bool {
     let meaningful_lines = output
         .lines()
         .map(str::trim)
-        .filter(|line| {
-            !line.is_empty()
-                && !is_terminal_status_line(line)
-        })
+        .filter(|line| !line.is_empty() && !is_terminal_status_line(line))
         .count();
     meaningful_lines > 0
 }
@@ -462,10 +468,7 @@ fn is_codex_working_only(output: &str) -> bool {
         .map(str::trim)
         .filter(|line| !line.is_empty())
         .collect::<Vec<_>>();
-    !lines.is_empty()
-        && lines.iter().all(|line| {
-            is_terminal_status_line(line)
-        })
+    !lines.is_empty() && lines.iter().all(|line| is_terminal_status_line(line))
 }
 
 fn extract_new_terminal_output(before: &str, after: &str, prompt: &str) -> String {
@@ -475,7 +478,10 @@ fn extract_new_terminal_output(before: &str, after: &str, prompt: &str) -> Strin
     let candidate = if after.starts_with(&before) {
         after[before.len()..].to_string()
     } else {
-        let before_lines = before.lines().map(normalize_line_for_compare).collect::<Vec<_>>();
+        let before_lines = before
+            .lines()
+            .map(normalize_line_for_compare)
+            .collect::<Vec<_>>();
         let after_lines = after.lines().collect::<Vec<_>>();
         let common_prefix = before_lines
             .iter()
@@ -489,7 +495,10 @@ fn extract_new_terminal_output(before: &str, after: &str, prompt: &str) -> Strin
                 .lines()
                 .filter(|line| {
                     let normalized = normalize_line_for_compare(line);
-                    !normalized.is_empty() && !before_lines.iter().any(|before_line| before_line == &normalized)
+                    !normalized.is_empty()
+                        && !before_lines
+                            .iter()
+                            .any(|before_line| before_line == &normalized)
                 })
                 .collect::<Vec<_>>()
                 .join("\n")
@@ -519,9 +528,9 @@ fn extract_reply_from_current_screen(after: &str, prompt: &str) -> String {
         .lines()
         .map(str::to_string)
         .collect::<Vec<_>>();
-    let prompt_index = lines
-        .iter()
-        .rposition(|line| normalize_prompt(line) == prompt || normalize_prompt(line) == format!("> {prompt}"));
+    let prompt_index = lines.iter().rposition(|line| {
+        normalize_prompt(line) == prompt || normalize_prompt(line) == format!("> {prompt}")
+    });
     let Some(index) = prompt_index else {
         return String::new();
     };
@@ -647,11 +656,10 @@ async fn git_status(path: String) -> Result<GitStatus, String> {
         .map_err(|error| error.to_string())
         .ok()
         .and_then(|output| {
-            output.status.success().then(|| {
-                String::from_utf8_lossy(&output.stdout)
-                    .trim()
-                    .to_string()
-            })
+            output
+                .status
+                .success()
+                .then(|| String::from_utf8_lossy(&output.stdout).trim().to_string())
         })
         .filter(|value| !value.is_empty());
     let output = Command::new("git")
@@ -715,6 +723,7 @@ fn ensure_local_db() -> rusqlite::Result<()> {
           title TEXT NOT NULL,
           status TEXT NOT NULL,
           summary TEXT,
+          archived_at TEXT,
           updated_at TEXT NOT NULL
         );
         CREATE TABLE IF NOT EXISTS local_ai_messages (
@@ -725,6 +734,32 @@ fn ensure_local_db() -> rusqlite::Result<()> {
           created_at TEXT NOT NULL
         );
         "#,
+    )?;
+    let _ = conn.execute(
+        "ALTER TABLE local_ai_sessions ADD COLUMN archived_at TEXT",
+        [],
+    );
+    conn.execute(
+        r#"
+        UPDATE local_ai_sessions
+        SET title = (
+          SELECT CASE
+            WHEN length(content) > 24 THEN substr(content, 1, 24) || '...'
+            ELSE content
+          END
+          FROM local_ai_messages
+          WHERE ai_session_id = local_ai_sessions.id AND role = 'user'
+          ORDER BY created_at ASC
+          LIMIT 1
+        )
+        WHERE title IN ('新的 AI CLI 会话', '接管已有 AI CLI 会话')
+          AND EXISTS (
+            SELECT 1
+            FROM local_ai_messages
+            WHERE ai_session_id = local_ai_sessions.id AND role = 'user'
+          )
+        "#,
+        [],
     )?;
     Ok(())
 }
@@ -774,7 +809,7 @@ fn save_local_session(session: &AiSession) -> rusqlite::Result<()> {
     ensure_local_db()?;
     let conn = open_local_db()?;
     conn.execute(
-        "INSERT OR REPLACE INTO local_ai_sessions (id, provider_id, terminal_session_id, title, status, summary, updated_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+        "INSERT OR REPLACE INTO local_ai_sessions (id, provider_id, terminal_session_id, title, status, summary, archived_at, updated_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
         params![
             session.id.to_string(),
             session.provider_id,
@@ -782,6 +817,7 @@ fn save_local_session(session: &AiSession) -> rusqlite::Result<()> {
             session.title,
             serde_json::to_value(&session.status).unwrap().as_str().unwrap(),
             session.summary,
+            session.archived_at.map(|value| value.to_rfc3339()),
             session.updated_at.to_rfc3339(),
         ],
     )?;
@@ -792,12 +828,13 @@ fn load_local_sessions() -> rusqlite::Result<Vec<AiSession>> {
     ensure_local_db()?;
     let conn = open_local_db()?;
     let mut stmt = conn.prepare(
-        "SELECT id, provider_id, terminal_session_id, title, status, summary, updated_at FROM local_ai_sessions ORDER BY updated_at DESC",
+        "SELECT id, provider_id, terminal_session_id, title, status, summary, archived_at, updated_at FROM local_ai_sessions ORDER BY updated_at DESC",
     )?;
     let rows = stmt.query_map([], |row| {
         let id: String = row.get(0)?;
         let status_text: String = row.get(4)?;
-        let updated_at: String = row.get(6)?;
+        let archived_at: Option<String> = row.get(6)?;
+        let updated_at: String = row.get(7)?;
         Ok(AiSession {
             id: Uuid::parse_str(&id).unwrap_or_else(|_| Uuid::new_v4()),
             user_id: Uuid::nil(),
@@ -809,12 +846,36 @@ fn load_local_sessions() -> rusqlite::Result<Vec<AiSession>> {
             status: serde_json::from_value(serde_json::Value::String(status_text))
                 .unwrap_or(AiSessionStatus::Running),
             summary: row.get(5)?,
+            archived_at: archived_at.and_then(|value| {
+                chrono::DateTime::parse_from_rfc3339(&value)
+                    .map(|value| value.with_timezone(&chrono::Utc))
+                    .ok()
+            }),
             updated_at: chrono::DateTime::parse_from_rfc3339(&updated_at)
                 .map(|value| value.with_timezone(&chrono::Utc))
                 .unwrap_or_else(|_| chrono::Utc::now()),
         })
     })?;
     rows.collect()
+}
+
+fn set_local_session_archived(ai_session_id: Uuid, archived: bool) -> rusqlite::Result<AiSession> {
+    ensure_local_db()?;
+    let archived_at = archived.then(chrono::Utc::now);
+    let updated_at = chrono::Utc::now();
+    let conn = open_local_db()?;
+    conn.execute(
+        "UPDATE local_ai_sessions SET archived_at = ?1, updated_at = ?2 WHERE id = ?3",
+        params![
+            archived_at.map(|value| value.to_rfc3339()),
+            updated_at.to_rfc3339(),
+            ai_session_id.to_string(),
+        ],
+    )?;
+    load_local_sessions()?
+        .into_iter()
+        .find(|session| session.id == ai_session_id)
+        .ok_or(rusqlite::Error::QueryReturnedNoRows)
 }
 
 fn save_local_message(
@@ -824,6 +885,7 @@ fn save_local_message(
 ) -> rusqlite::Result<()> {
     ensure_local_db()?;
     let conn = open_local_db()?;
+    let created_at = chrono::Utc::now().to_rfc3339();
     conn.execute(
         "INSERT INTO local_ai_messages (id, ai_session_id, role, content, created_at) VALUES (?1, ?2, ?3, ?4, ?5)",
         params![
@@ -831,10 +893,47 @@ fn save_local_message(
             ai_session_id.to_string(),
             serde_json::to_value(&role).unwrap().as_str().unwrap(),
             content,
-            chrono::Utc::now().to_rfc3339(),
+            created_at,
         ],
     )?;
+    if role == AiMessageRole::User {
+        conn.execute(
+            r#"
+            UPDATE local_ai_sessions
+            SET
+              title = CASE
+                WHEN title IN ('新的 AI CLI 会话', '接管已有 AI CLI 会话') THEN ?1
+                ELSE title
+              END,
+              updated_at = ?2
+            WHERE id = ?3
+            "#,
+            params![
+                session_title_from_prompt(content),
+                created_at,
+                ai_session_id.to_string(),
+            ],
+        )?;
+    } else {
+        conn.execute(
+            "UPDATE local_ai_sessions SET updated_at = ?1 WHERE id = ?2",
+            params![created_at, ai_session_id.to_string()],
+        )?;
+    }
     Ok(())
+}
+
+fn session_title_from_prompt(prompt: &str) -> String {
+    let first_line = prompt
+        .lines()
+        .map(str::trim)
+        .find(|line| !line.is_empty())
+        .unwrap_or("新的 AI CLI 会话");
+    let mut title = first_line.chars().take(24).collect::<String>();
+    if first_line.chars().count() > 24 {
+        title.push_str("...");
+    }
+    title
 }
 
 fn load_local_history(ai_session_id: Uuid) -> rusqlite::Result<Vec<AiHistoryMessage>> {
