@@ -5,7 +5,6 @@ import type { AiProvider, AiSession, TerminalSession, ViewName, WorkspaceProject
 const archiveBoxIcon = new URL("../assets/icons/archive-box.svg", import.meta.url).href;
 const projectFolderIcon = new URL("../assets/icons/project-folder.svg", import.meta.url).href;
 const sessionPlusIcon = new URL("../assets/icons/session-plus.svg", import.meta.url).href;
-const terminalIcon = new URL("../assets/icons/terminal.svg", import.meta.url).href;
 const providerClaudeIcon = new URL("../assets/icons/provider-claude.svg", import.meta.url).href;
 const providerCodexIcon = new URL("../assets/icons/provider-codex.svg", import.meta.url).href;
 const providerDeepseekIcon = new URL("../assets/icons/provider-deepseek.svg", import.meta.url).href;
@@ -18,6 +17,8 @@ const props = defineProps<{
   terminalSessions: TerminalSession[];
   activeSessions: AiSession[];
   activeAiSession: AiSession | null;
+  selectedProjectPath: string;
+  thinkingSessionIds: Record<string, boolean>;
   activeView: ViewName;
 }>();
 
@@ -33,6 +34,12 @@ const emit = defineEmits<{
 }>();
 
 const openSessionMenuPath = ref<string | null>(null);
+type SessionRole = "local" | "terminal";
+
+const sessionRoles: Array<{ id: SessionRole; label: string; detail: string }> = [
+  { id: "local", label: "本机 AI", detail: "结构化聊天" },
+  { id: "terminal", label: "接管终端", detail: "可控制终端" },
+];
 
 const providerIcons: Record<string, string> = {
   claude: providerClaudeIcon,
@@ -49,11 +56,36 @@ function sessionsForProject(path: string) {
   return props.activeSessions.filter((session) => session.summary === path);
 }
 
-function attachableTerminalSessions() {
-  return props.terminalSessions.filter((session) => session.tool !== "unknown");
+function localAiSessionsForProject(path: string) {
+  return sessionsForProject(path).filter((session) => !session.terminalSessionId);
+}
+
+function terminalSessionsForProject(path: string) {
+  return sessionsForProject(path).filter((session) => Boolean(session.terminalSessionId));
+}
+
+function sessionsForRoleProject(role: SessionRole, path: string) {
+  return role === "local" ? localAiSessionsForProject(path) : terminalSessionsForProject(path);
+}
+
+function projectsForRole(role: SessionRole) {
+  if (role === "local") return props.projects;
+  return props.projects.filter((project) => terminalSessionsForProject(project.path).length);
+}
+
+function roleSessionCount(role: SessionRole) {
+  return props.activeSessions.filter((session) => (
+    role === "local" ? !session.terminalSessionId : Boolean(session.terminalSessionId)
+  )).length;
+}
+
+function selectProject(path: string) {
+  openSessionMenuPath.value = null;
+  emit("selectProject", path);
 }
 
 function toggleSessionMenu(path: string) {
+  emit("selectProject", path);
   openSessionMenuPath.value = openSessionMenuPath.value === path ? null : path;
 }
 
@@ -85,88 +117,98 @@ function sessionTimeLabel(session: AiSession) {
   if (diffMs < day) return `${Math.floor(diffMs / hour)} 小时`;
   return `${Math.floor(diffMs / day)} 天`;
 }
+
+function isThinking(session: AiSession) {
+  return Boolean(props.thinkingSessionIds[session.id]);
+}
 </script>
 
 <template>
   <aside class="sidebar">
     <section class="sidebar-section">
       <div class="sidebar-heading">
-        <span>项目</span>
+        <span>角色</span>
         <button class="icon-button" title="选择本地项目" type="button" @click="emit('chooseProject')">＋</button>
       </div>
       <div class="project-tree">
         <button v-if="!projects.length" class="tree-empty" type="button" @click="emit('chooseProject')">
           选择本地项目
         </button>
-        <section v-for="project in projects" :key="project.path" class="tree-project">
-          <div class="tree-project-row">
-            <button class="tree-project-title" type="button" @click="emit('selectProject', project.path)">
-              <img class="tree-icon" :src="projectFolderIcon" alt="" aria-hidden="true" />
-              <strong>{{ project.name }}</strong>
-            </button>
-            <button
-              class="tree-project-add"
-              title="新增会话"
-              type="button"
-              @click.stop="toggleSessionMenu(project.path)"
-            >
-              <img :src="sessionPlusIcon" alt="" aria-hidden="true" />
-            </button>
-            <div v-if="openSessionMenuPath === project.path" class="tree-session-menu">
-              <div class="tree-session-menu-group">
-                <span class="tree-session-menu-label">新建终端</span>
-                <button v-for="provider in providers" :key="provider.id" type="button" @click="createSession(project.path, provider.id)">
-                  <img class="tree-session-menu-icon image" :src="providerIcon(provider.id)" alt="" aria-hidden="true" />
-                  <span>新建 {{ provider.name }} 会话</span>
-                </button>
-              </div>
-              <div class="tree-session-menu-group">
-                <span class="tree-session-menu-label">接管已有终端</span>
-                <button
-                  v-for="session in attachableTerminalSessions()"
-                  :key="session.sessionId"
-                  type="button"
-                  @click="attachSession(project.path, session)"
-                >
-                  <img class="tree-session-menu-icon image" :src="terminalIcon" alt="" aria-hidden="true" />
-                  <span>{{ session.name }} · {{ session.tool || session.backend }}</span>
-                </button>
-                <button v-if="!attachableTerminalSessions().length" class="disabled" type="button" disabled>
-                  <span class="tree-session-menu-icon">!</span>
-                  <span>未发现 AI CLI 终端</span>
-                </button>
-              </div>
-            </div>
+        <section v-for="role in sessionRoles" :key="role.id" class="tree-role">
+          <div class="tree-role-heading">
+            <span>{{ role.label }}</span>
+            <small>{{ roleSessionCount(role.id) ? `${roleSessionCount(role.id)} 个会话` : role.detail }}</small>
           </div>
-          <div class="tree-chat-list">
-            <template v-if="sessionsForProject(project.path).length">
-              <div v-for="session in sessionsForProject(project.path)" :key="session.id" class="tree-chat-row">
+          <template v-if="projectsForRole(role.id).length">
+            <section v-for="project in projectsForRole(role.id)" :key="`${role.id}-${project.path}`" class="tree-project">
+              <div class="tree-project-row">
                 <button
-                  class="tree-chat"
-                  :class="{ active: activeAiSession?.id === session.id }"
+                  class="tree-project-title"
+                  :class="{ active: selectedProjectPath === project.path }"
                   type="button"
-                  @click="emit('selectSession', session)"
+                  @click="selectProject(project.path)"
                 >
-                  <img class="tree-provider-icon" :src="providerIcon(session.providerId)" alt="" aria-hidden="true" />
-                  <span class="tree-chat-copy">
-                    <span>{{ session.title }}</span>
-                    <small v-if="sessionTimeLabel(session)">{{ sessionTimeLabel(session) }}</small>
-                  </span>
+                  <img class="tree-icon" :src="projectFolderIcon" alt="" aria-hidden="true" />
+                  <strong>{{ project.name }}</strong>
                 </button>
                 <button
-                  class="tree-chat-action"
-                  title="归档会话"
+                  v-if="role.id === 'local'"
+                  class="tree-project-add"
+                  title="新增会话"
                   type="button"
-                  @click.stop="emit('archiveSession', session.id, true)"
+                  @click.stop="toggleSessionMenu(project.path)"
                 >
-                  <img :src="archiveBoxIcon" alt="" aria-hidden="true" />
+                  <img :src="sessionPlusIcon" alt="" aria-hidden="true" />
+                </button>
+                <div v-if="role.id === 'local' && openSessionMenuPath === project.path" class="tree-session-menu">
+                  <div class="tree-session-menu-group">
+                    <span class="tree-session-menu-label">新建 AI 会话</span>
+                    <button v-for="provider in providers" :key="provider.id" type="button" @click="createSession(project.path, provider.id)">
+                      <img class="tree-session-menu-icon image" :src="providerIcon(provider.id)" alt="" aria-hidden="true" />
+                      <span>新建 {{ provider.name }} 会话</span>
+                    </button>
+                  </div>
+                </div>
+              </div>
+              <div class="tree-chat-list">
+                <template v-if="sessionsForRoleProject(role.id, project.path).length">
+                  <div v-for="session in sessionsForRoleProject(role.id, project.path)" :key="session.id" class="tree-chat-row">
+                    <button
+                      class="tree-chat"
+                      :class="{ active: activeAiSession?.id === session.id, terminal: role.id === 'terminal' }"
+                      type="button"
+                      @click="emit('selectSession', session)"
+                    >
+                      <img class="tree-provider-icon" :src="providerIcon(session.providerId)" alt="" aria-hidden="true" />
+                      <span class="tree-chat-copy">
+                        <span>{{ session.title }}</span>
+                        <i v-if="isThinking(session)" class="tree-chat-spinner" aria-label="思考中"></i>
+                        <small v-else-if="sessionTimeLabel(session)">{{ sessionTimeLabel(session) }}</small>
+                      </span>
+                    </button>
+                    <button
+                      class="tree-chat-action"
+                      title="归档会话"
+                      type="button"
+                      @click.stop="emit('archiveSession', session.id, true)"
+                    >
+                      <img :src="archiveBoxIcon" alt="" aria-hidden="true" />
+                    </button>
+                  </div>
+                </template>
+                <button
+                  v-else-if="role.id === 'local'"
+                  class="tree-chat muted"
+                  :class="{ active: selectedProjectPath === project.path }"
+                  type="button"
+                  @click="toggleSessionMenu(project.path)"
+                >
+                  新建 AI 会话
                 </button>
               </div>
-            </template>
-            <button v-else class="tree-chat muted" type="button" @click="toggleSessionMenu(project.path)">
-              新建 CLI 会话
-            </button>
-          </div>
+            </section>
+          </template>
+          <div v-else class="tree-role-empty">{{ role.id === "terminal" ? "暂无接管终端" : "暂无项目" }}</div>
         </section>
       </div>
     </section>

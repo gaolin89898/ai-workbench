@@ -18,6 +18,7 @@ serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 rusqlite = { version = "0.32", features = ["bundled"] }
 tauri = { version = "2.0.0", features = [] }
-tokio = { version = "1", features = ["process"] }
+tokio = { version = "1", features = ["io-util", "process", "time"] }
 uuid = { version = "1", features = ["serde"] }
 rfd = "0.15"
+portable-pty = "0.9.0"

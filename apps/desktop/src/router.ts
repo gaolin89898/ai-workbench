@@ -1,20 +1,25 @@
-import { createRouter, createWebHashHistory } from "vue-router";
-import { h } from "vue";
+import { createRouter, createWebHashHistory, type RouteRecordRaw } from "vue-router";
 
-const routeStub = { render: () => h("span") };
+const routes: RouteRecordRaw[] = [
+  { path: "/", redirect: "/chat" },
+  {
+    path: "/",
+    component: () => import("./AppShell.vue"),
+    children: [
+      { path: "chat", name: "aiSessions", component: () => import("./components/ChatView.vue") },
+      { path: "workspace", name: "workspace", component: () => import("./components/WorkspaceView.vue") },
+      { path: "projects", name: "projects", component: () => import("./components/ProjectsView.vue") },
+      { path: "providers", name: "providers", component: () => import("./components/ProvidersView.vue") },
+      { path: "pairing", name: "pairing", component: () => import("./components/PairingView.vue") },
+      { path: "settings", name: "settings", component: () => import("./components/SettingsView.vue") },
+    ],
+  },
+  { path: "/:pathMatch(.*)*", redirect: "/chat" },
+];
 
 const router = createRouter({
   history: createWebHashHistory(),
-  routes: [
-    { path: "/", redirect: "/chat" },
-    { path: "/workspace", name: "workspace", component: routeStub },
-    { path: "/projects", name: "projects", component: routeStub },
-    { path: "/chat", name: "aiSessions", component: routeStub },
-    { path: "/providers", name: "providers", component: routeStub },
-    { path: "/pairing", name: "pairing", component: routeStub },
-    { path: "/settings", name: "settings", component: routeStub },
-    { path: "/:pathMatch(.*)*", redirect: "/chat" },
-  ],
+  routes,
 });
 
 export default router;

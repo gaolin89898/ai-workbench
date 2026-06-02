@@ -2980,10 +2980,6 @@ class _ChatBubble extends StatelessWidget {
         mainAxisAlignment: isUser ? MainAxisAlignment.end : MainAxisAlignment.start,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          if (!isUser) ...[
-            _ChatAvatar(role: message.role),
-            const SizedBox(width: 8),
-          ],
           Flexible(
             child: ConstrainedBox(
               constraints: const BoxConstraints(maxWidth: 310),
@@ -3016,44 +3012,7 @@ class _ChatBubble extends StatelessWidget {
               ),
             ),
           ),
-          if (isUser) ...[
-            const SizedBox(width: 8),
-            _ChatAvatar(role: message.role),
-          ],
         ],
-      ),
-    );
-  }
-}
-
-class _ChatAvatar extends StatelessWidget {
-  const _ChatAvatar({required this.role});
-
-  final ChatRole role;
-
-  @override
-  Widget build(BuildContext context) {
-    final isUser = role == ChatRole.user;
-    final isError = role == ChatRole.error;
-    return Container(
-      width: 30,
-      height: 30,
-      decoration: BoxDecoration(
-        color: isUser
-            ? AppColors.primary
-            : isError
-                ? AppColors.danger
-                : const Color(0xff0f172a),
-        borderRadius: BorderRadius.circular(8),
-      ),
-      child: Icon(
-        isUser
-            ? Icons.person
-            : isError
-                ? Icons.error_outline
-                : Icons.smart_toy_outlined,
-        color: Colors.white,
-        size: 17,
       ),
     );
   }

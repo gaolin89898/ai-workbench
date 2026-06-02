@@ -129,6 +129,7 @@ pub struct AiSession {
     pub project_id: Option<ProjectId>,
     pub provider_id: String,
     pub terminal_session_id: Option<String>,
+    pub provider_session_id: Option<String>,
     pub title: String,
     pub status: AiSessionStatus,
     pub summary: Option<String>,

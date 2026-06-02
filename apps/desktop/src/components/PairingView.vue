@@ -1,28 +1,19 @@
 <script setup lang="ts">
 import { ref, watch } from "vue";
+import { useWorkspace } from "../composables/useWorkspace";
 
-const props = defineProps<{
-  server: string;
-  pairResult: string;
-  pairResultError: boolean;
-}>();
+const ws = useWorkspace();
 
-const emit = defineEmits<{
-  "update:server": [value: string];
-  pairDesktop: [server: string, code: string];
-}>();
-
-const localServer = ref(props.server);
+const localServer = ref(ws.settingsServer.value);
 const code = ref("");
 
-watch(
-  () => props.server,
-  (next) => {
-    localServer.value = next;
-  },
-);
+watch(() => ws.settingsServer.value, (next) => {
+  localServer.value = next;
+});
 
-watch(localServer, (next) => emit("update:server", next));
+watch(localServer, (next) => {
+  ws.settingsServer.value = next;
+});
 </script>
 
 <template>
@@ -44,8 +35,8 @@ watch(localServer, (next) => emit("update:server", next));
           <span>配对码</span>
           <input v-model="code" placeholder="A7K9Q2LM" maxlength="16" />
         </label>
-        <button class="button primary" type="button" @click="emit('pairDesktop', localServer, code)">配对这台桌面</button>
-        <div class="result-box large" :class="{ error: pairResultError }">{{ pairResult }}</div>
+        <button class="button primary" type="button" @click="ws.pairDesktop(localServer, code)">配对这台桌面</button>
+        <div class="result-box large" :class="{ error: ws.pairResultError.value }">{{ ws.pairResult.value }}</div>
       </article>
       <article class="panel">
         <h2>同步策略</h2>
@@ -53,7 +44,7 @@ watch(localServer, (next) => emit("update:server", next));
           <div><dt>云端</dt><dd>只保存元信息和摘要</dd></div>
           <div><dt>完整历史</dt><dd>本机 SQLite</dd></div>
           <div><dt>移动端历史</dt><dd>桌面在线时拉取</dd></div>
-          <div><dt>底层承载</dt><dd>tmux / screen</dd></div>
+          <div><dt>底层承载</dt><dd>本地 PTY</dd></div>
         </dl>
       </article>
     </section>

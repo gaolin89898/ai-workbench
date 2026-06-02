@@ -1,20 +1,49 @@
 # AI 工作台
 
-AI 工作台是一个多 AI Agent 桌面工作台原型，目标体验类似 Codex 桌面端，但可以同时集成 `Codex`、`Claude Code`、`Gemini`、`DeepSeek` 和后续自定义 CLI。
+AI 工作台是一个多 AI Agent 桌面工作台原型，目标体验类似 Codex Desktop，但可以同时集成 `Codex`、`Claude Code`、`Gemini`、`DeepSeek` 和后续自定义 CLI。
+
+它的核心思路是：**桌面端负责真正运行本机 AI CLI，后端负责账号、配对和消息转发，移动端负责远程查看和控制桌面上的项目与 AI 会话。**
 
 项目当前包含三端：
 
 - `crates/server`：Rust Axum 云端中转服务，负责账号、配对、设备、Provider 状态、项目元信息、AI 会话元信息、WebSocket 转发和高危内容检查。
-- `apps/desktop`：Tauri 桌面主应用，负责本机 AI 工具检测、项目登记、tmux AI 会话创建、Git 状态读取、本地 SQLite 历史能力和配对入口。
+- `apps/desktop`：Tauri 桌面主应用，负责本机 AI 工具检测、项目登记、Git 状态读取、本地 SQLite 历史能力、Codex exec 会话、shell pty 调试终端和配对入口。
 - `apps/mobile`：Flutter 移动端，负责登录、设备列表、项目、AI 工具状态、AI 会话、聊天式控制、日志和设置。
 - `crates/desktop-agent`：旧的命令行桌面代理，保留为 tmux/screen 兼容和调试路径。
+
+## 项目速览
+
+```text
+.
+├── apps/
+│   ├── desktop/              # Vue 3 + Tauri 桌面端
+│   │   ├── src/              # 桌面端前端页面、路由和 Tauri API 封装
+│   │   └── src-tauri/        # 桌面端 Rust 命令、本地 SQLite、pty、Codex exec
+│   └── mobile/               # Flutter 移动端
+├── crates/
+│   ├── server/               # Axum 后端服务和数据库迁移
+│   ├── shared/               # 共享模型与实时协议类型
+│   └── desktop-agent/        # 旧 CLI 代理，主要用于兼容和调试
+├── docs/protocol.md          # WebSocket 协议说明
+├── docker-compose.yml        # 本地 PostgreSQL
+└── Cargo.toml                # Rust workspace
+```
+
+主要入口：
+
+- 后端入口：[crates/server/src/main.rs](crates/server/src/main.rs)
+- 后端路由：[crates/server/src/routes/mod.rs](crates/server/src/routes/mod.rs)
+- 桌面前端入口：[apps/desktop/src/main.ts](apps/desktop/src/main.ts)
+- 桌面路由：[apps/desktop/src/router.ts](apps/desktop/src/router.ts)
+- 桌面 Tauri 命令：[apps/desktop/src-tauri/src/lib.rs](apps/desktop/src-tauri/src/lib.rs)
+- 移动端入口：[apps/mobile/lib/main.dart](apps/mobile/lib/main.dart)
 
 ## 当前定位
 
 主路径已经从“远程终端控制器”转为“AI 工作台”：
 
 - 用户主路径是：选择本地项目，然后创建新的 AI 会话，或者接管已有 tmux/screen 会话。
-- `tmux` / `screen` 仍是底层承载层，只在调试入口中暴露。
+- 桌面端当前已经支持本地 shell pty 和 Codex `exec --json` 会话；`tmux` / `screen` 继续作为兼容和调试路径保留。
 - 云端只保存元信息、摘要、状态和活动日志，不保存完整聊天内容。
 - 完整 AI 聊天历史计划保存在桌面端本机 SQLite，默认路径为 `~/.ai-workbench/history.db`，也可以用 `AI_WORKBENCH_DB` 环境变量覆盖。
 - 移动端查看完整历史需要对应桌面在线，由云端转发 `ai.history.request` 到桌面端读取本地 SQLite。
@@ -37,9 +66,12 @@ AI 工作台是一个多 AI Agent 桌面工作台原型，目标体验类似 Cod
 - AI 工作台中文界面。
 - 检测本机 `codex --version`、`claude --version`、`gemini --version`、`deepseek --version`。
 - 添加本机项目目录并读取 `git branch --show-current`、`git status --short`。
-- 自动创建 tmux AI 会话：`tmux new-session -d -s <name> -c <project_path> <provider_command>`。
+- 创建本地 AI 会话记录，并保存 provider、项目路径、标题、状态、摘要、归档状态和更新时间。
+- Codex 会话支持 `codex exec --json`，可预热会话、记录 provider thread id，并在后续消息中 resume。
+- 支持 shell pty 调试终端：启动、输入、resize、读取缓冲、停止，并通过 Tauri event 推送输出。
 - 接管已有 tmux/screen 会话的界面入口。
 - 本地 SQLite 表：`local_ai_sessions`、`local_ai_messages`。
+- 支持本地 AI 会话归档 / 取消归档。
 - 桌面配对入口。
 
 移动端：
@@ -83,11 +115,18 @@ Linux 上首次编译 Tauri 可能需要系统依赖，例如 GTK / WebKit / pkg
 
 ```bash
 cd apps/desktop
+pnpm install
+pnpm dev
+```
+
+如果使用 npm，也可以运行：
+
+```bash
 npm install
 npm run dev
 ```
 
-如果 1420 端口被占用，修改 [apps/desktop/src-tauri/tauri.conf.json](apps/desktop/src-tauri/tauri.conf.json) 里的 `devUrl`，同时修改 [apps/desktop/package.json](apps/desktop/package.json) 里的 `vite:dev` 端口。
+如果 1420 端口被占用，修改 [apps/desktop/src-tauri/tauri.conf.json](apps/desktop/src-tauri/tauri.conf.json) 里的 `devUrl`，同时修改 [apps/desktop/package.json](apps/desktop/package.json) 里的 `vite:dev` 端口。默认窗口为 1440×900，最小 1024×640，可在 `tauri.conf.json` 的 `app.windows` 中调整。
 
 桌面端本机历史数据库默认在：
 
@@ -212,6 +251,12 @@ cargo test --workspace
 
 ```bash
 cd apps/desktop
+pnpm vite:build
+```
+
+或使用 npm：
+
+```bash
 npm run vite:build
 ```
 
@@ -226,17 +271,16 @@ flutter analyze
 
 ## 设计稿
 
-新的中文 AI 工作台设计稿已经导出到：
+`.pen` 设计稿位于仓库根目录：
 
-```text
-design-exports-agent-cn/
-```
+- `icon.pen`：图标设计稿。
+- `pencil-new.pen`：整体 UI 设计稿（桌面端 + 移动端），包含工作台首页、AI 工具、新建 AI 会话、聊天会话、项目详情、设置，以及移动端工作台、项目、新建会话、AI 聊天、AI 工具、日志/设置等页面。
 
-包含桌面端工作台首页、AI 工具、新建 AI 会话、聊天会话、项目详情、设置，以及移动端工作台、项目、新建会话、AI 聊天、AI 工具、日志/设置等页面。
+设计稿导出的临时资源可能不会全部保留在仓库中，实际应用图标以 `apps/desktop/src/assets/icons/` 和 `apps/desktop/src-tauri/icons/` 为准。
 
 ## v1 边界
 
-- v1 仍以 `tmux` / `screen` 作为 AI CLI 承载层，不直接接管任意图形终端窗口。
+- v1 不直接接管任意图形终端窗口。主路径优先走桌面端本地 AI 会话和 Codex exec；`tmux` / `screen` 作为兼容和调试路径保留。
 - “接管已有会话”指接管已有 `tmux` / `screen` 的 window/pane；Codex、Claude Code 等工具内部自己的项目/对话历史不属于系统会话列表，只有当它们运行在某个 tmux/screen pane 里时才能被接管。
 - Windows v1 优先走 WSL + tmux。
 - 云端不保存完整聊天内容，只保存元信息和摘要。
