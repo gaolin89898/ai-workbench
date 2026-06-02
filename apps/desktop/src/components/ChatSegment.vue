@@ -26,24 +26,46 @@ function formatDuration(durationMs?: number) {
   return `${(durationMs / 1000).toFixed(durationMs < 10_000 ? 1 : 0)}s`;
 }
 
-function toolStatusText(status: "running" | "success" | "error") {
-  const names = {
-    running: "运行中",
-    success: "完成",
-    error: "失败",
-  };
-  return names[status];
+function toolLineTitle(segment: Extract<ChatSegmentType, { type: "tool" }>) {
+  const command = shortenCommand(segment.command);
+  const verb = segment.status === "running" ? "正在" : "已";
+  if (segment.toolName.includes("扫描")) {
+    if (segment.status === "error") return "扫描项目失败";
+    return segment.status === "running" ? "正在扫描项目" : "已扫描项目";
+  }
+  if (segment.toolName.includes("修改") || segment.toolName.includes("文件")) {
+    if (segment.status === "error") return "编辑文件失败";
+    return segment.status === "running" ? "正在编辑文件" : "已编辑文件";
+  }
+  if (segment.toolName.includes("命令") || segment.command) {
+    if (segment.status === "error") return command ? `运行失败 ${command}` : "运行命令失败";
+    return command ? `${verb}运行 ${command}` : `${verb}运行命令`;
+  }
+  if (segment.status === "error") return segment.summary || `处理失败 ${segment.toolName}`;
+  return segment.summary || `${verb}处理 ${segment.toolName}`;
 }
 
-function statusIcon(icon?: ChatSegmentType["icon"]) {
-  const icons = {
-    check: "✓",
-    read: "▹",
-    edit: "◇",
-    search: "○",
-    think: "·",
-  };
-  return icons[icon ?? "think"];
+function toolLineMeta(segment: Extract<ChatSegmentType, { type: "tool" }>) {
+  const parts: string[] = [];
+  if (segment.additions !== undefined) parts.push(`+${segment.additions}`);
+  if (segment.deletions !== undefined) parts.push(`-${segment.deletions}`);
+  if (segment.status === "error") parts.push("失败");
+  if (segment.durationMs) parts.push(formatDuration(segment.durationMs));
+  return parts.join(" ");
+}
+
+function toolHasDetails(segment: Extract<ChatSegmentType, { type: "tool" }>) {
+  return Boolean(segment.input || segment.output);
+}
+
+function shortenCommand(command?: string) {
+  if (!command) return "";
+  const cleaned = command
+    .replace(/^\/usr\/bin\/(?:bash|sh)\s+-lc\s+/, "")
+    .replace(/^bash\s+-lc\s+/, "")
+    .trim();
+  const unquoted = cleaned.replace(/^['"](.+)['"]$/, "$1");
+  return unquoted.length > 88 ? `${unquoted.slice(0, 85)}...` : unquoted;
 }
 
 function parseMarkdownBlocks(text: string): MarkdownBlock[] {
@@ -268,7 +290,6 @@ function inlineParts(text: string) {
   </article>
 
   <div v-else-if="segment.type === 'status'" class="chat-segment-status" :class="segment.icon">
-    <span class="chat-segment-status-icon">{{ statusIcon(segment.icon) }}</span>
     <span>{{ segment.label }}</span>
     <strong v-if="segment.detail">{{ segment.detail }}</strong>
     <span v-if="segment.additions !== undefined" class="chat-segment-additions">+{{ segment.additions }}</span>
@@ -287,31 +308,29 @@ function inlineParts(text: string) {
     <div class="chat-segment-content">{{ segment.text }}</div>
   </details>
 
-  <article v-else-if="segment.type === 'tool'" class="chat-segment-tool" :class="segment.status">
-    <header>
-      <span class="chat-segment-tool-icon" aria-hidden="true"></span>
-      <div>
-        <strong>{{ segment.summary || segment.toolName }}</strong>
-        <code v-if="segment.command">{{ segment.command }}</code>
-      </div>
-      <small v-if="segment.status !== 'success'">
-        {{ toolStatusText(segment.status) }}
-        <template v-if="segment.durationMs"> · {{ formatDuration(segment.durationMs) }}</template>
-      </small>
-    </header>
-    <p v-if="segment.additions !== undefined || segment.deletions !== undefined" class="chat-segment-change-counts">
-      <span v-if="segment.additions !== undefined" class="chat-segment-additions">+{{ segment.additions }}</span>
-      <span v-if="segment.deletions !== undefined" class="chat-segment-deletions">-{{ segment.deletions }}</span>
-    </p>
-    <details v-if="segment.input" class="chat-segment-detail">
-      <summary>查看输入</summary>
-      <pre>{{ segment.input }}</pre>
-    </details>
-    <details v-if="segment.output" class="chat-segment-detail">
-      <summary>查看输出</summary>
-      <pre>{{ segment.output }}</pre>
-    </details>
-  </article>
+  <details
+    v-else-if="segment.type === 'tool'"
+    class="chat-segment-tool"
+    :class="[segment.status, { expandable: toolHasDetails(segment) }]"
+  >
+    <summary>
+      <span class="chat-segment-tool-copy" :class="{ shimmer: segment.status === 'running' }">
+        <strong>{{ toolLineTitle(segment) }}</strong>
+        <small v-if="toolLineMeta(segment)">{{ toolLineMeta(segment) }}</small>
+      </span>
+      <span v-if="toolHasDetails(segment)" class="chat-segment-tool-chevron" aria-hidden="true">⌄</span>
+    </summary>
+    <div v-if="segment.input || segment.output" class="chat-segment-tool-details">
+      <section v-if="segment.input">
+        <strong>输入</strong>
+        <pre>{{ segment.input }}</pre>
+      </section>
+      <section v-if="segment.output">
+        <strong>输出</strong>
+        <pre>{{ segment.output }}</pre>
+      </section>
+    </div>
+  </details>
 
   <article v-else-if="segment.type === 'error'" class="chat-segment-error">
     <strong>{{ segment.title || "执行出错" }}</strong>

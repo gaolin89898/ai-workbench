@@ -75,6 +75,11 @@ function formatElapsedMs(elapsedMs: number) {
   return `${(elapsedMs / 1000).toFixed(elapsedMs < 10_000 ? 1 : 0)} 秒`;
 }
 
+function formatCompactElapsedMs(elapsedMs: number) {
+  if (elapsedMs < 1000) return `${elapsedMs}ms`;
+  return `${(elapsedMs / 1000).toFixed(elapsedMs < 10_000 ? 1 : 0)}s`;
+}
+
 function setChatRunState(sessionId: string, patch: Partial<ChatRunState>) {
   const previous = chatRunStates.value[sessionId];
   chatRunStates.value = {
@@ -534,6 +539,7 @@ async function sendPrompt(prompt: string) {
 function updatePendingAssistantStatus(sessionId: string, text: string) {
   const pending = pendingAssistants.get(sessionId);
   if (!pending) return;
+  if (shouldHideBackendStatus(text)) return;
   if (pending.lastStatusText === text) return;
   pending.lastStatusText = text;
   pending.hasBackendStatus = true;
@@ -544,6 +550,16 @@ function updatePendingAssistantStatus(sessionId: string, text: string) {
     title: described.title,
     detail: described.detail,
   });
+  if (text === "Codex 会话已连接") {
+    pending.steps.set("conversation-guided", {
+      type: "status",
+      stepId: "conversation-guided",
+      label: "已引导对话",
+      icon: "check",
+    });
+    syncPendingAssistantSegments(sessionId, pending.message.pending === false);
+    return;
+  }
   upsertPendingSegment(sessionId, {
     type: "status",
     stepId: "runtime-status",
@@ -565,6 +581,7 @@ function completePendingAssistantFromExec(sessionId: string) {
   if (!pending) return;
   const text = pending.message.text?.trim() ?? "";
   if (!text) return;
+  upsertCompletionSummary(sessionId);
   syncPendingAssistantSegments(sessionId, true);
   thinkingSessionIds.value = { ...thinkingSessionIds.value, [sessionId]: false };
   pendingAssistants.delete(sessionId);
@@ -577,6 +594,7 @@ function upsertPendingSegment(sessionId: string, segment: ChatSegment) {
   if (!pending || !stepId) return;
   pending.steps.delete("initial-thinking");
   if (segment.type === "status") {
+    if (shouldHideBackendStatus(segment.label)) return;
     if (pending.lastStatusText === segment.label) return;
     pending.lastStatusText = segment.label;
     pending.hasBackendStatus = true;
@@ -587,6 +605,16 @@ function upsertPendingSegment(sessionId: string, segment: ChatSegment) {
       title: described.title,
       detail: segment.detail ?? described.detail,
     });
+    if (segment.label === "Codex 会话已连接") {
+      pending.steps.set("conversation-guided", {
+        type: "status",
+        stepId: "conversation-guided",
+        label: "已引导对话",
+        icon: "check",
+      });
+      syncPendingAssistantSegments(sessionId, pending.message.pending === false);
+      return;
+    }
     pending.steps.set("runtime-status", { ...segment, stepId: "runtime-status" } as ChatSegment);
     syncPendingAssistantSegments(sessionId, pending.message.pending === false);
     return;
@@ -599,7 +627,7 @@ function syncPendingAssistantSegments(sessionId: string, done = false) {
   const pending = pendingAssistants.get(sessionId);
   if (!pending) return;
   const segments = [...pending.steps.values()].filter((segment) => (
-    !done || segment.type !== "status"
+    !done || segment.type !== "status" || isPersistentStatusSegment(segment)
   ));
   if (pending.finalText.trim()) {
     segments.push({ type: "text", text: pending.finalText });
@@ -610,6 +638,30 @@ function syncPendingAssistantSegments(sessionId: string, done = false) {
     text: pending.finalText,
     segments,
   });
+}
+
+function upsertCompletionSummary(sessionId: string) {
+  const pending = pendingAssistants.get(sessionId);
+  if (!pending) return;
+  const elapsedMs = Math.max(0, Math.round(performance.now() - pending.startedAt));
+  pending.steps.delete("runtime-status");
+  pending.steps.delete("initial-thinking");
+  pending.steps.set("final-summary", {
+    type: "status",
+    stepId: "final-summary",
+    label: `已处理 ${formatCompactElapsedMs(elapsedMs)}`,
+    icon: "check",
+  });
+}
+
+function isPersistentStatusSegment(segment: ChatSegment) {
+  return segment.type === "status" && (
+    segment.stepId === "final-summary" || segment.stepId === "conversation-guided"
+  );
+}
+
+function shouldHideBackendStatus(text: string) {
+  return text.includes("已生成一段回复") || text.includes("继续等待最终完成信号");
 }
 
 function patchPendingAssistant(sessionId: string, patch: Partial<ChatMessage>) {
