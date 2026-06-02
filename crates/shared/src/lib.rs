@@ -165,6 +165,30 @@ pub struct GitStatusSnapshot {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct ChatSegment {
+    #[serde(rename = "type")]
+    pub segment_type: String,
+    pub step_id: Option<String>,
+    pub text: Option<String>,
+    pub label: Option<String>,
+    pub detail: Option<String>,
+    pub icon: Option<String>,
+    pub additions: Option<i64>,
+    pub deletions: Option<i64>,
+    pub title: Option<String>,
+    pub collapsed: Option<bool>,
+    pub duration_ms: Option<i64>,
+    pub tool_name: Option<String>,
+    pub command: Option<String>,
+    pub status: Option<String>,
+    pub summary: Option<String>,
+    pub input: Option<String>,
+    pub output: Option<String>,
+    pub message: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(tag = "type")]
 pub enum RealtimeMessage {
     #[serde(rename = "desktop.heartbeat")]
@@ -243,12 +267,21 @@ pub enum RealtimeMessage {
     AiSessionCreate {
         device_id: DeviceId,
         request_id: Uuid,
+        ai_session_id: AiSessionId,
         provider_id: String,
         project_id: Option<ProjectId>,
         project_path: Option<String>,
         title: String,
         creation_mode: String,
         terminal_session_id: Option<String>,
+    },
+
+    #[serde(rename = "ai.session.archive")]
+    #[serde(rename_all = "camelCase")]
+    AiSessionArchive {
+        device_id: DeviceId,
+        ai_session_id: AiSessionId,
+        archived: bool,
     },
 
     #[serde(rename = "ai.message.send")]
@@ -293,6 +326,17 @@ pub enum RealtimeMessage {
         ai_session_id: AiSessionId,
         request_id: Uuid,
         messages: Vec<AiHistoryMessage>,
+    },
+
+    #[serde(rename = "ai.chat.output")]
+    #[serde(rename_all = "camelCase")]
+    AiChatOutput {
+        device_id: DeviceId,
+        ai_session_id: AiSessionId,
+        kind: String,
+        text: Option<String>,
+        step_id: Option<String>,
+        segment: Option<ChatSegment>,
     },
 
     #[serde(rename = "git.status.snapshot")]
@@ -404,5 +448,52 @@ mod tests {
         let json = serde_json::to_value(msg).unwrap();
         assert_eq!(json["type"], "ai.message.send");
         assert_eq!(json["aiSessionId"], Uuid::nil().to_string());
+    }
+
+    #[test]
+    fn serializes_ai_chat_output_type_names() {
+        let msg = RealtimeMessage::AiChatOutput {
+            device_id: Uuid::nil(),
+            ai_session_id: Uuid::nil(),
+            kind: "status".to_string(),
+            text: Some("running".to_string()),
+            step_id: Some("runtime-status".to_string()),
+            segment: Some(ChatSegment {
+                segment_type: "status".to_string(),
+                step_id: Some("runtime-status".to_string()),
+                text: None,
+                label: Some("Codex 正在执行".to_string()),
+                detail: None,
+                icon: Some("think".to_string()),
+                additions: None,
+                deletions: None,
+                title: None,
+                collapsed: None,
+                duration_ms: None,
+                tool_name: None,
+                command: None,
+                status: None,
+                summary: None,
+                input: None,
+                output: None,
+                message: None,
+            }),
+        };
+        let json = serde_json::to_value(msg).unwrap();
+        assert_eq!(json["type"], "ai.chat.output");
+        assert_eq!(json["segment"]["type"], "status");
+        assert_eq!(json["stepId"], "runtime-status");
+    }
+
+    #[test]
+    fn serializes_ai_session_archive_type_names() {
+        let msg = RealtimeMessage::AiSessionArchive {
+            device_id: Uuid::nil(),
+            ai_session_id: Uuid::nil(),
+            archived: true,
+        };
+        let json = serde_json::to_value(msg).unwrap();
+        assert_eq!(json["type"], "ai.session.archive");
+        assert_eq!(json["archived"], true);
     }
 }

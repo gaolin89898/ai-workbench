@@ -1,0 +1,8 @@
+gradle.beforeSettings { settings ->
+    settings.pluginManagement.repositories {
+        maven { url = uri("https://repo.huaweicloud.com/repository/maven/") }
+        google()
+        mavenCentral()
+        gradlePluginPortal()
+    }
+}

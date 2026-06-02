@@ -1,16 +1,18 @@
-use axum::{
-    extract::State,
-    http::HeaderMap,
-    Json,
-};
+use axum::{extract::State, http::HeaderMap, Json};
 use chrono::{Duration, Utc};
 use sqlx::Row;
 use std::sync::Arc;
 use uuid::Uuid;
 
-use crate::auth::{auth_response, authenticate_headers, is_unique_violation, random_pairing_code, token_for, validate_credentials};
+use crate::auth::{
+    auth_response, authenticate_headers, is_unique_violation, random_pairing_code, token_for,
+    validate_credentials,
+};
 use crate::error::ApiError;
-use crate::models::{AuthResponse, LoginRequest, PairDesktopRequest, PairDesktopResponse, PairingCodeResponse, RegisterRequest};
+use crate::models::{
+    AuthResponse, LoginRequest, PairDesktopRequest, PairDesktopResponse, PairingCodeResponse,
+    RegisterRequest,
+};
 use crate::state::AppState;
 
 pub async fn register(

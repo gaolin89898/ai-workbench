@@ -1,8 +1,9 @@
+use futures_util::{SinkExt, StreamExt};
 use portable_pty::{native_pty_system, Child, CommandBuilder, MasterPty, PtySize};
 use remote_term_shared::{
     detect_ai_tool, AiHistoryMessage, AiMessageRole, AiProviderDefinition, AiSession,
-    AiSessionStatus, DesktopProviderStatus, ProviderAuthStatus, SessionStatus, TerminalBackend,
-    TerminalSession, WorkspaceProject,
+    AiSessionStatus, ChatSegment, DesktopProviderStatus, ProviderAuthStatus, RealtimeMessage,
+    SessionStatus, TerminalBackend, TerminalSession, WorkspaceProject,
 };
 use rusqlite::{params, Connection};
 use serde::{Deserialize, Serialize};
@@ -11,18 +12,24 @@ use std::{
     io::{Read, Write},
     path::PathBuf,
     process::Stdio,
-    sync::Mutex,
+    sync::{
+        atomic::{AtomicU64, Ordering},
+        Arc, Mutex,
+    },
     thread,
     time::{Duration, Instant},
 };
 use tauri::{AppHandle, Emitter, Manager, State};
 use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::process::Command;
+use tokio::sync::mpsc;
+use tokio_tungstenite::{connect_async, tungstenite::Message};
 use uuid::Uuid;
 
 const SHELL_TERMINAL_OUTPUT_EVENT: &str = "shell-terminal-output";
 const SHELL_SESSION_STATUS_EVENT: &str = "shell-session-status";
 const AI_CHAT_OUTPUT_EVENT: &str = "ai-chat-output";
+const CLOUD_CONFIG_FILE: &str = "cloud-sync.json";
 
 struct ShellPtySessionManager {
     sessions: Mutex<HashMap<Uuid, ShellPtySessionHandle>>,
@@ -39,6 +46,62 @@ impl ShellPtySessionManager {
     fn new() -> Self {
         Self {
             sessions: Mutex::new(HashMap::new()),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct CloudSyncConfig {
+    server_url: String,
+    device_id: Uuid,
+    access_token: String,
+}
+
+struct DesktopCloudSync {
+    config: Mutex<Option<CloudSyncConfig>>,
+    outbound: Mutex<Option<mpsc::UnboundedSender<RealtimeMessage>>>,
+    generation: AtomicU64,
+}
+
+impl DesktopCloudSync {
+    fn new(config: Option<CloudSyncConfig>) -> Self {
+        Self {
+            config: Mutex::new(config),
+            outbound: Mutex::new(None),
+            generation: AtomicU64::new(0),
+        }
+    }
+
+    fn config(&self) -> Option<CloudSyncConfig> {
+        self.config.lock().ok().and_then(|config| config.clone())
+    }
+
+    fn set_config(&self, config: CloudSyncConfig) {
+        if let Ok(mut current) = self.config.lock() {
+            *current = Some(config);
+        }
+    }
+
+    fn set_outbound(&self, tx: Option<mpsc::UnboundedSender<RealtimeMessage>>) {
+        if let Ok(mut outbound) = self.outbound.lock() {
+            *outbound = tx;
+        }
+    }
+
+    fn next_generation(&self) -> u64 {
+        self.generation.fetch_add(1, Ordering::SeqCst) + 1
+    }
+
+    fn is_current_generation(&self, generation: u64) -> bool {
+        self.generation.load(Ordering::SeqCst) == generation
+    }
+
+    fn send(&self, message: RealtimeMessage) {
+        if let Ok(outbound) = self.outbound.lock() {
+            if let Some(tx) = outbound.as_ref() {
+                let _ = tx.send(message);
+            }
         }
     }
 }
@@ -177,7 +240,12 @@ async fn list_sessions() -> Result<Vec<TerminalSession>, String> {
 }
 
 #[tauri::command]
-async fn pair_desktop(server: String, code: String) -> Result<PairResponse, String> {
+async fn pair_desktop(
+    app: AppHandle,
+    cloud: State<'_, Arc<DesktopCloudSync>>,
+    server: String,
+    code: String,
+) -> Result<PairResponse, String> {
     let url = format!("{}/desktop/pair", server.trim_end_matches('/'));
     let name = std::env::var("HOSTNAME")
         .or_else(|_| std::env::var("COMPUTERNAME"))
@@ -187,7 +255,7 @@ async fn pair_desktop(server: String, code: String) -> Result<PairResponse, Stri
         name,
         os: std::env::consts::OS.to_string(),
     };
-    reqwest::Client::new()
+    let response = reqwest::Client::new()
         .post(url)
         .json(&request)
         .send()
@@ -197,7 +265,16 @@ async fn pair_desktop(server: String, code: String) -> Result<PairResponse, Stri
         .map_err(|error| error.to_string())?
         .json::<PairResponse>()
         .await
-        .map_err(|error| error.to_string())
+        .map_err(|error| error.to_string())?;
+    let config = CloudSyncConfig {
+        server_url: server.trim_end_matches('/').to_string(),
+        device_id: response.device_id,
+        access_token: response.access_token.clone(),
+    };
+    save_cloud_config(&config).map_err(|error| error.to_string())?;
+    cloud.set_config(config.clone());
+    start_cloud_sync(app, cloud.inner().clone(), config);
+    Ok(response)
 }
 
 #[tauri::command]
@@ -278,12 +355,18 @@ async fn get_git_status(path: String) -> Result<GitStatus, String> {
 
 #[tauri::command]
 async fn create_ai_session(req: CreateAiSessionRequest) -> Result<AiSession, String> {
+    create_ai_session_with_id(Uuid::new_v4(), req).await
+}
+
+async fn create_ai_session_with_id(
+    session_id: Uuid,
+    req: CreateAiSessionRequest,
+) -> Result<AiSession, String> {
     ensure_local_db().map_err(|error| error.to_string())?;
     let _provider = default_providers()
         .into_iter()
         .find(|item| item.id == req.provider_id)
         .ok_or_else(|| "unknown provider".to_string())?;
-    let session_id = Uuid::new_v4();
     let session = AiSession {
         id: session_id,
         user_id: Uuid::nil(),
@@ -768,10 +851,241 @@ pub fn run() {
         ])
         .setup(|app| {
             app.manage(ShellPtySessionManager::new());
+            let config = load_cloud_config().ok().flatten();
+            let cloud = Arc::new(DesktopCloudSync::new(config.clone()));
+            app.manage(cloud.clone());
+            if let Some(config) = config {
+                start_cloud_sync(app.handle().clone(), cloud, config);
+            }
             Ok(())
         })
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
+}
+
+fn start_cloud_sync(app: AppHandle, cloud: Arc<DesktopCloudSync>, config: CloudSyncConfig) {
+    let generation = cloud.next_generation();
+    tokio::spawn(async move {
+        while cloud.is_current_generation(generation) {
+            if let Err(error) =
+                connect_cloud_once(app.clone(), cloud.clone(), config.clone(), generation).await
+            {
+                eprintln!("[cloud-sync] disconnected: {error}");
+            }
+            if cloud.is_current_generation(generation) {
+                cloud.set_outbound(None);
+            }
+            tokio::time::sleep(Duration::from_secs(3)).await;
+        }
+    });
+}
+
+async fn connect_cloud_once(
+    app: AppHandle,
+    cloud: Arc<DesktopCloudSync>,
+    config: CloudSyncConfig,
+    generation: u64,
+) -> Result<(), String> {
+    let ws_url = websocket_url(&config.server_url, &config.access_token, "/ws/desktop")?;
+    let (stream, _) = connect_async(ws_url)
+        .await
+        .map_err(|error| error.to_string())?;
+    let (mut writer, mut reader) = stream.split();
+    let (tx, mut rx) = mpsc::unbounded_channel::<RealtimeMessage>();
+    cloud.set_outbound(Some(tx.clone()));
+    send_cloud_bootstrap(&tx, config.device_id).await;
+    let mut heartbeat = tokio::time::interval(Duration::from_secs(15));
+    let mut snapshot = tokio::time::interval(Duration::from_secs(10));
+
+    loop {
+        tokio::select! {
+            _ = heartbeat.tick() => {
+                if !cloud.is_current_generation(generation) {
+                    break;
+                }
+                let _ = tx.send(RealtimeMessage::DesktopHeartbeat {
+                    device_id: config.device_id,
+                    timestamp: chrono::Utc::now(),
+                });
+            }
+            _ = snapshot.tick() => {
+                if !cloud.is_current_generation(generation) {
+                    break;
+                }
+                send_cloud_snapshots(&tx, config.device_id).await;
+            }
+            outgoing = rx.recv() => {
+                let Some(message) = outgoing else { break; };
+                let payload = serde_json::to_string(&message).map_err(|error| error.to_string())?;
+                writer.send(Message::Text(payload.into())).await.map_err(|error| error.to_string())?;
+            }
+            incoming = reader.next() => {
+                let Some(message) = incoming else { break; };
+                let message = message.map_err(|error| error.to_string())?;
+                if let Message::Text(text) = message {
+                    if let Ok(message) = serde_json::from_str::<RealtimeMessage>(&text) {
+                        handle_cloud_message(&app, &tx, config.device_id, message).await;
+                    }
+                }
+            }
+        }
+    }
+    Ok(())
+}
+
+async fn send_cloud_bootstrap(tx: &mpsc::UnboundedSender<RealtimeMessage>, device_id: Uuid) {
+    let _ = tx.send(RealtimeMessage::DesktopHeartbeat {
+        device_id,
+        timestamp: chrono::Utc::now(),
+    });
+    send_cloud_snapshots(tx, device_id).await;
+}
+
+async fn send_cloud_snapshots(tx: &mpsc::UnboundedSender<RealtimeMessage>, device_id: Uuid) {
+    let providers = detect_ai_providers().await.unwrap_or_default();
+    let projects = load_local_projects()
+        .unwrap_or_default()
+        .into_iter()
+        .map(|project| WorkspaceProject {
+            device_id,
+            ..project
+        })
+        .collect::<Vec<_>>();
+    let sessions = load_local_sessions()
+        .unwrap_or_default()
+        .into_iter()
+        .map(|session| AiSession {
+            device_id,
+            ..session
+        })
+        .collect::<Vec<_>>();
+    let _ = tx.send(RealtimeMessage::ProvidersSnapshot {
+        device_id,
+        providers,
+    });
+    let _ = tx.send(RealtimeMessage::ProjectsSnapshot {
+        device_id,
+        projects,
+    });
+    let _ = tx.send(RealtimeMessage::AiSessionsSnapshot {
+        device_id,
+        sessions,
+    });
+}
+
+async fn handle_cloud_message(
+    app: &AppHandle,
+    tx: &mpsc::UnboundedSender<RealtimeMessage>,
+    device_id: Uuid,
+    message: RealtimeMessage,
+) {
+    match message {
+        RealtimeMessage::AiSessionCreate {
+            ai_session_id,
+            provider_id,
+            project_path,
+            title,
+            creation_mode,
+            terminal_session_id,
+            ..
+        } => {
+            let req = CreateAiSessionRequest {
+                provider_id,
+                project_path: project_path.unwrap_or_default(),
+                title,
+                creation_mode,
+                terminal_session_id,
+            };
+            if create_ai_session_with_id(ai_session_id, req).await.is_ok() {
+                send_cloud_snapshots(tx, device_id).await;
+            }
+        }
+        RealtimeMessage::AiMessageSend {
+            ai_session_id,
+            content,
+            ..
+        } => {
+            if let Some(session) = load_local_sessions()
+                .unwrap_or_default()
+                .into_iter()
+                .find(|session| session.id == ai_session_id)
+            {
+                let project_path = session.summary.unwrap_or_default();
+                if project_path.trim().is_empty() {
+                    emit_ai_chat_error(app, ai_session_id, "当前 AI 会话没有项目路径。");
+                    return;
+                }
+                if session.provider_id != "codex" {
+                    emit_ai_chat_error(app, ai_session_id, "移动端结构化聊天暂仅支持 Codex。");
+                    return;
+                }
+                let _ = save_local_message(ai_session_id, AiMessageRole::User, &content);
+                let result = run_codex_chat(
+                    app.clone(),
+                    RunCodexChatRequest {
+                        ai_session_id,
+                        project_path,
+                        prompt: content,
+                    },
+                )
+                .await;
+                match result {
+                    Ok(text) => {
+                        let _ = tx.send(RealtimeMessage::AiMessageDone {
+                            device_id,
+                            ai_session_id,
+                            status: AiSessionStatus::Idle,
+                            summary: Some(text.chars().take(160).collect()),
+                        });
+                    }
+                    Err(error) => {
+                        let _ = tx.send(RealtimeMessage::AiMessageDone {
+                            device_id,
+                            ai_session_id,
+                            status: AiSessionStatus::Failed,
+                            summary: Some(error),
+                        });
+                    }
+                }
+                send_cloud_snapshots(tx, device_id).await;
+            }
+        }
+        RealtimeMessage::AiHistoryRequest {
+            ai_session_id,
+            request_id,
+            ..
+        } => {
+            let messages = load_local_history(ai_session_id).unwrap_or_default();
+            let _ = tx.send(RealtimeMessage::AiHistoryResponse {
+                device_id,
+                ai_session_id,
+                request_id,
+                messages,
+            });
+        }
+        RealtimeMessage::AiSessionArchive {
+            ai_session_id,
+            archived,
+            ..
+        } => {
+            if set_local_session_archived(ai_session_id, archived).is_ok() {
+                send_cloud_snapshots(tx, device_id).await;
+            }
+        }
+        _ => {}
+    }
+}
+
+fn websocket_url(server: &str, token: &str, path: &str) -> Result<String, String> {
+    let server = server.trim_end_matches('/');
+    let base = if let Some(rest) = server.strip_prefix("https://") {
+        format!("wss://{rest}")
+    } else if let Some(rest) = server.strip_prefix("http://") {
+        format!("ws://{rest}")
+    } else {
+        return Err("server must start with http:// or https://".to_string());
+    };
+    Ok(format!("{base}{path}?token={token}"))
 }
 
 fn spawn_shell_reader_with_buffer(
@@ -837,6 +1151,12 @@ fn spawn_shell_reader_with_buffer(
 }
 
 fn emit_ai_chat_status(app: &AppHandle, ai_session_id: Uuid, text: &str) {
+    let segment = serde_json::json!({
+        "type": "status",
+        "stepId": format!("status-{}", text),
+        "label": text,
+        "icon": "think",
+    });
     let _ = app.emit(
         AI_CHAT_OUTPUT_EVENT,
         AiChatOutputEvent {
@@ -844,13 +1164,16 @@ fn emit_ai_chat_status(app: &AppHandle, ai_session_id: Uuid, text: &str) {
             kind: "status".to_string(),
             text: Some(text.to_string()),
             step_id: Some(format!("status-{}", text)),
-            segment: Some(serde_json::json!({
-                "type": "status",
-                "stepId": format!("status-{}", text),
-                "label": text,
-                "icon": "think",
-            })),
+            segment: Some(segment.clone()),
         },
+    );
+    send_cloud_ai_chat_output(
+        app,
+        ai_session_id,
+        "status",
+        Some(text.to_string()),
+        Some(format!("status-{}", text)),
+        Some(segment),
     );
 }
 
@@ -861,6 +1184,7 @@ fn emit_ai_chat_step(
     step_id: &str,
     segment: serde_json::Value,
 ) {
+    let cloud_segment = segment.clone();
     let _ = app.emit(
         AI_CHAT_OUTPUT_EVENT,
         AiChatOutputEvent {
@@ -871,9 +1195,21 @@ fn emit_ai_chat_step(
             segment: Some(segment),
         },
     );
+    send_cloud_ai_chat_output(
+        app,
+        ai_session_id,
+        kind,
+        None,
+        Some(step_id.to_string()),
+        Some(cloud_segment),
+    );
 }
 
 fn emit_ai_chat_done(app: &AppHandle, ai_session_id: Uuid, text: &str) {
+    let segment = serde_json::json!({
+        "type": "text",
+        "text": text,
+    });
     let _ = app.emit(
         AI_CHAT_OUTPUT_EVENT,
         AiChatOutputEvent {
@@ -881,15 +1217,25 @@ fn emit_ai_chat_done(app: &AppHandle, ai_session_id: Uuid, text: &str) {
             kind: "done".to_string(),
             text: Some(text.to_string()),
             step_id: None,
-            segment: Some(serde_json::json!({
-                "type": "text",
-                "text": text,
-            })),
+            segment: Some(segment.clone()),
         },
+    );
+    send_cloud_ai_chat_output(
+        app,
+        ai_session_id,
+        "done",
+        Some(text.to_string()),
+        None,
+        Some(segment),
     );
 }
 
 fn emit_ai_chat_error(app: &AppHandle, ai_session_id: Uuid, text: &str) {
+    let segment = serde_json::json!({
+        "type": "error",
+        "title": "Codex 执行失败",
+        "message": text,
+    });
     let _ = app.emit(
         AI_CHAT_OUTPUT_EVENT,
         AiChatOutputEvent {
@@ -897,13 +1243,42 @@ fn emit_ai_chat_error(app: &AppHandle, ai_session_id: Uuid, text: &str) {
             kind: "error".to_string(),
             text: Some(text.to_string()),
             step_id: None,
-            segment: Some(serde_json::json!({
-                "type": "error",
-                "title": "Codex 执行失败",
-                "message": text,
-            })),
+            segment: Some(segment.clone()),
         },
     );
+    send_cloud_ai_chat_output(
+        app,
+        ai_session_id,
+        "error",
+        Some(text.to_string()),
+        None,
+        Some(segment),
+    );
+}
+
+fn send_cloud_ai_chat_output(
+    app: &AppHandle,
+    ai_session_id: Uuid,
+    kind: &str,
+    text: Option<String>,
+    step_id: Option<String>,
+    segment: Option<serde_json::Value>,
+) {
+    let Some(cloud) = app.try_state::<Arc<DesktopCloudSync>>() else {
+        return;
+    };
+    let Some(config) = cloud.config() else {
+        return;
+    };
+    let segment = segment.and_then(|value| serde_json::from_value::<ChatSegment>(value).ok());
+    cloud.send(RealtimeMessage::AiChatOutput {
+        device_id: config.device_id,
+        ai_session_id,
+        kind: kind.to_string(),
+        text,
+        step_id,
+        segment,
+    });
 }
 
 fn handle_codex_json_line(
@@ -1655,6 +2030,38 @@ fn db_path() -> PathBuf {
                 .unwrap_or_else(|_| ".".to_string());
             PathBuf::from(home).join(".ai-workbench").join("history.db")
         })
+}
+
+fn app_data_dir() -> PathBuf {
+    db_path()
+        .parent()
+        .map(PathBuf::from)
+        .unwrap_or_else(|| PathBuf::from("."))
+}
+
+fn cloud_config_path() -> PathBuf {
+    app_data_dir().join(CLOUD_CONFIG_FILE)
+}
+
+fn save_cloud_config(config: &CloudSyncConfig) -> std::io::Result<()> {
+    let path = cloud_config_path();
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent)?;
+    }
+    let content = serde_json::to_string_pretty(config)
+        .map_err(|error| std::io::Error::new(std::io::ErrorKind::InvalidData, error))?;
+    std::fs::write(path, content)
+}
+
+fn load_cloud_config() -> std::io::Result<Option<CloudSyncConfig>> {
+    let path = cloud_config_path();
+    if !path.exists() {
+        return Ok(None);
+    }
+    let content = std::fs::read_to_string(path)?;
+    let config = serde_json::from_str::<CloudSyncConfig>(&content)
+        .map_err(|error| std::io::Error::new(std::io::ErrorKind::InvalidData, error))?;
+    Ok(Some(config))
 }
 
 fn codex_home() -> PathBuf {

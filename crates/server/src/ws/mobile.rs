@@ -6,7 +6,10 @@ use tokio::sync::mpsc;
 use tracing::error;
 use uuid::Uuid;
 
-use crate::db::{ensure_ai_session_owner, ensure_device_owner, insert_activity_log, load_settings, ActivityLogInsert};
+use crate::db::{
+    ensure_ai_session_owner, ensure_device_owner, insert_activity_log, load_settings,
+    ActivityLogInsert,
+};
 use crate::state::{AppState, MobileConnection};
 use crate::ws::dispatch::{forward_to_desktop, notify_mobiles};
 
@@ -56,7 +59,18 @@ async fn handle_mobile_message(state: &Arc<AppState>, user_id: Uuid, message: Re
             input,
             input_kind,
             confirmed_risk,
-        } => handle_terminal_input(state, user_id, device_id, session_id, input, input_kind, confirmed_risk).await,
+        } => {
+            handle_terminal_input(
+                state,
+                user_id,
+                device_id,
+                session_id,
+                input,
+                input_kind,
+                confirmed_risk,
+            )
+            .await
+        }
         RealtimeMessage::TerminalControl {
             device_id,
             session_id,
@@ -67,12 +81,27 @@ async fn handle_mobile_message(state: &Arc<AppState>, user_id: Uuid, message: Re
             ai_session_id,
             content,
             confirmed_risk,
-        } => handle_ai_message_send(state, user_id, device_id, ai_session_id, content, confirmed_risk).await,
+        } => {
+            handle_ai_message_send(
+                state,
+                user_id,
+                device_id,
+                ai_session_id,
+                content,
+                confirmed_risk,
+            )
+            .await
+        }
         RealtimeMessage::AiHistoryRequest {
             device_id,
             ai_session_id,
             request_id,
         } => handle_ai_history_request(state, user_id, device_id, ai_session_id, request_id).await,
+        RealtimeMessage::AiSessionArchive {
+            device_id,
+            ai_session_id,
+            archived,
+        } => handle_ai_session_archive(state, user_id, device_id, ai_session_id, archived).await,
         _ => {}
     }
 }
@@ -299,4 +328,47 @@ async fn handle_ai_history_request(
         )
         .await;
     }
+}
+
+async fn handle_ai_session_archive(
+    state: &Arc<AppState>,
+    user_id: Uuid,
+    device_id: Uuid,
+    ai_session_id: Uuid,
+    archived: bool,
+) {
+    if ensure_ai_session_owner(&state.pool, user_id, ai_session_id, device_id)
+        .await
+        .is_err()
+    {
+        return;
+    }
+    insert_activity_log(
+        &state.pool,
+        ActivityLogInsert {
+            user_id,
+            device_id: Some(device_id),
+            session_id: None,
+            kind: "settings",
+            title: if archived {
+                "AI 会话已请求归档"
+            } else {
+                "AI 会话已请求恢复"
+            },
+            body: "移动端请求桌面端更新本地 AI 会话归档状态。",
+            risky: false,
+        },
+    )
+    .await;
+    forward_to_desktop(
+        state,
+        user_id,
+        device_id,
+        RealtimeMessage::AiSessionArchive {
+            device_id,
+            ai_session_id,
+            archived,
+        },
+    )
+    .await;
 }

@@ -7,7 +7,9 @@ use sqlx::Row;
 use std::sync::Arc;
 
 use crate::auth::authenticate_headers;
-use crate::db::{ensure_device_owner, insert_activity_log, load_settings, row_to_settings, ActivityLogInsert};
+use crate::db::{
+    ensure_device_owner, insert_activity_log, load_settings, row_to_settings, ActivityLogInsert,
+};
 use crate::error::ApiError;
 use crate::models::{ActivityLogQuery, ActivityLogResponse, UserSettingsResponse};
 use crate::state::AppState;

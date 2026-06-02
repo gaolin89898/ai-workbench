@@ -7,11 +7,11 @@ use tracing::error;
 use uuid::Uuid;
 
 use crate::db::{
-    ensure_device_owner, insert_activity_log, mark_device_online, upsert_ai_sessions, upsert_projects,
-    upsert_provider_statuses, upsert_sessions, ActivityLogInsert,
+    ensure_device_owner, insert_activity_log, mark_device_online, upsert_ai_sessions,
+    upsert_projects, upsert_provider_statuses, upsert_sessions, ActivityLogInsert,
 };
 use crate::state::{AppState, DesktopConnection};
-use crate::ws::dispatch::{now_heartbeat, notify_mobiles};
+use crate::ws::dispatch::{notify_mobiles, now_heartbeat};
 
 pub async fn desktop_socket(state: Arc<AppState>, user_id: Uuid, socket: WebSocket) {
     let (mut sender, mut receiver) = socket.split();
@@ -77,9 +77,10 @@ async fn handle_desktop_message(
             device_id,
             timestamp: _,
         } => Some(handle_heartbeat(state, user_id, device_id, tx).await),
-        RealtimeMessage::SessionsSnapshot { device_id, sessions } => {
-            handle_sessions_snapshot(state, user_id, device_id, sessions).await
-        }
+        RealtimeMessage::SessionsSnapshot {
+            device_id,
+            sessions,
+        } => handle_sessions_snapshot(state, user_id, device_id, sessions).await,
         RealtimeMessage::TerminalOutput { device_id, .. } => {
             notify_mobiles(state, user_id, message).await;
             Some(device_id)
@@ -90,7 +91,14 @@ async fn handle_desktop_message(
             code,
             message: err_message,
         } => {
-            handle_terminal_error(state, user_id, device_id, session_id.as_deref(), &err_message).await;
+            handle_terminal_error(
+                state,
+                user_id,
+                device_id,
+                session_id.as_deref(),
+                &err_message,
+            )
+            .await;
             notify_mobiles(
                 state,
                 user_id,
@@ -104,18 +112,22 @@ async fn handle_desktop_message(
             .await;
             Some(device_id)
         }
-        RealtimeMessage::ProvidersSnapshot { device_id, providers } => {
-            handle_providers_snapshot(state, user_id, device_id, providers).await
-        }
-        RealtimeMessage::ProjectsSnapshot { device_id, projects } => {
-            handle_projects_snapshot(state, user_id, device_id, projects).await
-        }
-        RealtimeMessage::AiSessionsSnapshot { device_id, sessions } => {
-            handle_ai_sessions_snapshot(state, user_id, device_id, sessions).await
-        }
+        RealtimeMessage::ProvidersSnapshot {
+            device_id,
+            providers,
+        } => handle_providers_snapshot(state, user_id, device_id, providers).await,
+        RealtimeMessage::ProjectsSnapshot {
+            device_id,
+            projects,
+        } => handle_projects_snapshot(state, user_id, device_id, projects).await,
+        RealtimeMessage::AiSessionsSnapshot {
+            device_id,
+            sessions,
+        } => handle_ai_sessions_snapshot(state, user_id, device_id, sessions).await,
         RealtimeMessage::AiMessageDelta { device_id, .. }
         | RealtimeMessage::AiMessageDone { device_id, .. }
         | RealtimeMessage::AiHistoryResponse { device_id, .. }
+        | RealtimeMessage::AiChatOutput { device_id, .. }
         | RealtimeMessage::GitStatusSnapshot {
             snapshot: remote_term_shared::GitStatusSnapshot { device_id, .. },
         } => {
@@ -194,7 +206,10 @@ async fn handle_sessions_snapshot(
     notify_mobiles(
         state,
         user_id,
-        RealtimeMessage::SessionsSnapshot { device_id, sessions },
+        RealtimeMessage::SessionsSnapshot {
+            device_id,
+            sessions,
+        },
     )
     .await;
     Some(device_id)
@@ -218,7 +233,10 @@ async fn handle_providers_snapshot(
     notify_mobiles(
         state,
         user_id,
-        RealtimeMessage::ProvidersSnapshot { device_id, providers },
+        RealtimeMessage::ProvidersSnapshot {
+            device_id,
+            providers,
+        },
     )
     .await;
     Some(device_id)
@@ -242,7 +260,10 @@ async fn handle_projects_snapshot(
     notify_mobiles(
         state,
         user_id,
-        RealtimeMessage::ProjectsSnapshot { device_id, projects },
+        RealtimeMessage::ProjectsSnapshot {
+            device_id,
+            projects,
+        },
     )
     .await;
     Some(device_id)
@@ -260,13 +281,16 @@ async fn handle_ai_sessions_snapshot(
     {
         return None;
     }
-    if let Err(err) = upsert_ai_sessions(&state.pool, &sessions).await {
+    if let Err(err) = upsert_ai_sessions(&state.pool, user_id, device_id, &sessions).await {
         error!(?err, "failed to upsert ai sessions");
     }
     notify_mobiles(
         state,
         user_id,
-        RealtimeMessage::AiSessionsSnapshot { device_id, sessions },
+        RealtimeMessage::AiSessionsSnapshot {
+            device_id,
+            sessions,
+        },
     )
     .await;
     Some(device_id)

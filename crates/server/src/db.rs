@@ -3,7 +3,9 @@ use tracing::error;
 use uuid::Uuid;
 
 use crate::models::UserSettingsResponse;
-use remote_term_shared::{AiProviderDefinition, AiSession, DesktopProviderStatus, TerminalSession, WorkspaceProject};
+use remote_term_shared::{
+    AiProviderDefinition, AiSession, DesktopProviderStatus, TerminalSession, WorkspaceProject,
+};
 
 pub async fn ensure_device_owner(
     pool: &PgPool,
@@ -17,7 +19,9 @@ pub async fn ensure_device_owner(
     .bind(user_id)
     .fetch_one(pool)
     .await?;
-    exists.then_some(()).ok_or(crate::error::ApiError::Forbidden)
+    exists
+        .then_some(())
+        .ok_or(crate::error::ApiError::Forbidden)
 }
 
 pub async fn ensure_project_owner(
@@ -32,7 +36,9 @@ pub async fn ensure_project_owner(
     .bind(device_id)
     .fetch_one(pool)
     .await?;
-    exists.then_some(()).ok_or(crate::error::ApiError::Forbidden)
+    exists
+        .then_some(())
+        .ok_or(crate::error::ApiError::Forbidden)
 }
 
 pub async fn ensure_ai_session_owner(
@@ -49,7 +55,9 @@ pub async fn ensure_ai_session_owner(
     .bind(device_id)
     .fetch_one(pool)
     .await?;
-    exists.then_some(()).ok_or(crate::error::ApiError::Forbidden)
+    exists
+        .then_some(())
+        .ok_or(crate::error::ApiError::Forbidden)
 }
 
 pub async fn mark_device_online(
@@ -122,23 +130,29 @@ pub async fn upsert_projects(
     Ok(())
 }
 
-pub async fn upsert_ai_sessions(pool: &PgPool, sessions: &[AiSession]) -> Result<(), sqlx::Error> {
+pub async fn upsert_ai_sessions(
+    pool: &PgPool,
+    user_id: Uuid,
+    device_id: Uuid,
+    sessions: &[AiSession],
+) -> Result<(), sqlx::Error> {
     let mut tx = pool.begin().await?;
     for session in sessions {
         sqlx::query(
             r#"
-            INSERT INTO ai_sessions (id, user_id, device_id, project_id, provider_id, terminal_session_id, title, status, summary, archived_at, updated_at)
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+            INSERT INTO ai_sessions (id, user_id, device_id, project_id, provider_id, terminal_session_id, provider_session_id, title, status, summary, archived_at, updated_at)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
             ON CONFLICT (id)
-            DO UPDATE SET project_id = EXCLUDED.project_id, provider_id = EXCLUDED.provider_id, terminal_session_id = EXCLUDED.terminal_session_id, title = EXCLUDED.title, status = EXCLUDED.status, summary = EXCLUDED.summary, archived_at = EXCLUDED.archived_at, updated_at = EXCLUDED.updated_at
+            DO UPDATE SET project_id = EXCLUDED.project_id, provider_id = EXCLUDED.provider_id, terminal_session_id = EXCLUDED.terminal_session_id, provider_session_id = EXCLUDED.provider_session_id, title = EXCLUDED.title, status = EXCLUDED.status, summary = EXCLUDED.summary, archived_at = EXCLUDED.archived_at, updated_at = EXCLUDED.updated_at
             "#,
         )
         .bind(session.id)
-        .bind(session.user_id)
-        .bind(session.device_id)
+        .bind(user_id)
+        .bind(device_id)
         .bind(session.project_id)
         .bind(&session.provider_id)
         .bind(&session.terminal_session_id)
+        .bind(&session.provider_session_id)
         .bind(&session.title)
         .bind(serde_json::to_value(&session.status).unwrap().as_str().unwrap())
         .bind(&session.summary)
@@ -231,7 +245,7 @@ pub fn row_to_ai_session(row: sqlx::postgres::PgRow) -> anyhow::Result<AiSession
         project_id: row.get("project_id"),
         provider_id: row.get("provider_id"),
         terminal_session_id: row.get("terminal_session_id"),
-        provider_session_id: None,
+        provider_session_id: row.get("provider_session_id"),
         title: row.get("title"),
         status: serde_json::from_value(serde_json::Value::String(row.get("status")))?,
         summary: row.get("summary"),
@@ -268,7 +282,10 @@ pub async fn insert_activity_log(pool: &PgPool, item: ActivityLogInsert<'_>) {
     }
 }
 
-pub async fn load_settings(pool: &PgPool, user_id: Uuid) -> Result<UserSettingsResponse, sqlx::Error> {
+pub async fn load_settings(
+    pool: &PgPool,
+    user_id: Uuid,
+) -> Result<UserSettingsResponse, sqlx::Error> {
     let row = sqlx::query(
         "SELECT command_logging_enabled, risk_confirmation_enabled, output_buffer_lines, auto_reconnect_enabled FROM users WHERE id = $1",
     )

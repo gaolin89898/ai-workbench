@@ -8,7 +8,9 @@ use std::sync::Arc;
 use uuid::Uuid;
 
 use crate::auth::authenticate_headers;
-use crate::db::{ensure_device_owner, ensure_project_owner, row_to_ai_session, row_to_project, row_to_provider};
+use crate::db::{
+    ensure_device_owner, ensure_project_owner, row_to_ai_session, row_to_project, row_to_provider,
+};
 use crate::error::ApiError;
 use crate::models::CreateAiSessionRequest;
 use crate::state::AppState;
@@ -81,7 +83,7 @@ pub async fn list_ai_sessions(
     let user_id = authenticate_headers(&state, &headers)?;
     ensure_device_owner(&state.pool, user_id, device_id).await?;
     let rows = sqlx::query(
-        "SELECT id, user_id, device_id, project_id, provider_id, terminal_session_id, title, status, summary, archived_at, updated_at FROM ai_sessions WHERE device_id = $1 AND user_id = $2 ORDER BY updated_at DESC",
+        "SELECT id, user_id, device_id, project_id, provider_id, terminal_session_id, provider_session_id, title, status, summary, archived_at, updated_at FROM ai_sessions WHERE device_id = $1 AND user_id = $2 ORDER BY updated_at DESC",
     )
     .bind(device_id)
     .bind(user_id)
@@ -112,9 +114,9 @@ pub async fn create_ai_session(
     }
     let row = sqlx::query(
         r#"
-        INSERT INTO ai_sessions (user_id, device_id, project_id, provider_id, terminal_session_id, title, status, summary, archived_at, updated_at)
-        VALUES ($1, $2, $3, $4, $5, $6, 'idle', $7, NULL, NOW())
-        RETURNING id, user_id, device_id, project_id, provider_id, terminal_session_id, title, status, summary, archived_at, updated_at
+        INSERT INTO ai_sessions (user_id, device_id, project_id, provider_id, terminal_session_id, provider_session_id, title, status, summary, archived_at, updated_at)
+        VALUES ($1, $2, $3, $4, $5, NULL, $6, 'idle', $7, NULL, NOW())
+        RETURNING id, user_id, device_id, project_id, provider_id, terminal_session_id, provider_session_id, title, status, summary, archived_at, updated_at
         "#,
     )
     .bind(user_id)
@@ -134,6 +136,7 @@ pub async fn create_ai_session(
         RealtimeMessage::AiSessionCreate {
             device_id,
             request_id: Uuid::new_v4(),
+            ai_session_id: session.id,
             provider_id: req.provider_id,
             project_id: req.project_id,
             project_path: req.project_path,
@@ -153,7 +156,7 @@ pub async fn get_ai_session(
 ) -> Result<Json<AiSession>, ApiError> {
     let user_id = authenticate_headers(&state, &headers)?;
     let row = sqlx::query(
-        "SELECT id, user_id, device_id, project_id, provider_id, terminal_session_id, title, status, summary, archived_at, updated_at FROM ai_sessions WHERE id = $1 AND user_id = $2",
+        "SELECT id, user_id, device_id, project_id, provider_id, terminal_session_id, provider_session_id, title, status, summary, archived_at, updated_at FROM ai_sessions WHERE id = $1 AND user_id = $2",
     )
     .bind(session_id)
     .bind(user_id)
