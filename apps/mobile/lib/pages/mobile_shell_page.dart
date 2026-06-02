@@ -30,11 +30,15 @@ class _MobileShellPageState extends State<MobileShellPage> {
         selectedIndex: _index,
         onDestinationSelected: (value) => setState(() => _index = value),
         destinations: const [
-          NavigationDestination(icon: Icon(Icons.space_dashboard_outlined), label: '工作台'),
+          NavigationDestination(
+              icon: Icon(Icons.space_dashboard_outlined), label: '工作台'),
           NavigationDestination(icon: Icon(Icons.folder_outlined), label: '项目'),
-          NavigationDestination(icon: Icon(Icons.chat_bubble_outline), label: '会话'),
-          NavigationDestination(icon: Icon(Icons.receipt_long_outlined), label: '日志'),
-          NavigationDestination(icon: Icon(Icons.settings_outlined), label: '设置'),
+          NavigationDestination(
+              icon: Icon(Icons.chat_bubble_outline), label: '会话'),
+          NavigationDestination(
+              icon: Icon(Icons.receipt_long_outlined), label: '日志'),
+          NavigationDestination(
+              icon: Icon(Icons.settings_outlined), label: '设置'),
         ],
       ),
     );
@@ -52,20 +56,30 @@ class _DashboardTab extends StatelessWidget {
       builder: (context, _) => Scaffold(
         appBar: AppBar(
           title: Text(ws.selectedDevice?.name ?? '工作台'),
-          actions: [IconButton(onPressed: ws.refreshWorkspace, icon: const Icon(Icons.refresh))],
+          actions: [
+            IconButton(
+                onPressed: ws.refreshWorkspace, icon: const Icon(Icons.refresh))
+          ],
         ),
         body: ListView(
           padding: const EdgeInsets.all(16),
           children: [
             _MetricGrid(
               values: [
-                ('Provider', '${ws.providerStatuses.where((item) => item.installed).length}/${ws.providerStatuses.length} 可用'),
+                (
+                  'Provider',
+                  '${ws.providerStatuses.where((item) => item.installed).length}/${ws.providerStatuses.length} 可用'
+                ),
                 ('项目', '${ws.projects.length} 个'),
-                ('会话', '${ws.sessions.where((item) => !item.archived).length} 个活跃'),
+                (
+                  '会话',
+                  '${ws.sessions.where((item) => !item.archived).length} 个活跃'
+                ),
               ],
             ),
             const SizedBox(height: 16),
-            const Text('最近 AI 会话', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w900)),
+            const Text('最近 AI 会话',
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.w900)),
             const SizedBox(height: 10),
             if (ws.sessions.isEmpty)
               const AppCard(child: Text('还没有 AI 会话。先从项目页创建一个 Codex 会话。'))
@@ -97,7 +111,9 @@ class _ProjectsTab extends StatelessWidget {
             padding: const EdgeInsets.all(16),
             children: [
               if (ws.projects.isEmpty)
-                const SizedBox(height: 360, child: EmptyState('桌面端还没有同步项目。请先在桌面端添加本机项目目录。'))
+                const SizedBox(
+                    height: 360,
+                    child: EmptyState('桌面端还没有同步项目。请先在桌面端添加本机项目目录。'))
               else
                 ...ws.projects.map((project) => Padding(
                       padding: const EdgeInsets.only(bottom: 12),
@@ -105,9 +121,13 @@ class _ProjectsTab extends StatelessWidget {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Text(project.name, style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w900)),
+                            Text(project.name,
+                                style: const TextStyle(
+                                    fontSize: 17, fontWeight: FontWeight.w900)),
                             const SizedBox(height: 4),
-                            Text(project.path, style: const TextStyle(color: AppColors.muted, fontSize: 12)),
+                            Text(project.path,
+                                style: const TextStyle(
+                                    color: AppColors.muted, fontSize: 12)),
                             const SizedBox(height: 10),
                             Row(
                               children: [
@@ -118,10 +138,18 @@ class _ProjectsTab extends StatelessWidget {
                                 const Spacer(),
                                 FilledButton.icon(
                                   onPressed: () async {
-                                    final session = await ws.createCodexSession(project);
+                                    final session =
+                                        await ws.createCodexSession(project);
                                     if (session != null && context.mounted) {
                                       ws.openSession(session);
-                                      Navigator.of(context).push(MaterialPageRoute(builder: (_) => ChatPage(session: session)));
+                                      Navigator.of(context).push(
+                                        MaterialPageRoute(
+                                          builder: (_) => WorkspaceScope(
+                                            controller: ws,
+                                            child: ChatPage(session: session),
+                                          ),
+                                        ),
+                                      );
                                     }
                                   },
                                   icon: const Icon(Icons.add),
@@ -163,7 +191,9 @@ class _SessionsTab extends StatelessWidget {
           padding: const EdgeInsets.all(16),
           children: [
             if (ws.visibleSessions.isEmpty)
-              SizedBox(height: 360, child: EmptyState(ws.showArchived ? '没有已归档会话。' : '还没有活跃会话。'))
+              SizedBox(
+                  height: 360,
+                  child: EmptyState(ws.showArchived ? '没有已归档会话。' : '还没有活跃会话。'))
             else
               ...ws.visibleSessions.map((session) => Padding(
                     padding: const EdgeInsets.only(bottom: 10),
@@ -198,11 +228,17 @@ class _LogsTab extends StatelessWidget {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text(log.title, style: const TextStyle(fontWeight: FontWeight.w900)),
+                          Text(log.title,
+                              style:
+                                  const TextStyle(fontWeight: FontWeight.w900)),
                           const SizedBox(height: 4),
-                          Text(log.body, style: const TextStyle(color: AppColors.muted, height: 1.4)),
+                          Text(log.body,
+                              style: const TextStyle(
+                                  color: AppColors.muted, height: 1.4)),
                           const SizedBox(height: 4),
-                          Text(log.createdAt, style: const TextStyle(color: AppColors.muted, fontSize: 11)),
+                          Text(log.createdAt,
+                              style: const TextStyle(
+                                  color: AppColors.muted, fontSize: 11)),
                         ],
                       ),
                     ),
@@ -230,9 +266,15 @@ class _MetricGrid extends StatelessWidget {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(item.$1, style: const TextStyle(color: AppColors.muted, fontSize: 12, fontWeight: FontWeight.w800)),
+                        Text(item.$1,
+                            style: const TextStyle(
+                                color: AppColors.muted,
+                                fontSize: 12,
+                                fontWeight: FontWeight.w800)),
                         const SizedBox(height: 8),
-                        Text(item.$2, style: const TextStyle(fontWeight: FontWeight.w900)),
+                        Text(item.$2,
+                            style:
+                                const TextStyle(fontWeight: FontWeight.w900)),
                       ],
                     ),
                   ),
@@ -252,21 +294,36 @@ class _SessionTile extends StatelessWidget {
   Widget build(BuildContext context) {
     final ws = WorkspaceScope.of(context);
     final session = ws.sessions.firstWhere((item) => item.id == sessionId);
-    final project = ws.projects.where((item) => item.path == session.summary).firstOrNull;
+    final project =
+        ws.projects.where((item) => item.path == session.summary).firstOrNull;
     return AppCard(
       onTap: () {
         ws.openSession(session);
-        Navigator.of(context).push(MaterialPageRoute(builder: (_) => ChatPage(session: session)));
+        Navigator.of(context).push(
+          MaterialPageRoute(
+            builder: (_) => WorkspaceScope(
+              controller: ws,
+              child: ChatPage(session: session),
+            ),
+          ),
+        );
       },
       child: Row(
         children: [
-          Icon(session.providerId == 'codex' ? Icons.smart_toy_outlined : Icons.extension_outlined, color: AppColors.primary),
+          Icon(
+              session.providerId == 'codex'
+                  ? Icons.smart_toy_outlined
+                  : Icons.extension_outlined,
+              color: AppColors.primary),
           const SizedBox(width: 12),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(session.title, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w900)),
+                Text(session.title,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(fontWeight: FontWeight.w900)),
                 Text(
                   '${session.providerId} · ${project?.name ?? session.summary ?? '未绑定项目'}',
                   maxLines: 1,
@@ -277,9 +334,11 @@ class _SessionTile extends StatelessWidget {
             ),
           ),
           if (ws.runStatusBySession[session.id] != null)
-            Text(ws.runStatusBySession[session.id]!, style: const TextStyle(color: AppColors.muted, fontSize: 11))
+            Text(ws.runStatusBySession[session.id]!,
+                style: const TextStyle(color: AppColors.muted, fontSize: 11))
           else
-            Text(session.archived ? '已归档' : session.status, style: const TextStyle(color: AppColors.muted, fontSize: 11)),
+            Text(session.archived ? '已归档' : session.status,
+                style: const TextStyle(color: AppColors.muted, fontSize: 11)),
         ],
       ),
     );
