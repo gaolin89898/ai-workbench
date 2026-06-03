@@ -34,7 +34,7 @@ class _UpdatePageState extends State<UpdatePage> {
                         TextStyle(fontSize: 18, fontWeight: FontWeight.w900)),
                 const SizedBox(height: 6),
                 const Text(
-                  '从 GitHub Releases 检查最新 mobile-v* APK。下载后会交给系统浏览器和安装器处理。',
+                  '优先从 OpenList 检查移动端 APK，失败时自动回退到 GitHub Releases。下载后会交给系统浏览器和安装器处理。',
                   style: TextStyle(color: AppColors.muted, height: 1.45),
                 ),
                 const SizedBox(height: 16),
@@ -55,8 +55,8 @@ class _UpdatePageState extends State<UpdatePage> {
                     style: TextStyle(fontWeight: FontWeight.w900)),
                 const SizedBox(height: 8),
                 Text(_status,
-                    style: const TextStyle(
-                        color: AppColors.muted, height: 1.45)),
+                    style:
+                        const TextStyle(color: AppColors.muted, height: 1.45)),
                 if (update != null) ...[
                   const SizedBox(height: 14),
                   _UpdateStatus(update: update),
@@ -80,15 +80,14 @@ class _UpdatePageState extends State<UpdatePage> {
   Future<void> _checkUpdate() async {
     setState(() {
       _checking = true;
-      _status = '正在检查 GitHub Releases...';
+      _status = '正在检查 OpenList 更新源...';
     });
     try {
       final update = await _updates.check();
       if (!mounted) return;
       setState(() {
         _update = update;
-        _status =
-            update.available ? '发现新版本 ${update.version}' : '当前已经是最新版本。';
+        _status = update.available ? '发现新版本 ${update.version}' : '当前已经是最新版本。';
       });
     } catch (error) {
       if (mounted) setState(() => _status = '检查更新失败：$error');
@@ -123,12 +122,10 @@ class _UpdateStatus extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final color = update.available ? AppColors.success : AppColors.muted;
-    final title = update.available
-        ? '发现新版本 ${update.version}'
-        : '当前已是最新版本';
+    final title = update.available ? '发现新版本 ${update.version}' : '当前已是最新版本';
     final subtitle = update.available
-        ? '当前版本 ${update.currentVersion}，Release：${update.tagName ?? '未知'}。'
-        : '当前版本 ${update.currentVersion}。';
+        ? '当前版本 ${update.currentVersion}，来源：${update.source}，Release：${update.tagName ?? '未知'}。'
+        : '当前版本 ${update.currentVersion}，来源：${update.source}。';
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(12),
@@ -151,7 +148,8 @@ class _UpdateStatus extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(title, style: const TextStyle(fontWeight: FontWeight.w900)),
+                Text(title,
+                    style: const TextStyle(fontWeight: FontWeight.w900)),
                 const SizedBox(height: 4),
                 Text(subtitle,
                     style:
