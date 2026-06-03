@@ -14,6 +14,9 @@ class PairingPage extends StatefulWidget {
 }
 
 class _PairingPageState extends State<PairingPage> {
+  final TextEditingController _desktopServerController =
+      TextEditingController();
+  final TextEditingController _desktopCodeController = TextEditingController();
   String? _code;
   String? _expiresAt;
   String? _error;
@@ -21,6 +24,21 @@ class _PairingPageState extends State<PairingPage> {
   bool _loading = false;
   bool _approving = false;
   bool _scanned = false;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_desktopServerController.text.isEmpty) {
+      _desktopServerController.text = WorkspaceScope.of(context).api.baseUrl;
+    }
+  }
+
+  @override
+  void dispose() {
+    _desktopServerController.dispose();
+    _desktopCodeController.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -66,6 +84,36 @@ class _PairingPageState extends State<PairingPage> {
                   onPressed: _approving ? null : _openScanner,
                   icon: const Icon(Icons.qr_code_scanner),
                   label: Text(_approving ? '确认中...' : '扫一扫'),
+                ),
+                const SizedBox(height: 14),
+                const Divider(height: 1),
+                const SizedBox(height: 14),
+                const Text(
+                  '相机不可用时，输入桌面二维码下面的 8 位码也能完成同一套配对。',
+                  style: TextStyle(color: AppColors.muted, height: 1.45),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: _desktopServerController,
+                  decoration: const InputDecoration(
+                    labelText: '服务器地址',
+                    hintText: 'http://192.168.2.7:8081',
+                  ),
+                ),
+                const SizedBox(height: 10),
+                TextField(
+                  controller: _desktopCodeController,
+                  textCapitalization: TextCapitalization.characters,
+                  decoration: const InputDecoration(
+                    labelText: '桌面配对码',
+                    hintText: '二维码下方 8 位码',
+                  ),
+                ),
+                const SizedBox(height: 12),
+                OutlinedButton.icon(
+                  onPressed: _approving ? null : _approveTypedDesktopCode,
+                  icon: const Icon(Icons.key),
+                  label: const Text('用桌面码确认配对'),
                 ),
               ],
             ),
@@ -161,11 +209,6 @@ class _PairingPageState extends State<PairingPage> {
   }
 
   Future<void> _approveQrPayload(String rawValue) async {
-    setState(() {
-      _approving = true;
-      _scanResult = null;
-      _error = null;
-    });
     try {
       final payload = jsonDecode(rawValue) as Map<String, dynamic>;
       if (payload['kind'] != 'ai-workbench.desktop-pairing') {
@@ -179,6 +222,33 @@ class _PairingPageState extends State<PairingPage> {
           code.isEmpty) {
         throw Exception('二维码缺少配对信息');
       }
+      await _approveDesktopPairing(serverUrl: serverUrl, code: code);
+    } catch (error) {
+      if (!mounted) return;
+      setState(() => _scanResult = '扫码配对失败：$error');
+    }
+  }
+
+  Future<void> _approveTypedDesktopCode() async {
+    final serverUrl = _desktopServerController.text.trim();
+    final code = _desktopCodeController.text.trim().toUpperCase();
+    if (serverUrl.isEmpty || code.isEmpty) {
+      setState(() => _scanResult = '请填写服务器地址和桌面配对码。');
+      return;
+    }
+    await _approveDesktopPairing(serverUrl: serverUrl, code: code);
+  }
+
+  Future<void> _approveDesktopPairing({
+    required String serverUrl,
+    required String code,
+  }) async {
+    setState(() {
+      _approving = true;
+      _scanResult = null;
+      _error = null;
+    });
+    try {
       await WorkspaceScope.of(context).api.approveDesktopPairing(
             serverUrl: serverUrl,
             code: code,
@@ -188,7 +258,7 @@ class _PairingPageState extends State<PairingPage> {
       setState(() => _scanResult = '已确认配对，桌面端会自动完成保存。');
     } catch (error) {
       if (!mounted) return;
-      setState(() => _scanResult = '扫码配对失败：$error');
+      setState(() => _scanResult = '配对失败：$error');
     } finally {
       if (mounted) {
         setState(() => _approving = false);
