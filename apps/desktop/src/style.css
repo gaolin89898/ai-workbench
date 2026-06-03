@@ -254,7 +254,7 @@ button {
   justify-content: space-between;
   gap: 8px;
   min-height: 26px;
-  padding: 0 8px;
+  padding: 0 6px;
   color: #475569;
 }
 
@@ -276,7 +276,7 @@ button {
 
 .tree-role-empty {
   color: #a0a7b2;
-  padding: 2px 9px 4px 14px;
+  padding: 2px 6px 4px;
   font-size: 12px;
   line-height: 1.5;
 }
@@ -298,7 +298,13 @@ button {
   grid-template-columns: minmax(0, 1fr) 28px;
   align-items: center;
   gap: 4px;
-  padding-left: 8px;
+  border-radius: 8px;
+  padding-left: 0;
+  transition: background-color 120ms ease;
+}
+
+.tree-project-row:hover {
+  background: #e9ecef;
 }
 
 .tree-project-title {
@@ -306,12 +312,13 @@ button {
   align-items: center;
   gap: 8px;
   min-height: 32px;
-  padding: 0 9px;
+  padding: 0 6px;
 }
 
 .tree-project-title:hover,
-.tree-project-title.active {
-  background: #e9ecef;
+.tree-project-title.active,
+.tree-project-row.active .tree-project-title {
+  background: transparent;
   color: #111827;
 }
 
@@ -329,20 +336,17 @@ button {
 }
 
 .tree-project-add:hover {
-  background: #e9ecef;
+  background: #dde2e8;
   color: #111827;
 }
 
-.tree-session-menu {
+.tree-project-menu {
   position: absolute;
   top: 34px;
-  left: 0;
   z-index: 100;
   display: flex;
-  width: 226px;
   max-width: calc(100vw - 24px);
   flex-direction: column;
-  gap: 4px;
   border: 1px solid #e5e7eb;
   border-radius: 8px;
   background: #fff;
@@ -350,26 +354,39 @@ button {
   box-shadow: 0 10px 24px rgb(15 23 42 / 12%);
 }
 
-.tree-session-menu-group {
-  display: flex;
-  flex-direction: column;
+.tree-project-menu {
+  right: 0;
+  width: 196px;
   gap: 2px;
 }
 
-.tree-session-menu-group + .tree-session-menu-group {
-  border-top: 1px solid #edf0f3;
+.session-context-menu {
+  position: fixed;
+  z-index: 1000;
+  display: flex;
+  width: 168px;
+  max-width: calc(100vw - 24px);
+  flex-direction: column;
+  gap: 0;
+  border: 1px solid #dedede;
+  border-radius: 8px;
+  background: #fbfbfb;
+  padding: 4px 0;
+  box-shadow: 0 14px 28px rgb(15 23 42 / 16%), 0 5px 12px rgb(15 23 42 / 10%);
+}
+
+.session-context-menu-section {
+  display: flex;
+  flex-direction: column;
+  padding: 4px 0;
+}
+
+.session-context-menu-section + .session-context-menu-section {
+  border-top: 1px solid #d8d8d8;
   padding-top: 4px;
 }
 
-.tree-session-menu-label {
-  display: block;
-  color: #94a3b8;
-  padding: 4px 8px 2px;
-  font-size: 11px;
-  font-weight: 750;
-}
-
-.tree-session-menu button {
+.tree-project-menu button {
   display: flex;
   align-items: center;
   gap: 8px;
@@ -384,35 +401,59 @@ button {
   text-align: left;
 }
 
-.tree-session-menu button:hover {
+.tree-project-menu button:hover {
   background: #f3f4f6;
 }
 
-.tree-session-menu button.disabled,
-.tree-session-menu button:disabled {
+.tree-project-menu button:disabled {
   cursor: default;
   color: #9ca3af;
 }
 
-.tree-session-menu button.disabled:hover,
-.tree-session-menu button:disabled:hover {
+.tree-project-menu button:disabled:hover {
   background: transparent;
 }
 
-.tree-session-menu-icon {
+.session-context-menu button {
+  display: block;
+  width: 100%;
+  min-height: 28px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: #202124;
+  padding: 0 18px;
+  font-size: 14px;
+  font-weight: 400;
+  line-height: 28px;
+  text-align: left;
+}
+
+.session-context-menu button:hover {
+  background: #f1f1f1;
+}
+
+.session-context-menu button:disabled {
+  cursor: default;
+  color: #9ca3af;
+}
+
+.session-context-menu button:disabled:hover {
+  background: transparent;
+}
+
+.tree-project-menu-icon {
   display: inline-grid;
   width: 18px;
   height: 18px;
   place-items: center;
-  color: #64748b;
-  font-size: 14px;
+  color: #6b7280;
+  font-size: 15px;
+  line-height: 1;
 }
 
-.tree-session-menu-icon.image {
-  display: block;
-  width: 18px;
-  height: 18px;
-  object-fit: contain;
+.tree-project-menu button:disabled .tree-project-menu-icon {
+  color: #a8afb9;
 }
 
 .tree-icon,
@@ -435,8 +476,34 @@ button {
 .tree-chat-list {
   display: flex;
   flex-direction: column;
-  gap: 6px;
-  padding-left: 34px;
+  gap: 8px;
+  padding-left: 0;
+}
+
+.tree-provider-group {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.tree-provider-group-heading {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 18px;
+  color: #9ca3af;
+  padding: 2px 6px 0 6px;
+  font-size: 11px;
+  font-weight: 760;
+  line-height: 16px;
+}
+
+.tree-provider-group-icon {
+  display: block;
+  width: 18px;
+  height: 18px;
+  flex: 0 0 auto;
+  object-fit: contain;
 }
 
 .tree-session-group {
@@ -484,6 +551,18 @@ button {
   display: flex;
   align-items: center;
   min-width: 0;
+  border-radius: 8px;
+  transition: background-color 120ms ease;
+}
+
+.tree-chat-row:hover,
+.tree-chat-row.active {
+  background: #e9ecef;
+}
+
+.tree-chat-row.terminal:hover,
+.tree-chat-row.terminal.active {
+  background: #f1f5f9;
 }
 
 .tree-chat {
@@ -491,12 +570,12 @@ button {
   align-items: center;
   gap: 8px;
   min-height: 34px;
-  padding: 0 34px 0 9px;
+  padding: 0 8px 0 32px;
 }
 
 .tree-chat:hover,
 .tree-chat.active {
-  background: #e9ecef;
+  background: transparent;
 }
 
 .tree-chat.terminal {
@@ -505,7 +584,7 @@ button {
 
 .tree-chat.terminal:hover,
 .tree-chat.terminal.active {
-  background: #f1f5f9;
+  background: transparent;
 }
 
 .tree-chat-copy {
@@ -528,7 +607,7 @@ button {
 .tree-chat-copy small,
 .tree-chat-spinner {
   flex: 0 0 auto;
-  transition: opacity 120ms ease;
+  transition: opacity 120ms ease, visibility 120ms ease;
 }
 
 .tree-chat-copy small {
@@ -547,15 +626,19 @@ button {
   animation: tree-chat-spin 820ms linear infinite;
 }
 
-.tree-provider-icon {
-  display: block;
-  width: 18px;
-  height: 18px;
-  flex: 0 0 auto;
-}
-
 .tree-chat.muted {
   color: #9ca3af;
+}
+
+.tree-chat-empty {
+  cursor: default;
+  background: transparent;
+  color: #a0a7b2;
+  padding-right: 8px;
+}
+
+.tree-chat-empty:hover {
+  background: transparent;
 }
 
 .tree-chat.muted.active {
@@ -595,6 +678,7 @@ button {
 .tree-chat-row:hover .tree-chat-spinner,
 .tree-chat-row:focus-within .tree-chat-spinner {
   opacity: 0;
+  visibility: hidden;
 }
 
 @keyframes tree-chat-spin {
