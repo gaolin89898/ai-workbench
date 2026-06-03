@@ -50,6 +50,29 @@ pub struct PairDesktopResponse {
     pub access_token: String,
 }
 
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CreateDesktopPairingRequest {
+    pub name: String,
+    pub os: String,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DesktopPairingRequestResponse {
+    pub code: String,
+    pub expires_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DesktopPairingStatusResponse {
+    pub status: String,
+    pub expires_at: DateTime<Utc>,
+    pub device_id: Option<Uuid>,
+    pub access_token: Option<String>,
+}
+
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct DeviceResponse {

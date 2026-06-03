@@ -29,6 +29,8 @@ use uuid::Uuid;
 const SHELL_TERMINAL_OUTPUT_EVENT: &str = "shell-terminal-output";
 const SHELL_SESSION_STATUS_EVENT: &str = "shell-session-status";
 const AI_CHAT_OUTPUT_EVENT: &str = "ai-chat-output";
+const WORKSPACE_CHANGED_EVENT: &str = "workspace-changed";
+const AI_HISTORY_CHANGED_EVENT: &str = "ai-history-changed";
 const CLOUD_CONFIG_FILE: &str = "cloud-sync.json";
 
 struct ShellPtySessionManager {
@@ -116,9 +118,48 @@ struct PairRequest {
 
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+struct CreateDesktopPairingRequest {
+    name: String,
+    os: String,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 struct PairResponse {
     device_id: Uuid,
     access_token: String,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct DesktopPairingRequestResponse {
+    code: String,
+    expires_at: chrono::DateTime<chrono::Utc>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct DesktopPairingStatusResponse {
+    status: String,
+    expires_at: chrono::DateTime<chrono::Utc>,
+    device_id: Option<Uuid>,
+    access_token: Option<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct DesktopQrPairingPayload {
+    kind: String,
+    server_url: String,
+    code: String,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct SavedCloudConfig {
+    server_url: String,
+    device_id: Uuid,
+    paired: bool,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -277,6 +318,95 @@ async fn pair_desktop(
     Ok(response)
 }
 
+fn desktop_name() -> String {
+    std::env::var("HOSTNAME")
+        .or_else(|_| std::env::var("COMPUTERNAME"))
+        .unwrap_or_else(|_| "Desktop".to_string())
+}
+
+#[tauri::command]
+async fn create_desktop_pairing_request(
+    server: String,
+) -> Result<DesktopPairingRequestResponse, String> {
+    let url = format!("{}/desktop/pairing-requests", server.trim_end_matches('/'));
+    let request = CreateDesktopPairingRequest {
+        name: desktop_name(),
+        os: std::env::consts::OS.to_string(),
+    };
+    reqwest::Client::new()
+        .post(url)
+        .json(&request)
+        .send()
+        .await
+        .map_err(|error| error.to_string())?
+        .error_for_status()
+        .map_err(|error| error.to_string())?
+        .json::<DesktopPairingRequestResponse>()
+        .await
+        .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+async fn get_desktop_pairing_status(
+    app: AppHandle,
+    cloud: State<'_, Arc<DesktopCloudSync>>,
+    server: String,
+    code: String,
+) -> Result<DesktopPairingStatusResponse, String> {
+    let trimmed_server = server.trim_end_matches('/').to_string();
+    let url = format!(
+        "{}/desktop/pairing-requests/{}",
+        trimmed_server,
+        code.trim()
+    );
+    let response = reqwest::Client::new()
+        .get(url)
+        .send()
+        .await
+        .map_err(|error| error.to_string())?
+        .error_for_status()
+        .map_err(|error| error.to_string())?
+        .json::<DesktopPairingStatusResponse>()
+        .await
+        .map_err(|error| error.to_string())?;
+    if response.status == "approved" {
+        if let (Some(device_id), Some(access_token)) =
+            (response.device_id, response.access_token.clone())
+        {
+            let config = CloudSyncConfig {
+                server_url: trimmed_server,
+                device_id,
+                access_token,
+            };
+            save_cloud_config(&config).map_err(|error| error.to_string())?;
+            cloud.set_config(config.clone());
+            start_cloud_sync(app, cloud.inner().clone(), config);
+        }
+    }
+    Ok(response)
+}
+
+#[tauri::command]
+fn build_desktop_pairing_qr_payload(server: String, code: String) -> Result<String, String> {
+    serde_json::to_string(&DesktopQrPairingPayload {
+        kind: "ai-workbench.desktop-pairing".to_string(),
+        server_url: server.trim_end_matches('/').to_string(),
+        code: code.trim().to_string(),
+    })
+    .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+async fn get_cloud_config() -> Result<Option<SavedCloudConfig>, String> {
+    Ok(load_cloud_config()
+        .map_err(|error| error.to_string())?
+        .map(|config| SavedCloudConfig {
+            server_url: config.server_url,
+            device_id: config.device_id,
+            paired: true,
+        }))
+}
+
 #[tauri::command]
 async fn list_ai_providers() -> Result<Vec<AiProviderDefinition>, String> {
     Ok(default_providers())
@@ -362,11 +492,29 @@ async fn create_ai_session_with_id(
     session_id: Uuid,
     req: CreateAiSessionRequest,
 ) -> Result<AiSession, String> {
+    create_ai_session_with_id_inner(session_id, req, false).await
+}
+
+async fn create_ai_session_with_id_inner(
+    session_id: Uuid,
+    req: CreateAiSessionRequest,
+    ensure_project: bool,
+) -> Result<AiSession, String> {
     ensure_local_db().map_err(|error| error.to_string())?;
     let _provider = default_providers()
         .into_iter()
         .find(|item| item.id == req.provider_id)
         .ok_or_else(|| "unknown provider".to_string())?;
+    if ensure_project && !req.project_path.trim().is_empty() {
+        let known_project = load_local_projects()
+            .map_err(|error| error.to_string())?
+            .into_iter()
+            .any(|project| project.path == req.project_path);
+        if !known_project {
+            let project = project_from_path(req.project_path.clone()).await?;
+            save_local_project(&project).map_err(|error| error.to_string())?;
+        }
+    }
     let session = AiSession {
         id: session_id,
         user_id: Uuid::nil(),
@@ -826,6 +974,10 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             list_sessions,
             pair_desktop,
+            create_desktop_pairing_request,
+            get_desktop_pairing_status,
+            build_desktop_pairing_qr_payload,
+            get_cloud_config,
             list_ai_providers,
             detect_ai_providers,
             add_workspace_project,
@@ -865,7 +1017,7 @@ pub fn run() {
 
 fn start_cloud_sync(app: AppHandle, cloud: Arc<DesktopCloudSync>, config: CloudSyncConfig) {
     let generation = cloud.next_generation();
-    tokio::spawn(async move {
+    tauri::async_runtime::spawn(async move {
         while cloud.is_current_generation(generation) {
             if let Err(error) =
                 connect_cloud_once(app.clone(), cloud.clone(), config.clone(), generation).await
@@ -996,8 +1148,18 @@ async fn handle_cloud_message(
                 creation_mode,
                 terminal_session_id,
             };
-            if create_ai_session_with_id(ai_session_id, req).await.is_ok() {
-                send_cloud_snapshots(tx, device_id).await;
+            match create_ai_session_with_id_inner(ai_session_id, req, true).await {
+                Ok(_) => {
+                    let _ = app.emit(WORKSPACE_CHANGED_EVENT, ());
+                    send_cloud_snapshots(tx, device_id).await;
+                }
+                Err(error) => {
+                    emit_ai_chat_error(
+                        app,
+                        ai_session_id,
+                        &format!("移动端创建会话同步失败：{error}"),
+                    );
+                }
             }
         }
         RealtimeMessage::AiMessageSend {
@@ -1020,6 +1182,7 @@ async fn handle_cloud_message(
                     return;
                 }
                 let _ = save_local_message(ai_session_id, AiMessageRole::User, &content);
+                emit_ai_history_changed(app, ai_session_id);
                 let result = run_codex_chat(
                     app.clone(),
                     RunCodexChatRequest {
@@ -1031,6 +1194,7 @@ async fn handle_cloud_message(
                 .await;
                 match result {
                     Ok(text) => {
+                        emit_ai_history_changed(app, ai_session_id);
                         let _ = tx.send(RealtimeMessage::AiMessageDone {
                             device_id,
                             ai_session_id,
@@ -1039,6 +1203,7 @@ async fn handle_cloud_message(
                         });
                     }
                     Err(error) => {
+                        emit_ai_history_changed(app, ai_session_id);
                         let _ = tx.send(RealtimeMessage::AiMessageDone {
                             device_id,
                             ai_session_id,
@@ -1069,6 +1234,7 @@ async fn handle_cloud_message(
             ..
         } => {
             if set_local_session_archived(ai_session_id, archived).is_ok() {
+                let _ = app.emit(WORKSPACE_CHANGED_EVENT, ());
                 send_cloud_snapshots(tx, device_id).await;
             }
         }
@@ -1175,6 +1341,14 @@ fn emit_ai_chat_status(app: &AppHandle, ai_session_id: Uuid, text: &str) {
         Some(format!("status-{}", text)),
         Some(segment),
     );
+}
+
+fn emit_ai_history_changed(app: &AppHandle, ai_session_id: Uuid) {
+    let _ = app.emit(
+        AI_HISTORY_CHANGED_EVENT,
+        serde_json::json!({ "aiSessionId": ai_session_id }),
+    );
+    let _ = app.emit(WORKSPACE_CHANGED_EVENT, ());
 }
 
 fn emit_ai_chat_step(

@@ -44,7 +44,7 @@ class DeviceListPage extends StatelessWidget {
               if (ws.devices.isEmpty)
                 const SizedBox(
                     height: 360,
-                    child: EmptyState('还没有配对桌面。先在右上角生成配对码，再到桌面端配对。'))
+                    child: EmptyState('还没有配对桌面。先在桌面端生成二维码，再点右上角扫一扫配对。'))
               else
                 ...ws.devices.map((device) => Padding(
                       padding: const EdgeInsets.only(bottom: 12),

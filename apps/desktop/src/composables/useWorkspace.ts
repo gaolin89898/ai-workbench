@@ -1,6 +1,6 @@
 import { computed, ref, watch } from "vue";
 import router from "../router";
-import { tauriApi, type AiProvider, type AiSession, type ChatMessage, type ChatSegment, type ProviderStatus, type TerminalSession, type ViewName, type WorkspaceProject } from "../services/tauri";
+import { tauriApi, type AiProvider, type AiSession, type ChatMessage, type ChatSegment, type DesktopPairingStatus, type ProviderStatus, type TerminalSession, type ViewName, type WorkspaceProject } from "../services/tauri";
 
 const providers = ref<AiProvider[]>([]);
 const providerStatuses = ref<ProviderStatus[]>([]);
@@ -20,8 +20,12 @@ const projectResult = ref("请选择一个本机项目目录。");
 const projectResultError = ref(false);
 const pairResult = ref("配对成功后显示 device_id 与 token 摘要。");
 const pairResultError = ref(false);
+const qrPairingCode = ref("");
+const qrPairingPayload = ref("");
+const qrPairingExpiresAt = ref("");
+const qrPairingStatus = ref<"idle" | "creating" | "pending" | "approved" | "expired" | "error">("idle");
 const settingsServer = ref("http://127.0.0.1:8080");
-const settingsResult = ref("尚未保存");
+const settingsResult = ref("尚未读取配对配置");
 const chatMessages = ref<ChatMessage[]>([
   { role: "system", text: "创建 AI 会话后，这里会变成聊天界面。" },
 ]);
@@ -63,6 +67,9 @@ const pendingAssistants = new Map<string, PendingAssistant>();
 const assistantDrafts = new Map<string, { message: ChatMessage; savedText: string }>();
 let aiEventsInitialized = false;
 let aiEventsInitPromise: Promise<void> | null = null;
+let workspaceEventsInitialized = false;
+let workspaceEventsInitPromise: Promise<void> | null = null;
+let qrPairingTimer: number | null = null;
 
 function pushChatDebugEvent(message: string) {
   const time = new Date().toLocaleTimeString();
@@ -152,8 +159,25 @@ watch(selectedProjectPath, () => {
 
 async function refreshWorkspace() {
   await initAiEventListeners();
-  await Promise.all([loadProviders(), loadLocalWorkspace(), detectProviders(), refreshTerminalSessions()]);
+  await initWorkspaceEventListeners();
+  await Promise.all([loadCloudConfig(), loadProviders(), loadLocalWorkspace(), detectProviders(), refreshTerminalSessions()]);
   ensureSelectedProject();
+}
+
+async function loadCloudConfig() {
+  try {
+    const config = await tauriApi.getCloudConfig();
+    if (!config) {
+      settingsResult.value = "尚未配对桌面。";
+      return;
+    }
+    settingsServer.value = config.serverUrl;
+    pairResult.value = `已读取保存的配对：${config.deviceId.slice(0, 8)}...`;
+    pairResultError.value = false;
+    settingsResult.value = `已连接到保存的服务器：${config.serverUrl}`;
+  } catch (error) {
+    settingsResult.value = `读取配对配置失败：${String(error)}`;
+  }
 }
 
 async function loadProviders() {
@@ -730,6 +754,13 @@ async function initAiEventListeners() {
         return;
       }
       if (event.kind === "done") {
+        if (!pending) {
+          if (activeAiSession.value?.id === event.aiSessionId) {
+            void loadAiSessionHistory(event.aiSessionId);
+          }
+          void loadLocalWorkspace();
+          return;
+        }
         const doneElapsedMs = pending ? Math.round(performance.now() - pending.startedAt) : undefined;
         replacePendingAssistantText(event.aiSessionId, event.text ?? "", true);
         completePendingAssistantFromExec(event.aiSessionId);
@@ -743,7 +774,13 @@ async function initAiEventListeners() {
       }
       if (event.kind === "error") {
         const pending = pendingAssistants.get(event.aiSessionId);
-        if (!pending) return;
+        if (!pending) {
+          if (activeAiSession.value?.id === event.aiSessionId) {
+            void loadAiSessionHistory(event.aiSessionId);
+          }
+          void loadLocalWorkspace();
+          return;
+        }
         patchPendingAssistant(event.aiSessionId, {
           pending: false,
           role: "error",
@@ -765,6 +802,25 @@ async function initAiEventListeners() {
     aiEventsInitialized = true;
   });
   return aiEventsInitPromise;
+}
+
+async function initWorkspaceEventListeners() {
+  if (workspaceEventsInitialized) return;
+  if (workspaceEventsInitPromise) return workspaceEventsInitPromise;
+  workspaceEventsInitPromise = tauriApi.onWorkspaceChanged(() => {
+    const activeSessionId = activeAiSession.value?.id;
+    void loadLocalWorkspace();
+    if (activeSessionId) void loadAiSessionHistory(activeSessionId);
+  }).then(async () => {
+    await tauriApi.onAiHistoryChanged((event) => {
+      void loadLocalWorkspace();
+      if (activeAiSession.value?.id === event.aiSessionId) {
+        void loadAiSessionHistory(event.aiSessionId);
+      }
+    });
+    workspaceEventsInitialized = true;
+  });
+  return workspaceEventsInitPromise;
 }
 
 async function refreshShellLiveState(sessionId: string) {
@@ -846,8 +902,78 @@ async function pairDesktop(server: string, code: string) {
     pairResult.value = JSON.stringify(value, null, 2);
     pairResultError.value = false;
     settingsServer.value = trimmedServer;
+    settingsResult.value = `配对配置已保存：${trimmedServer}`;
   } catch (error) {
     pairResult.value = `配对失败：${String(error)}`;
+    pairResultError.value = true;
+  }
+}
+
+function clearQrPairingTimer() {
+  if (qrPairingTimer !== null) {
+    window.clearTimeout(qrPairingTimer);
+    qrPairingTimer = null;
+  }
+}
+
+function describeQrPairingStatus(status: DesktopPairingStatus) {
+  if (status.status === "approved") return "手机端已确认，桌面配对配置已保存。";
+  if (status.status === "expired") return "二维码已过期，请重新生成。";
+  return "等待手机扫码确认。";
+}
+
+async function pollQrPairing(server: string, code: string) {
+  clearQrPairingTimer();
+  if (!code || qrPairingStatus.value !== "pending") return;
+  try {
+    const status = await tauriApi.getDesktopPairingStatus(server, code);
+    pairResult.value = describeQrPairingStatus(status);
+    pairResultError.value = false;
+    if (status.status === "approved") {
+      qrPairingStatus.value = "approved";
+      settingsServer.value = server;
+      settingsResult.value = `配对配置已保存：${server}`;
+      await loadCloudConfig();
+      return;
+    }
+    if (status.status === "expired") {
+      qrPairingStatus.value = "expired";
+      qrPairingPayload.value = "";
+      return;
+    }
+  } catch (error) {
+    pairResult.value = `查询配对状态失败：${String(error)}`;
+    pairResultError.value = true;
+  }
+  qrPairingTimer = window.setTimeout(() => void pollQrPairing(server, code), 2000);
+}
+
+async function createQrPairingRequest(server: string) {
+  const trimmedServer = server.trim().replace(/\/$/, "");
+  clearQrPairingTimer();
+  pairResultError.value = false;
+  if (!trimmedServer) {
+    pairResult.value = "请先填写手机可访问的服务器地址。";
+    pairResultError.value = true;
+    return;
+  }
+  qrPairingStatus.value = "creating";
+  pairResult.value = "正在生成二维码...";
+  try {
+    const request = await tauriApi.createDesktopPairingRequest(trimmedServer);
+    const payload = await tauriApi.buildDesktopPairingQrPayload(trimmedServer, request.code);
+    qrPairingCode.value = request.code;
+    qrPairingPayload.value = payload;
+    qrPairingExpiresAt.value = request.expiresAt;
+    qrPairingStatus.value = "pending";
+    pairResult.value = "二维码已生成，等待手机扫码确认。";
+    pairResultError.value = false;
+    settingsServer.value = trimmedServer;
+    void pollQrPairing(trimmedServer, request.code);
+  } catch (error) {
+    qrPairingStatus.value = "error";
+    qrPairingPayload.value = "";
+    pairResult.value = `生成二维码失败：${String(error)}`;
     pairResultError.value = true;
   }
 }
@@ -882,6 +1008,10 @@ export function useWorkspace() {
     projectResultError,
     pairResult,
     pairResultError,
+    qrPairingCode,
+    qrPairingPayload,
+    qrPairingExpiresAt,
+    qrPairingStatus,
     settingsServer,
     settingsResult,
     chatMessages,
@@ -917,6 +1047,7 @@ export function useWorkspace() {
     resizeShell,
     archiveAiSession,
     pairDesktop,
+    createQrPairingRequest,
     saveSettings,
     switchView,
   };

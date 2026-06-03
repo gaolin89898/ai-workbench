@@ -56,6 +56,24 @@ export type PairResponse = {
   access_token?: string;
 };
 
+export type DesktopPairingRequest = {
+  code: string;
+  expiresAt: string;
+};
+
+export type DesktopPairingStatus = {
+  status: "pending" | "approved" | "expired" | string;
+  expiresAt: string;
+  deviceId?: string | null;
+  accessToken?: string | null;
+};
+
+export type SavedCloudConfig = {
+  serverUrl: string;
+  deviceId: string;
+  paired: boolean;
+};
+
 export type ChatSegment =
   | {
       type: "text";
@@ -164,9 +182,20 @@ export type AiChatOutputEvent = {
   segment?: ChatSegment | null;
 };
 
+export type AiHistoryChangedEvent = {
+  aiSessionId: string;
+};
+
 export const tauriApi = {
   listSessions: () => invoke<TerminalSession[]>("list_sessions"),
   pairDesktop: (server: string, code: string) => invoke<PairResponse>("pair_desktop", { server, code }),
+  createDesktopPairingRequest: (server: string) =>
+    invoke<DesktopPairingRequest>("create_desktop_pairing_request", { server }),
+  getDesktopPairingStatus: (server: string, code: string) =>
+    invoke<DesktopPairingStatus>("get_desktop_pairing_status", { server, code }),
+  buildDesktopPairingQrPayload: (server: string, code: string) =>
+    invoke<string>("build_desktop_pairing_qr_payload", { server, code }),
+  getCloudConfig: () => invoke<SavedCloudConfig | null>("get_cloud_config"),
   listAiProviders: () => invoke<AiProvider[]>("list_ai_providers"),
   detectAiProviders: () => invoke<ProviderStatus[]>("detect_ai_providers"),
   addWorkspaceProject: (path: string) => invoke<WorkspaceProject>("add_workspace_project", { path }),
@@ -194,4 +223,8 @@ export const tauriApi = {
     listen<ShellSessionStatusEvent>("shell-session-status", ({ payload }) => handler(payload)),
   onAiChatOutput: (handler: (event: AiChatOutputEvent) => void) =>
     listen<AiChatOutputEvent>("ai-chat-output", ({ payload }) => handler(payload)),
+  onWorkspaceChanged: (handler: () => void) =>
+    listen<void>("workspace-changed", () => handler()),
+  onAiHistoryChanged: (handler: (event: AiHistoryChangedEvent) => void) =>
+    listen<AiHistoryChangedEvent>("ai-history-changed", ({ payload }) => handler(payload)),
 };

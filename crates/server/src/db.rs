@@ -112,8 +112,8 @@ pub async fn upsert_projects(
             r#"
             INSERT INTO workspace_projects (id, device_id, name, path, git_branch, git_dirty, updated_at)
             VALUES ($1, $2, $3, $4, $5, $6, $7)
-            ON CONFLICT (device_id, path)
-            DO UPDATE SET name = EXCLUDED.name, git_branch = EXCLUDED.git_branch, git_dirty = EXCLUDED.git_dirty, updated_at = EXCLUDED.updated_at
+            ON CONFLICT (id)
+            DO UPDATE SET device_id = EXCLUDED.device_id, name = EXCLUDED.name, path = EXCLUDED.path, git_branch = EXCLUDED.git_branch, git_dirty = EXCLUDED.git_dirty, updated_at = EXCLUDED.updated_at
             "#,
         )
         .bind(project.id)

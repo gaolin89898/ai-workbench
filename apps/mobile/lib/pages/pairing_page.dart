@@ -1,4 +1,7 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
+import 'package:mobile_scanner/mobile_scanner.dart';
 
 import '../state/workspace_scope.dart';
 import '../widgets/app_theme.dart';
@@ -14,7 +17,10 @@ class _PairingPageState extends State<PairingPage> {
   String? _code;
   String? _expiresAt;
   String? _error;
+  String? _scanResult;
   bool _loading = false;
+  bool _approving = false;
+  bool _scanned = false;
 
   @override
   Widget build(BuildContext context) {
@@ -25,7 +31,43 @@ class _PairingPageState extends State<PairingPage> {
         children: [
           const AppCard(
             child: Text(
-              '在桌面端打开“设备配对”，输入这里生成的一次性配对码。配对后手机就能远程控制桌面端 Codex 会话。',
+              '在桌面端打开“设置 / 设备配对”，生成二维码后用这里扫一扫。配对后手机就能看到桌面端 Codex 会话。',
+            ),
+          ),
+          const SizedBox(height: 12),
+          AppCard(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                const Text(
+                  '扫码配对',
+                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.w900),
+                ),
+                const SizedBox(height: 8),
+                const Text(
+                  '扫描桌面端显示的二维码，手机确认后桌面会自动保存配对。',
+                  style: TextStyle(color: AppColors.muted, height: 1.45),
+                ),
+                if (_scanResult != null) ...[
+                  const SizedBox(height: 10),
+                  Text(
+                    _scanResult!,
+                    style: TextStyle(
+                      color: _scanResult!.contains('失败') ||
+                              _scanResult!.contains('无效')
+                          ? AppColors.danger
+                          : AppColors.success,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ],
+                const SizedBox(height: 14),
+                FilledButton.icon(
+                  onPressed: _approving ? null : _openScanner,
+                  icon: const Icon(Icons.qr_code_scanner),
+                  label: Text(_approving ? '确认中...' : '扫一扫'),
+                ),
+              ],
             ),
           ),
           const SizedBox(height: 12),
@@ -53,6 +95,16 @@ class _PairingPageState extends State<PairingPage> {
                       style: const TextStyle(color: AppColors.danger)),
                 ],
                 const SizedBox(height: 16),
+                const Text(
+                  '备用短码',
+                  style: TextStyle(fontSize: 14, fontWeight: FontWeight.w900),
+                ),
+                const SizedBox(height: 6),
+                const Text(
+                  '如果扫码不可用，可以生成短码后回到桌面端手动输入。',
+                  style: TextStyle(color: AppColors.muted, height: 1.45),
+                ),
+                const SizedBox(height: 14),
                 FilledButton(
                   onPressed: _loading ? null : _create,
                   child: Text(_loading ? '生成中...' : '生成配对码'),
@@ -87,5 +139,103 @@ class _PairingPageState extends State<PairingPage> {
         setState(() => _loading = false);
       }
     }
+  }
+
+  Future<void> _openScanner() async {
+    _scanned = false;
+    await Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => WorkspaceScope(
+          controller: WorkspaceScope.of(context),
+          child: _DesktopPairingScanner(
+            onDetected: (value) async {
+              if (_scanned) return;
+              _scanned = true;
+              Navigator.of(context).pop();
+              await _approveQrPayload(value);
+            },
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _approveQrPayload(String rawValue) async {
+    setState(() {
+      _approving = true;
+      _scanResult = null;
+      _error = null;
+    });
+    try {
+      final payload = jsonDecode(rawValue) as Map<String, dynamic>;
+      if (payload['kind'] != 'ai-workbench.desktop-pairing') {
+        throw Exception('无效二维码');
+      }
+      final serverUrl = payload['serverUrl'] as String?;
+      final code = payload['code'] as String?;
+      if (serverUrl == null ||
+          serverUrl.isEmpty ||
+          code == null ||
+          code.isEmpty) {
+        throw Exception('二维码缺少配对信息');
+      }
+      await WorkspaceScope.of(context).api.approveDesktopPairing(
+            serverUrl: serverUrl,
+            code: code,
+          );
+      await WorkspaceScope.of(context).loadDevices();
+      if (!mounted) return;
+      setState(() => _scanResult = '已确认配对，桌面端会自动完成保存。');
+    } catch (error) {
+      if (!mounted) return;
+      setState(() => _scanResult = '扫码配对失败：$error');
+    } finally {
+      if (mounted) {
+        setState(() => _approving = false);
+      }
+    }
+  }
+}
+
+class _DesktopPairingScanner extends StatelessWidget {
+  const _DesktopPairingScanner({required this.onDetected});
+
+  final Future<void> Function(String value) onDetected;
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: const Text('扫描桌面二维码')),
+      body: Stack(
+        children: [
+          MobileScanner(
+            onDetect: (capture) {
+              final value = capture.barcodes.isEmpty
+                  ? null
+                  : capture.barcodes.first.rawValue;
+              if (value == null || value.isEmpty) return;
+              onDetected(value);
+            },
+          ),
+          Align(
+            alignment: Alignment.bottomCenter,
+            child: Container(
+              width: double.infinity,
+              margin: const EdgeInsets.all(16),
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                color: AppColors.ink.withValues(alpha: 0.86),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: const Text(
+                '把桌面端二维码放入取景框，识别后会自动返回确认。',
+                textAlign: TextAlign.center,
+                style: TextStyle(color: Colors.white, height: 1.45),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
   }
 }

@@ -15,6 +15,7 @@ const activeView = computed<ViewName>(() => {
   }
   return "aiSessions";
 });
+const isFullscreenRoute = computed(() => route.name === "settings");
 
 onMounted(() => {
   ws.refreshWorkspace().catch((error) => {
@@ -24,8 +25,9 @@ onMounted(() => {
 </script>
 
 <template>
-  <main class="app-shell">
+  <main class="app-shell" :class="{ fullscreen: isFullscreenRoute }">
     <SidebarProjectTree
+      v-if="!isFullscreenRoute"
       :projects="ws.projects.value"
       :providers="ws.providers.value"
       :terminal-sessions="ws.terminalSessions.value"

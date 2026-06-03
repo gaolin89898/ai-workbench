@@ -49,21 +49,37 @@ class ApiClient {
     token = jsonDecode(response.body)['accessToken'] as String;
   }
 
-  Future<List<DesktopDevice>> devices() => _getList('/devices', DesktopDevice.fromJson);
-  Future<List<AiProvider>> providers() => _getList('/providers', AiProvider.fromJson);
+  Future<List<DesktopDevice>> devices() =>
+      _getList('/devices', DesktopDevice.fromJson);
+  Future<List<AiProvider>> providers() =>
+      _getList('/providers', AiProvider.fromJson);
   Future<List<ProviderStatus>> deviceProviders(String deviceId) =>
       _getList('/devices/$deviceId/providers', ProviderStatus.fromJson);
   Future<List<WorkspaceProject>> projects(String deviceId) =>
       _getList('/devices/$deviceId/projects', WorkspaceProject.fromJson);
   Future<List<AiSessionMeta>> aiSessions(String deviceId) =>
       _getList('/devices/$deviceId/ai-sessions', AiSessionMeta.fromJson);
-  Future<List<ActivityLog>> activityLogs({String? deviceId}) =>
-      _getList(deviceId == null ? '/activity-logs' : '/activity-logs?deviceId=$deviceId', ActivityLog.fromJson);
+  Future<List<ActivityLog>> activityLogs({String? deviceId}) => _getList(
+      deviceId == null ? '/activity-logs' : '/activity-logs?deviceId=$deviceId',
+      ActivityLog.fromJson);
 
   Future<PairingCode> createPairingCode() async {
     final response = await http.post(uri('/pairing/codes'), headers: headers);
     _throwIfBad(response);
-    return PairingCode.fromJson(jsonDecode(response.body) as Map<String, dynamic>);
+    return PairingCode.fromJson(
+        jsonDecode(response.body) as Map<String, dynamic>);
+  }
+
+  Future<void> approveDesktopPairing({
+    required String serverUrl,
+    required String code,
+  }) async {
+    final response = await http.post(
+      Uri.parse(
+          '${serverUrl.replaceFirst(RegExp(r'/$'), '')}/desktop/pairing-requests/${Uri.encodeComponent(code)}/approve'),
+      headers: headers,
+    );
+    _throwIfBad(response);
   }
 
   Future<AiSessionMeta> createAiSession(
@@ -86,13 +102,15 @@ class ApiClient {
       }),
     );
     _throwIfBad(response);
-    return AiSessionMeta.fromJson(jsonDecode(response.body) as Map<String, dynamic>);
+    return AiSessionMeta.fromJson(
+        jsonDecode(response.body) as Map<String, dynamic>);
   }
 
   Future<UserSettings> settings() async {
     final response = await http.get(uri('/settings'), headers: headers);
     _throwIfBad(response);
-    return UserSettings.fromJson(jsonDecode(response.body) as Map<String, dynamic>);
+    return UserSettings.fromJson(
+        jsonDecode(response.body) as Map<String, dynamic>);
   }
 
   Future<UserSettings> updateSettings(UserSettings settings) async {
@@ -102,7 +120,8 @@ class ApiClient {
       body: jsonEncode(settings.toJson()),
     );
     _throwIfBad(response);
-    return UserSettings.fromJson(jsonDecode(response.body) as Map<String, dynamic>);
+    return UserSettings.fromJson(
+        jsonDecode(response.body) as Map<String, dynamic>);
   }
 
   Future<List<T>> _getList<T>(
