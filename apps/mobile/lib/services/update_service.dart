@@ -8,7 +8,7 @@ const _releasesUrl =
     'https://api.github.com/repos/gaolin89898/ai-workbench/releases';
 const _openListBaseUrl = 'http://openlist.gaolin.xin';
 const _openListUsername = 'ai-workbench';
-const _openListReleaseDir = '/软件包/ai-workbench-releases';
+const _openListReleaseDir = '/ai-workbench-releases/Android';
 const _openListManifestPath = '$_openListReleaseDir/latest.json';
 
 class MobileUpdateInfo {
