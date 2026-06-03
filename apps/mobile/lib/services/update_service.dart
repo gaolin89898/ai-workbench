@@ -1,9 +1,9 @@
 import 'dart:convert';
 
 import 'package:http/http.dart' as http;
+import 'package:package_info_plus/package_info_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
 
-const _currentMobileVersion = '0.1.1';
 const _releasesUrl =
     'https://api.github.com/repos/gaolin89898/ai-workbench/releases';
 
@@ -31,6 +31,8 @@ class MobileUpdateService {
   const MobileUpdateService();
 
   Future<MobileUpdateInfo> check() async {
+    final packageInfo = await PackageInfo.fromPlatform();
+    final currentVersion = packageInfo.version;
     final response = await http.get(
       Uri.parse(_releasesUrl),
       headers: const {
@@ -51,11 +53,11 @@ class MobileUpdateService {
     final latestVersion = _mobileVersionFromTag(tagName);
     final available = apkUrl != null &&
         latestVersion != null &&
-        _compareVersions(latestVersion, _currentMobileVersion) > 0;
+        _compareVersions(latestVersion, currentVersion) > 0;
 
     return MobileUpdateInfo(
       available: available,
-      currentVersion: _currentMobileVersion,
+      currentVersion: currentVersion,
       version: latestVersion,
       tagName: tagName,
       releaseUrl: json['html_url'] as String?,
@@ -113,8 +115,9 @@ class MobileUpdateService {
   int _compareVersions(String left, String right) {
     final leftParts = _versionParts(left);
     final rightParts = _versionParts(right);
-    final length =
-        leftParts.length > rightParts.length ? leftParts.length : rightParts.length;
+    final length = leftParts.length > rightParts.length
+        ? leftParts.length
+        : rightParts.length;
     for (var index = 0; index < length; index += 1) {
       final leftValue = index < leftParts.length ? leftParts[index] : 0;
       final rightValue = index < rightParts.length ? rightParts[index] : 0;

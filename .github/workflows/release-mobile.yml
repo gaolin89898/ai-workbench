@@ -33,6 +33,17 @@ jobs:
         working-directory: apps/mobile
         run: flutter pub get
 
+      - name: Restore Android release signing
+        working-directory: apps/mobile/android
+        run: |
+          echo "${{ secrets.ANDROID_KEYSTORE_BASE64 }}" | base64 -d > app/release.jks
+          {
+            echo "storeFile=release.jks"
+            echo "storePassword=${{ secrets.ANDROID_KEYSTORE_PASSWORD }}"
+            echo "keyAlias=${{ secrets.ANDROID_KEY_ALIAS }}"
+            echo "keyPassword=${{ secrets.ANDROID_KEY_PASSWORD }}"
+          } > key.properties
+
       - name: Build release APK
         working-directory: apps/mobile
         run: flutter build apk --release
