@@ -197,10 +197,33 @@ class _PairingPageState extends State<PairingPage> {
   }
 }
 
-class _DesktopPairingScanner extends StatelessWidget {
+class _DesktopPairingScanner extends StatefulWidget {
   const _DesktopPairingScanner({required this.onDetected});
 
   final Future<void> Function(String value) onDetected;
+
+  @override
+  State<_DesktopPairingScanner> createState() => _DesktopPairingScannerState();
+}
+
+class _DesktopPairingScannerState extends State<_DesktopPairingScanner> {
+  late final MobileScannerController _controller;
+  bool _handled = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = MobileScannerController(
+      formats: const [BarcodeFormat.qrCode],
+      detectionSpeed: DetectionSpeed.noDuplicates,
+    );
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -209,12 +232,24 @@ class _DesktopPairingScanner extends StatelessWidget {
       body: Stack(
         children: [
           MobileScanner(
+            controller: _controller,
+            errorBuilder: (context, error, child) => _ScannerErrorPanel(
+              message: _scannerErrorMessage(error),
+            ),
+            placeholderBuilder: (context, child) => const ColoredBox(
+              color: Colors.black,
+              child: Center(
+                child: CircularProgressIndicator(color: Colors.white),
+              ),
+            ),
             onDetect: (capture) {
+              if (_handled) return;
               final value = capture.barcodes.isEmpty
                   ? null
                   : capture.barcodes.first.rawValue;
               if (value == null || value.isEmpty) return;
-              onDetected(value);
+              _handled = true;
+              widget.onDetected(value);
             },
           ),
           Align(
@@ -235,6 +270,55 @@ class _DesktopPairingScanner extends StatelessWidget {
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  String _scannerErrorMessage(MobileScannerException error) {
+    final details = error.errorDetails?.message;
+    if (error.errorCode == MobileScannerErrorCode.permissionDenied) {
+      return '没有相机权限。请在系统设置里允许应用使用相机，或返回使用备用短码配对。';
+    }
+    if (error.errorCode == MobileScannerErrorCode.unsupported) {
+      return '当前设备暂不支持扫码组件。请返回使用备用短码配对。';
+    }
+    if (details != null && details.isNotEmpty) {
+      return '相机启动失败：$details。可以先返回使用备用短码配对。';
+    }
+    return '相机启动失败。可以先返回使用备用短码配对。';
+  }
+}
+
+class _ScannerErrorPanel extends StatelessWidget {
+  const _ScannerErrorPanel({required this.message});
+
+  final String message;
+
+  @override
+  Widget build(BuildContext context) {
+    return ColoredBox(
+      color: Colors.black,
+      child: Center(
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(Icons.error_outline, color: Colors.white, size: 42),
+              const SizedBox(height: 14),
+              Text(
+                message,
+                textAlign: TextAlign.center,
+                style: const TextStyle(color: Colors.white, height: 1.5),
+              ),
+              const SizedBox(height: 18),
+              FilledButton(
+                onPressed: () => Navigator.of(context).pop(),
+                child: const Text('返回使用短码'),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }
