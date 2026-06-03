@@ -269,6 +269,12 @@ flutter analyze
 
 当前环境如果没有 Flutter SDK，会看到 `flutter: command not found`，需要先安装 Flutter 后再执行。
 
+## 桌面端自动更新
+
+桌面端支持通过 GitHub Releases 自动更新。发布 `v*` 标签后，GitHub Actions 会构建 Tauri 安装包并上传 `latest.json`，桌面端可在“设置 -> 应用更新”里检查、下载并重启安装。
+
+配置签名私钥和发版步骤见 [docs/desktop-auto-update.md](docs/desktop-auto-update.md)。
+
 ## 设计稿
 
 `.pen` 设计稿位于仓库根目录：

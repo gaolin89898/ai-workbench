@@ -1,5 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
+import { relaunch } from "@tauri-apps/plugin-process";
+import { check } from "@tauri-apps/plugin-updater";
 
 export type ViewName = "workspace" | "projects" | "aiSessions" | "providers" | "pairing" | "settings";
 
@@ -186,6 +188,14 @@ export type AiHistoryChangedEvent = {
   aiSessionId: string;
 };
 
+export type AppUpdateInfo = {
+  available: boolean;
+  version?: string;
+  currentVersion?: string;
+  date?: string | null;
+  body?: string | null;
+};
+
 export const tauriApi = {
   listSessions: () => invoke<TerminalSession[]>("list_sessions"),
   pairDesktop: (server: string, code: string) => invoke<PairResponse>("pair_desktop", { server, code }),
@@ -217,6 +227,24 @@ export const tauriApi = {
   listLocalAiSessions: () => invoke<AiSession[]>("list_local_ai_sessions"),
   archiveLocalAiSession: (aiSessionId: string, archived: boolean) =>
     invoke<AiSession>("archive_local_ai_session", { aiSessionId, archived }),
+  checkAppUpdate: async (): Promise<AppUpdateInfo> => {
+    const update = await check();
+    if (!update) return { available: false };
+    return {
+      available: true,
+      version: update.version,
+      currentVersion: update.currentVersion,
+      date: update.date,
+      body: update.body,
+    };
+  },
+  installAppUpdate: async () => {
+    const update = await check();
+    if (!update) return false;
+    await update.downloadAndInstall();
+    await relaunch();
+    return true;
+  },
   onShellTerminalOutput: (handler: (event: ShellTerminalEvent) => void) =>
     listen<ShellTerminalEvent>("shell-terminal-output", ({ payload }) => handler(payload)),
   onShellSessionStatus: (handler: (event: ShellSessionStatusEvent) => void) =>

@@ -26,6 +26,11 @@ const qrPairingExpiresAt = ref("");
 const qrPairingStatus = ref<"idle" | "creating" | "pending" | "approved" | "expired" | "error">("idle");
 const settingsServer = ref("http://127.0.0.1:8080");
 const settingsResult = ref("尚未读取配对配置");
+const updateResult = ref("尚未检查更新。");
+const updateResultError = ref(false);
+const updateChecking = ref(false);
+const updateInstalling = ref(false);
+const updateAvailableVersion = ref("");
 const chatMessages = ref<ChatMessage[]>([
   { role: "system", text: "创建 AI 会话后，这里会变成聊天界面。" },
 ]);
@@ -983,6 +988,45 @@ function saveSettings() {
   settingsResult.value = `已在本地预览保存。服务器地址：${server || "未设置"}；完整历史仍保存在本机 SQLite。`;
 }
 
+async function checkAppUpdate() {
+  updateChecking.value = true;
+  updateResultError.value = false;
+  updateResult.value = "正在检查 GitHub Releases...";
+  try {
+    const update = await tauriApi.checkAppUpdate();
+    if (!update.available) {
+      updateAvailableVersion.value = "";
+      updateResult.value = "当前已经是最新版本。";
+      return;
+    }
+    updateAvailableVersion.value = update.version ?? "";
+    updateResult.value = `发现新版本 ${update.version ?? ""}${update.currentVersion ? `（当前 ${update.currentVersion}）` : ""}。`;
+  } catch (error) {
+    updateResultError.value = true;
+    updateResult.value = `检查更新失败：${String(error)}`;
+  } finally {
+    updateChecking.value = false;
+  }
+}
+
+async function installAppUpdate() {
+  updateInstalling.value = true;
+  updateResultError.value = false;
+  updateResult.value = "正在下载并安装更新...";
+  try {
+    const installed = await tauriApi.installAppUpdate();
+    if (!installed) {
+      updateAvailableVersion.value = "";
+      updateResult.value = "没有可安装的更新。";
+    }
+  } catch (error) {
+    updateResultError.value = true;
+    updateResult.value = `安装更新失败：${String(error)}`;
+  } finally {
+    updateInstalling.value = false;
+  }
+}
+
 function switchView(view: ViewName) {
   const path = routePaths[view];
   if (router.currentRoute.value.path !== path) void router.push(path);
@@ -1014,6 +1058,11 @@ export function useWorkspace() {
     qrPairingStatus,
     settingsServer,
     settingsResult,
+    updateResult,
+    updateResultError,
+    updateChecking,
+    updateInstalling,
+    updateAvailableVersion,
     chatMessages,
     chatDebugEvents,
     activeChatRunState,
@@ -1049,6 +1098,8 @@ export function useWorkspace() {
     pairDesktop,
     createQrPairingRequest,
     saveSettings,
+    checkAppUpdate,
+    installAppUpdate,
     switchView,
   };
 }

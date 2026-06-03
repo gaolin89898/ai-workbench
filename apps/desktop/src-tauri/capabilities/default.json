@@ -6,6 +6,8 @@
   "permissions": [
     "core:default",
     "core:event:default",
-    "core:event:allow-listen"
+    "core:event:allow-listen",
+    "process:allow-restart",
+    "updater:default"
   ]
 }

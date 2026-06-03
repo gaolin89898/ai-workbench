@@ -4,7 +4,7 @@ import QRCode from "qrcode";
 import { useWorkspace } from "../composables/useWorkspace";
 import type { AiProvider, ProviderStatus } from "../services/tauri";
 
-type SettingsPanel = "connection" | "security" | "pairing" | "debug";
+type SettingsPanel = "connection" | "security" | "pairing" | "updates" | "debug";
 type ProviderRow = {
   provider: AiProvider;
   status?: ProviderStatus;
@@ -48,6 +48,12 @@ const settingsPanels: SettingsPanelItem[] = [
     label: "设备配对",
     eyebrow: "移动端",
     description: "把这台桌面绑定到移动端账号",
+  },
+  {
+    id: "updates",
+    label: "应用更新",
+    eyebrow: "Release",
+    description: "从 GitHub Releases 检查和安装桌面端更新",
   },
   {
     id: "debug",
@@ -352,6 +358,56 @@ function checkedAt(status?: ProviderStatus) {
                   <small>过期时间：{{ ws.qrPairingExpiresAt.value }}</small>
                 </div>
                 <p>{{ ws.pairResult.value }}</p>
+              </aside>
+            </div>
+          </section>
+
+          <section v-else-if="settingsPanel === 'updates'" class="settings-section">
+            <div class="settings-section-heading">
+              <div>
+                <h2 class="settings-section-title">应用更新</h2>
+                <p class="settings-section-description">桌面端会从 GitHub Releases 读取最新版本，下载签名更新包并重启安装。</p>
+              </div>
+              <span class="settings-section-chip">{{ ws.updateAvailableVersion.value ? `可更新 ${ws.updateAvailableVersion.value}` : "GitHub Releases" }}</span>
+            </div>
+            <div class="settings-grid">
+              <div class="settings-card settings-form-card">
+                <div class="settings-row">
+                  <span class="settings-row-copy">
+                    <strong>更新来源</strong>
+                    <small>gaolin89898/ai-workbench 的 latest.json</small>
+                  </span>
+                  <code>GitHub</code>
+                </div>
+                <div class="settings-row">
+                  <span class="settings-row-copy">
+                    <strong>签名校验</strong>
+                    <small>安装前会校验 Release 更新包签名</small>
+                  </span>
+                  <span class="badge success">已启用</span>
+                </div>
+                <div class="button-row">
+                  <button class="button secondary" type="button" :disabled="ws.updateChecking.value || ws.updateInstalling.value" @click="ws.checkAppUpdate">
+                    {{ ws.updateChecking.value ? "检查中" : "检查更新" }}
+                  </button>
+                  <button class="button primary" type="button" :disabled="!ws.updateAvailableVersion.value || ws.updateInstalling.value" @click="ws.installAppUpdate">
+                    {{ ws.updateInstalling.value ? "安装中" : "下载并重启安装" }}
+                  </button>
+                </div>
+              </div>
+              <aside class="settings-note-panel" :class="{ error: ws.updateResultError.value }">
+                <strong>更新状态</strong>
+                <p>{{ ws.updateResult.value }}</p>
+                <dl>
+                  <div>
+                    <dt>Release</dt>
+                    <dd>latest.json</dd>
+                  </div>
+                  <div>
+                    <dt>触发</dt>
+                    <dd>推送 v* 标签</dd>
+                  </div>
+                </dl>
               </aside>
             </div>
           </section>
