@@ -14,7 +14,7 @@ class LoginPage extends StatefulWidget {
 }
 
 class _LoginPageState extends State<LoginPage> {
-  final _server = TextEditingController(text: 'http://192.168.2.7:8081');
+  final _server = TextEditingController(text: 'http://118.196.78.91');
   final _email = TextEditingController(text: 'demo@example.com');
   final _password = TextEditingController(text: 'password123');
   bool _loading = false;

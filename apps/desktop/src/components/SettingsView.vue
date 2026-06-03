@@ -242,7 +242,7 @@ function checkedAt(status?: ProviderStatus) {
               <div class="settings-card settings-card-main">
                 <label class="settings-field">
                   <span>服务器地址</span>
-                  <input v-model="localServer" class="settings-field-input" placeholder="http://127.0.0.1:8080" />
+                  <input v-model="localServer" class="settings-field-input" placeholder="http://118.196.78.91" />
                   <small>桌面端配对和移动端转发使用的云端地址。</small>
                 </label>
                 <label class="settings-field">
@@ -326,7 +326,7 @@ function checkedAt(status?: ProviderStatus) {
                 <label class="settings-field">
                   <span>服务器地址</span>
                   <input v-model="localServer" class="settings-field-input" />
-                  <small>请填写手机能访问到的地址，例如局域网 IP，不要用 127.0.0.1。</small>
+                  <small>请填写手机能访问到的地址。默认服务器为 118.196.78.91。</small>
                 </label>
                 <button
                   class="button primary"
