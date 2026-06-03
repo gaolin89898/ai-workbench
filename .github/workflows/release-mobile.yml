@@ -1,0 +1,51 @@
+name: Release mobile APK
+
+on:
+  push:
+    tags:
+      - "mobile-v*"
+
+permissions:
+  contents: write
+
+jobs:
+  release-mobile:
+    name: Release mobile APK
+    runs-on: ubuntu-22.04
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Install dependencies
+        working-directory: apps/mobile
+        run: flutter pub get
+
+      - name: Build release APK
+        working-directory: apps/mobile
+        run: flutter build apk --release
+
+      - name: Prepare artifact
+        run: |
+          mkdir -p release-assets
+          cp apps/mobile/build/app/outputs/flutter-apk/app-release.apk \
+            release-assets/ai-workbench-mobile-${GITHUB_REF_NAME}.apk
+
+      - name: Publish GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: "AI Workbench Mobile ${{ github.ref_name }}"
+          body: "Android APK release for AI Workbench mobile."
+          files: release-assets/*.apk
