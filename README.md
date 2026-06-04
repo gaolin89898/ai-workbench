@@ -1,13 +1,13 @@
 # AI 工作台
 
-AI 工作台是一个多 AI Agent 桌面工作台原型，目标体验类似 Codex Desktop，但可以同时集成 `Codex`、`Claude Code`、`Gemini`、`DeepSeek` 和后续自定义 CLI。
+AI 工作台是一个多 AI Agent 桌面工作台原型，目标体验类似 Codex Desktop，但可以同时集成 `Codex`、`Claude Code`、`OpenCode`、`DeepSeek` 和后续自定义 CLI。
 
 它的核心思路是：**桌面端负责真正运行本机 AI CLI，后端负责账号、配对和消息转发，移动端负责远程查看和控制桌面上的项目与 AI 会话。**
 
 项目当前包含三端：
 
 - `crates/server`：Rust Axum 云端中转服务，负责账号、配对、设备、Provider 状态、项目元信息、AI 会话元信息、WebSocket 转发和高危内容检查。
-- `apps/desktop`：Tauri 桌面主应用，负责本机 AI 工具检测、项目登记、Git 状态读取、本地 SQLite 历史能力、Codex exec 会话、shell pty 调试终端和配对入口。
+- `apps/desktop`：Tauri 桌面主应用，负责本机 AI 工具检测、项目登记、Git 状态读取、本地 SQLite 历史能力、本地 AI 会话、shell pty 调试终端和配对入口。
 - `apps/mobile`：Flutter 移动端，负责登录、设备列表、项目、AI 工具状态、AI 会话、聊天式控制、日志和设置。
 - `crates/desktop-agent`：旧的命令行桌面代理，保留为 tmux/screen 兼容和调试路径。
 
@@ -18,7 +18,7 @@ AI 工作台是一个多 AI Agent 桌面工作台原型，目标体验类似 Cod
 ├── apps/
 │   ├── desktop/              # Vue 3 + Tauri 桌面端
 │   │   ├── src/              # 桌面端前端页面、路由和 Tauri API 封装
-│   │   └── src-tauri/        # 桌面端 Rust 命令、本地 SQLite、pty、Codex exec
+│   │   └── src-tauri/        # 桌面端 Rust 命令、本地 SQLite、pty、本地 AI 会话
 │   └── mobile/               # Flutter 移动端
 ├── crates/
 │   ├── server/               # Axum 后端服务和数据库迁移
@@ -44,7 +44,7 @@ AI 工作台是一个多 AI Agent 桌面工作台原型，目标体验类似 Cod
 
 核心使用路径是：用户先选择一个本地项目，然后创建新的 AI 会话，或接管已有的 `tmux` / `screen` 会话继续工作。
 
-桌面端负责承载主要工作流，包括本地 Shell PTY、Codex `exec --json` 会话、本地项目管理和完整 AI 聊天历史。`tmux` / `screen` 仍然保留，用于兼容已有工作环境、接管历史会话和调试。
+桌面端负责承载主要工作流，包括本地 Shell PTY、本地 AI 会话、本地项目管理和完整 AI 聊天历史。`tmux` / `screen` 仍然保留，用于兼容已有工作环境、接管历史会话和调试。
 
 云端只作为账号、设备配对、状态同步和消息转发层使用。它保存设备、项目、会话元信息、摘要、状态和活动日志，不保存完整聊天内容。
 
@@ -78,10 +78,10 @@ AI_WORKBENCH_DB
 桌面端：
 
 - AI 工作台中文界面。
-- 检测本机 `codex --version`、`claude --version`、`gemini --version`、`deepseek --version`。
+- 检测本机 `codex --version`、`claude --version`、`opencode --version`、`deepseek --version`。
 - 添加本机项目目录并读取 `git branch --show-current`、`git status --short`。
 - 创建本地 AI 会话记录，并保存 provider、项目路径、标题、状态、摘要、归档状态和更新时间。
-- Codex 会话支持 `codex exec --json`，可预热会话、记录 provider thread id，并在后续消息中 resume。
+- 本地 AI 会话可预热会话、记录 provider thread id，并在后续消息中 resume。
 - 支持 shell pty 调试终端：启动、输入、resize、读取缓冲、停止，并通过 Tauri event 推送输出。
 - 接管已有 tmux/screen 会话的界面入口。
 - 本地 SQLite 表：`local_ai_sessions`、`local_ai_messages`。
@@ -300,9 +300,9 @@ flutter analyze
 
 ## v1 边界
 
-- v1 不直接接管任意图形终端窗口。主路径优先走桌面端本地 AI 会话和 Codex exec；`tmux` / `screen` 作为兼容和调试路径保留。
+- v1 不直接接管任意图形终端窗口。主路径优先走桌面端本地 AI 会话；`tmux` / `screen` 作为兼容和调试路径保留。
 - “接管已有会话”指接管已有 `tmux` / `screen` 的 window/pane；Codex、Claude Code 等工具内部自己的项目/对话历史不属于系统会话列表，只有当它们运行在某个 tmux/screen pane 里时才能被接管。
 - Windows v1 优先走 WSL + tmux。
 - 云端不保存完整聊天内容，只保存元信息和摘要。
 - Git 能力先展示 branch、dirty 状态和文件列表，不做完整 diff 和内置编辑器。
-- 自定义 Provider 后续会做成配置能力；当前内置 Provider 为 Codex、Claude Code、Gemini、DeepSeek。
+- 自定义 Provider 后续会做成配置能力；当前内置 Provider 为 Codex、Claude Code、OpenCode、DeepSeek。

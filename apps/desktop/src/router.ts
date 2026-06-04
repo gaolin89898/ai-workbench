@@ -14,6 +14,11 @@ const routes: RouteRecordRaw[] = [
       { path: "settings", name: "settings", component: () => import("./components/SettingsView.vue") },
     ],
   },
+  {
+    path: "/session/:id",
+    name: "sessionWindow",
+    component: () => import("./components/SessionWindow.vue"),
+  },
   { path: "/:pathMatch(.*)*", redirect: "/chat" },
 ];
 

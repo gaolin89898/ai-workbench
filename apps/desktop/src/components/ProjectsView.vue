@@ -31,7 +31,7 @@ const projectPath = ref("");
       </article>
       <article class="panel">
         <h2>项目列表</h2>
-        <p class="hint-text">项目是主入口。聊天使用 Codex exec，终端页提供独立项目 shell。</p>
+        <p class="hint-text">项目是主入口。聊天使用本地 AI 会话，终端页提供独立项目 shell。</p>
         <div class="compact-list">
           <div v-if="!ws.projects.value.length" class="empty-state">还没有项目。先添加本机项目目录，再创建 AI 会话。</div>
           <article v-for="project in ws.projects.value" :key="project.path" class="compact-row project-row">

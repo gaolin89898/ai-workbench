@@ -87,7 +87,7 @@ export type ChatSegment =
       stepId?: string;
       label: string;
       detail?: string;
-      icon?: "check" | "read" | "edit" | "search" | "think";
+      icon?: "check" | "read" | "edit" | "search" | "think" | "warn";
       additions?: number;
       deletions?: number;
     }
@@ -154,6 +154,12 @@ export type RunCodexChatRequest = {
   prompt: string;
 };
 
+export type RunAiChatRequest = {
+  aiSessionId: string;
+  projectPath: string;
+  prompt: string;
+};
+
 export type ResizeShellRequest = {
   aiSessionId: string;
   cols: number;
@@ -178,7 +184,7 @@ export type ShellSessionStatusEvent = {
 
 export type AiChatOutputEvent = {
   aiSessionId: string;
-  kind: "status" | "step-start" | "step-update" | "done" | "error";
+  kind: "status" | "step-start" | "step-update" | "delta" | "done" | "error";
   text?: string;
   stepId?: string | null;
   segment?: ChatSegment | null;
@@ -211,6 +217,11 @@ export const tauriApi = {
   addWorkspaceProject: (path: string) => invoke<WorkspaceProject>("add_workspace_project", { path }),
   chooseWorkspaceProject: () => invoke<WorkspaceProject | null>("choose_workspace_project"),
   listWorkspaceProjects: () => invoke<WorkspaceProject[]>("list_workspace_projects"),
+  renameWorkspaceProject: (id: string, name: string) =>
+    invoke<WorkspaceProject>("rename_workspace_project", { id, name }),
+  removeWorkspaceProject: (id: string) => invoke<void>("remove_workspace_project", { id }),
+  openProjectInFileManager: (path: string) =>
+    invoke<void>("open_project_in_file_manager", { path }),
   createAiSession: (req: CreateAiSessionRequest) => invoke<AiSession>("create_ai_session", { req }),
   restartAiSession: (aiSessionId: string) => invoke<AiSession>("restart_ai_session", { aiSessionId }),
   appendLocalAiMessage: (aiSessionId: string, role: ChatMessage["role"], content: string) =>
@@ -219,7 +230,9 @@ export const tauriApi = {
   sendShellInput: (req: ShellInputRequest) => invoke<void>("send_shell_input", { req }),
   resizeShell: (req: ResizeShellRequest) => invoke<void>("resize_shell", { req }),
   getShellBuffer: (aiSessionId: string) => invoke<string>("get_shell_buffer", { aiSessionId }),
+  runAiChat: (req: RunAiChatRequest) => invoke<string>("run_ai_chat", { req }),
   runCodexChat: (req: RunCodexChatRequest) => invoke<string>("run_codex_chat", { req }),
+  warmupAiSession: (aiSessionId: string) => invoke<AiSession>("warmup_ai_session", { aiSessionId }),
   warmupCodexSession: (aiSessionId: string) => invoke<AiSession>("warmup_codex_session", { aiSessionId }),
   stopShellPty: (aiSessionId: string) => invoke<void>("stop_shell_pty", { aiSessionId }),
   isShellLive: (aiSessionId: string) => invoke<boolean>("is_shell_live", { aiSessionId }),
@@ -227,6 +240,10 @@ export const tauriApi = {
   listLocalAiSessions: () => invoke<AiSession[]>("list_local_ai_sessions"),
   archiveLocalAiSession: (aiSessionId: string, archived: boolean) =>
     invoke<AiSession>("archive_local_ai_session", { aiSessionId, archived }),
+  renameLocalAiSession: (aiSessionId: string, title: string) =>
+    invoke<AiSession>("rename_local_ai_session", { aiSessionId, title }),
+  openSessionInNewWindow: (aiSessionId: string) =>
+    invoke<void>("open_session_in_new_window", { aiSessionId }),
   checkAppUpdate: async (): Promise<AppUpdateInfo> => {
     const update = await check();
     if (!update) return { available: false };

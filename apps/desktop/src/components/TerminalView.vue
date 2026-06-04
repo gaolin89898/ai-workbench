@@ -165,7 +165,7 @@ async function fitTerminal() {
         <span class="terminal-placeholder-kicker">项目 shell</span>
         <h2>{{ selectedProject ? `在 ${selectedProject.name} 下运行命令` : "选择项目后打开 shell" }}</h2>
         <p>
-          {{ selectedProject ? "终端页只提供干净的 shell，不会自动启动 Codex/Claude/Gemini/DeepSeek。" : "先选择一个本地项目，然后打开项目 shell。" }}
+          {{ selectedProject ? "终端页只提供干净的 shell，不会自动启动 Codex/Claude/OpenCode/DeepSeek。" : "先选择一个本地项目，然后打开项目 shell。" }}
         </p>
         <div class="terminal-placeholder-actions">
           <button

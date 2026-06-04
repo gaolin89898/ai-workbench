@@ -20,7 +20,7 @@ use std::{
     time::{Duration, Instant},
 };
 use tauri::{AppHandle, Emitter, Manager, State};
-use tokio::io::{AsyncBufReadExt, BufReader};
+use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::process::Command;
 use tokio::sync::mpsc;
 use tokio_tungstenite::{connect_async, tungstenite::Message};
@@ -219,9 +219,17 @@ struct StartShellPtyRequest {
     cwd: String,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct RunCodexChatRequest {
+    ai_session_id: Uuid,
+    project_path: String,
+    prompt: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct RunAiChatRequest {
     ai_session_id: Uuid,
     project_path: String,
     prompt: String,
@@ -455,6 +463,65 @@ async fn list_workspace_projects() -> Result<Vec<WorkspaceProject>, String> {
     load_local_projects().map_err(|error| error.to_string())
 }
 
+#[tauri::command]
+async fn rename_workspace_project(id: String, name: String) -> Result<WorkspaceProject, String> {
+    let trimmed = name.trim();
+    if trimmed.is_empty() {
+        return Err("项目名称不能为空".to_string());
+    }
+    let mut project = load_local_projects()
+        .map_err(|error| error.to_string())?
+        .into_iter()
+        .find(|project| project.id.to_string() == id)
+        .ok_or_else(|| "项目不存在".to_string())?;
+    project.name = trimmed.to_string();
+    project.updated_at = chrono::Utc::now();
+    save_local_project(&project).map_err(|error| error.to_string())?;
+    Ok(project)
+}
+
+#[tauri::command]
+async fn remove_workspace_project(id: String) -> Result<(), String> {
+    ensure_local_db().map_err(|error| error.to_string())?;
+    let conn = open_local_db().map_err(|error| error.to_string())?;
+    let deleted = conn
+        .execute("DELETE FROM local_projects WHERE id = ?1", [id])
+        .map_err(|error| error.to_string())?;
+    if deleted == 0 {
+        return Err("项目不存在".to_string());
+    }
+    Ok(())
+}
+
+#[tauri::command]
+async fn open_project_in_file_manager(path: String) -> Result<(), String> {
+    if path.trim().is_empty() {
+        return Err("项目路径为空".to_string());
+    }
+    let metadata = tokio::fs::metadata(&path)
+        .await
+        .map_err(|error| format!("无法访问项目路径：{error}"))?;
+    if !metadata.is_dir() {
+        return Err("项目路径不是一个目录".to_string());
+    }
+    let (program, args) = if cfg!(target_os = "macos") {
+        ("open", vec![path.clone()])
+    } else if cfg!(target_os = "windows") {
+        ("explorer", vec![path.clone()])
+    } else {
+        ("xdg-open", vec![path.clone()])
+    };
+    let status = tokio::process::Command::new(program)
+        .args(&args)
+        .status()
+        .await
+        .map_err(|error| format!("无法启动文件管理器：{error}"))?;
+    if !status.success() {
+        return Err(format!("文件管理器退出异常：{status}"));
+    }
+    Ok(())
+}
+
 async fn project_from_path(path: String) -> Result<WorkspaceProject, String> {
     let git = git_status(path.clone()).await.unwrap_or(GitStatus {
         path: path.clone(),
@@ -672,14 +739,57 @@ async fn get_shell_buffer(
 
 #[tauri::command]
 async fn run_codex_chat(app: AppHandle, req: RunCodexChatRequest) -> Result<String, String> {
+    let ai_session_id = req.ai_session_id;
+    match run_codex_chat_app_server(app.clone(), req).await {
+        Ok(reply) => Ok(reply),
+        Err(error) => {
+            emit_ai_chat_error_for_provider(&app, ai_session_id, "codex", &error);
+            Err(error)
+        }
+    }
+}
+
+#[tauri::command]
+async fn run_ai_chat(app: AppHandle, req: RunAiChatRequest) -> Result<String, String> {
+    let ai_session_id = req.ai_session_id;
+    let provider_id = load_local_sessions()
+        .map_err(|error| error.to_string())?
+        .into_iter()
+        .find(|item| item.id == ai_session_id)
+        .map(|session| session.provider_id)
+        .ok_or_else(|| "ai session not found".to_string())?;
+    let result = match provider_id.as_str() {
+        "codex" => {
+            run_codex_chat_app_server(
+                app.clone(),
+                RunCodexChatRequest {
+                    ai_session_id: req.ai_session_id,
+                    project_path: req.project_path,
+                    prompt: req.prompt,
+                },
+            )
+            .await
+        }
+        "claude" => run_claude_chat_stream_json(app.clone(), req).await,
+        _ => Err(format!(
+            "{} 暂不支持结构化聊天。可以在终端页直接运行对应 CLI。",
+            provider_display_name(&provider_id)
+        )),
+    };
+    match result {
+        Ok(reply) => Ok(reply),
+        Err(error) => {
+            emit_ai_chat_error_for_provider(&app, ai_session_id, &provider_id, &error);
+            Err(error)
+        }
+    }
+}
+
+async fn run_codex_chat_app_server(
+    app: AppHandle,
+    req: RunCodexChatRequest,
+) -> Result<String, String> {
     let started_at = Instant::now();
-    eprintln!(
-        "[run_codex_chat +{}ms] start session={} cwd={} prompt_len={}",
-        started_at.elapsed().as_millis(),
-        req.ai_session_id,
-        req.project_path,
-        req.prompt.len()
-    );
     let user_prompt = req.prompt.trim().to_string();
     if user_prompt.is_empty() {
         return Err("prompt cannot be empty".to_string());
@@ -692,78 +802,604 @@ async fn run_codex_chat(app: AppHandle, req: RunCodexChatRequest) -> Result<Stri
     if session.provider_id != "codex" {
         return Err("run_codex_chat only supports Codex sessions".to_string());
     }
-
-    let prescan = if should_prescan_project(&user_prompt) {
-        Some(
-            run_project_prescan(&app, req.ai_session_id, &req.project_path)
-                .await
-                .map_err(|error| error.to_string())?,
-        )
-    } else {
-        None
-    };
-    let prompt = codex_desktop_prompt(&user_prompt, prescan.as_deref());
-
-    emit_ai_chat_status(&app, req.ai_session_id, "正在启动 Codex exec...");
-    let mut command = Command::new("codex");
-    command
-        .current_dir(&req.project_path)
-        .stdin(Stdio::null())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped());
-    if let Some(provider_session_id) = session
+    let existing_thread_id = session
         .provider_session_id
         .as_deref()
-        .filter(|value| !value.trim().is_empty())
-    {
-        command.args([
-            "exec",
-            "resume",
-            "--json",
-            "--skip-git-repo-check",
-            "--dangerously-bypass-approvals-and-sandbox",
-            provider_session_id,
-            &prompt,
-        ]);
-    } else {
-        command.args([
-            "exec",
-            "--json",
-            "-C",
-            &req.project_path,
-            "--skip-git-repo-check",
-            "--dangerously-bypass-approvals-and-sandbox",
-            &prompt,
-        ]);
-    }
+        .and_then(codex_app_server_thread_id)
+        .map(str::to_string);
 
-    let mut child = command.spawn().map_err(|error| {
-        eprintln!(
-            "[run_codex_chat +{}ms] spawn failed: {error}",
-            started_at.elapsed().as_millis()
-        );
-        error.to_string()
-    })?;
-    eprintln!(
-        "[run_codex_chat +{}ms] spawned codex",
-        started_at.elapsed().as_millis()
-    );
+    let prompt = user_prompt.clone();
+    emit_ai_chat_status(&app, req.ai_session_id, "正在连接 Codex app-server...");
+
+    let mut child = Command::new("codex")
+        .args(["app-server", "--stdio"])
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .map_err(|error| format!("failed to start codex app-server: {error}"))?;
+    let mut stdin = child
+        .stdin
+        .take()
+        .ok_or_else(|| "failed to capture codex app-server stdin".to_string())?;
     let stdout = child
         .stdout
         .take()
-        .ok_or_else(|| "failed to capture codex stdout".to_string())?;
+        .ok_or_else(|| "failed to capture codex app-server stdout".to_string())?;
     let stderr = child
         .stderr
         .take()
-        .ok_or_else(|| "failed to capture codex stderr".to_string())?;
-    let stderr_app = app.clone();
-    let stderr_session_id = req.ai_session_id;
+        .ok_or_else(|| "failed to capture codex app-server stderr".to_string())?;
     let stderr_task = tokio::spawn(async move {
         let mut reader = BufReader::new(stderr).lines();
         let mut lines = Vec::new();
         while let Ok(Some(line)) = reader.next_line().await {
             if !line.trim().is_empty() {
-                let _ = (&stderr_app, stderr_session_id);
+                lines.push(line);
+            }
+        }
+        lines.join("\n")
+    });
+
+    let mut next_id = 1_u64;
+    write_jsonrpc_message(
+        &mut stdin,
+        serde_json::json!({
+            "jsonrpc": "2.0",
+            "id": next_id,
+            "method": "initialize",
+            "params": {
+                "clientInfo": {
+                    "name": "ai-workbench-desktop",
+                    "title": "AI 工作台",
+                    "version": env!("CARGO_PKG_VERSION"),
+                },
+                "capabilities": {
+                    "experimentalApi": true,
+                },
+            },
+        }),
+    )
+    .await?;
+    let initialize_id = next_id;
+    next_id += 1;
+
+    let mut reader = BufReader::new(stdout).lines();
+    let mut initialized = false;
+    let mut thread_id: Option<String> = existing_thread_id;
+    let mut pending_resume_id: Option<u64> = None;
+    let mut turn_started = false;
+    let mut final_text = String::new();
+    let mut command_outputs: HashMap<String, String> = HashMap::new();
+
+    loop {
+        let line = match tokio::time::timeout(Duration::from_secs(60), reader.next_line()).await {
+            Ok(Ok(Some(line))) => line,
+            Ok(Ok(None)) => break,
+            Ok(Err(error)) => return Err(error.to_string()),
+            Err(_) => return Err("Codex app-server 60 秒内没有返回新事件。".to_string()),
+        };
+        let trimmed = line.trim();
+        if trimmed.is_empty() {
+            continue;
+        }
+        eprintln!(
+            "[run_codex_app_server +{}ms] stdout: {trimmed}",
+            started_at.elapsed().as_millis()
+        );
+        let value: serde_json::Value = serde_json::from_str(trimmed)
+            .map_err(|error| format!("invalid codex app-server JSON-RPC: {error}: {trimmed}"))?;
+        if let Some(error) = value.get("error") {
+            if value.get("id").and_then(|value| value.as_u64()) == pending_resume_id {
+                pending_resume_id = None;
+                thread_id = None;
+                emit_ai_chat_status(
+                    &app,
+                    req.ai_session_id,
+                    "Codex 历史会话未找到，正在创建新的 app-server 会话...",
+                );
+                write_jsonrpc_message(
+                    &mut stdin,
+                    serde_json::json!({
+                        "jsonrpc": "2.0",
+                        "id": next_id,
+                        "method": "thread/start",
+                        "params": {
+                            "cwd": req.project_path,
+                            "runtimeWorkspaceRoots": [req.project_path],
+                            "approvalPolicy": "never",
+                            "sandbox": "danger-full-access",
+                            "developerInstructions": codex_desktop_developer_instructions(),
+                        },
+                    }),
+                )
+                .await?;
+                next_id += 1;
+                continue;
+            }
+            return Err(codex_jsonrpc_error_message(error));
+        }
+
+        if value.get("id").and_then(|value| value.as_u64()) == Some(initialize_id)
+            && value.get("result").is_some()
+            && !initialized
+        {
+            initialized = true;
+            write_jsonrpc_message(
+                &mut stdin,
+                serde_json::json!({
+                    "jsonrpc": "2.0",
+                    "method": "initialized",
+                }),
+            )
+            .await?;
+
+            if thread_id.is_none() {
+                emit_ai_chat_status(&app, req.ai_session_id, "正在创建 Codex app-server 会话...");
+                write_jsonrpc_message(
+                    &mut stdin,
+                    serde_json::json!({
+                        "jsonrpc": "2.0",
+                        "id": next_id,
+                        "method": "thread/start",
+                        "params": {
+                            "cwd": req.project_path,
+                            "runtimeWorkspaceRoots": [req.project_path],
+                            "approvalPolicy": "never",
+                            "sandbox": "danger-full-access",
+                            "developerInstructions": codex_desktop_developer_instructions(),
+                        },
+                    }),
+                )
+                .await?;
+                next_id += 1;
+            } else {
+                let existing_thread_id = thread_id.as_deref().unwrap();
+                emit_ai_chat_status(&app, req.ai_session_id, "正在恢复 Codex app-server 会话...");
+                write_jsonrpc_message(
+                    &mut stdin,
+                    serde_json::json!({
+                        "jsonrpc": "2.0",
+                        "id": next_id,
+                        "method": "thread/resume",
+                        "params": {
+                            "threadId": existing_thread_id,
+                            "cwd": req.project_path,
+                            "approvalPolicy": "never",
+                            "sandbox": "danger-full-access",
+                            "developerInstructions": codex_desktop_developer_instructions(),
+                        },
+                    }),
+                )
+                .await?;
+                pending_resume_id = Some(next_id);
+                next_id += 1;
+            }
+            continue;
+        }
+
+        if value.get("id").and_then(|value| value.as_u64()) == pending_resume_id
+            && value.get("result").is_some()
+        {
+            pending_resume_id = None;
+            if let Some(id) = value.get("result").and_then(extract_codex_thread_id) {
+                thread_id = Some(id.to_string());
+                set_local_session_provider_session_id(
+                    req.ai_session_id,
+                    &format!("app-server:{id}"),
+                )
+                .map_err(|error| error.to_string())?;
+            }
+            let Some(id) = thread_id.as_deref() else {
+                return Err("Codex app-server 恢复会话后没有返回 thread id。".to_string());
+            };
+            emit_ai_chat_status(&app, req.ai_session_id, "Codex app-server 会话已恢复");
+            start_codex_app_server_turn(&mut stdin, &mut next_id, id, &req.project_path, &prompt)
+                .await?;
+            turn_started = true;
+            emit_ai_chat_status(&app, req.ai_session_id, "Codex app-server 正在处理...");
+            continue;
+        }
+
+        if let Some(method) = value.get("method").and_then(|value| value.as_str()) {
+            match method {
+                "thread/started" => {
+                    if let Some(id) = value
+                        .get("params")
+                        .and_then(|params| extract_codex_thread_id(params))
+                    {
+                        thread_id = Some(id.to_string());
+                        set_local_session_provider_session_id(
+                            req.ai_session_id,
+                            &format!("app-server:{id}"),
+                        )
+                        .map_err(|error| error.to_string())?;
+                        emit_ai_chat_status(&app, req.ai_session_id, "Codex app-server 会话已连接");
+                        start_codex_app_server_turn(
+                            &mut stdin,
+                            &mut next_id,
+                            id,
+                            &req.project_path,
+                            &prompt,
+                        )
+                        .await?;
+                        turn_started = true;
+                        emit_ai_chat_status(
+                            &app,
+                            req.ai_session_id,
+                            "Codex app-server 正在处理...",
+                        );
+                    }
+                }
+                "turn/started" => {
+                    emit_ai_chat_status(&app, req.ai_session_id, "Codex 正在生成回复...");
+                }
+                "item/started" => {
+                    if let Some(item) = value.get("params").and_then(|params| params.get("item")) {
+                        if let Some((step_id, segment)) = codex_item_segment(item, "running") {
+                            emit_ai_chat_step(
+                                &app,
+                                req.ai_session_id,
+                                "step-start",
+                                &step_id,
+                                segment,
+                            );
+                        }
+                    }
+                }
+                "item/agentMessage/delta" => {
+                    if let Some(delta) = value
+                        .get("params")
+                        .and_then(|params| params.get("delta"))
+                        .and_then(|delta| delta.as_str())
+                    {
+                        final_text.push_str(delta);
+                        emit_ai_chat_delta(&app, req.ai_session_id, delta, &final_text);
+                    }
+                }
+                "item/commandExecution/outputDelta" => {
+                    let params = value.get("params").unwrap_or(&serde_json::Value::Null);
+                    let item_id = params
+                        .get("itemId")
+                        .and_then(|value| value.as_str())
+                        .unwrap_or("command-output")
+                        .to_string();
+                    let delta = params
+                        .get("delta")
+                        .and_then(|value| value.as_str())
+                        .unwrap_or("");
+                    let output = command_outputs.entry(item_id.clone()).or_default();
+                    output.push_str(delta);
+                    emit_ai_chat_step(
+                        &app,
+                        req.ai_session_id,
+                        "step-update",
+                        &item_id,
+                        serde_json::json!({
+                            "type": "tool",
+                            "stepId": item_id,
+                            "toolName": "运行命令",
+                            "status": "running",
+                            "summary": "命令正在输出",
+                            "output": output,
+                        }),
+                    );
+                }
+                "item/completed" => {
+                    if let Some(item) = value.get("params").and_then(|params| params.get("item")) {
+                        if let Some((step_id, mut segment)) =
+                            codex_item_segment(item, codex_completed_status(item))
+                        {
+                            if let Some(output) = command_outputs.get(&step_id) {
+                                if let Some(object) = segment.as_object_mut() {
+                                    object.insert(
+                                        "output".to_string(),
+                                        serde_json::Value::String(output.clone()),
+                                    );
+                                }
+                            }
+                            emit_ai_chat_step(
+                                &app,
+                                req.ai_session_id,
+                                "step-update",
+                                &step_id,
+                                segment,
+                            );
+                        }
+                    }
+                }
+                "turn/completed" => {
+                    let _ = child.kill().await;
+                    let _ = tokio::time::timeout(Duration::from_millis(250), child.wait()).await;
+                    if final_text.trim().is_empty() {
+                        return Err("Codex app-server 没有返回可显示的回复。".to_string());
+                    }
+                    save_local_message(req.ai_session_id, AiMessageRole::Assistant, &final_text)
+                        .map_err(|error| error.to_string())?;
+                    emit_ai_chat_done(&app, req.ai_session_id, &final_text);
+                    return Ok(final_text);
+                }
+                "error" => {
+                    let message = value
+                        .get("params")
+                        .and_then(codex_app_server_error_notification_message)
+                        .unwrap_or_else(|| "Codex app-server error".to_string());
+                    if final_text.trim().is_empty() {
+                        return Err(message);
+                    }
+                    emit_ai_chat_status(
+                        &app,
+                        req.ai_session_id,
+                        &format!("Codex app-server 后续事件报错，已保留当前回复：{message}"),
+                    );
+                    save_local_message(req.ai_session_id, AiMessageRole::Assistant, &final_text)
+                        .map_err(|error| error.to_string())?;
+                    emit_ai_chat_done(&app, req.ai_session_id, &final_text);
+                    return Ok(final_text);
+                }
+                _ => {}
+            }
+        }
+
+        if let Some(id) = value.get("id").cloned() {
+            if value.get("method").is_some()
+                && value.get("result").is_none()
+                && value.get("error").is_none()
+            {
+                write_jsonrpc_message(
+                    &mut stdin,
+                    serde_json::json!({
+                        "jsonrpc": "2.0",
+                        "id": id,
+                        "result": {
+                            "decision": "denied",
+                            "reason": "AI 工作台暂未接入 app-server 审批弹窗。请改用不需要审批的操作。",
+                        },
+                    }),
+                )
+                .await?;
+            }
+        }
+    }
+
+    let stderr_output = stderr_task.await.unwrap_or_default();
+    if !turn_started {
+        Err(if stderr_output.trim().is_empty() {
+            "Codex app-server exited before starting a turn".to_string()
+        } else {
+            stderr_output
+        })
+    } else {
+        Err(if stderr_output.trim().is_empty() {
+            "Codex app-server exited before completing the turn".to_string()
+        } else {
+            stderr_output
+        })
+    }
+}
+
+async fn start_codex_app_server_turn(
+    stdin: &mut tokio::process::ChildStdin,
+    next_id: &mut u64,
+    thread_id: &str,
+    project_path: &str,
+    prompt: &str,
+) -> Result<(), String> {
+    write_jsonrpc_message(
+        stdin,
+        serde_json::json!({
+            "jsonrpc": "2.0",
+            "id": *next_id,
+            "method": "turn/start",
+            "params": {
+                "threadId": thread_id,
+                "cwd": project_path,
+                "runtimeWorkspaceRoots": [project_path],
+                "approvalPolicy": "never",
+                "sandboxPolicy": {
+                    "type": "dangerFullAccess",
+                },
+                "input": [{
+                    "type": "text",
+                    "text": prompt,
+                    "text_elements": [],
+                }],
+            },
+        }),
+    )
+    .await?;
+    *next_id += 1;
+    Ok(())
+}
+
+async fn write_jsonrpc_message(
+    stdin: &mut tokio::process::ChildStdin,
+    message: serde_json::Value,
+) -> Result<(), String> {
+    let payload = serde_json::to_string(&message).map_err(|error| error.to_string())?;
+    stdin
+        .write_all(payload.as_bytes())
+        .await
+        .map_err(|error| error.to_string())?;
+    stdin
+        .write_all(b"\n")
+        .await
+        .map_err(|error| error.to_string())?;
+    stdin.flush().await.map_err(|error| error.to_string())
+}
+
+fn extract_codex_thread_id(params: &serde_json::Value) -> Option<&str> {
+    params
+        .get("thread")
+        .and_then(|thread| thread.get("id").or_else(|| thread.get("threadId")))
+        .and_then(|value| value.as_str())
+        .or_else(|| params.get("threadId").and_then(|value| value.as_str()))
+        .or_else(|| params.get("id").and_then(|value| value.as_str()))
+}
+
+fn codex_jsonrpc_error_message(error: &serde_json::Value) -> String {
+    let message = error
+        .get("message")
+        .and_then(|value| value.as_str())
+        .unwrap_or("Codex app-server JSON-RPC error");
+    let code = error.get("code").and_then(|value| value.as_i64());
+    match code {
+        Some(code) => format!("Codex app-server error {code}: {message}"),
+        None => message.to_string(),
+    }
+}
+
+fn codex_app_server_error_notification_message(params: &serde_json::Value) -> Option<String> {
+    let error = params.get("error").unwrap_or(params);
+    let message = error
+        .get("message")
+        .and_then(|value| value.as_str())
+        .or_else(|| params.get("message").and_then(|value| value.as_str()))?;
+    let details = error
+        .get("additionalDetails")
+        .and_then(|value| value.as_str())
+        .filter(|value| !value.trim().is_empty());
+    let info = error
+        .get("codexErrorInfo")
+        .filter(|value| !value.is_null())
+        .map(|value| value.to_string());
+    let retry = params
+        .get("willRetry")
+        .and_then(|value| value.as_bool())
+        .map(|value| {
+            if value {
+                "will retry"
+            } else {
+                "will not retry"
+            }
+        });
+    let mut parts = vec![message.to_string()];
+    if let Some(details) = details {
+        parts.push(details.to_string());
+    }
+    if let Some(info) = info {
+        parts.push(format!("info={info}"));
+    }
+    if let Some(retry) = retry {
+        parts.push(retry.to_string());
+    }
+    Some(parts.join("；"))
+}
+
+fn codex_app_server_thread_id(provider_session_id: &str) -> Option<&str> {
+    provider_session_id
+        .strip_prefix("app-server:")
+        .filter(|thread_id| !thread_id.trim().is_empty())
+}
+
+async fn run_claude_chat_stream_json(
+    app: AppHandle,
+    req: RunAiChatRequest,
+) -> Result<String, String> {
+    let user_prompt = req.prompt.trim().to_string();
+    if user_prompt.is_empty() {
+        return Err("prompt cannot be empty".to_string());
+    }
+    let session = load_local_sessions()
+        .map_err(|error| error.to_string())?
+        .into_iter()
+        .find(|item| item.id == req.ai_session_id)
+        .ok_or_else(|| "ai session not found".to_string())?;
+    if session.provider_id != "claude" {
+        return Err("run_claude_chat only supports Claude Code sessions".to_string());
+    }
+    let prompt = claude_desktop_prompt(&user_prompt);
+    if let Some(existing_session_id) = session
+        .provider_session_id
+        .as_deref()
+        .and_then(claude_provider_session_id)
+        .map(str::to_string)
+    {
+        match run_claude_chat_once(
+            app.clone(),
+            req.clone(),
+            prompt.clone(),
+            existing_session_id,
+            true,
+        )
+        .await
+        {
+            Ok(reply) => return Ok(reply),
+            Err(error) => {
+                emit_ai_chat_status(
+                    &app,
+                    req.ai_session_id,
+                    "Claude 历史会话未找到，已创建新会话。",
+                );
+                eprintln!("[run_claude_stream_json] resume failed, starting fresh: {error}");
+            }
+        }
+    }
+
+    let session_id = req.ai_session_id.to_string();
+    set_local_session_provider_session_id(req.ai_session_id, &format!("claude:{session_id}"))
+        .map_err(|error| error.to_string())?;
+    run_claude_chat_once(app, req, prompt, session_id, false).await
+}
+
+async fn run_claude_chat_once(
+    app: AppHandle,
+    req: RunAiChatRequest,
+    prompt: String,
+    claude_session_id: String,
+    resume: bool,
+) -> Result<String, String> {
+    let started_at = Instant::now();
+    emit_ai_chat_status(
+        &app,
+        req.ai_session_id,
+        if resume {
+            "正在恢复 Claude Code 会话..."
+        } else {
+            "正在启动 Claude Code..."
+        },
+    );
+
+    let mut command = Command::new("claude");
+    command
+        .current_dir(&req.project_path)
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .args([
+            "--print",
+            "--output-format",
+            "stream-json",
+            "--verbose",
+            "--include-partial-messages",
+            "--permission-mode",
+            "plan",
+            "--append-system-prompt",
+            "你正在 AI 工作台桌面端中运行。回复使用中文，直接、简洁；如果用户要求查看、检查或分析项目，必须实际读取本机项目文件后再给结论。",
+        ]);
+    if resume {
+        command.arg("--resume").arg(&claude_session_id);
+    } else {
+        command.arg("--session-id").arg(&claude_session_id);
+    }
+    command.arg(prompt);
+
+    let mut child = command
+        .spawn()
+        .map_err(|error| format!("failed to start Claude Code: {error}"))?;
+    let stdout = child
+        .stdout
+        .take()
+        .ok_or_else(|| "failed to capture Claude Code stdout".to_string())?;
+    let stderr = child
+        .stderr
+        .take()
+        .ok_or_else(|| "failed to capture Claude Code stderr".to_string())?;
+    let stderr_task = tokio::spawn(async move {
+        let mut reader = BufReader::new(stderr).lines();
+        let mut lines = Vec::new();
+        while let Ok(Some(line)) = reader.next_line().await {
+            if !line.trim().is_empty() {
                 lines.push(line);
             }
         }
@@ -772,154 +1408,282 @@ async fn run_codex_chat(app: AppHandle, req: RunCodexChatRequest) -> Result<Stri
 
     let mut reader = BufReader::new(stdout).lines();
     let mut final_text = String::new();
-    let mut provider_session_id = session.provider_session_id.clone();
-    let mut completed = false;
-    while let Some(line) = reader
-        .next_line()
-        .await
-        .map_err(|error| error.to_string())?
-    {
+    let mut saw_event = false;
+    loop {
+        let line = match tokio::time::timeout(Duration::from_secs(120), reader.next_line()).await {
+            Ok(Ok(Some(line))) => line,
+            Ok(Ok(None)) => break,
+            Ok(Err(error)) => return Err(error.to_string()),
+            Err(_) => return Err("Claude Code 120 秒内没有返回新事件。".to_string()),
+        };
+        let trimmed = line.trim();
+        if trimmed.is_empty() {
+            continue;
+        }
+        saw_event = true;
         eprintln!(
-            "[run_codex_chat +{}ms] stdout: {line}",
+            "[run_claude_stream_json +{}ms] stdout: {trimmed}",
             started_at.elapsed().as_millis()
         );
-        completed = handle_codex_json_line(
-            &app,
-            req.ai_session_id,
-            &line,
-            &mut provider_session_id,
-            &mut final_text,
-        );
-        if completed {
+        if handle_claude_stream_json_line(&app, req.ai_session_id, trimmed, &mut final_text)? {
             break;
         }
     }
 
-    let status = if completed {
-        let _ = tokio::time::timeout(Duration::from_millis(250), child.wait()).await;
-        None
-    } else {
-        Some(child.wait().await.map_err(|error| error.to_string())?)
-    };
-    let stderr_output = if completed {
-        String::new()
-    } else {
-        stderr_task.await.unwrap_or_default()
-    };
-    if !completed && status.is_some_and(|status| !status.success()) {
-        let message = if stderr_output.trim().is_empty() {
-            "Codex exec failed".to_string()
+    let status = child.wait().await.map_err(|error| error.to_string())?;
+    let stderr_output = stderr_task.await.unwrap_or_default();
+    if !status.success() && final_text.trim().is_empty() {
+        return Err(if stderr_output.trim().is_empty() {
+            "Claude Code 执行失败。".to_string()
         } else {
             stderr_output
-        };
-        emit_ai_chat_error(&app, req.ai_session_id, &message);
-        return Err(message);
+        });
     }
-
-    if let Some(provider_session_id) = provider_session_id.filter(|value| !value.trim().is_empty())
-    {
-        set_local_session_provider_session_id(req.ai_session_id, &provider_session_id)
-            .map_err(|error| error.to_string())?;
+    if !saw_event && final_text.trim().is_empty() {
+        return Err("Claude Code 没有返回 stream-json 事件。".to_string());
     }
-    if !final_text.trim().is_empty() {
-        save_local_message(req.ai_session_id, AiMessageRole::Assistant, &final_text)
-            .map_err(|error| error.to_string())?;
-        eprintln!(
-            "[run_codex_chat +{}ms] saved assistant chars={}",
-            started_at.elapsed().as_millis(),
-            final_text.len()
-        );
-    } else {
-        eprintln!(
-            "[run_codex_chat +{}ms] empty final text",
-            started_at.elapsed().as_millis()
-        );
-        emit_ai_chat_error(&app, req.ai_session_id, "Codex 没有返回可显示的回复。");
-        return Err("Codex 没有返回可显示的回复。".to_string());
+    if final_text.trim().is_empty() {
+        return Err("Claude Code 没有返回可显示的回复。".to_string());
     }
+    save_local_message(req.ai_session_id, AiMessageRole::Assistant, &final_text)
+        .map_err(|error| error.to_string())?;
+    emit_ai_chat_done(&app, req.ai_session_id, &final_text);
     Ok(final_text)
+}
+
+fn handle_claude_stream_json_line(
+    app: &AppHandle,
+    ai_session_id: Uuid,
+    line: &str,
+    final_text: &mut String,
+) -> Result<bool, String> {
+    let value: serde_json::Value = serde_json::from_str(line)
+        .map_err(|error| format!("invalid Claude Code stream JSON: {error}: {line}"))?;
+    let event_type = value
+        .get("type")
+        .and_then(|value| value.as_str())
+        .unwrap_or("");
+    match event_type {
+        "system" => {
+            if value.get("subtype").and_then(|value| value.as_str()) == Some("init") {
+                emit_ai_chat_status(app, ai_session_id, "Claude Code 会话已连接");
+            }
+        }
+        "assistant" => {
+            if let Some(message) = value.get("message") {
+                emit_claude_tool_segments(app, ai_session_id, message);
+                if let Some(text) = claude_message_text(message) {
+                    append_claude_text(app, ai_session_id, final_text, &text);
+                }
+            }
+        }
+        "stream_event" => {
+            if let Some(event) = value.get("event") {
+                handle_claude_nested_stream_event(app, ai_session_id, event, final_text);
+            }
+        }
+        "result" => {
+            if value
+                .get("is_error")
+                .and_then(|value| value.as_bool())
+                .unwrap_or(false)
+            {
+                let message = value
+                    .get("result")
+                    .and_then(|value| value.as_str())
+                    .filter(|value| !value.trim().is_empty())
+                    .unwrap_or("Claude Code 执行失败。");
+                if final_text.trim().is_empty() {
+                    return Err(message.to_string());
+                }
+                emit_ai_chat_status(
+                    app,
+                    ai_session_id,
+                    &format!("Claude Code 后续事件报错，已保留当前回复：{message}"),
+                );
+                return Ok(true);
+            }
+            if let Some(text) = value
+                .get("result")
+                .and_then(|value| value.as_str())
+                .filter(|value| !value.trim().is_empty())
+            {
+                append_claude_text(app, ai_session_id, final_text, text);
+            }
+            return Ok(true);
+        }
+        other if other.contains("delta") => {
+            if let Some(text) = value
+                .pointer("/delta/text")
+                .and_then(|value| value.as_str())
+                .or_else(|| value.get("text").and_then(|value| value.as_str()))
+            {
+                append_claude_text(app, ai_session_id, final_text, text);
+            }
+        }
+        _ => {}
+    }
+    Ok(false)
+}
+
+fn handle_claude_nested_stream_event(
+    app: &AppHandle,
+    ai_session_id: Uuid,
+    event: &serde_json::Value,
+    final_text: &mut String,
+) {
+    match event
+        .get("type")
+        .and_then(|value| value.as_str())
+        .unwrap_or("")
+    {
+        "content_block_start" => {
+            if event
+                .get("content_block")
+                .and_then(|block| block.get("type"))
+                .and_then(|value| value.as_str())
+                == Some("tool_use")
+            {
+                let block = event
+                    .get("content_block")
+                    .unwrap_or(&serde_json::Value::Null);
+                let id = block
+                    .get("id")
+                    .and_then(|value| value.as_str())
+                    .unwrap_or("claude-tool");
+                let name = block
+                    .get("name")
+                    .and_then(|value| value.as_str())
+                    .unwrap_or("Claude 工具");
+                emit_ai_chat_step(
+                    app,
+                    ai_session_id,
+                    "step-start",
+                    id,
+                    serde_json::json!({
+                        "type": "tool",
+                        "stepId": id,
+                        "toolName": name,
+                        "status": "running",
+                        "summary": "Claude Code 正在使用工具",
+                    }),
+                );
+            }
+        }
+        "content_block_delta" => {
+            if let Some(text) = event
+                .pointer("/delta/text")
+                .and_then(|value| value.as_str())
+                .filter(|_| {
+                    event
+                        .pointer("/delta/type")
+                        .and_then(|value| value.as_str())
+                        == Some("text_delta")
+                })
+            {
+                append_claude_text(app, ai_session_id, final_text, text);
+            }
+        }
+        _ => {}
+    }
+}
+
+fn append_claude_text(app: &AppHandle, ai_session_id: Uuid, final_text: &mut String, text: &str) {
+    if text.trim().is_empty() {
+        return;
+    }
+    let delta = if text.starts_with(final_text.as_str()) {
+        text[final_text.len()..].to_string()
+    } else if final_text.ends_with(text) {
+        String::new()
+    } else {
+        text.to_string()
+    };
+    if delta.is_empty() {
+        return;
+    }
+    final_text.push_str(&delta);
+    emit_ai_chat_delta(app, ai_session_id, &delta, final_text);
+}
+
+fn claude_message_text(message: &serde_json::Value) -> Option<String> {
+    let content = message.get("content")?;
+    if let Some(text) = content.as_str() {
+        return Some(text.to_string());
+    }
+    let mut parts = Vec::new();
+    if let Some(items) = content.as_array() {
+        for item in items {
+            if item.get("type").and_then(|value| value.as_str()) == Some("text") {
+                if let Some(text) = item.get("text").and_then(|value| value.as_str()) {
+                    parts.push(text);
+                }
+            }
+        }
+    }
+    (!parts.is_empty()).then(|| parts.join(""))
+}
+
+fn emit_claude_tool_segments(app: &AppHandle, ai_session_id: Uuid, message: &serde_json::Value) {
+    let Some(items) = message.get("content").and_then(|value| value.as_array()) else {
+        return;
+    };
+    for item in items {
+        let item_type = item
+            .get("type")
+            .and_then(|value| value.as_str())
+            .unwrap_or("");
+        if item_type != "tool_use" {
+            continue;
+        }
+        let id = item
+            .get("id")
+            .and_then(|value| value.as_str())
+            .unwrap_or("claude-tool");
+        let name = item
+            .get("name")
+            .and_then(|value| value.as_str())
+            .unwrap_or("Claude 工具");
+        emit_ai_chat_step(
+            app,
+            ai_session_id,
+            "step-start",
+            id,
+            serde_json::json!({
+                "type": "tool",
+                "stepId": id,
+                "toolName": name,
+                "status": "running",
+                "summary": "Claude Code 正在使用工具",
+                "input": item.get("input").map(|value| value.to_string()).unwrap_or_default(),
+            }),
+        );
+    }
+}
+
+fn claude_provider_session_id(provider_session_id: &str) -> Option<&str> {
+    provider_session_id
+        .strip_prefix("claude:")
+        .filter(|session_id| !session_id.trim().is_empty())
 }
 
 #[tauri::command]
 async fn warmup_codex_session(app: AppHandle, ai_session_id: Uuid) -> Result<AiSession, String> {
-    let started_at = Instant::now();
-    let mut session = load_local_sessions()
+    warmup_ai_session(app, ai_session_id).await
+}
+
+#[tauri::command]
+async fn warmup_ai_session(app: AppHandle, ai_session_id: Uuid) -> Result<AiSession, String> {
+    let session = load_local_sessions()
         .map_err(|error| error.to_string())?
         .into_iter()
         .find(|item| item.id == ai_session_id)
         .ok_or_else(|| "ai session not found".to_string())?;
-    if session.provider_id != "codex" {
-        return Ok(session);
+    match session.provider_id.as_str() {
+        "codex" => emit_ai_chat_status(&app, ai_session_id, "Codex app-server 将在发送消息时连接"),
+        "claude" => emit_ai_chat_status(&app, ai_session_id, "Claude Code 将在发送消息时连接"),
+        _ => {}
     }
-    if session
-        .provider_session_id
-        .as_deref()
-        .is_some_and(|value| !value.trim().is_empty())
-    {
-        return Ok(session);
-    }
-    let Some(project_path) = session.summary.clone() else {
-        return Ok(session);
-    };
-    emit_ai_chat_status(&app, ai_session_id, "正在预热 Codex 会话...");
-    let prompt = "初始化这个 Codex Desktop 会话。只回复：已就绪。";
-    let mut child = Command::new("codex")
-        .current_dir(&project_path)
-        .args([
-            "exec",
-            "--json",
-            "-C",
-            &project_path,
-            "--skip-git-repo-check",
-            "--dangerously-bypass-approvals-and-sandbox",
-            prompt,
-        ])
-        .stdin(Stdio::null())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::null())
-        .spawn()
-        .map_err(|error| error.to_string())?;
-    let stdout = child
-        .stdout
-        .take()
-        .ok_or_else(|| "failed to capture codex warmup stdout".to_string())?;
-    let mut reader = BufReader::new(stdout).lines();
-    while let Some(line) = reader
-        .next_line()
-        .await
-        .map_err(|error| error.to_string())?
-    {
-        eprintln!(
-            "[warmup_codex_session +{}ms] stdout: {line}",
-            started_at.elapsed().as_millis()
-        );
-        let Ok(value) = serde_json::from_str::<serde_json::Value>(&line) else {
-            continue;
-        };
-        if value.get("type").and_then(|value| value.as_str()) == Some("thread.started") {
-            if let Some(thread_id) = value.get("thread_id").and_then(|value| value.as_str()) {
-                session.provider_session_id = Some(thread_id.to_string());
-                set_local_session_provider_session_id(ai_session_id, thread_id)
-                    .map_err(|error| error.to_string())?;
-            }
-        }
-        if value.get("type").and_then(|value| value.as_str()) == Some("item.completed")
-            && value
-                .get("item")
-                .and_then(|item| item.get("type"))
-                .and_then(|value| value.as_str())
-                == Some("agent_message")
-        {
-            break;
-        }
-    }
-    let _ = tokio::time::timeout(Duration::from_millis(250), child.wait()).await;
-    emit_ai_chat_status(&app, ai_session_id, "Codex 会话已预热");
-    eprintln!(
-        "[warmup_codex_session +{}ms] done session={}",
-        started_at.elapsed().as_millis(),
-        ai_session_id
-    );
     Ok(session)
 }
 
@@ -968,6 +1732,51 @@ async fn archive_local_ai_session(
     set_local_session_archived(ai_session_id, archived).map_err(|error| error.to_string())
 }
 
+#[tauri::command]
+async fn rename_local_ai_session(ai_session_id: Uuid, title: String) -> Result<AiSession, String> {
+    let trimmed = title.trim();
+    if trimmed.is_empty() {
+        return Err("会话名称不能为空".to_string());
+    }
+    ensure_local_db().map_err(|error| error.to_string())?;
+    let conn = open_local_db().map_err(|error| error.to_string())?;
+    let now = chrono::Utc::now().to_rfc3339();
+    let updated = conn
+        .execute(
+            "UPDATE local_ai_sessions SET title = ?1, updated_at = ?2 WHERE id = ?3",
+            params![trimmed, now, ai_session_id.to_string()],
+        )
+        .map_err(|error| error.to_string())?;
+    if updated == 0 {
+        return Err("会话不存在".to_string());
+    }
+    load_local_sessions()
+        .map_err(|error| error.to_string())?
+        .into_iter()
+        .find(|session| session.id == ai_session_id)
+        .ok_or_else(|| "会话不存在".to_string())
+}
+
+#[tauri::command]
+async fn open_session_in_new_window(
+    app: AppHandle,
+    ai_session_id: Uuid,
+) -> Result<(), String> {
+    use tauri::WebviewUrl;
+    let url = format!("index.html#/session/{}", ai_session_id);
+    let label = format!("session-{}", ai_session_id.simple());
+    if app.get_webview_window(&label).is_some() {
+        return Ok(());
+    }
+    tauri::WebviewWindowBuilder::new(&app, &label, WebviewUrl::App(url.into()))
+        .title("AI 会话")
+        .inner_size(1024.0, 720.0)
+        .min_inner_size(640.0, 480.0)
+        .build()
+        .map_err(|error| error.to_string())?;
+    Ok(())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -985,6 +1794,9 @@ pub fn run() {
             add_workspace_project,
             choose_workspace_project,
             list_workspace_projects,
+            rename_workspace_project,
+            remove_workspace_project,
+            open_project_in_file_manager,
             get_git_status,
             create_ai_session,
             restart_ai_session,
@@ -995,13 +1807,17 @@ pub fn run() {
             send_shell_input,
             resize_shell,
             get_shell_buffer,
+            run_ai_chat,
             run_codex_chat,
+            warmup_ai_session,
             warmup_codex_session,
             stop_shell_pty,
             is_shell_live,
             list_local_ai_history,
             list_local_ai_sessions,
-            archive_local_ai_session
+            archive_local_ai_session,
+            rename_local_ai_session,
+            open_session_in_new_window
         ])
         .setup(|app| {
             app.manage(ShellPtySessionManager::new());
@@ -1179,15 +1995,11 @@ async fn handle_cloud_message(
                     emit_ai_chat_error(app, ai_session_id, "当前 AI 会话没有项目路径。");
                     return;
                 }
-                if session.provider_id != "codex" {
-                    emit_ai_chat_error(app, ai_session_id, "移动端结构化聊天暂仅支持 Codex。");
-                    return;
-                }
                 let _ = save_local_message(ai_session_id, AiMessageRole::User, &content);
                 emit_ai_history_changed(app, ai_session_id);
-                let result = run_codex_chat(
+                let result = run_ai_chat(
                     app.clone(),
-                    RunCodexChatRequest {
+                    RunAiChatRequest {
                         ai_session_id,
                         project_path,
                         prompt: content,
@@ -1406,10 +2218,53 @@ fn emit_ai_chat_done(app: &AppHandle, ai_session_id: Uuid, text: &str) {
     );
 }
 
+fn emit_ai_chat_delta(app: &AppHandle, ai_session_id: Uuid, delta: &str, full_text: &str) {
+    let segment = serde_json::json!({
+        "type": "text",
+        "text": full_text,
+    });
+    let _ = app.emit(
+        AI_CHAT_OUTPUT_EVENT,
+        AiChatOutputEvent {
+            ai_session_id,
+            kind: "delta".to_string(),
+            text: Some(delta.to_string()),
+            step_id: None,
+            segment: Some(segment.clone()),
+        },
+    );
+    send_cloud_ai_chat_output(
+        app,
+        ai_session_id,
+        "delta",
+        Some(delta.to_string()),
+        None,
+        Some(segment),
+    );
+}
+
 fn emit_ai_chat_error(app: &AppHandle, ai_session_id: Uuid, text: &str) {
+    emit_ai_chat_error_with_title(app, ai_session_id, "AI 执行失败", text);
+}
+
+fn emit_ai_chat_error_for_provider(
+    app: &AppHandle,
+    ai_session_id: Uuid,
+    provider_id: &str,
+    text: &str,
+) {
+    emit_ai_chat_error_with_title(
+        app,
+        ai_session_id,
+        &format!("{} 执行失败", provider_display_name(provider_id)),
+        text,
+    );
+}
+
+fn emit_ai_chat_error_with_title(app: &AppHandle, ai_session_id: Uuid, title: &str, text: &str) {
     let segment = serde_json::json!({
         "type": "error",
-        "title": "Codex 执行失败",
+        "title": title,
         "message": text,
     });
     let _ = app.emit(
@@ -1457,185 +2312,28 @@ fn send_cloud_ai_chat_output(
     });
 }
 
-fn handle_codex_json_line(
-    app: &AppHandle,
-    ai_session_id: Uuid,
-    line: &str,
-    provider_session_id: &mut Option<String>,
-    final_text: &mut String,
-) -> bool {
-    let Ok(value) = serde_json::from_str::<serde_json::Value>(line) else {
-        return false;
-    };
-    match value.get("type").and_then(|value| value.as_str()) {
-        Some("thread.started") => {
-            if let Some(thread_id) = value.get("thread_id").and_then(|value| value.as_str()) {
-                *provider_session_id = Some(thread_id.to_string());
-            }
-            emit_ai_chat_status(app, ai_session_id, "Codex 会话已连接");
-        }
-        Some("turn.started") => {
-            emit_ai_chat_status(app, ai_session_id, "Codex 正在处理...");
-        }
-        Some("item.started") => {
-            if let Some(item) = value.get("item") {
-                if let Some((step_id, segment)) = codex_item_segment(item, "running") {
-                    emit_ai_chat_step(app, ai_session_id, "step-start", &step_id, segment);
-                }
-            }
-        }
-        Some("item.completed") => {
-            if let Some(item) = value.get("item") {
-                if let Some(text) = codex_agent_message_text(item) {
-                    if !final_text.trim().is_empty() {
-                        final_text.push_str("\n\n");
-                    }
-                    final_text.push_str(&text);
-                    emit_ai_chat_step(
-                        app,
-                        ai_session_id,
-                        "step-update",
-                        "assistant-message",
-                        serde_json::json!({
-                            "type": "status",
-                            "stepId": "assistant-message",
-                            "label": "Codex 已生成一段回复，继续等待最终完成信号",
-                            "icon": "think",
-                        }),
-                    );
-                } else if let Some((step_id, segment)) =
-                    codex_item_segment(item, codex_completed_status(item))
-                {
-                    emit_ai_chat_step(app, ai_session_id, "step-update", &step_id, segment);
-                }
-            }
-        }
-        Some("turn.completed") => {
-            if final_text.trim().is_empty() {
-                emit_ai_chat_status(app, ai_session_id, "Codex 已完成");
-            }
-            if !final_text.trim().is_empty() {
-                emit_ai_chat_done(app, ai_session_id, final_text);
-            }
-            return !final_text.trim().is_empty();
-        }
-        Some("error") => {
-            let message = value
-                .get("message")
-                .and_then(|value| value.as_str())
-                .unwrap_or("Codex exec error");
-            emit_ai_chat_error(app, ai_session_id, message);
-        }
-        _ => {}
-    }
-    false
-}
-
-fn codex_agent_message_text(item: &serde_json::Value) -> Option<String> {
-    (item.get("type").and_then(|value| value.as_str()) == Some("agent_message"))
-        .then(|| item.get("text").and_then(|value| value.as_str()))
-        .flatten()
-        .map(str::trim)
-        .filter(|value| !value.is_empty())
-        .map(ToString::to_string)
-}
-
-fn codex_desktop_prompt(user_prompt: &str, prescan: Option<&str>) -> String {
-    let prescan_block = prescan
-        .map(|value| {
-            format!(
-                r#"
-后端已经先执行了一次只读项目扫描，结果如下。请基于这些真实结果直接总结，不要再说“我先看”。
-
-```text
-{value}
-```
-"#
-            )
-        })
-        .unwrap_or_default();
-    format!(
-        r#"你正在 Codex Desktop 的聊天页中工作。当前终端页是独立 shell，不用于 AI 回复。
+fn codex_desktop_developer_instructions() -> &'static str {
+    r#"你正在 Codex Desktop 的聊天页中工作。当前终端页是独立 shell，不用于 AI 回复。
 
 行为要求：
 - 如果用户要求“扫描、查看、检查、分析项目、找入口、看目录、看文件、排查问题”，不要只说明计划，必须直接执行必要的读取/命令来完成检查。
 - 可以运行只读命令，例如 pwd、ls、find、rg、sed、cat、git status。
 - 回复要直接给结论，并简要说明你实际查看了什么。
-- 如果需要修改文件，先按正常 Codex 行为执行，再总结改动。
-{prescan_block}
+- 如果需要修改文件，先按正常 Codex 行为执行，再总结改动。"#
+}
+
+fn claude_desktop_prompt(user_prompt: &str) -> String {
+    format!(
+        r#"你正在 AI 工作台桌面端的聊天页中工作。当前终端页是独立 shell，不用于 AI 回复。
+
+行为要求：
+- 回复使用中文，直接给结论，并简要说明你实际查看了什么。
+- 如果用户要求“扫描、查看、检查、分析项目、找入口、看目录、看文件、排查问题”，不要只说明计划，必须直接执行必要的读取/命令来完成检查。
+- 默认保持保守，只读优先；如果需要修改文件，先按 Claude Code 的权限模式执行，再总结改动。
 
 用户请求：
 {user_prompt}"#
     )
-}
-
-fn should_prescan_project(prompt: &str) -> bool {
-    let normalized = prompt.trim().to_lowercase();
-    [
-        "扫描",
-        "扫一下",
-        "查看这个项目",
-        "看这个项目",
-        "项目结构",
-        "入口",
-        "怎么运行",
-        "运行方式",
-        "分析项目",
-        "检查项目",
-    ]
-    .iter()
-    .any(|keyword| normalized.contains(keyword))
-}
-
-async fn run_project_prescan(
-    app: &AppHandle,
-    ai_session_id: Uuid,
-    project_path: &str,
-) -> Result<String, std::io::Error> {
-    let command = "pwd && printf '\\n--- git status ---\\n' && git status --short --branch 2>/dev/null || true && printf '\\n--- files ---\\n' && find . -maxdepth 2 -type f | sed 's#^./##' | head -80 && printf '\\n--- manifests ---\\n' && for f in package.json pnpm-workspace.yaml Cargo.toml tauri.conf.json docker-compose.yml README.md; do [ -f \"$f\" ] && echo \"### $f\" && sed -n '1,80p' \"$f\"; done";
-    emit_ai_chat_step(
-        app,
-        ai_session_id,
-        "step-start",
-        "desktop-prescan",
-        serde_json::json!({
-            "type": "tool",
-            "stepId": "desktop-prescan",
-            "toolName": "项目扫描",
-            "command": command,
-            "status": "running",
-            "summary": "正在读取当前项目结构",
-        }),
-    );
-    let output = Command::new("bash")
-        .current_dir(project_path)
-        .args(["-lc", command])
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .output()
-        .await?;
-    let mut text = String::from_utf8_lossy(&output.stdout).to_string();
-    let stderr = String::from_utf8_lossy(&output.stderr);
-    if !stderr.trim().is_empty() {
-        text.push_str("\n--- stderr ---\n");
-        text.push_str(&stderr);
-    }
-    emit_ai_chat_step(
-        app,
-        ai_session_id,
-        "step-update",
-        "desktop-prescan",
-        serde_json::json!({
-            "type": "tool",
-            "stepId": "desktop-prescan",
-            "toolName": "项目扫描",
-            "command": command,
-            "status": if output.status.success() { "success" } else { "error" },
-            "summary": "已读取当前项目结构",
-            "output": text,
-        }),
-    );
-    Ok(text)
 }
 
 fn codex_completed_status(item: &serde_json::Value) -> &'static str {
@@ -1712,14 +2410,25 @@ fn codex_item_segment(
             "summary": if status == "running" { "正在修改文件" } else { "文件修改完成" },
             "input": raw_json,
         }),
-        "agent_message" => return None,
+        "agent_message" | "agentMessage" | "assistant_message" | "assistantMessage" => return None,
+        "user_message" | "userMessage" => {
+            let output = extract_user_request_text(&extract_assistant_text(&raw_json));
+            serde_json::json!({
+                "type": "tool",
+                "stepId": step_id,
+                "toolName": item_type,
+                "status": status,
+                "summary": if status == "running" { format!("正在处理: {item_type}") } else { format!("已处理: {item_type}") },
+                "output": if status == "running" { serde_json::Value::Null } else { serde_json::Value::String(output) },
+            })
+        }
         other => serde_json::json!({
             "type": "tool",
             "stepId": step_id,
             "toolName": other,
             "status": status,
             "summary": if status == "running" { format!("正在处理：{other}") } else { format!("已处理：{other}") },
-            "output": if status == "running" { serde_json::Value::Null } else { serde_json::Value::String(raw_json) },
+            "output": if status == "running" { serde_json::Value::Null } else { serde_json::Value::String(extract_assistant_text(&raw_json)) },
         }),
     };
     Some((step_id, segment))
@@ -2142,9 +2851,9 @@ fn default_providers() -> Vec<AiProviderDefinition> {
             enabled: true,
         },
         AiProviderDefinition {
-            id: "gemini".to_string(),
-            name: "Gemini".to_string(),
-            command: "gemini".to_string(),
+            id: "opencode".to_string(),
+            name: "OpenCode".to_string(),
+            command: "opencode".to_string(),
             built_in: true,
             enabled: true,
         },
@@ -2156,6 +2865,16 @@ fn default_providers() -> Vec<AiProviderDefinition> {
             enabled: true,
         },
     ]
+}
+
+fn provider_display_name(provider_id: &str) -> &'static str {
+    match provider_id {
+        "codex" => "Codex",
+        "claude" => "Claude Code",
+        "opencode" => "OpenCode",
+        "deepseek" => "DeepSeek",
+        _ => "AI",
+    }
 }
 
 async fn git_status(path: String) -> Result<GitStatus, String> {
@@ -2522,13 +3241,18 @@ fn save_local_message(
     ensure_local_db()?;
     let conn = open_local_db()?;
     let created_at = chrono::Utc::now().to_rfc3339();
+    let display_content = if role == AiMessageRole::Assistant {
+        extract_assistant_text(content)
+    } else {
+        content.to_string()
+    };
     conn.execute(
         "INSERT INTO local_ai_messages (id, ai_session_id, role, content, created_at) VALUES (?1, ?2, ?3, ?4, ?5)",
         params![
             Uuid::new_v4().to_string(),
             ai_session_id.to_string(),
             serde_json::to_value(&role).unwrap().as_str().unwrap(),
-            content,
+            display_content,
             created_at,
         ],
     )?;
@@ -2557,6 +3281,78 @@ fn save_local_message(
         )?;
     }
     Ok(())
+}
+
+fn extract_assistant_text(content: &str) -> String {
+    let trimmed = content.trim();
+    if trimmed.is_empty() || !(trimmed.starts_with('{') || trimmed.starts_with('[')) {
+        return content.to_string();
+    }
+    let Ok(value) = serde_json::from_str::<serde_json::Value>(trimmed) else {
+        return content.to_string();
+    };
+    let text = extract_text_from_json_value(&value).trim().to_string();
+    if text.is_empty() {
+        content.to_string()
+    } else {
+        text
+    }
+}
+
+fn extract_user_request_text(content: &str) -> String {
+    let Some((_, request)) = content
+        .split_once("用户请求：")
+        .or_else(|| content.split_once("用户请求:"))
+    else {
+        return content.trim().to_string();
+    };
+    request.trim().to_string()
+}
+
+fn extract_text_from_json_value(value: &serde_json::Value) -> String {
+    match value {
+        serde_json::Value::String(text) => text.to_string(),
+        serde_json::Value::Array(items) => items
+            .iter()
+            .map(extract_text_from_json_value)
+            .filter(|text| !text.trim().is_empty())
+            .collect::<Vec<_>>()
+            .join("\n"),
+        serde_json::Value::Object(object) => {
+            for key in ["text", "result", "output", "message"] {
+                if let Some(text) = object.get(key).and_then(|value| value.as_str()) {
+                    return text.to_string();
+                }
+            }
+            if let Some(items) = object.get("content").and_then(|value| value.as_array()) {
+                return items
+                    .iter()
+                    .map(|item| {
+                        if item.get("type").and_then(|value| value.as_str()) == Some("text") {
+                            item.get("text")
+                                .and_then(|value| value.as_str())
+                                .unwrap_or_default()
+                                .to_string()
+                        } else {
+                            extract_text_from_json_value(item)
+                        }
+                    })
+                    .filter(|text| !text.trim().is_empty())
+                    .collect::<Vec<_>>()
+                    .join("\n");
+            }
+            for key in ["message", "delta"] {
+                if let Some(nested) = object.get(key).filter(|value| value.is_object()) {
+                    let text = extract_text_from_json_value(nested);
+                    if !text.trim().is_empty() {
+                        return text;
+                    }
+                }
+            }
+            String::new()
+        }
+        _ => String::new(),
+    }
 }
 
 fn session_title_from_prompt(prompt: &str) -> String {

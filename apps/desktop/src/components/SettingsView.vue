@@ -1,10 +1,11 @@
 <script setup lang="ts">
 import { computed, ref, watch } from "vue";
+import { useRouter } from "vue-router";
 import QRCode from "qrcode";
 import { useWorkspace } from "../composables/useWorkspace";
 import type { AiProvider, ProviderStatus } from "../services/tauri";
 
-type SettingsPanel = "connection" | "security" | "pairing" | "updates" | "debug";
+type SettingsPanel = "connection" | "security" | "pairing" | "updates" | "debug" | "archive";
 type ProviderRow = {
   provider: AiProvider;
   status?: ProviderStatus;
@@ -17,6 +18,7 @@ type SettingsPanelItem = {
 };
 
 const ws = useWorkspace();
+const router = useRouter();
 
 const localServer = ref(ws.settingsServer.value);
 const settingsPanel = ref<SettingsPanel>("connection");
@@ -60,6 +62,12 @@ const settingsPanels: SettingsPanelItem[] = [
     label: "调试入口",
     eyebrow: "诊断",
     description: "Provider 检测和本地 PTY 状态",
+  },
+  {
+    id: "archive",
+    label: "已归档对话",
+    eyebrow: "历史",
+    description: "查看和恢复已归档的 AI 会话",
   },
 ];
 
@@ -161,6 +169,29 @@ function checkedAt(status?: ProviderStatus) {
   if (Number.isNaN(date.getTime())) return "时间未知";
   return date.toLocaleTimeString();
 }
+
+function goBack() {
+  if (router.currentRoute.value.path !== "/chat") {
+    void router.push("/chat");
+  }
+}
+
+function archivedAtLabel(value?: string | null) {
+  if (!value) return "时间未知";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "时间未知";
+  return date.toLocaleString("zh-CN", { hour12: false });
+}
+
+function projectNameForSession(path?: string | null) {
+  if (!path) return "未关联项目";
+  const match = ws.projects.value.find((project) => project.path === path);
+  return match?.name ?? path.split(/[\\/]/).filter(Boolean).pop() ?? path;
+}
+
+async function restoreSession(sessionId: string) {
+  await ws.archiveAiSession(sessionId, false);
+}
 </script>
 
 <template>
@@ -168,7 +199,7 @@ function checkedAt(status?: ProviderStatus) {
     <section class="view active settings-page" data-view-panel="settings">
       <aside class="settings-nav">
         <div class="settings-nav-top">
-          <button class="settings-back-button" type="button" aria-label="返回首页" @click="ws.switchView('aiSessions')">
+          <button class="settings-back-button" type="button" aria-label="返回首页" @click="goBack">
             <span aria-hidden="true"></span>
             返回首页
           </button>
@@ -203,7 +234,7 @@ function checkedAt(status?: ProviderStatus) {
 
       <div class="settings-content">
         <div class="settings-scroll">
-          <header class="settings-header">
+          <header v-if="settingsPanel === 'connection'" class="settings-header">
             <div>
               <span class="settings-kicker">Desktop Settings</span>
               <h1>{{ activePanelMeta.label }}</h1>
@@ -212,7 +243,7 @@ function checkedAt(status?: ProviderStatus) {
             <button class="button primary narrow" type="button" @click="ws.saveSettings">保存设置</button>
           </header>
 
-          <div class="settings-overview" aria-label="设置概览">
+          <div v-if="settingsPanel === 'connection'" class="settings-overview" aria-label="设置概览">
             <article>
               <span>服务器</span>
               <strong>{{ localServer || "未设置" }}</strong>
@@ -412,6 +443,32 @@ function checkedAt(status?: ProviderStatus) {
             </div>
           </section>
 
+          <section v-else-if="settingsPanel === 'archive'" class="settings-section">
+            <div class="settings-section-heading">
+              <div>
+                <h2 class="settings-section-title">已归档对话</h2>
+                <p class="settings-section-description">查看已归档的 AI 会话,选择恢复后会回到侧边栏最近会话列表。</p>
+              </div>
+              <span class="settings-section-chip">{{ ws.archivedSessions.value.length }} 条</span>
+            </div>
+            <div class="settings-archive-list">
+              <div v-if="!ws.archivedSessions.value.length" class="empty-state">暂无已归档的 AI 会话。</div>
+              <article
+                v-for="session in ws.archivedSessions.value"
+                :key="session.id"
+                class="settings-archive-item"
+              >
+                <div class="settings-archive-main">
+                  <strong>{{ session.title || "未命名会话" }}</strong>
+                  <small>{{ archivedAtLabel(session.archivedAt) }} · {{ projectNameForSession(session.summary) }}</small>
+                </div>
+                <button class="button secondary mini" type="button" @click="restoreSession(session.id)">
+                  取消归档
+                </button>
+              </article>
+            </div>
+          </section>
+
           <section v-else class="settings-section">
             <div class="settings-section-heading">
               <div>
@@ -432,7 +489,7 @@ function checkedAt(status?: ProviderStatus) {
                 <div class="settings-provider-heading">
                   <span class="settings-row-copy">
                     <strong>Provider 检测</strong>
-                    <small>检测 Codex、Claude、Gemini、DeepSeek 的安装、认证和版本状态</small>
+                    <small>检测 Codex、Claude、OpenCode、DeepSeek 的安装、认证和版本状态</small>
                   </span>
                   <span class="settings-provider-summary">{{ installedProviderCount }} 个可用</span>
                 </div>

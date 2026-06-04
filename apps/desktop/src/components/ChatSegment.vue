@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed } from "vue";
 import type { ChatSegment as ChatSegmentType } from "../services/tauri";
+import { extractAssistantText } from "../utils/chat";
 
 const props = defineProps<{
   segment: ChatSegmentType;
@@ -29,6 +30,10 @@ function formatDuration(durationMs?: number) {
 function toolLineTitle(segment: Extract<ChatSegmentType, { type: "tool" }>) {
   const command = shortenCommand(segment.command);
   const verb = segment.status === "running" ? "正在" : "已";
+  if (isUserMessageSegment(segment)) {
+    if (segment.status === "error") return "处理失败";
+    return segment.status === "running" ? "正在处理" : "已处理";
+  }
   if (segment.toolName.includes("扫描")) {
     if (segment.status === "error") return "扫描项目失败";
     return segment.status === "running" ? "正在扫描项目" : "已扫描项目";
@@ -56,6 +61,22 @@ function toolLineMeta(segment: Extract<ChatSegmentType, { type: "tool" }>) {
 
 function toolHasDetails(segment: Extract<ChatSegmentType, { type: "tool" }>) {
   return Boolean(segment.input || segment.output);
+}
+
+function toolDetailText(segment: Extract<ChatSegmentType, { type: "tool" }>, value?: string) {
+  const text = extractAssistantText(value ?? "");
+  if (isUserMessageSegment(segment)) return extractUserRequest(text);
+  return text;
+}
+
+function isUserMessageSegment(segment: Extract<ChatSegmentType, { type: "tool" }>) {
+  return /(?:^|[:\s])(?:userMessage|user_message)(?:$|[:\s])/i.test(segment.toolName)
+    || /(?:^|[:\s])(?:userMessage|user_message)(?:$|[:\s])/i.test(segment.summary ?? "");
+}
+
+function extractUserRequest(text: string) {
+  const match = text.match(/用户请求[：:]\s*([\s\S]*)$/);
+  return (match?.[1] ?? text).trim();
 }
 
 function shortenCommand(command?: string) {
@@ -318,16 +339,16 @@ function inlineParts(text: string) {
         <strong>{{ toolLineTitle(segment) }}</strong>
         <small v-if="toolLineMeta(segment)">{{ toolLineMeta(segment) }}</small>
       </span>
-      <span v-if="toolHasDetails(segment)" class="chat-segment-tool-chevron" aria-hidden="true">⌄</span>
+      <svg v-if="toolHasDetails(segment)" class="chat-segment-tool-chevron" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+        <path d="M5 6.5 8 9.5l3-3" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" />
+      </svg>
     </summary>
     <div v-if="segment.input || segment.output" class="chat-segment-tool-details">
       <section v-if="segment.input">
-        <strong>输入</strong>
-        <pre>{{ segment.input }}</pre>
+        <pre>{{ toolDetailText(segment, segment.input) }}</pre>
       </section>
       <section v-if="segment.output">
-        <strong>输出</strong>
-        <pre>{{ segment.output }}</pre>
+        <pre>{{ toolDetailText(segment, segment.output) }}</pre>
       </section>
     </div>
   </details>

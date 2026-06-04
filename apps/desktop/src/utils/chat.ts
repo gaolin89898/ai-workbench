@@ -1,5 +1,17 @@
 import type { ChatSegment } from "../services/tauri";
 
+export function extractAssistantText(value: string) {
+  const trimmed = value.trim();
+  if (!trimmed || !(trimmed.startsWith("{") || trimmed.startsWith("["))) return value;
+  try {
+    const parsed = JSON.parse(trimmed);
+    const text = extractTextFromJsonValue(parsed);
+    return text.trim() || value;
+  } catch {
+    return value;
+  }
+}
+
 export function statusText(status: string) {
   const names: Record<string, string> = {
     running: "运行中",
@@ -18,7 +30,7 @@ export function cleanAssistantOutput(output: string, prompt: string) {
 }
 
 export function assistantOutputToSegments(output: string, prompt: string): ChatSegment[] {
-  const lines = assistantDisplayLines(output, prompt);
+  const lines = assistantDisplayLines(extractAssistantText(output), prompt);
   if (!lines.length) return [];
   const segments: ChatSegment[] = [];
   let textLines: string[] = [];
@@ -75,13 +87,40 @@ export function assistantOutputToSegments(output: string, prompt: string): ChatS
 }
 
 export function formatChatMessageText(text: string) {
-  const lines = text.split(/\r?\n/);
+  const lines = extractAssistantText(text).split(/\r?\n/);
   const visibleLines = lines.filter((line) => !isToolTraceLine(normalizeChatText(line)));
   const hasToolTrace = visibleLines.length !== lines.length;
   const content = visibleLines.join("\n").trim();
   if (hasToolTrace && !content) return "思考中";
   if (hasToolTrace) return `${content}\n\n思考中`;
   return text;
+}
+
+function extractTextFromJsonValue(value: unknown): string {
+  if (typeof value === "string") return value;
+  if (!value || typeof value !== "object") return "";
+  if (Array.isArray(value)) {
+    return value.map(extractTextFromJsonValue).filter(Boolean).join("\n");
+  }
+  const record = value as Record<string, unknown>;
+  if (typeof record.text === "string") return record.text;
+  if (typeof record.result === "string") return record.result;
+  if (typeof record.output === "string") return record.output;
+  if (typeof record.message === "string") return record.message;
+  if (Array.isArray(record.content)) {
+    return record.content
+      .map((item) => {
+        if (!item || typeof item !== "object") return "";
+        const contentItem = item as Record<string, unknown>;
+        if (contentItem.type === "text" && typeof contentItem.text === "string") return contentItem.text;
+        return extractTextFromJsonValue(contentItem);
+      })
+      .filter(Boolean)
+      .join("\n");
+  }
+  if (record.message && typeof record.message === "object") return extractTextFromJsonValue(record.message);
+  if (record.delta && typeof record.delta === "object") return extractTextFromJsonValue(record.delta);
+  return "";
 }
 
 function normalizeChatText(value: string) {
@@ -139,7 +178,7 @@ function isPromptEchoLine(normalizedLine: string, normalizedPrompt: string) {
 function parseStatusLine(value: string): ChatSegment | null {
   const processed = value.match(/^Processed\s+(.+)$/i);
   if (processed) {
-    return { type: "status", label: "已处理", detail: processed[1].trim(), icon: "check" };
+    return null;
   }
 
   const thinking = value.match(/^(?:Thinking|正在思考|思考中)(?:\s+(.+))?$/i);
@@ -229,6 +268,7 @@ function isTerminalStatusLine(value: string) {
     value.startsWith("model:") ||
     value.startsWith("directory:") ||
     value.startsWith("Tip:")
+    || /^Processed\s+/i.test(value)
   );
 }
 

@@ -9,7 +9,7 @@ import type { AiProvider } from "../services/tauri";
 const providerClaudeIcon = new URL("../assets/icons/provider-claude.svg", import.meta.url).href;
 const providerCodexIcon = new URL("../assets/icons/provider-codex.svg", import.meta.url).href;
 const providerDeepseekIcon = new URL("../assets/icons/provider-deepseek.svg", import.meta.url).href;
-const providerGeminiIcon = new URL("../assets/icons/provider-gemini.svg", import.meta.url).href;
+const providerOpencodeIcon = new URL("../assets/icons/provider-opencode.svg", import.meta.url).href;
 const ws = useWorkspace();
 
 const prompt = ref("");
@@ -20,7 +20,7 @@ const startMenuOpen = ref(false);
 const builtInProviders: AiProvider[] = [
   { id: "codex", name: "Codex", command: "codex", builtIn: true, enabled: true },
   { id: "claude", name: "Claude Code", command: "claude", builtIn: true, enabled: true },
-  { id: "gemini", name: "Gemini", command: "gemini", builtIn: true, enabled: true },
+  { id: "opencode", name: "OpenCode", command: "opencode", builtIn: true, enabled: true },
   { id: "deepseek", name: "DeepSeek TUI", command: "deepseek", builtIn: true, enabled: true },
 ];
 const providerOrder = new Map(builtInProviders.map((provider, index) => [provider.id, index]));
@@ -50,11 +50,17 @@ const chatHeaderMeta = computed(() => {
 const conversationTitle = computed(() => ws.activeAiSession.value?.title ?? currentProject.value?.name ?? "新对话");
 const startTitle = computed(() => `我们该在 ${currentProject.value?.name ?? "项目"} 中做什么?`);
 const showCreateHint = computed(() => !ws.activeAiSession.value && ws.createAiResult.value);
+const activeProviderName = computed(() => {
+  const providerId = ws.activeAiSession.value?.providerId ?? ws.selectedProviderId.value;
+  return providerChoices.value.find((provider) => provider.id === providerId)?.name
+    ?? builtInProviders.find((provider) => provider.id === providerId)?.name
+    ?? "AI";
+});
 const providerIcons: Record<string, string> = {
   claude: providerClaudeIcon,
   codex: providerCodexIcon,
   deepseek: providerDeepseekIcon,
-  gemini: providerGeminiIcon,
+  opencode: providerOpencodeIcon,
 };
 
 function providerIcon(providerId: string) {
@@ -187,11 +193,11 @@ function onPromptKeydown(event: KeyboardEvent) {
         <div v-if="activeTab === 'chat'" ref="chatScroll" class="terminal-preview">
           <div v-if="!ws.activeAiSession.value && ws.chatMessages.value.length === 1 && ws.chatMessages.value[0]?.role === 'system'" class="chat-welcome">
             <h2>从一个项目开始聊天</h2>
-            <p>左侧选择本地项目，然后新建 AI 会话。聊天页使用 Codex，终端页只提供项目 shell。</p>
+            <p>左侧选择本地项目，然后新建 AI 会话。聊天页支持 Codex / Claude Code，终端页只提供项目 shell。</p>
           </div>
           <div v-else-if="ws.activeAiSession.value && !ws.chatMessages.value.length" class="chat-welcome">
             <h2>{{ ws.activeAiSession.value.title }}</h2>
-            <p>会话已连接。现在输入 prompt，会通过 Codex exec 在当前项目中处理。</p>
+            <p>会话已连接。现在输入 prompt，AI 会在当前项目中处理。</p>
           </div>
           <template v-else>
             <ChatMessageRow
@@ -208,7 +214,7 @@ function onPromptKeydown(event: KeyboardEvent) {
           <header>
             <div>
               <strong>执行日志</strong>
-              <span>{{ ws.activeChatIsRunning.value ? "Codex 正在执行" : "最近一次运行记录" }}</span>
+              <span>{{ ws.activeChatIsRunning.value ? `${activeProviderName} 正在执行` : "最近一次运行记录" }}</span>
             </div>
             <small>{{ ws.chatDebugEvents.value.length }} 条</small>
           </header>

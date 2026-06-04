@@ -1,6 +1,7 @@
 import { computed, ref, watch } from "vue";
 import router from "../router";
 import { tauriApi, type AiProvider, type AiSession, type ChatMessage, type ChatSegment, type DesktopPairingStatus, type ProviderStatus, type TerminalSession, type ViewName, type WorkspaceProject } from "../services/tauri";
+import { extractAssistantText } from "../utils/chat";
 
 const providers = ref<AiProvider[]>([]);
 const providerStatuses = ref<ProviderStatus[]>([]);
@@ -40,7 +41,57 @@ const thinkingSessionIds = ref<Record<string, boolean>>({});
 const chatDebugEvents = ref<string[]>([]);
 const chatRunStates = ref<Record<string, ChatRunState>>({});
 
-const activeSessions = computed(() => aiSessions.value.filter((session) => !session.archivedAt));
+const PIN_STORAGE_KEY = "ai-workbench.pinnedSessions";
+const UNREAD_STORAGE_KEY = "ai-workbench.unreadSessions";
+
+function readSessionSet(key: string): Set<string> {
+  try {
+    const raw = window.localStorage.getItem(key);
+    if (!raw) return new Set();
+    const parsed = JSON.parse(raw);
+    return new Set(Array.isArray(parsed) ? parsed.filter((value) => typeof value === "string") : []);
+  } catch {
+    return new Set();
+  }
+}
+
+function writeSessionSet(key: string, value: Set<string>) {
+  try {
+    window.localStorage.setItem(key, JSON.stringify([...value]));
+  } catch {
+    /* ignore quota errors */
+  }
+}
+
+const pinnedSessionIds = ref<Set<string>>(readSessionSet(PIN_STORAGE_KEY));
+const unreadSessionIds = ref<Set<string>>(readSessionSet(UNREAD_STORAGE_KEY));
+
+watch(
+  pinnedSessionIds,
+  (next) => writeSessionSet(PIN_STORAGE_KEY, next),
+  { deep: true },
+);
+watch(
+  unreadSessionIds,
+  (next) => writeSessionSet(UNREAD_STORAGE_KEY, next),
+  { deep: true },
+);
+
+const activeSessions = computed(() => {
+  const list = aiSessions.value.filter((session) => !session.archivedAt);
+  return list
+    .map((session) => ({
+      session,
+      pinned: pinnedSessionIds.value.has(session.id),
+    }))
+    .sort((left, right) => {
+      if (left.pinned !== right.pinned) return left.pinned ? -1 : 1;
+      const leftTime = Date.parse(left.session.updatedAt ?? "");
+      const rightTime = Date.parse(right.session.updatedAt ?? "");
+      return (Number.isNaN(rightTime) ? 0 : rightTime) - (Number.isNaN(leftTime) ? 0 : leftTime);
+    })
+    .map((entry) => entry.session);
+});
 const archivedSessions = computed(() => aiSessions.value.filter((session) => !!session.archivedAt));
 const activeChatRunState = computed(() => {
   const sessionId = activeAiSession.value?.id;
@@ -75,6 +126,7 @@ let aiEventsInitPromise: Promise<void> | null = null;
 let workspaceEventsInitialized = false;
 let workspaceEventsInitPromise: Promise<void> | null = null;
 let qrPairingTimer: number | null = null;
+const supportedChatProviders = new Set(["codex", "claude"]);
 
 function pushChatDebugEvent(message: string) {
   const time = new Date().toLocaleTimeString();
@@ -90,6 +142,25 @@ function formatElapsedMs(elapsedMs: number) {
 function formatCompactElapsedMs(elapsedMs: number) {
   if (elapsedMs < 1000) return `${elapsedMs}ms`;
   return `${(elapsedMs / 1000).toFixed(elapsedMs < 10_000 ? 1 : 0)}s`;
+}
+
+function providerDisplayName(providerId?: string | null) {
+  if (!providerId) return "AI";
+  return providers.value.find((provider) => provider.id === providerId)?.name
+    ?? ({ codex: "Codex", claude: "Claude Code", opencode: "OpenCode", deepseek: "DeepSeek" } as Record<string, string>)[providerId]
+    ?? "AI";
+}
+
+function providerNameForSession(sessionId?: string | null) {
+  const providerId = sessionId
+    ? (activeAiSession.value?.id === sessionId ? activeAiSession.value.providerId : aiSessions.value.find((session) => session.id === sessionId)?.providerId)
+    : activeAiSession.value?.providerId;
+  return providerDisplayName(providerId);
+}
+
+function providerRuntimeName(providerId?: string | null) {
+  if (providerId === "codex") return "Codex app-server";
+  return providerDisplayName(providerId);
 }
 
 function setChatRunState(sessionId: string, patch: Partial<ChatRunState>) {
@@ -117,22 +188,23 @@ function clearChatRunStateSoon(sessionId: string) {
   }, 5_000);
 }
 
-function describeBackendStatus(text: string) {
-  if (text.includes("启动")) return { phase: "starting" as const, title: "正在启动 Codex", detail: text };
-  if (text.includes("连接")) return { phase: "connected" as const, title: "Codex 已连接", detail: text };
-  if (text.includes("处理") || text.includes("推理")) return { phase: "running" as const, title: "Codex 正在执行", detail: text };
-  if (text.includes("完成")) return { phase: "done" as const, title: "Codex 已完成", detail: text };
-  return { phase: "running" as const, title: "Codex 正在执行", detail: text };
+function describeBackendStatus(text: string, providerName: string) {
+  if (text.includes("启动")) return { phase: "starting" as const, title: `正在启动 ${providerName}`, detail: text };
+  if (text.includes("连接")) return { phase: "connected" as const, title: `${providerName} 已连接`, detail: text };
+  if (text.includes("处理") || text.includes("推理") || text.includes("生成")) return { phase: "running" as const, title: `${providerName} 正在执行`, detail: text };
+  if (text.includes("完成")) return { phase: "done" as const, title: `${providerName} 已完成`, detail: text };
+  return { phase: "running" as const, title: `${providerName} 正在执行`, detail: text };
 }
 
-function describeChatEventForLog(event: { kind: string; text?: string; segment?: ChatSegment | null }, elapsedText: string) {
+function describeChatEventForLog(event: { aiSessionId: string; kind: string; text?: string; segment?: ChatSegment | null }, elapsedText: string) {
+  const providerName = providerNameForSession(event.aiSessionId);
   const text = event.text ?? (event.segment?.type === "status" ? event.segment.label : event.segment?.type) ?? "";
   const suffix = text ? `：${text.slice(0, 80)}` : "";
   if (event.kind === "status") return `状态更新${elapsedText}${suffix}`;
   if (event.kind === "step-start") return `步骤开始${elapsedText}${suffix}`;
   if (event.kind === "step-update") return `步骤更新${elapsedText}${suffix}`;
-  if (event.kind === "done") return `Codex 已完成${elapsedText}${suffix}`;
-  if (event.kind === "error") return `Codex 报错${elapsedText}${suffix}`;
+  if (event.kind === "done") return `${providerName} 已完成${elapsedText}${suffix}`;
+  if (event.kind === "error") return `${providerName} 报错${elapsedText}${suffix}`;
   return `收到事件 ${event.kind}${elapsedText}${suffix}`;
 }
 
@@ -265,8 +337,57 @@ function registerProject(project: WorkspaceProject) {
   selectedProjectPath.value = project.path;
 }
 
+async function renameProject(project: WorkspaceProject, name: string) {
+  const trimmed = name.trim();
+  if (!trimmed) {
+    projectResult.value = "项目名称不能为空。";
+    projectResultError.value = true;
+    return;
+  }
+  try {
+    const updated = await tauriApi.renameWorkspaceProject(project.id, trimmed);
+    projects.value = projects.value.map((item) => (item.id === updated.id ? updated : item));
+    projectResult.value = `已重命名：${updated.name}`;
+    projectResultError.value = false;
+  } catch (error) {
+    projectResult.value = `重命名失败：${String(error)}`;
+    projectResultError.value = true;
+  }
+}
+
+async function removeProject(project: WorkspaceProject) {
+  try {
+    await tauriApi.removeWorkspaceProject(project.id);
+    projects.value = projects.value.filter((item) => item.id !== project.id);
+    if (selectedProjectPath.value === project.path) {
+      selectedProjectPath.value = projects.value[0]?.path ?? "";
+    }
+    if (activeAiSession.value?.summary === project.path) {
+      activeAiSession.value = null;
+      chatMessages.value = [];
+    }
+    projectResult.value = `已从列表移除：${project.name}（磁盘上的目录未删除）`;
+    projectResultError.value = false;
+  } catch (error) {
+    projectResult.value = `移出失败：${String(error)}`;
+    projectResultError.value = true;
+  }
+}
+
+async function openProjectInFileManager(project: WorkspaceProject) {
+  try {
+    await tauriApi.openProjectInFileManager(project.path);
+    projectResult.value = `已在文件管理器中打开：${project.path}`;
+    projectResultError.value = false;
+  } catch (error) {
+    projectResult.value = `打开文件管理器失败：${String(error)}`;
+    projectResultError.value = true;
+  }
+}
+
 function selectProjectPath(path: string) {
   selectedProjectPath.value = path;
+  selectedProviderId.value = "codex";
   switchView("aiSessions");
 }
 
@@ -275,6 +396,7 @@ function resetChatControlsForNewSession(path: string) {
   chatMessages.value = [];
   aiSessionTitle.value = "新的 AI CLI 会话";
   selectedProjectPath.value = path;
+  selectedProviderId.value = "codex";
   selectedCreationMode.value = "auto";
   selectedTerminalSessionId.value = "";
   switchView("aiSessions");
@@ -303,6 +425,7 @@ function prepareProjectSession(path: string, action: "create" | "attach") {
   chatMessages.value = [];
   aiSessionTitle.value = "新的 AI CLI 会话";
   selectedProjectPath.value = path;
+  selectedProviderId.value = "codex";
   selectedCreationMode.value = "auto";
   selectedTerminalSessionId.value = "";
   switchView("aiSessions");
@@ -325,7 +448,7 @@ async function createAiSession(): Promise<AiSession | null> {
     });
     aiSessions.value = [session, ...aiSessions.value.filter((item) => item.id !== session.id)];
     await setActiveAiSession(session);
-    warmupCodexForSession(session.id);
+    warmupAiForSession(session.id);
     createAiResult.value = `已新建 AI 会话：${session.title}`;
     createAiError.value = false;
     return session;
@@ -336,9 +459,10 @@ async function createAiSession(): Promise<AiSession | null> {
   }
 }
 
-function warmupCodexForSession(sessionId: string) {
-  pushChatDebugEvent(`warmup codex: ${sessionId.slice(0, 8)}`);
-  void tauriApi.warmupCodexSession(sessionId).then((session) => {
+function warmupAiForSession(sessionId: string) {
+  const providerName = providerNameForSession(sessionId);
+  pushChatDebugEvent(`warmup ${providerName}: ${sessionId.slice(0, 8)}`);
+  void tauriApi.warmupAiSession(sessionId).then((session) => {
     pushChatDebugEvent(`warmup resolved: ${session.providerSessionId ? "ready" : "no thread"}`);
     aiSessions.value = [session, ...aiSessions.value.filter((item) => item.id !== session.id)].sort(sortSessionsByUpdatedAt);
     if (activeAiSession.value?.id === session.id) {
@@ -380,6 +504,7 @@ async function setActiveAiSession(session: AiSession) {
   await initAiEventListeners();
   if (activeAiSession.value?.id) await saveAssistantDraft(activeAiSession.value.id);
   activeAiSession.value = session;
+  markSessionRead(session.id);
   syncChatControlsWithSession(session);
   switchView("aiSessions");
   chatMessages.value = [];
@@ -432,21 +557,23 @@ async function sendPrompt(prompt: string) {
   }
   const sessionId = activeAiSession.value.id;
   const providerId = activeAiSession.value.providerId;
+  const providerName = providerDisplayName(providerId);
+  const runtimeName = providerRuntimeName(providerId);
   const projectPath = activeAiSession.value.summary || selectedProjectPath.value;
-  if (providerId !== "codex") {
+  if (!supportedChatProviders.has(providerId)) {
     chatMessages.value.push({
       role: "error",
       segments: [{
         type: "error",
-        title: "暂仅 Codex 支持聊天",
-        message: "Claude、Gemini、DeepSeek 的结构化聊天还没有迁移。可以在终端页直接运行对应 CLI。",
+        title: `${providerName} 暂不支持聊天`,
+        message: "Codex / Claude Code 支持结构化聊天。OpenCode、DeepSeek 可以先在终端页直接运行对应 CLI。",
       }],
-      text: "暂仅 Codex 支持结构化聊天。可以在终端页直接运行 claude / gemini / deepseek CLI。",
+      text: `${providerName} 暂不支持结构化聊天。可以在终端页直接运行对应 CLI。`,
     });
     return;
   }
   if (!projectPath) {
-    chatMessages.value.push({ role: "error", text: "当前 Codex 会话没有项目路径，请先在左侧选择项目。" });
+    chatMessages.value.push({ role: "error", text: `当前 ${providerName} 会话没有项目路径，请先在左侧选择项目。` });
     return;
   }
   if (pendingAssistants.has(sessionId)) {
@@ -464,7 +591,7 @@ async function sendPrompt(prompt: string) {
     segments: [{
       type: "status",
       stepId: "initial-thinking",
-      label: "等待 Codex 返回...",
+      label: `等待 ${providerName} 返回...`,
       icon: "think",
     }],
   };
@@ -482,8 +609,8 @@ async function sendPrompt(prompt: string) {
   setChatRunState(sessionId, {
     active: true,
     phase: "saving",
-    title: "正在发送给 Codex",
-    detail: "正在保存用户消息，随后启动 Codex exec。",
+    title: `正在发送给 ${providerName}`,
+    detail: `正在保存用户消息，随后连接 ${runtimeName}。`,
     startedAt: performance.now(),
   });
   thinkingSessionIds.value = { ...thinkingSessionIds.value, [sessionId]: true };
@@ -493,12 +620,12 @@ async function sendPrompt(prompt: string) {
     setChatRunState(sessionId, {
       active: true,
       phase: "starting",
-      title: "正在启动 Codex",
-      detail: "消息已保存，正在把任务交给 Codex exec。",
+      title: `正在启动 ${providerName}`,
+      detail: `消息已保存，正在把任务交给 ${runtimeName}。`,
     });
     pushChatDebugEvent(`用户消息已保存：${sessionId.slice(0, 8)}`);
-    pushChatDebugEvent("已启动 Codex exec");
-    void tauriApi.runCodexChat({
+    pushChatDebugEvent(`已连接 ${runtimeName}`);
+    void tauriApi.runAiChat({
       aiSessionId: sessionId,
       projectPath,
       prompt: trimmed,
@@ -507,26 +634,26 @@ async function sendPrompt(prompt: string) {
       const startedAt = pending?.startedAt ?? chatRunStates.value[sessionId]?.startedAt ?? performance.now();
       const elapsedMs = Math.round(performance.now() - startedAt);
       if (!pending) {
-        pushChatDebugEvent(`Codex 进程已退出：之前已收到完成事件，返回 ${reply.length} 字符`);
+        pushChatDebugEvent(`${providerName} 进程已退出：之前已收到完成事件，返回 ${reply.length} 字符`);
         setChatRunState(sessionId, {
           active: false,
           phase: "done",
-          title: "Codex 已完成",
+          title: `${providerName} 已完成`,
           detail: `执行已结束，用时 ${formatElapsedMs(elapsedMs)}。正在等待下一条消息。`,
         });
         return;
       }
-      pushChatDebugEvent(`Codex 已返回结果：${reply.length} 字符，用时 ${formatElapsedMs(elapsedMs)}`);
+      pushChatDebugEvent(`${providerName} 已返回结果：${reply.length} 字符，用时 ${formatElapsedMs(elapsedMs)}`);
       replacePendingAssistantText(sessionId, reply, true);
       completePendingAssistantFromExec(sessionId);
       setChatRunState(sessionId, {
         active: false,
         phase: "done",
-        title: "Codex 已完成",
+        title: `${providerName} 已完成`,
         detail: `已返回 ${reply.length} 个字符，用时 ${formatElapsedMs(elapsedMs)}。正在等待下一条消息。`,
       });
     }).catch((error) => {
-      pushChatDebugEvent(`Codex 执行失败：${String(error)}`);
+      pushChatDebugEvent(`${providerName} 执行失败：${String(error)}`);
       const pending = pendingAssistants.get(sessionId);
       if (!pending) return;
       patchPendingAssistant(sessionId, {
@@ -541,7 +668,7 @@ async function sendPrompt(prompt: string) {
       setChatRunState(sessionId, {
         active: false,
         phase: "error",
-        title: "Codex 执行失败",
+        title: `${providerName} 执行失败`,
         detail: String(error),
       });
     });
@@ -572,35 +699,32 @@ function updatePendingAssistantStatus(sessionId: string, text: string) {
   if (pending.lastStatusText === text) return;
   pending.lastStatusText = text;
   pending.hasBackendStatus = true;
-  const described = describeBackendStatus(text);
+  const providerName = providerNameForSession(sessionId);
+  const described = describeBackendStatus(text, providerName);
   setChatRunState(sessionId, {
     active: described.phase !== "done",
     phase: described.phase,
     title: described.title,
     detail: described.detail,
   });
-  if (text === "Codex 会话已连接") {
-    pending.steps.set("conversation-guided", {
+  pending.steps.delete("initial-thinking");
+  if (text.includes("会话已连接")) {
+    pending.steps.delete("conversation-guided");
+  } else {
+    pending.steps.set("runtime-status", {
       type: "status",
-      stepId: "conversation-guided",
-      label: "已引导对话",
-      icon: "check",
+      stepId: "runtime-status",
+      label: text,
+      icon: "think",
     });
-    syncPendingAssistantSegments(sessionId, pending.message.pending === false);
-    return;
   }
-  upsertPendingSegment(sessionId, {
-    type: "status",
-    stepId: "runtime-status",
-    label: text,
-    icon: "think",
-  });
+  syncPendingAssistantSegments(sessionId, pending.message.pending === false);
 }
 
 function replacePendingAssistantText(sessionId: string, text: string, done = false) {
   const pending = pendingAssistants.get(sessionId);
   if (!pending) return;
-  pending.finalText = text;
+  pending.finalText = extractAssistantText(text);
   syncPendingAssistantSegments(sessionId, done);
   thinkingSessionIds.value = { ...thinkingSessionIds.value, [sessionId]: !done };
 }
@@ -627,24 +751,20 @@ function upsertPendingSegment(sessionId: string, segment: ChatSegment) {
     if (pending.lastStatusText === segment.label) return;
     pending.lastStatusText = segment.label;
     pending.hasBackendStatus = true;
-    const described = describeBackendStatus(segment.label);
+    const providerName = providerNameForSession(sessionId);
+    const described = describeBackendStatus(segment.label, providerName);
     setChatRunState(sessionId, {
       active: described.phase !== "done",
       phase: described.phase,
       title: described.title,
       detail: segment.detail ?? described.detail,
     });
-    if (segment.label === "Codex 会话已连接") {
-      pending.steps.set("conversation-guided", {
-        type: "status",
-        stepId: "conversation-guided",
-        label: "已引导对话",
-        icon: "check",
-      });
-      syncPendingAssistantSegments(sessionId, pending.message.pending === false);
-      return;
+    pending.steps.delete("initial-thinking");
+    if (segment.label.includes("会话已连接")) {
+      pending.steps.delete("conversation-guided");
+    } else {
+      pending.steps.set("runtime-status", { ...segment, stepId: "runtime-status" } as ChatSegment);
     }
-    pending.steps.set("runtime-status", { ...segment, stepId: "runtime-status" } as ChatSegment);
     syncPendingAssistantSegments(sessionId, pending.message.pending === false);
     return;
   }
@@ -685,7 +805,7 @@ function upsertCompletionSummary(sessionId: string) {
 
 function isPersistentStatusSegment(segment: ChatSegment) {
   return segment.type === "status" && (
-    segment.stepId === "final-summary" || segment.stepId === "conversation-guided"
+    segment.stepId === "final-summary"
   );
 }
 
@@ -743,6 +863,8 @@ async function initAiEventListeners() {
     }),
     tauriApi.onAiChatOutput((event) => {
       const pending = pendingAssistants.get(event.aiSessionId);
+      const providerName = providerNameForSession(event.aiSessionId);
+      const runtimeName = providerRuntimeName(activeAiSession.value?.id === event.aiSessionId ? activeAiSession.value.providerId : aiSessions.value.find((session) => session.id === event.aiSessionId)?.providerId);
       const elapsedMs = pending ? Math.round(performance.now() - pending.startedAt) : undefined;
       const elapsedText = elapsedMs === undefined ? "" : `，用时 ${formatElapsedMs(elapsedMs)}`;
       pushChatDebugEvent(describeChatEventForLog(event, elapsedText));
@@ -758,6 +880,18 @@ async function initAiEventListeners() {
         if (event.segment) upsertPendingSegment(event.aiSessionId, event.segment);
         return;
       }
+      if (event.kind === "delta") {
+        const pending = pendingAssistants.get(event.aiSessionId);
+        if (!pending) return;
+        replacePendingAssistantText(event.aiSessionId, `${pending.finalText}${event.text ?? ""}`, false);
+        setChatRunState(event.aiSessionId, {
+          active: true,
+          phase: "running",
+          title: `${providerName} 正在回复`,
+          detail: `正在流式接收回复${elapsedText}。`,
+        });
+        return;
+      }
       if (event.kind === "done") {
         if (!pending) {
           if (activeAiSession.value?.id === event.aiSessionId) {
@@ -767,12 +901,12 @@ async function initAiEventListeners() {
           return;
         }
         const doneElapsedMs = pending ? Math.round(performance.now() - pending.startedAt) : undefined;
-        replacePendingAssistantText(event.aiSessionId, event.text ?? "", true);
+        replacePendingAssistantText(event.aiSessionId, event.text ?? pending.finalText, true);
         completePendingAssistantFromExec(event.aiSessionId);
         setChatRunState(event.aiSessionId, {
           active: false,
           phase: "done",
-          title: "Codex 已完成",
+          title: `${providerName} 已完成`,
           detail: `回复已写入聊天窗口${doneElapsedMs === undefined ? "" : `，用时 ${formatElapsedMs(doneElapsedMs)}`}。正在等待下一条消息。`,
         });
         return;
@@ -786,11 +920,28 @@ async function initAiEventListeners() {
           void loadLocalWorkspace();
           return;
         }
+        if (pending.finalText.trim()) {
+          upsertPendingSegment(event.aiSessionId, event.segment ?? {
+            type: "status",
+            stepId: "provider-warning",
+            label: event.text ?? `${runtimeName} 返回了一个后续错误，已保留当前回复。`,
+            icon: "warn",
+          });
+          replacePendingAssistantText(event.aiSessionId, pending.finalText, true);
+          completePendingAssistantFromExec(event.aiSessionId);
+          setChatRunState(event.aiSessionId, {
+            active: false,
+            phase: "done",
+            title: `${providerName} 已返回部分结果`,
+            detail: event.text ?? `${runtimeName} 返回了一个后续错误，已保留当前回复。`,
+          });
+          return;
+        }
         patchPendingAssistant(event.aiSessionId, {
           pending: false,
           role: "error",
-          segments: [event.segment ?? { type: "error", title: "Codex 执行失败", message: event.text ?? "Codex 执行失败" }],
-          text: event.text ?? "Codex 执行失败",
+          segments: [event.segment ?? { type: "error", title: `${providerName} 执行失败`, message: event.text ?? `${providerName} 执行失败` }],
+          text: event.text ?? `${providerName} 执行失败`,
         });
         pendingAssistants.delete(event.aiSessionId);
         assistantDrafts.delete(event.aiSessionId);
@@ -798,8 +949,8 @@ async function initAiEventListeners() {
         setChatRunState(event.aiSessionId, {
           active: false,
           phase: "error",
-          title: "Codex 执行失败",
-          detail: event.text ?? "Codex 执行失败",
+          title: `${providerName} 执行失败`,
+          detail: event.text ?? `${providerName} 执行失败`,
         });
       }
     }),
@@ -845,7 +996,7 @@ function refreshChatMessages() {
 
 async function saveAssistantDraft(sessionId: string) {
   const draft = assistantDrafts.get(sessionId);
-  const text = draft?.message.text?.trim() ?? "";
+  const text = extractAssistantText(draft?.message.text?.trim() ?? "");
   if (!draft || !text || text === draft.savedText) return;
   await tauriApi.appendLocalAiMessage(sessionId, "assistant", text);
   assistantDrafts.set(sessionId, { ...draft, savedText: text });
@@ -890,6 +1041,75 @@ async function archiveAiSession(sessionId: string, archived: boolean) {
   } catch (error) {
     chatMessages.value.push({ role: "error", text: `${archived ? "归档" : "恢复"}失败：${String(error)}` });
   }
+}
+
+function isSessionPinned(sessionId: string) {
+  return pinnedSessionIds.value.has(sessionId);
+}
+
+function toggleSessionPinned(sessionId: string) {
+  if (!sessionId) return;
+  const next = new Set(pinnedSessionIds.value);
+  if (next.has(sessionId)) next.delete(sessionId);
+  else next.add(sessionId);
+  pinnedSessionIds.value = next;
+}
+
+function isSessionUnread(sessionId: string) {
+  return unreadSessionIds.value.has(sessionId);
+}
+
+function markSessionUnread(sessionId: string) {
+  if (!sessionId) return;
+  const next = new Set(unreadSessionIds.value);
+  next.add(sessionId);
+  unreadSessionIds.value = next;
+}
+
+function markSessionRead(sessionId: string) {
+  if (!sessionId) return;
+  if (!unreadSessionIds.value.has(sessionId)) return;
+  const next = new Set(unreadSessionIds.value);
+  next.delete(sessionId);
+  unreadSessionIds.value = next;
+}
+
+async function renameAiSession(session: AiSession, title: string) {
+  const trimmed = title.trim();
+  if (!trimmed) {
+    chatMessages.value.push({ role: "error", text: "会话名称不能为空。" });
+    return;
+  }
+  try {
+    const updated = await tauriApi.renameLocalAiSession(session.id, trimmed);
+    aiSessions.value = aiSessions.value.map((item) => (item.id === updated.id ? updated : item));
+    if (activeAiSession.value?.id === updated.id) {
+      activeAiSession.value = updated;
+      aiSessionTitle.value = updated.title;
+    }
+    chatMessages.value.push({ role: "system", text: `已重命名为「${updated.title}」。` });
+  } catch (error) {
+    chatMessages.value.push({ role: "error", text: `重命名失败：${String(error)}` });
+  }
+}
+
+async function openAiSessionInNewWindow(session: AiSession) {
+  try {
+    await tauriApi.openSessionInNewWindow(session.id);
+  } catch (error) {
+    chatMessages.value.push({ role: "error", text: `打开新窗口失败：${String(error)}` });
+  }
+}
+
+function deriveSessionToLocal(session: AiSession) {
+  activeAiSession.value = session;
+  selectedProjectPath.value = session.summary ?? selectedProjectPath.value;
+  selectedProviderId.value = session.providerId;
+  void startShellForActiveSession(true);
+  chatMessages.value.push({
+    role: "system",
+    text: `已为「${session.title}」启动本地终端，会话里看到的代码改动也会落到这个目录。`,
+  });
 }
 
 async function pairDesktop(server: string, code: string) {
@@ -1067,6 +1287,8 @@ export function useWorkspace() {
     chatDebugEvents,
     activeChatRunState,
     activeChatIsRunning,
+    pinnedSessionIds,
+    unreadSessionIds,
     shellBuffers,
     liveShellSessions,
     thinkingSessionIds,
@@ -1080,6 +1302,9 @@ export function useWorkspace() {
     chooseProject,
     addProject,
     registerProject,
+    renameProject,
+    removeProject,
+    openProjectInFileManager,
     selectProjectPath,
     resetChatControlsForNewSession,
     createAiSessionForProject,
@@ -1095,6 +1320,14 @@ export function useWorkspace() {
     sendShellInput,
     resizeShell,
     archiveAiSession,
+    renameAiSession,
+    isSessionPinned,
+    toggleSessionPinned,
+    isSessionUnread,
+    markSessionUnread,
+    markSessionRead,
+    openAiSessionInNewWindow,
+    deriveSessionToLocal,
     pairDesktop,
     createQrPairingRequest,
     saveSettings,

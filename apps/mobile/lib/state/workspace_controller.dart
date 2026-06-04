@@ -102,7 +102,7 @@ class WorkspaceController extends ChangeNotifier {
     if (session.providerId != 'codex') {
       _appendMessage(session.id, const ChatMessage(
         role: ChatRole.error,
-        text: '移动端结构化聊天暂仅支持 Codex。Claude / Gemini / DeepSeek 请先在桌面端或终端入口使用。',
+        text: '移动端结构化聊天暂仅支持 Codex。Claude / OpenCode / DeepSeek 请先在桌面端或终端入口使用。',
       ));
       return;
     }

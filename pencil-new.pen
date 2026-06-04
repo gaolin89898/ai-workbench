@@ -287,7 +287,7 @@
                     {
                       "type": "frame",
                       "id": "Q0kE5o",
-                      "name": "新建 Gemini PTY",
+                      "name": "新建 OpenCode PTY",
                       "width": "fill_container",
                       "height": 34,
                       "fill": "#FFFFFF",
@@ -302,7 +302,7 @@
                         {
                           "type": "frame",
                           "id": "BTo1W",
-                          "name": "Gemini标记",
+                          "name": "OpenCode标记",
                           "width": 20,
                           "height": 20,
                           "fill": "#ECFDF5",
@@ -313,9 +313,9 @@
                             {
                               "type": "text",
                               "id": "sCyXK",
-                              "name": "Gemini字母",
+                              "name": "OpenCode字母",
                               "fill": "#16A34A",
-                              "content": "G",
+                              "content": "O",
                               "fontFamily": "Inter",
                               "fontSize": 10,
                               "fontWeight": "800"
@@ -325,11 +325,11 @@
                         {
                           "type": "text",
                           "id": "FNW9u",
-                          "name": "Gemini文案",
+                          "name": "OpenCode文案",
                           "fill": "#374151",
                           "textGrowth": "fixed-width",
                           "width": "fill_container",
-                          "content": "新建 Gemini PTY",
+                          "content": "新建 OpenCode PTY",
                           "fontFamily": "Inter",
                           "fontSize": 12,
                           "fontWeight": "700"
@@ -337,7 +337,7 @@
                         {
                           "type": "text",
                           "id": "FBgl2",
-                          "name": "Gemini状态",
+                          "name": "OpenCode状态",
                           "fill": "#9CA3AF",
                           "content": "可用",
                           "fontFamily": "Inter",
