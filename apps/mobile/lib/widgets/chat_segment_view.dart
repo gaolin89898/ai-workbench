@@ -37,7 +37,7 @@ class _StatusSegment extends StatelessWidget {
         const SizedBox(width: 8),
         Expanded(
           child: Text(
-            segment.label ?? segment.text ?? 'Codex 正在执行',
+            segment.label ?? segment.text ?? 'AI 正在执行',
             style: const TextStyle(color: AppColors.muted, fontSize: 13, height: 1.45),
           ),
         ),
@@ -163,20 +163,66 @@ class ChatBubble extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            if (message.segments.isEmpty)
+            // Show accumulated streaming text (from delta events)
+            if ((message.text ?? '').isNotEmpty)
               SelectableText(
-                message.text ?? '',
-                style: TextStyle(color: isUser ? Colors.white : isError ? AppColors.danger : AppColors.ink, height: 1.5),
-              )
-            else
+                message.text!,
+                style: TextStyle(
+                  color: isUser ? Colors.white : isError ? AppColors.danger : AppColors.ink,
+                  height: 1.5,
+                ),
+              ),
+            // Show segments (status, tool, thought, etc.)
+            if (message.segments.isNotEmpty)
               ...message.segments.map((segment) => Padding(
                     padding: const EdgeInsets.only(bottom: 8),
                     child: ChatSegmentView(segment: segment),
                   )),
-            if (message.pending)
-              const Text('处理中...', style: TextStyle(color: AppColors.muted, fontSize: 12)),
+            // Typing indicator for pending messages
+            if (message.pending && (message.text ?? '').isEmpty && message.segments.isEmpty)
+              const Text('处理中...', style: TextStyle(color: AppColors.muted, fontSize: 12))
+            else if (message.pending && (message.text ?? '').isNotEmpty)
+              const _TypingCursor(),
           ],
         ),
+      ),
+    );
+  }
+}
+
+class _TypingCursor extends StatefulWidget {
+  const _TypingCursor();
+
+  @override
+  State<_TypingCursor> createState() => _TypingCursorState();
+}
+
+class _TypingCursorState extends State<_TypingCursor>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _ctrl;
+
+  @override
+  void initState() {
+    super.initState();
+    _ctrl = AnimationController(vsync: this, duration: const Duration(milliseconds: 600))
+      ..repeat(reverse: true);
+  }
+
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: _ctrl,
+      builder: (context, _) => Container(
+        width: 2,
+        height: 16,
+        margin: const EdgeInsets.only(left: 2, top: 2),
+        color: AppColors.primary.withValues(alpha: _ctrl.value),
       ),
     );
   }

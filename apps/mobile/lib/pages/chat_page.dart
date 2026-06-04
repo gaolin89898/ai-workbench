@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../models/workbench_models.dart';
+import '../state/workspace_controller.dart';
 import '../state/workspace_scope.dart';
 import '../widgets/app_theme.dart';
 import '../widgets/chat_segment_view.dart';
@@ -43,16 +44,16 @@ class _ChatPageState extends State<ChatPage> {
       builder: (context, _) {
         final session = ws.sessions.where((item) => item.id == widget.session.id).firstOrNull ?? widget.session;
         final messages = ws.messagesBySession[session.id] ?? const <ChatMessage>[];
-        final isCodex = session.providerId == 'codex';
         WidgetsBinding.instance.addPostFrameCallback((_) {
           if (_scroll.hasClients) _scroll.jumpTo(_scroll.position.maxScrollExtent);
         });
+        final title = ws.getEffectiveTitle(session);
         return Scaffold(
           appBar: AppBar(
             title: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(session.title, overflow: TextOverflow.ellipsis),
+                Text(title, overflow: TextOverflow.ellipsis),
                 Text(
                   '${session.providerId} · ${ws.runStatusBySession[session.id] ?? session.status}',
                   style: const TextStyle(color: AppColors.muted, fontSize: 12, fontWeight: FontWeight.w600),
@@ -60,6 +61,11 @@ class _ChatPageState extends State<ChatPage> {
               ],
             ),
             actions: [
+              IconButton(
+                tooltip: '重命名',
+                onPressed: () => _showRename(context, ws, session, title),
+                icon: const Icon(Icons.edit_outlined, size: 20),
+              ),
               IconButton(
                 tooltip: session.archived ? '恢复' : '归档',
                 onPressed: () => ws.archiveSession(session, !session.archived),
@@ -69,11 +75,6 @@ class _ChatPageState extends State<ChatPage> {
           ),
           body: Column(
             children: [
-              if (!isCodex)
-                const Padding(
-                  padding: EdgeInsets.all(12),
-                  child: AppCard(child: Text('移动端结构化聊天暂仅支持 Codex。这个 Provider 会话可先在桌面端使用。')),
-                ),
               if (session.archived)
                 const Padding(
                   padding: EdgeInsets.all(12),
@@ -102,10 +103,10 @@ class _ChatPageState extends State<ChatPage> {
                       Expanded(
                         child: TextField(
                           controller: _prompt,
-                          enabled: isCodex && !session.archived,
+                          enabled: !session.archived,
                           minLines: 1,
                           maxLines: 5,
-                          decoration: const InputDecoration(hintText: '发送给 Codex'),
+                          decoration: InputDecoration(hintText: '发送给 ${session.providerId}'),
                         ),
                       ),
                       const SizedBox(width: 10),
@@ -113,7 +114,7 @@ class _ChatPageState extends State<ChatPage> {
                         width: 48,
                         height: 48,
                         child: FilledButton(
-                          onPressed: isCodex && !session.archived ? _send : null,
+                          onPressed: !session.archived ? _send : null,
                           style: FilledButton.styleFrom(padding: EdgeInsets.zero),
                           child: const Icon(Icons.arrow_upward),
                         ),
@@ -133,6 +134,28 @@ class _ChatPageState extends State<ChatPage> {
     final text = _prompt.text;
     WorkspaceScope.of(context).sendPrompt(widget.session, text);
     _prompt.clear();
+  }
+
+  void _showRename(BuildContext context, WorkspaceController ws, AiSessionMeta session, String currentTitle) {
+    final ctrl = TextEditingController(text: currentTitle);
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('重命名会话'),
+        content: TextField(controller: ctrl, autofocus: true),
+        actions: [
+          TextButton(onPressed: () => Navigator.of(ctx).pop(), child: const Text('取消')),
+          FilledButton(
+            onPressed: () {
+              final trimmed = ctrl.text.trim();
+              if (trimmed.isNotEmpty) ws.renameSession(session.id, trimmed);
+              Navigator.of(ctx).pop();
+            },
+            child: const Text('确定'),
+          ),
+        ],
+      ),
+    );
   }
 }
 

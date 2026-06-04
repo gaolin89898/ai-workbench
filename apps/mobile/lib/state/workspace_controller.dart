@@ -1,13 +1,16 @@
 import 'dart:async';
 
 import 'package:flutter/foundation.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../models/workbench_models.dart';
 import '../services/api_client.dart';
 import '../services/realtime_client.dart';
 
 class WorkspaceController extends ChangeNotifier {
-  WorkspaceController({required this.api}) : realtime = RealtimeClient(api);
+  WorkspaceController({required this.api}) : realtime = RealtimeClient(api) {
+    _loadPersistence();
+  }
 
   final ApiClient api;
   final RealtimeClient realtime;
@@ -26,8 +29,27 @@ class WorkspaceController extends ChangeNotifier {
   final Map<String, List<ChatMessage>> messagesBySession = {};
   final Map<String, String> runStatusBySession = {};
 
-  List<AiSessionMeta> get visibleSessions =>
-      sessions.where((session) => showArchived ? session.archived : !session.archived).toList();
+  // Client-side session state (matching desktop's localStorage pattern)
+  final Set<String> _pinnedSessionIds = {};
+  final Set<String> _unreadSessionIds = {};
+  final Map<String, String> _localTitleOverrides = {};
+
+  bool isSessionPinned(String sessionId) => _pinnedSessionIds.contains(sessionId);
+  bool isSessionUnread(String sessionId) => _unreadSessionIds.contains(sessionId);
+  String getEffectiveTitle(AiSessionMeta session) =>
+      _localTitleOverrides[session.id] ?? session.title;
+
+  List<AiSessionMeta> get visibleSessions {
+    final filtered = sessions.where((s) => showArchived ? s.archived : !s.archived).toList();
+    // Sort: pinned first, then by updatedAt desc
+    filtered.sort((a, b) {
+      final aPinned = _pinnedSessionIds.contains(a.id) ? 0 : 1;
+      final bPinned = _pinnedSessionIds.contains(b.id) ? 0 : 1;
+      if (aPinned != bPinned) return aPinned.compareTo(bPinned);
+      return b.updatedAt.compareTo(a.updatedAt);
+    });
+    return filtered;
+  }
 
   List<AiSessionMeta> sessionsForProject(String path) =>
       sessions.where((session) => session.summary == path && (showArchived ? session.archived : !session.archived)).toList();
@@ -66,20 +88,20 @@ class WorkspaceController extends ChangeNotifier {
     });
   }
 
-  Future<AiSessionMeta?> createCodexSession(WorkspaceProject project) async {
+  Future<AiSessionMeta?> createSession(WorkspaceProject project, {String providerId = 'codex'}) async {
     final device = selectedDevice;
     if (device == null) return null;
     return _runValue(() async {
       final session = await api.createAiSession(
         device.id,
-        providerId: 'codex',
+        providerId: providerId,
         title: '新的 AI CLI 会话',
         projectId: project.id,
         projectPath: project.path,
       );
       _upsertSession(session);
       messagesBySession[session.id] = [
-        const ChatMessage(role: ChatRole.system, text: '已创建 Codex 会话。现在可以发送 prompt。'),
+        ChatMessage(role: ChatRole.system, text: '已创建 $providerId 会话。现在可以发送 prompt。'),
       ];
       return session;
     });
@@ -92,6 +114,7 @@ class WorkspaceController extends ChangeNotifier {
     );
     final device = selectedDevice;
     if (device != null) realtime.requestHistory(device.id, session.id);
+    markSessionRead(session.id);
     notifyListeners();
   }
 
@@ -99,13 +122,6 @@ class WorkspaceController extends ChangeNotifier {
     final device = selectedDevice;
     final trimmed = prompt.trim();
     if (device == null || trimmed.isEmpty) return;
-    if (session.providerId != 'codex') {
-      _appendMessage(session.id, const ChatMessage(
-        role: ChatRole.error,
-        text: '移动端结构化聊天暂仅支持 Codex。Claude / OpenCode / DeepSeek 请先在桌面端或终端入口使用。',
-      ));
-      return;
-    }
     if (session.archived) {
       _appendMessage(session.id, const ChatMessage(role: ChatRole.error, text: '这个会话已归档。请先恢复后再发送。'));
       return;
@@ -113,13 +129,13 @@ class WorkspaceController extends ChangeNotifier {
     _appendMessage(session.id, ChatMessage(role: ChatRole.user, text: trimmed));
     messagesBySession[session.id] = [
       ...(messagesBySession[session.id] ?? const []),
-      const ChatMessage(
+      ChatMessage(
         role: ChatRole.assistant,
         pending: true,
-        segments: [ChatSegment(type: 'status', label: '等待 Codex 返回...', icon: 'think')],
+        segments: [ChatSegment(type: 'status', label: '等待 ${session.providerId} 返回...', icon: 'think')],
       ),
     ];
-    runStatusBySession[session.id] = '正在发送给 Codex';
+    runStatusBySession[session.id] = '正在发送给 ${session.providerId}';
     notifyListeners();
     realtime.sendPrompt(device.id, session.id, trimmed);
   }
@@ -135,6 +151,66 @@ class WorkspaceController extends ChangeNotifier {
   void toggleArchived() {
     showArchived = !showArchived;
     notifyListeners();
+  }
+
+  void toggleSessionPinned(String sessionId) {
+    if (_pinnedSessionIds.contains(sessionId)) {
+      _pinnedSessionIds.remove(sessionId);
+    } else {
+      _pinnedSessionIds.add(sessionId);
+    }
+    _savePinned();
+    notifyListeners();
+  }
+
+  void markSessionRead(String sessionId) {
+    _unreadSessionIds.remove(sessionId);
+    _saveUnread();
+    notifyListeners();
+  }
+
+  void markSessionUnread(String sessionId) {
+    _unreadSessionIds.add(sessionId);
+    _saveUnread();
+    notifyListeners();
+  }
+
+  void renameSession(String sessionId, String newTitle) {
+    _localTitleOverrides[sessionId] = newTitle;
+    _saveTitleOverrides();
+    notifyListeners();
+  }
+
+  // --- Persistence ---
+
+  Future<void> _loadPersistence() async {
+    final prefs = await SharedPreferences.getInstance();
+    _pinnedSessionIds.addAll(prefs.getStringList('pinnedSessions') ?? []);
+    _unreadSessionIds.addAll(prefs.getStringList('unreadSessions') ?? []);
+    for (final entry in (prefs.getStringList('titleOverrides') ?? const [])) {
+      final parts = entry.split('\x00');
+      if (parts.length == 2) _localTitleOverrides[parts[0]] = parts[1];
+    }
+    notifyListeners();
+  }
+
+  void _savePinned() {
+    SharedPreferences.getInstance().then((prefs) {
+      prefs.setStringList('pinnedSessions', _pinnedSessionIds.toList());
+    });
+  }
+
+  void _saveUnread() {
+    SharedPreferences.getInstance().then((prefs) {
+      prefs.setStringList('unreadSessions', _unreadSessionIds.toList());
+    });
+  }
+
+  void _saveTitleOverrides() {
+    SharedPreferences.getInstance().then((prefs) {
+      final entries = _localTitleOverrides.entries.map((e) => '${e.key}\x00${e.value}').toList();
+      prefs.setStringList('titleOverrides', entries);
+    });
   }
 
   Future<void> _run(Future<void> Function() action) async {
@@ -198,6 +274,9 @@ class WorkspaceController extends ChangeNotifier {
       case 'ai.chat.output':
         _handleChatOutput(json);
         break;
+      case 'ai.message.delta':
+        _handleMessageDelta(json);
+        break;
       case 'ai.message.done':
         final sessionId = json['aiSessionId'] as String;
         runStatusBySession[sessionId] = json['status'] as String? ?? 'idle';
@@ -235,7 +314,7 @@ class WorkspaceController extends ChangeNotifier {
     } else if (kind == 'error') {
       final errorMessage = ChatMessage(
         role: ChatRole.error,
-        text: text ?? segment?.message ?? 'Codex 执行失败',
+        text: text ?? segment?.message ?? 'AI 执行失败',
         segments: [if (segment != null) segment],
       );
       if (pendingIndex >= 0) {
@@ -244,15 +323,42 @@ class WorkspaceController extends ChangeNotifier {
         current.add(errorMessage);
       }
       runStatusBySession[sessionId] = '执行失败';
+    } else if (kind == 'delta') {
+      // Streaming text delta — append to pending message's text
+      if (text != null && text.isNotEmpty) {
+        if (pendingIndex >= 0) {
+          final pending = current[pendingIndex];
+          final accumulated = (pending.text ?? '') + text;
+          current[pendingIndex] = pending.copyWith(text: accumulated);
+        } else {
+          current.add(ChatMessage(role: ChatRole.assistant, pending: true, text: text));
+        }
+      }
     } else {
-      final nextSegment = segment ?? ChatSegment(type: 'status', label: text ?? 'Codex 正在执行', icon: 'think');
+      final nextSegment = segment ?? ChatSegment(type: 'status', label: text ?? 'AI 正在执行', icon: 'think');
       if (pendingIndex >= 0) {
         final pending = current[pendingIndex];
         current[pendingIndex] = pending.copyWith(segments: [...pending.segments, nextSegment]);
       } else {
         current.add(ChatMessage(role: ChatRole.assistant, pending: true, segments: [nextSegment]));
       }
-      runStatusBySession[sessionId] = text ?? nextSegment.label ?? 'Codex 正在执行';
+      runStatusBySession[sessionId] = text ?? nextSegment.label ?? 'AI 正在执行';
+    }
+    messagesBySession[sessionId] = current;
+  }
+
+  void _handleMessageDelta(Map<String, dynamic> json) {
+    final sessionId = json['aiSessionId'] as String;
+    final content = json['content'] as String? ?? '';
+    if (content.isEmpty) return;
+    final current = [...(messagesBySession[sessionId] ?? const <ChatMessage>[])];
+    final pendingIndex = current.lastIndexWhere((message) => message.pending && message.role == ChatRole.assistant);
+    if (pendingIndex >= 0) {
+      final pending = current[pendingIndex];
+      final accumulated = (pending.text ?? '') + content;
+      current[pendingIndex] = pending.copyWith(text: accumulated);
+    } else {
+      current.add(ChatMessage(role: ChatRole.assistant, pending: true, text: content));
     }
     messagesBySession[sessionId] = current;
   }
