@@ -30,7 +30,7 @@ pub enum TerminalBackend {
 pub enum AiTool {
     Codex,
     Claude,
-    Gemini,
+    Opencode,
     Deepseek,
     Unknown,
 }
@@ -396,8 +396,8 @@ pub fn detect_ai_tool(name_or_output: &str) -> AiTool {
         AiTool::Codex
     } else if value.contains("claude") {
         AiTool::Claude
-    } else if value.contains("gemini") {
-        AiTool::Gemini
+    } else if value.contains("opencode") {
+        AiTool::Opencode
     } else if value.contains("deepseek") {
         AiTool::Deepseek
     } else {

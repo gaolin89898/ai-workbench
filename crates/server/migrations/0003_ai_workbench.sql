@@ -10,7 +10,7 @@ CREATE TABLE ai_providers (
 INSERT INTO ai_providers (id, name, command, built_in, enabled) VALUES
   ('codex', 'Codex', 'codex', TRUE, TRUE),
   ('claude', 'Claude Code', 'claude', TRUE, TRUE),
-  ('gemini', 'Gemini', 'gemini', TRUE, TRUE),
+  ('opencode', 'OpenCode', 'opencode', TRUE, TRUE),
   ('deepseek', 'DeepSeek TUI', 'deepseek', TRUE, TRUE)
 ON CONFLICT (id) DO NOTHING;
 
