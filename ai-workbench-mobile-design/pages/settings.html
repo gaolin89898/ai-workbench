@@ -1,0 +1,238 @@
+<!DOCTYPE html>
+<html lang="zh-CN" class="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>设置</title>
+    <style id="theme-vars">
+/* AI Workbench Mobile — Light Task-Oriented Theme */
+/* Inspired by Trae Work clean aesthetic */
+:root {
+  /* Brand */
+  --color-primary: #2563eb;
+  --color-primary-hover: #1d4ed8;
+  --color-primary-muted: rgba(37, 99, 235, 0.12);
+  --color-primary-soft: rgba(37, 99, 235, 0.06);
+
+  /* Surface & Background */
+  --color-bg-app: #f8fafc;
+  --color-bg-sidebar: #ffffff;
+  --color-bg-main: #f8fafc;
+  --color-bg-surface: #ffffff;
+  --color-bg-elevated: #ffffff;
+  --color-bg-input: #f1f5f9;
+  --color-bg-hover: rgba(0, 0, 0, 0.02);
+  --color-bg-active: rgba(37, 99, 235, 0.08);
+
+  /* Text */
+  --color-text-primary: #0f172a;
+  --color-text-secondary: #475569;
+  --color-text-muted: #94a3b8;
+  --color-text-inverse: #ffffff;
+
+  /* Border */
+  --color-border: #e2e8f0;
+  --color-border-active: rgba(37, 99, 235, 0.4);
+
+  /* State Colors */
+  --state-success: #22c55e;
+  --state-warning: #f59e0b;
+  --state-error: #ef4444;
+  --state-info: #3b82f6;
+
+  /* Radius */
+  --radius-sm: 4px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --radius-full: 9999px;
+
+  /* Typography */
+  --font-sans: "Inter", ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --font-mono: "JetBrains Mono", "Fira Code", ui-monospace, "Cascadia Code", monospace;
+
+  --text-xs: 11px;
+  --text-sm: 12px;
+  --text-base: 13px;
+  --text-md: 14px;
+  --text-lg: 16px;
+  --text-xl: 20px;
+  --text-2xl: 28px;
+
+  --leading-tight: 1.25;
+  --leading-normal: 1.5;
+  --leading-relaxed: 1.625;
+
+  --font-weight-normal: 400;
+  --font-weight-medium: 500;
+  --font-weight-semibold: 600;
+  --font-weight-bold: 700;
+  --font-weight-extrabold: 800;
+
+  /* Shadow */
+  --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.05);
+  --shadow-elevated: 0 4px 12px rgba(0, 0, 0, 0.08);
+  --shadow-modal: 0 8px 32px rgba(0, 0, 0, 0.12);
+
+  /* Spacing */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-10: 40px;
+}
+
+    </style>
+    <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4.3.1/dist/index.global.js"></script>
+    <script src="https://unpkg.com/lucide@1.8.0/dist/umd/lucide.min.js"></script>
+    <style type="text/tailwindcss">
+  @theme inline {
+    --color-primary: var(--color-primary);
+    --color-border: var(--color-border);
+  }
+  @layer base {
+    body { background: var(--color-background); color: var(--color-text-primary); }
+    td, th { @apply break-words; word-break: break-all; word-break: auto-phrase; }
+    th { @apply whitespace-nowrap; }
+  }
+    </style>
+    <style>
+      .no-scrollbar::-webkit-scrollbar { display: none; }
+      .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+      [data-icon] {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        -webkit-mask-size: contain;
+        mask-size: contain;
+        -webkit-mask-repeat: no-repeat;
+        mask-repeat: no-repeat;
+        -webkit-mask-position: center;
+        mask-position: center;
+        background-color: currentColor;
+      }
+    </style>
+</head>
+<body style="margin:0; padding:0; background:var(--color-bg-app); font-family:var(--font-sans); color:var(--color-text-primary);">
+
+  <!-- Top App Bar -->
+  <header style="position:sticky; top:0; z-index:30; border-bottom:1px solid var(--color-border); background:var(--color-bg-surface);">
+    <div style="display:flex; align-items:center; justify-content:center; height:56px;">
+      <h1 style="font-size:var(--text-lg); font-weight:var(--font-weight-semibold); color:var(--color-text-primary); margin:0;">设置</h1>
+    </div>
+  </header>
+
+  <!-- Main Content -->
+  <main style="padding:var(--space-6) 0 var(--space-10);">
+
+    <!-- Section: 连接 -->
+    <section style="margin-bottom:var(--space-6);">
+      <h2 style="font-size:var(--text-sm); color:var(--color-text-muted); font-weight:var(--font-weight-medium); margin:0 0 var(--space-2) var(--space-4); text-transform:uppercase; letter-spacing:0.05em;">连接</h2>
+      <div style="margin:0 var(--space-4); background:var(--color-bg-surface); border-radius:var(--radius-lg); box-shadow:var(--shadow-card); overflow:hidden;">
+        <!-- 服务器 -->
+        <div style="display:flex; align-items:center; justify-content:space-between; padding:var(--space-3) var(--space-4); border-bottom:1px solid var(--color-border);">
+          <span style="flex-shrink:0; font-size:var(--text-md); color:var(--color-text-primary);">服务器</span>
+          <div style="display:flex; align-items:center; gap:4px; flex:1; min-width:0; justify-content:flex-end;">
+            <span style="font-size:var(--text-md); color:var(--color-text-muted); overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">http://127.0.0.1:8080</span>
+            <i data-lucide="chevron-right" style="width:16px; height:16px; color:var(--color-text-muted); flex-shrink:0;"></i>
+          </div>
+        </div>
+        <!-- 状态 -->
+        <div style="display:flex; align-items:center; justify-content:space-between; padding:var(--space-3) var(--space-4); border-bottom:1px solid var(--color-border);">
+          <span style="flex-shrink:0; font-size:var(--text-md); color:var(--color-text-primary);">状态</span>
+          <div style="display:flex; align-items:center; gap:var(--space-2);">
+            <span style="display:inline-block; width:8px; height:8px; border-radius:50%; background:var(--state-success);"></span>
+            <span style="font-size:var(--text-md); color:var(--state-success);">已连接</span>
+          </div>
+        </div>
+        <!-- 账户 -->
+        <div style="display:flex; align-items:center; justify-content:space-between; padding:var(--space-3) var(--space-4);">
+          <span style="flex-shrink:0; font-size:var(--text-md); color:var(--color-text-primary);">账户</span>
+          <div style="display:flex; align-items:center; gap:4px; flex:1; min-width:0; justify-content:flex-end;">
+            <span style="font-size:var(--text-md); color:var(--color-text-muted); overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">user@example.com</span>
+            <i data-lucide="chevron-right" style="width:16px; height:16px; color:var(--color-text-muted); flex-shrink:0;"></i>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Section: 桌面端 -->
+    <section style="margin-bottom:var(--space-6);">
+      <h2 style="font-size:var(--text-sm); color:var(--color-text-muted); font-weight:var(--font-weight-medium); margin:0 0 var(--space-2) var(--space-4); text-transform:uppercase; letter-spacing:0.05em;">桌面端</h2>
+      <div style="margin:0 var(--space-4); background:var(--color-bg-surface); border-radius:var(--radius-lg); box-shadow:var(--shadow-card); overflow:hidden;">
+        <!-- 已配对设备 -->
+        <div style="display:flex; align-items:center; justify-content:space-between; padding:var(--space-3) var(--space-4); border-bottom:1px solid var(--color-border);">
+          <span style="flex-shrink:0; font-size:var(--text-md); color:var(--color-text-primary);">已配对设备</span>
+          <div style="display:flex; align-items:center; gap:4px; flex:1; min-width:0; justify-content:flex-end;">
+            <span style="font-size:var(--text-md); color:var(--color-text-muted); overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">Workstation</span>
+            <i data-lucide="chevron-right" style="width:16px; height:16px; color:var(--color-text-muted); flex-shrink:0;"></i>
+          </div>
+        </div>
+        <!-- 自动同步 (toggle ON) -->
+        <div style="display:flex; align-items:center; justify-content:space-between; padding:var(--space-3) var(--space-4);">
+          <span style="flex-shrink:0; font-size:var(--text-md); color:var(--color-text-primary);">自动同步</span>
+          <div style="width:51px; height:31px; border-radius:var(--radius-full); background:var(--color-primary); position:relative; cursor:pointer;">
+            <div style="width:27px; height:27px; border-radius:50%; background:#ffffff; box-shadow:0 1px 3px rgba(0,0,0,0.15); position:absolute; top:2px; left:22px;"></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Section: 通用 -->
+    <section style="margin-bottom:var(--space-6);">
+      <h2 style="font-size:var(--text-sm); color:var(--color-text-muted); font-weight:var(--font-weight-medium); margin:0 0 var(--space-2) var(--space-4); text-transform:uppercase; letter-spacing:0.05em;">通用</h2>
+      <div style="margin:0 var(--space-4); background:var(--color-bg-surface); border-radius:var(--radius-lg); box-shadow:var(--shadow-card); overflow:hidden;">
+        <!-- 语言 -->
+        <div style="display:flex; align-items:center; justify-content:space-between; padding:var(--space-3) var(--space-4); border-bottom:1px solid var(--color-border);">
+          <span style="flex-shrink:0; font-size:var(--text-md); color:var(--color-text-primary);">语言</span>
+          <div style="display:flex; align-items:center; gap:4px; flex:1; min-width:0; justify-content:flex-end;">
+            <span style="font-size:var(--text-md); color:var(--color-text-muted); overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">中文</span>
+            <i data-lucide="chevron-right" style="width:16px; height:16px; color:var(--color-text-muted); flex-shrink:0;"></i>
+          </div>
+        </div>
+        <!-- 通知 (toggle ON) -->
+        <div style="display:flex; align-items:center; justify-content:space-between; padding:var(--space-3) var(--space-4); border-bottom:1px solid var(--color-border);">
+          <span style="flex-shrink:0; font-size:var(--text-md); color:var(--color-text-primary);">通知</span>
+          <div style="width:51px; height:31px; border-radius:var(--radius-full); background:var(--color-primary); position:relative; cursor:pointer;">
+            <div style="width:27px; height:27px; border-radius:50%; background:#ffffff; box-shadow:0 1px 3px rgba(0,0,0,0.15); position:absolute; top:2px; left:22px;"></div>
+          </div>
+        </div>
+        <!-- 紧凑模式 (toggle OFF) -->
+        <div style="display:flex; align-items:center; justify-content:space-between; padding:var(--space-3) var(--space-4);">
+          <span style="flex-shrink:0; font-size:var(--text-md); color:var(--color-text-primary);">紧凑模式</span>
+          <div style="width:51px; height:31px; border-radius:var(--radius-full); background:var(--color-border); position:relative; cursor:pointer;">
+            <div style="width:27px; height:27px; border-radius:50%; background:#ffffff; box-shadow:0 1px 3px rgba(0,0,0,0.15); position:absolute; top:2px; left:2px;"></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Section: 关于 -->
+    <section style="margin-bottom:var(--space-6);">
+      <h2 style="font-size:var(--text-sm); color:var(--color-text-muted); font-weight:var(--font-weight-medium); margin:0 0 var(--space-2) var(--space-4); text-transform:uppercase; letter-spacing:0.05em;">关于</h2>
+      <div style="margin:0 var(--space-4); background:var(--color-bg-surface); border-radius:var(--radius-lg); box-shadow:var(--shadow-card); overflow:hidden;">
+        <!-- 版本 -->
+        <div style="display:flex; align-items:center; justify-content:space-between; padding:var(--space-3) var(--space-4); border-bottom:1px solid var(--color-border);">
+          <span style="flex-shrink:0; font-size:var(--text-md); color:var(--color-text-primary);">版本</span>
+          <span style="font-size:var(--text-md); color:var(--color-text-muted);">0.3.2</span>
+        </div>
+        <!-- 检查更新 -->
+        <div style="display:flex; align-items:center; justify-content:space-between; padding:var(--space-3) var(--space-4); border-bottom:1px solid var(--color-border);">
+          <span style="flex-shrink:0; font-size:var(--text-md); color:var(--color-text-primary);">检查更新</span>
+          <i data-lucide="chevron-right" style="width:16px; height:16px; color:var(--color-text-muted); flex-shrink:0;"></i>
+        </div>
+        <!-- 隐私政策 -->
+        <div style="display:flex; align-items:center; justify-content:space-between; padding:var(--space-3) var(--space-4);">
+          <span style="flex-shrink:0; font-size:var(--text-md); color:var(--color-text-primary);">隐私政策</span>
+          <i data-lucide="chevron-right" style="width:16px; height:16px; color:var(--color-text-muted); flex-shrink:0;"></i>
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+  <script>lucide.createIcons();</script>
+</body>
+</html>

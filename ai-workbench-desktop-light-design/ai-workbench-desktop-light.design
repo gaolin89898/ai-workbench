@@ -1,0 +1,73 @@
+{
+  "data": [
+    {
+      "id": "page-workspace",
+      "title": "工作台",
+      "type": "page",
+      "version": 1,
+      "createdAt": 1782513600000,
+      "canvasData": {
+        "x": 0,
+        "y": 0,
+        "group": 0
+      },
+      "devMetadata": {
+        "htmlSrc": "pages/workspace.html",
+        "interactions": []
+      }
+    },
+    {
+      "id": "page-chat-session",
+      "title": "AI 会话",
+      "type": "page",
+      "version": 1,
+      "createdAt": 1782513600000,
+      "canvasData": {
+        "x": 620,
+        "y": 0,
+        "group": 0
+      },
+      "devMetadata": {
+        "htmlSrc": "pages/chat-session.html",
+        "interactions": []
+      }
+    },
+    {
+      "id": "page-providers",
+      "title": "AI 工具",
+      "type": "page",
+      "version": 1,
+      "createdAt": 1782513600000,
+      "canvasData": {
+        "x": 1240,
+        "y": 0,
+        "group": 0
+      },
+      "devMetadata": {
+        "htmlSrc": "pages/providers.html",
+        "interactions": []
+      }
+    },
+    {
+      "id": "page-settings",
+      "title": "设置",
+      "type": "page",
+      "version": 1,
+      "createdAt": 1782513600000,
+      "canvasData": {
+        "x": 1860,
+        "y": 0,
+        "group": 0
+      },
+      "devMetadata": {
+        "htmlSrc": "pages/settings.html",
+        "interactions": []
+      }
+    }
+  ],
+  "config": {
+    "autoLayout": true,
+    "deviceType": "desktop",
+    "projectName": "AI 工作台 桌面端 白色版"
+  }
+}

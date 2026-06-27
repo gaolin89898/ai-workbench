@@ -1,0 +1,334 @@
+<!DOCTYPE html>
+<html lang="zh-CN" class="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Workbench — 设置</title>
+    <style id="theme-vars">
+:root {
+  --color-primary: #2563eb;
+  --color-primary-hover: #1d4ed8;
+  --color-primary-muted: rgba(37, 99, 235, 0.12);
+  --color-primary-soft: rgba(37, 99, 235, 0.06);
+  --color-bg-app: #f8fafc;
+  --color-bg-sidebar: #ffffff;
+  --color-bg-main: #f8fafc;
+  --color-bg-surface: #ffffff;
+  --color-bg-elevated: #f1f5f9;
+  --color-bg-input: #f1f5f9;
+  --color-bg-hover: rgba(0, 0, 0, 0.03);
+  --color-bg-active: rgba(37, 99, 235, 0.08);
+  --color-text-primary: #0f172a;
+  --color-text-secondary: #475569;
+  --color-text-muted: #94a3b8;
+  --color-text-inverse: #ffffff;
+  --color-border: #e2e8f0;
+  --color-border-active: rgba(37, 99, 235, 0.4);
+  --state-success: #22c55e;
+  --state-warning: #f59e0b;
+  --state-error: #ef4444;
+  --state-info: #3b82f6;
+  --radius-sm: 4px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --radius-full: 9999px;
+  --font-sans: "Inter", ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --font-mono: "JetBrains Mono", "Fira Code", ui-monospace, "Cascadia Code", monospace;
+  --text-xs: 11px;
+  --text-sm: 12px;
+  --text-base: 13px;
+  --text-md: 14px;
+  --text-lg: 16px;
+  --text-xl: 20px;
+  --text-2xl: 28px;
+  --leading-tight: 1.25;
+  --leading-normal: 1.5;
+  --leading-relaxed: 1.625;
+  --font-weight-normal: 400;
+  --font-weight-medium: 500;
+  --font-weight-semibold: 600;
+  --font-weight-bold: 700;
+  --font-weight-extrabold: 800;
+  --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.05);
+  --shadow-elevated: 0 4px 12px rgba(0, 0, 0, 0.08);
+  --shadow-modal: 0 8px 32px rgba(0, 0, 0, 0.12);
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-10: 40px;
+  --sidebar-width: 272px;
+  --topbar-height: 48px;
+  --composer-height: auto;
+}
+
+    </style>
+    <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4.3.1/dist/index.global.js"></script>
+    <script src="https://unpkg.com/lucide@1.8.0/dist/umd/lucide.min.js"></script>
+    <style type="text/tailwindcss">
+  @theme inline {
+    --color-primary: var(--color-primary);
+    --color-border: var(--color-border);
+  }
+  @layer base {
+    body { background: var(--color-background); color: var(--color-text-primary); }
+    td, th { @apply break-words; word-break: break-all; word-break: auto-phrase; }
+    th { @apply whitespace-nowrap; }
+  }
+    </style>
+    <style>
+      .no-scrollbar::-webkit-scrollbar { display: none; }
+      .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+      [data-icon] {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        -webkit-mask-size: contain;
+        mask-size: contain;
+        -webkit-mask-repeat: no-repeat;
+        mask-repeat: no-repeat;
+        -webkit-mask-position: center;
+        mask-position: center;
+        background-color: currentColor;
+      }
+    </style>
+</head>
+<body class="min-h-screen font-sans antialiased" style="background:var(--color-bg-app); color:var(--color-text-primary); font-family:var(--font-sans);">
+    <main>
+        <!-- Page Header -->
+        <header class="flex items-center gap-4 px-10 pt-8 pb-2">
+            <a href="#" class="inline-flex items-center gap-1.5 shrink-0 transition-colors hover:opacity-80" style="color:var(--color-primary); font-size:var(--text-md); font-weight:var(--font-weight-medium);">
+                <i data-lucide="arrow-left" class="w-4 h-4"></i>
+                <span>返回工作台</span>
+            </a>
+            <h1 style="font-size:var(--text-2xl); font-weight:var(--font-weight-bold); color:var(--color-text-primary); line-height:var(--leading-tight);">设置</h1>
+        </header>
+
+        <!-- Two-Column Card Grid -->
+        <div class="px-10 pt-6 pb-16">
+            <div class="grid gap-5" style="grid-template-columns: 55fr 45fr;">
+
+                <!-- ========== LEFT COLUMN ========== -->
+
+                <!-- Card: 服务器连接 -->
+                <section class="rounded-lg p-5" style="background:var(--color-bg-surface); border:1px solid var(--color-border);">
+                    <div class="flex items-center gap-2.5 mb-4">
+                        <div class="flex items-center justify-center w-8 h-8 rounded-md shrink-0" style="background:var(--color-primary-muted);">
+                            <i data-lucide="server" class="w-4 h-4" style="color:var(--color-primary);"></i>
+                        </div>
+                        <h2 style="font-size:var(--text-lg); font-weight:var(--font-weight-semibold); color:var(--color-text-primary); line-height:var(--leading-tight);">服务器连接</h2>
+                    </div>
+
+                    <div class="mb-3.5">
+                        <label class="block mb-1.5" style="font-size:var(--text-sm); font-weight:var(--font-weight-medium); color:var(--color-text-secondary);">服务器地址</label>
+                        <div class="flex items-center gap-2">
+                            <input type="text" value="http://127.0.0.1:8080" readonly class="flex-1 px-3 py-2 rounded-md text-sm outline-none truncate" style="background:var(--color-bg-input); color:var(--color-text-primary); border:1px solid var(--color-border); font-family:var(--font-mono); font-size:var(--text-sm);">
+                            <button class="flex items-center justify-center w-9 h-9 rounded-md shrink-0 transition-colors hover:opacity-80" style="background:var(--color-bg-elevated); color:var(--color-text-secondary); border:1px solid var(--color-border);" aria-label="复制服务器地址">
+                                <i data-lucide="copy" class="w-3.5 h-3.5"></i>
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="flex items-center gap-4">
+                        <div class="flex items-center gap-2">
+                            <span class="w-2 h-2 rounded-full shrink-0" style="background:var(--state-success);"></span>
+                            <span style="font-size:var(--text-sm); color:var(--state-success); font-weight:var(--font-weight-medium);">已连接</span>
+                        </div>
+                        <span style="font-size:var(--text-sm); color:var(--color-text-muted);">延迟: 12ms</span>
+                    </div>
+                </section>
+
+                <!-- Card: 配对 -->
+                <section class="rounded-lg p-5" style="background:var(--color-bg-surface); border:1px solid var(--color-border);">
+                    <div class="flex items-center gap-2.5 mb-4">
+                        <div class="flex items-center justify-center w-8 h-8 rounded-md shrink-0" style="background:var(--color-primary-muted);">
+                            <i data-lucide="link" class="w-4 h-4" style="color:var(--color-primary);"></i>
+                        </div>
+                        <h2 style="font-size:var(--text-lg); font-weight:var(--font-weight-semibold); color:var(--color-text-primary); line-height:var(--leading-tight);">配对</h2>
+                    </div>
+
+                    <div class="mb-3.5">
+                        <label class="block mb-1.5" style="font-size:var(--text-sm); font-weight:var(--font-weight-medium); color:var(--color-text-secondary);">设备 ID</label>
+                        <div class="flex items-center gap-2">
+                            <code class="flex-1 px-3 py-2 rounded-md truncate block" style="background:var(--color-bg-input); color:var(--color-text-primary); border:1px solid var(--color-border); font-family:var(--font-mono); font-size:var(--text-sm);">a1b2c3d4-e5f6-7890-abcd-ef1234567890</code>
+                            <button class="flex items-center justify-center w-9 h-9 rounded-md shrink-0 transition-colors hover:opacity-80" style="background:var(--color-bg-elevated); color:var(--color-text-secondary); border:1px solid var(--color-border);" aria-label="复制设备 ID">
+                                <i data-lucide="copy" class="w-3.5 h-3.5"></i>
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="mb-4">
+                        <button class="px-4 py-2 rounded-md text-sm font-medium transition-colors shrink-0" style="background:var(--color-primary); color:#ffffff;">
+                            生成配对码
+                        </button>
+                    </div>
+
+                    <div>
+                        <label class="block mb-2.5" style="font-size:var(--text-sm); font-weight:var(--font-weight-medium); color:var(--color-text-secondary);">已配对设备</label>
+                        <div class="flex items-center justify-between py-2.5 px-3.5 rounded-md" style="background:var(--color-bg-hover);">
+                            <div class="flex items-center gap-3 min-w-0">
+                                <i data-lucide="smartphone" class="w-4 h-4 shrink-0" style="color:var(--color-text-muted);"></i>
+                                <span class="truncate" style="font-size:var(--text-sm); color:var(--color-text-primary); font-weight:var(--font-weight-medium);">iPhone 15 Pro</span>
+                            </div>
+                            <span class="shrink-0 ml-3" style="font-size:var(--text-xs); color:var(--color-text-muted);">2 分钟前</span>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- ========== RIGHT COLUMN ========== -->
+
+                <!-- Card: 数据库 -->
+                <section class="rounded-lg p-5" style="background:var(--color-bg-surface); border:1px solid var(--color-border);">
+                    <div class="flex items-center gap-2.5 mb-4">
+                        <div class="flex items-center justify-center w-8 h-8 rounded-md shrink-0" style="background:var(--color-primary-muted);">
+                            <i data-lucide="database" class="w-4 h-4" style="color:var(--color-primary);"></i>
+                        </div>
+                        <h2 style="font-size:var(--text-lg); font-weight:var(--font-weight-semibold); color:var(--color-text-primary); line-height:var(--leading-tight);">数据库</h2>
+                    </div>
+
+                    <div class="mb-3.5">
+                        <div class="flex items-center gap-2">
+                            <div class="flex-1 px-3 py-2 rounded-md truncate" style="background:var(--color-bg-input); color:var(--color-text-primary); border:1px solid var(--color-border); font-family:var(--font-mono); font-size:var(--text-sm);">~/.ai-workbench/history.db</div>
+                            <button class="flex items-center gap-1.5 px-3 py-2 rounded-md text-sm font-medium shrink-0 transition-colors hover:opacity-80" style="background:var(--color-bg-elevated); color:var(--color-text-secondary); border:1px solid var(--color-border);">
+                                <i data-lucide="folder-open" class="w-3.5 h-3.5"></i>
+                                <span>打开</span>
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="flex items-center gap-2">
+                        <i data-lucide="bar-chart-3" class="w-3.5 h-3.5 shrink-0" style="color:var(--color-text-muted);"></i>
+                        <span style="font-size:var(--text-sm); color:var(--color-text-muted);">156 个会话，2,340 条消息</span>
+                    </div>
+                </section>
+
+                <!-- Card: 应用更新 -->
+                <section class="rounded-lg p-5" style="background:var(--color-bg-surface); border:1px solid var(--color-border);">
+                    <div class="flex items-center gap-2.5 mb-4">
+                        <div class="flex items-center justify-center w-8 h-8 rounded-md shrink-0" style="background:var(--color-primary-muted);">
+                            <i data-lucide="download" class="w-4 h-4" style="color:var(--color-primary);"></i>
+                        </div>
+                        <h2 style="font-size:var(--text-lg); font-weight:var(--font-weight-semibold); color:var(--color-text-primary); line-height:var(--leading-tight);">应用更新</h2>
+                    </div>
+
+                    <div class="flex items-center justify-between mb-4">
+                        <div class="flex items-center gap-2 min-w-0">
+                            <span style="font-size:var(--text-sm); color:var(--color-text-secondary);">当前版本</span>
+                            <span class="px-2 py-0.5 rounded-md shrink-0" style="background:var(--color-primary-muted); color:var(--color-primary); font-family:var(--font-mono); font-size:var(--text-sm); font-weight:var(--font-weight-medium);">v0.3.2</span>
+                        </div>
+                        <button class="px-4 py-2 rounded-md text-sm font-medium shrink-0 transition-colors hover:opacity-80" style="background:var(--color-bg-elevated); color:var(--color-text-primary); border:1px solid var(--color-border);">
+                            检查更新
+                        </button>
+                    </div>
+
+                    <div class="flex items-center justify-between">
+                        <div class="min-w-0 mr-3">
+                            <div style="font-size:var(--text-sm); color:var(--color-text-primary); font-weight:var(--font-weight-medium);">自动更新</div>
+                            <div style="font-size:var(--text-xs); color:var(--color-text-muted);">自动下载并安装更新</div>
+                        </div>
+                        <button class="toggle-switch active shrink-0" type="button" role="switch" aria-checked="true" aria-label="自动更新开关">
+                            <span class="toggle-track">
+                                <span class="toggle-thumb"></span>
+                            </span>
+                        </button>
+                    </div>
+                </section>
+
+                <!-- Card: 关于 -->
+                <section class="rounded-lg p-5" style="background:var(--color-bg-surface); border:1px solid var(--color-border);">
+                    <div class="flex items-center gap-2.5 mb-4">
+                        <div class="flex items-center justify-center w-8 h-8 rounded-md shrink-0" style="background:var(--color-primary-muted);">
+                            <i data-lucide="info" class="w-4 h-4" style="color:var(--color-primary);"></i>
+                        </div>
+                        <h2 style="font-size:var(--text-lg); font-weight:var(--font-weight-semibold); color:var(--color-text-primary); line-height:var(--leading-tight);">关于</h2>
+                    </div>
+
+                    <div class="space-y-3">
+                        <div class="flex items-baseline gap-3">
+                            <span class="shrink-0" style="font-size:var(--text-sm); color:var(--color-text-muted); min-width:72px;">应用</span>
+                            <span class="truncate" style="font-size:var(--text-sm); color:var(--color-text-primary); font-weight:var(--font-weight-medium);">AI Workbench</span>
+                        </div>
+                        <div class="flex items-baseline gap-3">
+                            <span class="shrink-0" style="font-size:var(--text-sm); color:var(--color-text-muted); min-width:72px;">版本</span>
+                            <span class="truncate" style="font-size:var(--text-sm); color:var(--color-text-primary); font-family:var(--font-mono);">v0.3.2</span>
+                        </div>
+                        <div class="flex items-baseline gap-3">
+                            <span class="shrink-0" style="font-size:var(--text-sm); color:var(--color-text-muted); min-width:72px;">构建</span>
+                            <span class="truncate" style="font-size:var(--text-sm); color:var(--color-text-primary); font-family:var(--font-mono);">2024.12.15-a8f3c</span>
+                        </div>
+                        <div class="flex items-baseline gap-3">
+                            <span class="shrink-0" style="font-size:var(--text-sm); color:var(--color-text-muted); min-width:72px;">运行时</span>
+                            <span class="truncate" style="font-size:var(--text-sm); color:var(--color-text-primary); font-family:var(--font-mono);">Electron 28.1.0 / Node 18.19.0</span>
+                        </div>
+                    </div>
+                </section>
+
+            </div>
+        </div>
+    </main>
+
+    <!-- Custom Styles (must be in body, not head) -->
+    <style>
+        /* Toggle Switch — macOS System Settings style */
+        .toggle-switch {
+            background: none;
+            border: none;
+            padding: 0;
+            cursor: pointer;
+            outline: none;
+        }
+        .toggle-track {
+            display: block;
+            position: relative;
+            width: 40px;
+            height: 22px;
+            border-radius: 11px;
+            background: var(--color-border);
+            transition: background 0.2s ease;
+        }
+        .toggle-thumb {
+            position: absolute;
+            top: 2px;
+            left: 2px;
+            width: 18px;
+            height: 18px;
+            border-radius: 50%;
+            background: var(--color-text-muted);
+            transition: transform 0.2s ease, background 0.2s ease;
+        }
+        .toggle-switch.active .toggle-track {
+            background: var(--color-primary);
+        }
+        .toggle-switch.active .toggle-thumb {
+            transform: translateX(18px);
+            background: #ffffff;
+        }
+
+        /* Input focus */
+        input:focus {
+            border-color: var(--color-border-active) !important;
+            box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.15);
+        }
+
+        /* Button hover states */
+        button:hover {
+            opacity: 0.9;
+        }
+        button:active {
+            opacity: 0.8;
+        }
+
+        /* Responsive: stack to single column on smaller screens */
+        @media (max-width: 860px) {
+            div[style*="grid-template-columns: 55fr"] {
+                grid-template-columns: 1fr !important;
+            }
+        }
+    </style>
+
+    <script>lucide.createIcons();</script>
+</body>
+</html>

@@ -1,0 +1,336 @@
+<!DOCTYPE html>
+<html lang="zh-CN" class="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI 工具 — AI Workbench</title>
+    <style id="theme-vars">
+:root {
+  --color-primary: #2563eb;
+  --color-primary-hover: #1d4ed8;
+  --color-primary-muted: rgba(37, 99, 235, 0.12);
+  --color-primary-soft: rgba(37, 99, 235, 0.06);
+  --color-bg-app: #f8fafc;
+  --color-bg-sidebar: #ffffff;
+  --color-bg-main: #f8fafc;
+  --color-bg-surface: #ffffff;
+  --color-bg-elevated: #f1f5f9;
+  --color-bg-input: #f1f5f9;
+  --color-bg-hover: rgba(0, 0, 0, 0.03);
+  --color-bg-active: rgba(37, 99, 235, 0.08);
+  --color-text-primary: #0f172a;
+  --color-text-secondary: #475569;
+  --color-text-muted: #94a3b8;
+  --color-text-inverse: #ffffff;
+  --color-border: #e2e8f0;
+  --color-border-active: rgba(37, 99, 235, 0.4);
+  --state-success: #22c55e;
+  --state-warning: #f59e0b;
+  --state-error: #ef4444;
+  --state-info: #3b82f6;
+  --radius-sm: 4px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --radius-full: 9999px;
+  --font-sans: "Inter", ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --font-mono: "JetBrains Mono", "Fira Code", ui-monospace, "Cascadia Code", monospace;
+  --text-xs: 11px;
+  --text-sm: 12px;
+  --text-base: 13px;
+  --text-md: 14px;
+  --text-lg: 16px;
+  --text-xl: 20px;
+  --text-2xl: 28px;
+  --leading-tight: 1.25;
+  --leading-normal: 1.5;
+  --leading-relaxed: 1.625;
+  --font-weight-normal: 400;
+  --font-weight-medium: 500;
+  --font-weight-semibold: 600;
+  --font-weight-bold: 700;
+  --font-weight-extrabold: 800;
+  --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.05);
+  --shadow-elevated: 0 4px 12px rgba(0, 0, 0, 0.08);
+  --shadow-modal: 0 8px 32px rgba(0, 0, 0, 0.12);
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-10: 40px;
+  --sidebar-width: 272px;
+  --topbar-height: 48px;
+  --composer-height: auto;
+}
+
+    </style>
+    <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4.3.1/dist/index.global.js"></script>
+    <script src="https://unpkg.com/lucide@1.8.0/dist/umd/lucide.min.js"></script>
+    <style type="text/tailwindcss">
+  @theme inline {
+    --color-primary: var(--color-primary);
+    --color-border: var(--color-border);
+  }
+  @layer base {
+    body { background: var(--color-background); color: var(--color-text-primary); }
+    td, th { @apply break-words; word-break: break-all; word-break: auto-phrase; }
+    th { @apply whitespace-nowrap; }
+  }
+    </style>
+    <style>
+      .no-scrollbar::-webkit-scrollbar { display: none; }
+      .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+      [data-icon] {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        -webkit-mask-size: contain;
+        mask-size: contain;
+        -webkit-mask-repeat: no-repeat;
+        mask-repeat: no-repeat;
+        -webkit-mask-position: center;
+        mask-position: center;
+        background-color: currentColor;
+      }
+    </style>
+</head>
+<body style="background: var(--color-bg-app); color: var(--color-text-primary); font-family: var(--font-sans); margin: 0; height: 100vh; overflow: hidden;">
+
+  <!-- Fullscreen Dashboard Layout — NO SIDEBAR -->
+  <main class="flex flex-col h-screen overflow-y-auto" style="background: var(--color-bg-app);">
+
+    <!-- Top Bar -->
+    <header class="shrink-0 flex items-center justify-between px-6" style="height: var(--topbar-height); border-bottom: 1px solid var(--color-border); background: var(--color-bg-app);">
+      <a href="#" class="inline-flex items-center gap-1.5 shrink-0 whitespace-nowrap" style="font-size: var(--text-sm); color: var(--color-primary); text-decoration: none; font-weight: var(--font-weight-medium);">
+        <i data-lucide="arrow-left" style="width: 14px; height: 14px;"></i>
+        返回工作台
+      </a>
+      <h1 class="truncate" style="font-size: var(--text-md); font-weight: var(--font-weight-semibold); color: var(--color-text-primary); text-wrap: balance; word-break: keep-all; overflow-wrap: break-word;">AI 工具</h1>
+      <button class="inline-flex items-center gap-2 shrink-0 px-3 py-1.5 rounded-lg whitespace-nowrap" style="background: transparent; border: 1px solid var(--color-border); color: var(--color-text-secondary); font-size: var(--text-sm); font-weight: var(--font-weight-medium); cursor: pointer; transition: border-color 0.15s;">
+        <i data-lucide="refresh-cw" style="width: 13px; height: 13px;"></i>
+        重新检测
+      </button>
+    </header>
+
+    <!-- Dashboard Content -->
+    <div class="flex-1 overflow-y-auto" style="padding: var(--space-8) var(--space-10);">
+      <div style="max-width: 1200px; margin: 0 auto;">
+
+        <!-- Stats Row: 3 Large Metric Cards -->
+        <div class="grid gap-5 mb-8" style="grid-template-columns: repeat(3, 1fr);">
+
+          <!-- 可用 -->
+          <div class="rounded-lg px-6 py-5" style="background: var(--color-bg-surface); border: 1px solid var(--color-border); border-top: 3px solid var(--state-success);">
+            <div class="flex items-center gap-4">
+              <div class="inline-flex items-center justify-center shrink-0 rounded-lg" style="width: 44px; height: 44px; background: rgba(34, 197, 94, 0.12);">
+                <i data-lucide="check-circle" style="width: 22px; height: 22px; color: var(--state-success);"></i>
+              </div>
+              <div class="min-w-0">
+                <span class="whitespace-nowrap block" style="font-size: 36px; font-weight: var(--font-weight-bold); color: var(--state-success); line-height: 1;">3</span>
+                <span class="truncate block" style="font-size: var(--text-sm); color: var(--color-text-secondary);">可用</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- 缺失 -->
+          <div class="rounded-lg px-6 py-5" style="background: var(--color-bg-surface); border: 1px solid var(--color-border); border-top: 3px solid var(--state-warning);">
+            <div class="flex items-center gap-4">
+              <div class="inline-flex items-center justify-center shrink-0 rounded-lg" style="width: 44px; height: 44px; background: rgba(245, 158, 11, 0.12);">
+                <i data-lucide="alert-triangle" style="width: 22px; height: 22px; color: var(--state-warning);"></i>
+              </div>
+              <div class="min-w-0">
+                <span class="whitespace-nowrap block" style="font-size: 36px; font-weight: var(--font-weight-bold); color: var(--state-warning); line-height: 1;">1</span>
+                <span class="truncate block" style="font-size: var(--text-sm); color: var(--color-text-secondary);">缺失</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- 总计 -->
+          <div class="rounded-lg px-6 py-5" style="background: var(--color-bg-surface); border: 1px solid var(--color-border); border-top: 3px solid var(--state-info);">
+            <div class="flex items-center gap-4">
+              <div class="inline-flex items-center justify-center shrink-0 rounded-lg" style="width: 44px; height: 44px; background: rgba(59, 130, 246, 0.12);">
+                <i data-lucide="layers" style="width: 22px; height: 22px; color: var(--state-info);"></i>
+              </div>
+              <div class="min-w-0">
+                <span class="whitespace-nowrap block" style="font-size: 36px; font-weight: var(--font-weight-bold); color: var(--state-info); line-height: 1;">4</span>
+                <span class="truncate block" style="font-size: var(--text-sm); color: var(--color-text-secondary);">总计</span>
+              </div>
+            </div>
+          </div>
+
+        </div>
+        <!-- End Stats Row -->
+
+        <!-- Provider Cards — 2x2 Grid -->
+        <div class="grid gap-5" style="grid-template-columns: repeat(2, 1fr);">
+
+          <!-- Codex — Installed -->
+          <div class="rounded-lg px-6 py-5" style="background: var(--color-bg-surface); border: 1px solid var(--color-border); border-left: 4px solid #3b82f6;">
+            <div class="flex items-start justify-between gap-4 mb-3">
+              <div class="flex items-center gap-3 min-w-0">
+                <div class="inline-flex items-center justify-center shrink-0 rounded-lg" style="width: 40px; height: 40px; background: rgba(59, 130, 246, 0.12);">
+                  <i data-lucide="terminal" style="width: 20px; height: 20px; color: #3b82f6;"></i>
+                </div>
+                <div class="min-w-0">
+                  <span class="truncate block" style="font-size: var(--text-xl); font-weight: var(--font-weight-bold); color: var(--color-text-primary);">Codex</span>
+                  <code class="truncate whitespace-nowrap block rounded px-1.5 py-0.5 mt-0.5" style="font-family: var(--font-mono); font-size: var(--text-xs); background: var(--color-bg-elevated); color: var(--color-text-muted);">$ codex</code>
+                </div>
+              </div>
+              <span class="status-dot-installed shrink-0 mt-1"></span>
+            </div>
+            <div class="mb-4">
+              <span class="whitespace-nowrap" style="font-family: var(--font-mono); font-size: var(--text-sm); color: var(--color-text-muted);">v2.1.0</span>
+            </div>
+            <div class="flex items-center gap-2 flex-wrap">
+              <span class="inline-flex items-center justify-center whitespace-nowrap rounded-lg px-2.5 py-1" style="font-size: var(--text-xs); font-weight: var(--font-weight-medium); background: rgba(34, 197, 94, 0.12); color: var(--state-success);">已安装</span>
+              <span class="inline-flex items-center justify-center whitespace-nowrap rounded-lg px-2.5 py-1" style="font-size: var(--text-xs); font-weight: var(--font-weight-medium); background: rgba(34, 197, 94, 0.12); color: var(--state-success);">已登录</span>
+            </div>
+          </div>
+
+          <!-- Claude Code — Installed -->
+          <div class="rounded-lg px-6 py-5" style="background: var(--color-bg-surface); border: 1px solid var(--color-border); border-left: 4px solid #f97316;">
+            <div class="flex items-start justify-between gap-4 mb-3">
+              <div class="flex items-center gap-3 min-w-0">
+                <div class="inline-flex items-center justify-center shrink-0 rounded-lg" style="width: 40px; height: 40px; background: rgba(249, 115, 22, 0.12);">
+                  <i data-lucide="sparkles" style="width: 20px; height: 20px; color: #f97316;"></i>
+                </div>
+                <div class="min-w-0">
+                  <span class="truncate block" style="font-size: var(--text-xl); font-weight: var(--font-weight-bold); color: var(--color-text-primary);">Claude Code</span>
+                  <code class="truncate whitespace-nowrap block rounded px-1.5 py-0.5 mt-0.5" style="font-family: var(--font-mono); font-size: var(--text-xs); background: var(--color-bg-elevated); color: var(--color-text-muted);">$ claude</code>
+                </div>
+              </div>
+              <span class="status-dot-installed shrink-0 mt-1"></span>
+            </div>
+            <div class="mb-4">
+              <span class="whitespace-nowrap" style="font-family: var(--font-mono); font-size: var(--text-sm); color: var(--color-text-muted);">v1.0.85</span>
+            </div>
+            <div class="flex items-center gap-2 flex-wrap">
+              <span class="inline-flex items-center justify-center whitespace-nowrap rounded-lg px-2.5 py-1" style="font-size: var(--text-xs); font-weight: var(--font-weight-medium); background: rgba(34, 197, 94, 0.12); color: var(--state-success);">已安装</span>
+              <span class="inline-flex items-center justify-center whitespace-nowrap rounded-lg px-2.5 py-1" style="font-size: var(--text-xs); font-weight: var(--font-weight-medium); background: rgba(34, 197, 94, 0.12); color: var(--state-success);">已登录</span>
+            </div>
+          </div>
+
+          <!-- OpenCode — Installed -->
+          <div class="rounded-lg px-6 py-5" style="background: var(--color-bg-surface); border: 1px solid var(--color-border); border-left: 4px solid #a855f7;">
+            <div class="flex items-start justify-between gap-4 mb-3">
+              <div class="flex items-center gap-3 min-w-0">
+                <div class="inline-flex items-center justify-center shrink-0 rounded-lg" style="width: 40px; height: 40px; background: rgba(168, 85, 247, 0.12);">
+                  <i data-lucide="code-2" style="width: 20px; height: 20px; color: #a855f7;"></i>
+                </div>
+                <div class="min-w-0">
+                  <span class="truncate block" style="font-size: var(--text-xl); font-weight: var(--font-weight-bold); color: var(--color-text-primary);">OpenCode</span>
+                  <code class="truncate whitespace-nowrap block rounded px-1.5 py-0.5 mt-0.5" style="font-family: var(--font-mono); font-size: var(--text-xs); background: var(--color-bg-elevated); color: var(--color-text-muted);">$ opencode</code>
+                </div>
+              </div>
+              <span class="status-dot-installed shrink-0 mt-1"></span>
+            </div>
+            <div class="mb-4">
+              <span class="whitespace-nowrap" style="font-family: var(--font-mono); font-size: var(--text-sm); color: var(--color-text-muted);">v0.5.2</span>
+            </div>
+            <div class="flex items-center gap-2 flex-wrap">
+              <span class="inline-flex items-center justify-center whitespace-nowrap rounded-lg px-2.5 py-1" style="font-size: var(--text-xs); font-weight: var(--font-weight-medium); background: rgba(34, 197, 94, 0.12); color: var(--state-success);">已安装</span>
+              <span class="inline-flex items-center justify-center whitespace-nowrap rounded-lg px-2.5 py-1" style="font-size: var(--text-xs); font-weight: var(--font-weight-medium); background: rgba(34, 197, 94, 0.12); color: var(--state-success);">已登录</span>
+            </div>
+          </div>
+
+          <!-- DeepSeek — Not Installed -->
+          <div class="rounded-lg px-6 py-5" style="background: var(--color-bg-surface); border: 1px solid var(--color-border); border-left: 4px solid #14b8a6;">
+            <div class="flex items-start justify-between gap-4 mb-3">
+              <div class="flex items-center gap-3 min-w-0">
+                <div class="inline-flex items-center justify-center shrink-0 rounded-lg" style="width: 40px; height: 40px; background: rgba(20, 184, 166, 0.12);">
+                  <i data-lucide="bot" style="width: 20px; height: 20px; color: #14b8a6;"></i>
+                </div>
+                <div class="min-w-0">
+                  <span class="truncate block" style="font-size: var(--text-xl); font-weight: var(--font-weight-bold); color: var(--color-text-primary);">DeepSeek</span>
+                  <code class="truncate whitespace-nowrap block rounded px-1.5 py-0.5 mt-0.5" style="font-family: var(--font-mono); font-size: var(--text-xs); background: var(--color-bg-elevated); color: var(--color-text-muted);">$ deepseek</code>
+                </div>
+              </div>
+              <span class="status-dot-missing shrink-0 mt-1"></span>
+            </div>
+            <div class="mb-4">
+              <span class="whitespace-nowrap" style="font-family: var(--font-mono); font-size: var(--text-sm); color: var(--state-warning);">Command not found</span>
+            </div>
+            <div class="flex items-center gap-2 flex-wrap">
+              <span class="inline-flex items-center justify-center whitespace-nowrap rounded-lg px-2.5 py-1" style="font-size: var(--text-xs); font-weight: var(--font-weight-medium); background: rgba(245, 158, 11, 0.12); color: var(--state-warning);">未安装</span>
+              <span class="inline-flex items-center justify-center whitespace-nowrap rounded-lg px-2.5 py-1" style="font-size: var(--text-xs); font-weight: var(--font-weight-medium); background: rgba(239, 68, 68, 0.12); color: var(--state-error);">未登录</span>
+            </div>
+          </div>
+
+        </div>
+        <!-- End Provider Grid -->
+
+        <!-- Install Instructions — Collapsed Section -->
+        <section class="mt-8 rounded-lg" style="background: var(--color-bg-surface); border: 1px solid var(--color-border);">
+          <details>
+            <summary class="flex items-center justify-between px-6 py-4 cursor-pointer" style="list-style: none;">
+              <div class="flex items-center gap-2.5">
+                <i data-lucide="book-open" style="width: 16px; height: 16px; color: var(--color-text-muted); flex-shrink: 0;"></i>
+                <span class="truncate" style="font-size: var(--text-md); font-weight: var(--font-weight-medium); color: var(--color-text-primary);">安装说明</span>
+              </div>
+              <i data-lucide="chevron-down" style="width: 16px; height: 16px; color: var(--color-text-muted); flex-shrink: 0;"></i>
+            </summary>
+            <div class="px-6 pb-5">
+              <div class="flex flex-col gap-4">
+
+                <!-- DeepSeek Install -->
+                <div class="rounded-lg px-4 py-3" style="background: var(--color-bg-app);">
+                  <div class="flex items-center gap-2 mb-2">
+                    <i data-lucide="bot" style="width: 14px; height: 14px; color: #14b8a6; flex-shrink: 0;"></i>
+                    <span class="truncate" style="font-size: var(--text-sm); font-weight: var(--font-weight-medium); color: var(--color-text-primary);">DeepSeek</span>
+                  </div>
+                  <code class="block whitespace-nowrap rounded px-3 py-2" style="font-family: var(--font-mono); font-size: var(--text-sm); background: var(--color-bg-elevated); color: var(--color-text-secondary);">npm install -g @anthropic-ai/deepseek-cli</code>
+                </div>
+
+                <!-- General Note -->
+                <div class="flex items-start gap-2 px-1">
+                  <i data-lucide="info" style="width: 14px; height: 14px; color: var(--color-text-muted); flex-shrink: 0; margin-top: 2px;"></i>
+                  <p class="truncate" style="font-size: var(--text-sm); color: var(--color-text-secondary); line-height: var(--leading-normal);">安装完成后请点击"重新检测"按钮以刷新状态。</p>
+                </div>
+
+              </div>
+            </div>
+          </details>
+        </section>
+
+      </div>
+    </div>
+
+  </main>
+
+  <!-- Lucide init -->
+  <script>lucide.createIcons();</script>
+
+  <!-- Custom styles for status dots -->
+  <style>
+    @layer base {
+      .status-dot-installed,
+      .status-dot-missing {
+        display: inline-block;
+        width: 10px;
+        height: 10px;
+        border-radius: 50%;
+        flex-shrink: 0;
+      }
+      .status-dot-installed {
+        background: var(--state-success);
+        box-shadow: 0 0 8px 2px rgba(34, 197, 94, 0.4);
+        animation: pulse-green 2s ease-in-out infinite;
+      }
+      .status-dot-missing {
+        background: var(--state-warning);
+        box-shadow: 0 0 6px 2px rgba(245, 158, 11, 0.3);
+      }
+      @keyframes pulse-green {
+        0%, 100% { box-shadow: 0 0 8px 2px rgba(34, 197, 94, 0.4); }
+        50% { box-shadow: 0 0 12px 4px rgba(34, 197, 94, 0.6); }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        .status-dot-installed { animation: none; }
+      }
+    }
+  </style>
+
+</body>
+</html>
