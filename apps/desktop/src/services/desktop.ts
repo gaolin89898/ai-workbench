@@ -103,6 +103,7 @@ export type ChatSegment =
       summary?: string;
       input?: string;
       output?: string;
+      diff?: string;
       durationMs?: number;
       additions?: number;
       deletions?: number;
@@ -121,6 +122,7 @@ export type ChatMessage = {
   text?: string;
   pending?: boolean;
   segments?: ChatSegment[];
+  images?: ChatImageAttachment[];
 };
 
 export type AiHistoryMessage = {
@@ -147,13 +149,24 @@ export type RunCodexChatRequest = {
   aiSessionId: string;
   projectPath: string;
   prompt: string;
+  images?: ChatImageAttachment[];
 };
 
 export type RunAiChatRequest = {
   aiSessionId: string;
   projectPath: string;
   prompt: string;
+  images?: ChatImageAttachment[];
 };
+
+export type ChatImageAttachment = {
+  id: string;
+  name: string;
+  mimeType: string;
+  dataUrl: string;
+};
+
+export type ClipboardImage = Omit<ChatImageAttachment, "id">;
 
 export type ResizeShellRequest = {
   aiSessionId: string;
@@ -225,6 +238,8 @@ export const desktopApi = {
     ipc<string>("build_desktop_pairing_qr_payload", server, code),
   getCloudConfig: (): Promise<SavedCloudConfig | null> =>
     ipc<SavedCloudConfig | null>("get_cloud_config"),
+  readClipboardImage: (): Promise<ClipboardImage | null> =>
+    ipc<ClipboardImage | null>("read_clipboard_image"),
   listAiProviders: (): Promise<AiProvider[]> =>
     ipc<AiProvider[]>("list_ai_providers"),
   detectAiProviders: (): Promise<ProviderStatus[]> =>

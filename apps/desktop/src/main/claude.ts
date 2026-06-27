@@ -14,7 +14,8 @@ type Sender = { send: (channel: string, ...args: unknown[]) => void };
 // ---------- Constants ----------
 
 const CLAUDE_TIMEOUT_MS = 120_000;
-const activeClaudeRuns = new Map<string, () => void>();
+const CLI_INTERRUPT_FALLBACK_MS = 1500;
+const activeClaudeRuns = new Map<string, { stop: () => void; sender: Sender }>();
 
 function spawnClaude(args: string[], options?: { cwd?: string }): ChildProcessWithoutNullStreams {
   if (process.platform === "win32") {
@@ -51,6 +52,10 @@ function emit(sender: Sender, event: AiChatOutputEvent): void {
 
 function strOrUndef(v: unknown): string | undefined {
   return typeof v === "string" ? v : undefined;
+}
+
+function isUserStopError(err: unknown): boolean {
+  return err instanceof Error && err.message === "AI chat stopped by user";
 }
 
 // Extract incremental text from a content_block_delta message.
@@ -101,6 +106,9 @@ function runClaudeOnce(
   existingSessionId: string | null
 ): Promise<string> {
   const { aiSessionId, projectPath, prompt } = req;
+  const imageNote = req.images?.length
+    ? `\n\n[用户还粘贴了 ${req.images.length} 张图片；当前 Claude CLI 集成暂未直接传递图片二进制，请根据用户文字继续，并在需要时提示用户改用 Codex 或描述图片内容。]`
+    : "";
 
   // Build CLI args
   const args = [
@@ -114,7 +122,7 @@ function runClaudeOnce(
   if (existingSessionId) {
     args.push("--resume", existingSessionId);
   }
-  args.push(prompt);
+  args.push(`${prompt}${imageNote}`);
 
   const child: ChildProcessWithoutNullStreams = spawnClaude(args, { cwd: projectPath });
 
@@ -190,9 +198,42 @@ function runClaudeOnce(
       }
     }
 
-    activeClaudeRuns.set(aiSessionId, () => {
-      killChild();
-      reject(new Error("AI chat stopped by user"));
+    function interruptChild(): void {
+      if (closed) return;
+      closed = true;
+      clearTimeout(timeout);
+      activeClaudeRuns.delete(aiSessionId);
+      try {
+        rl.close();
+      } catch {
+        // ignore
+      }
+      try {
+        child.kill("SIGINT");
+      } catch {
+        // ignore
+      }
+      setTimeout(() => {
+        if (child.killed || child.exitCode !== null || child.signalCode !== null) return;
+        try {
+          child.stdin.end();
+        } catch {
+          // ignore
+        }
+        try {
+          child.kill();
+        } catch {
+          // ignore
+        }
+      }, CLI_INTERRUPT_FALLBACK_MS);
+    }
+
+    activeClaudeRuns.set(aiSessionId, {
+      sender,
+      stop: () => {
+        interruptChild();
+        reject(new Error("AI chat stopped by user"));
+      },
     });
 
     // ----- stdout: parse stream-json lines -----
@@ -371,6 +412,7 @@ export async function runAiChat(
     try {
       return await runClaudeOnce(req, sender, sessionId);
     } catch (err) {
+      if (isUserStopError(err)) return sessionId;
       // Retry without --resume only for resume-specific failures
       if (
         err &&
@@ -394,13 +436,29 @@ export async function runAiChat(
     }
   }
 
-  return await runClaudeOnce(req, sender, null);
+  try {
+    return await runClaudeOnce(req, sender, null);
+  } catch (err) {
+    if (isUserStopError(err)) return "";
+    throw err;
+  }
 }
 
 export function stopAiChat(aiSessionId: string): boolean {
-  const stop = activeClaudeRuns.get(aiSessionId);
-  if (!stop) return false;
-  stop();
+  const run = activeClaudeRuns.get(aiSessionId);
+  if (!run) return false;
+  emit(run.sender, {
+    aiSessionId,
+    kind: "done",
+    text: "",
+    segment: {
+      type: "status",
+      stepId: "interrupted",
+      label: "已中断",
+      icon: "warn",
+    },
+  });
+  run.stop();
   return true;
 }
 

@@ -1,16 +1,18 @@
-import type { ChatSegment } from "../services/desktop";
+import type { ChatImageAttachment, ChatSegment } from "../services/desktop";
 
 const STRUCTURED_MESSAGE_PREFIX = "__AI_WORKBENCH_MESSAGE_V1__";
 
 export type StoredAssistantMessage = {
   text: string;
   segments?: ChatSegment[];
+  images?: ChatImageAttachment[];
 };
 
 export function encodeAssistantMessageForStorage(message: StoredAssistantMessage) {
   return `${STRUCTURED_MESSAGE_PREFIX}${JSON.stringify({
     text: message.text,
     segments: message.segments,
+    images: message.images,
   })}`;
 }
 
@@ -22,7 +24,8 @@ export function decodeAssistantMessageFromStorage(value: string): StoredAssistan
     const record = parsed as Record<string, unknown>;
     const text = typeof record.text === "string" ? record.text : "";
     const segments = Array.isArray(record.segments) ? (record.segments as ChatSegment[]) : undefined;
-    return { text, segments };
+    const images = Array.isArray(record.images) ? (record.images as ChatImageAttachment[]) : undefined;
+    return { text, segments, images };
   } catch {
     return { text: value };
   }
@@ -252,6 +255,10 @@ function parseStatusLine(value: string): ChatSegment | null {
 }
 
 function parseToolStart(value: string): { toolName: string; command?: string; summary?: string } | null {
+  const ranZh = value.match(/^已运行\s+(.+)$/i);
+  if (ranZh) {
+    return { toolName: "命令", command: ranZh[1].trim(), summary: "已执行本地命令" };
+  }
   const ran = value.match(/^Ran\s+(.+)$/i);
   if (ran) {
     return { toolName: "命令", command: ran[1].trim(), summary: "已执行本地命令" };

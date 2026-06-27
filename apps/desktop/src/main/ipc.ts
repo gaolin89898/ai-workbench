@@ -9,7 +9,7 @@
 // Example: window.desktop.ipc.pairDesktop("http://...", "ABC123") ->
 //   ipcMain.handle("pair_desktop", (_event, args) => { const [server, code] = args; ... })
 
-import { ipcMain, BrowserWindow, type WebContents } from "electron";
+import { ipcMain, BrowserWindow, clipboard, type WebContents } from "electron";
 import { randomUUID } from "node:crypto";
 import * as db from "./db";
 import * as pty from "./pty";
@@ -84,6 +84,16 @@ export function registerIpcHandlers(win?: BrowserWindow): void {
   );
 
   ipcMain.handle("get_cloud_config", async () => getCloudConfig());
+
+  ipcMain.handle("read_clipboard_image", async () => {
+    const image = clipboard.readImage();
+    if (image.isEmpty()) return null;
+    return {
+      name: "截图",
+      mimeType: "image/png",
+      dataUrl: image.toDataURL(),
+    };
+  });
 
   // ---------- AI providers ----------
 
@@ -206,9 +216,11 @@ export function registerIpcHandlers(win?: BrowserWindow): void {
 
   ipcMain.handle("run_codex_chat", async (_event, args: [RunCodexChatRequest]) => {
     const req = args[0];
+    const session = db.getLocalAiSession(req.aiSessionId);
+    const existingSessionId = session?.providerSessionId ?? null;
     const providerSessionId = await runCodexChat(req, getSender());
     db.updateLocalAiSession(req.aiSessionId, {
-      providerSessionId: providerSessionId || null,
+      providerSessionId: providerSessionId || existingSessionId,
       status: "completed",
     });
     return providerSessionId;

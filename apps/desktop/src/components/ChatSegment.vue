@@ -21,6 +21,16 @@ const renderedTextBlocks = computed(() => {
   return parseMarkdownBlocks(props.segment.text);
 });
 
+type DiffLine = {
+  type: "add" | "delete" | "meta" | "context";
+  text: string;
+};
+
+const toolDiffLines = computed<DiffLine[]>(() => {
+  if (props.segment.type !== "tool" || !props.segment.diff) return [];
+  return parseDiffLines(props.segment.diff);
+});
+
 function formatDuration(durationMs?: number) {
   if (!durationMs) return "";
   if (durationMs < 1000) return `${durationMs}ms`;
@@ -39,8 +49,10 @@ function toolLineTitle(segment: Extract<ChatSegmentType, { type: "tool" }>) {
     return segment.status === "running" ? "正在扫描项目" : "已扫描项目";
   }
   if (segment.toolName.includes("修改") || segment.toolName.includes("文件")) {
-    if (segment.status === "error") return "编辑文件失败";
-    return segment.status === "running" ? "正在编辑文件" : "已编辑文件";
+    if (segment.status === "error") return command ? `修改 ${command} 文件失败` : "修改文件失败";
+    return command
+      ? `${segment.status === "running" ? "正在修改" : "已修改"} ${command} 文件`
+      : (segment.status === "running" ? "正在修改文件" : "已修改文件");
   }
   if (segment.toolName.includes("命令") || segment.command) {
     if (segment.status === "error") return command ? `运行失败 ${command}` : "运行命令失败";
@@ -60,7 +72,7 @@ function toolLineMeta(segment: Extract<ChatSegmentType, { type: "tool" }>) {
 }
 
 function toolHasDetails(segment: Extract<ChatSegmentType, { type: "tool" }>) {
-  return Boolean(segment.input || segment.output);
+  return Boolean(segment.input || segment.output || segment.diff);
 }
 
 function toolDetailText(segment: Extract<ChatSegmentType, { type: "tool" }>, value?: string) {
@@ -87,6 +99,17 @@ function shortenCommand(command?: string) {
     .trim();
   const unquoted = cleaned.replace(/^['"](.+)['"]$/, "$1");
   return unquoted.length > 88 ? `${unquoted.slice(0, 85)}...` : unquoted;
+}
+
+function parseDiffLines(diff: string): DiffLine[] {
+  return diff.replace(/\r\n/g, "\n").split("\n").map((line) => {
+    if (line.startsWith("+") && !line.startsWith("+++")) return { type: "add", text: line };
+    if (line.startsWith("-") && !line.startsWith("---")) return { type: "delete", text: line };
+    if (line.startsWith("@@") || line.startsWith("diff ") || line.startsWith("index ") || line.startsWith("+++") || line.startsWith("---")) {
+      return { type: "meta", text: line };
+    }
+    return { type: "context", text: line };
+  });
 }
 
 function parseMarkdownBlocks(text: string): MarkdownBlock[] {
@@ -343,13 +366,27 @@ function inlineParts(text: string) {
         <path d="M5 6.5 8 9.5l3-3" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" />
       </svg>
     </summary>
-    <div v-if="segment.input || segment.output" class="chat-segment-tool-details">
-      <section v-if="segment.input">
+    <div v-if="segment.input || segment.output || segment.diff" class="chat-segment-tool-details">
+      <section v-if="toolDiffLines.length" class="chat-segment-diff-section">
+        <div class="chat-segment-diff">
+          <div
+            v-for="(line, lineIndex) in toolDiffLines"
+            :key="lineIndex"
+            class="chat-segment-diff-line"
+            :class="line.type"
+          >
+            <code>{{ line.text || " " }}</code>
+          </div>
+        </div>
+      </section>
+      <details v-if="segment.input" class="chat-segment-output-block">
+        <summary>查看输入</summary>
         <pre>{{ toolDetailText(segment, segment.input) }}</pre>
-      </section>
-      <section v-if="segment.output">
+      </details>
+      <details v-if="segment.output" class="chat-segment-output-block">
+        <summary>查看输出</summary>
         <pre>{{ toolDetailText(segment, segment.output) }}</pre>
-      </section>
+      </details>
     </div>
   </details>
 

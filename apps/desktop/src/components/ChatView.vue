@@ -3,15 +3,18 @@ import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue"
 import ChatMessageRow from "./ChatMessageRow.vue";
 import TerminalView from "./TerminalView.vue";
 import { useWorkspace } from "../composables/useWorkspace";
-import type { AiProvider } from "../services/desktop";
+import { desktopApi, type AiProvider, type ChatImageAttachment } from "../services/desktop";
 
 const providerClaudeIcon = new URL("../assets/icons/provider-claude.svg", import.meta.url).href;
 const providerCodexIcon = new URL("../assets/icons/provider-codex.svg", import.meta.url).href;
 const providerDeepseekIcon = new URL("../assets/icons/provider-deepseek.svg", import.meta.url).href;
 const providerOpencodeIcon = new URL("../assets/icons/provider-opencode.svg", import.meta.url).href;
+const sendIcon = new URL("../assets/icons/send.svg", import.meta.url).href;
 const ws = useWorkspace();
 
 const prompt = ref("");
+const imageAttachments = ref<ChatImageAttachment[]>([]);
+const previewImage = ref<ChatImageAttachment | null>(null);
 const chatScroll = ref<HTMLDivElement | null>(null);
 const startPromptBox = ref<HTMLFormElement | null>(null);
 const activeTab = ref<"chat" | "terminal" | "logs">("chat");
@@ -55,12 +58,17 @@ const activeProviderName = computed(() => {
     ?? builtInProviders.find((provider) => provider.id === providerId)?.name
     ?? "AI";
 });
+const canSend = computed(() => Boolean(prompt.value.trim() || imageAttachments.value.length || ws.activeChatIsRunning.value));
 const providerIcons: Record<string, string> = {
   claude: providerClaudeIcon,
   codex: providerCodexIcon,
   deepseek: providerDeepseekIcon,
   opencode: providerOpencodeIcon,
 };
+
+function createAttachmentId() {
+  return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+}
 
 function providerIcon(providerId: string) {
   return providerIcons[providerId] ?? providerCodexIcon;
@@ -74,6 +82,11 @@ function closeStartMenuOnOutsideClick(event: PointerEvent) {
 }
 
 function onWindowKeydown(event: KeyboardEvent) {
+  if (event.key === "Escape" && previewImage.value) {
+    event.preventDefault();
+    previewImage.value = null;
+    return;
+  }
   if (event.key !== "Escape" || !ws.activeChatIsRunning.value) return;
   event.preventDefault();
   void ws.stopActiveAiChat();
@@ -83,6 +96,85 @@ function projectForNewSession() {
   const project = currentProject.value ?? ws.projects.value[0];
   if (project) ws.selectedProjectPath.value = project.path;
   return project;
+}
+
+function fileToDataUrl(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.addEventListener("load", () => {
+      if (typeof reader.result === "string") resolve(reader.result);
+      else reject(new Error("图片读取失败"));
+    });
+    reader.addEventListener("error", () => reject(reader.error ?? new Error("图片读取失败")));
+    reader.readAsDataURL(file);
+  });
+}
+
+async function addImageFiles(files: File[]) {
+  const images = files.filter((file) => file.type.startsWith("image/"));
+  if (!images.length) return;
+  const next: ChatImageAttachment[] = [];
+  for (const file of images) {
+    next.push({
+      id: createAttachmentId(),
+      name: file.name || "截图",
+      mimeType: file.type || "image/png",
+      dataUrl: await fileToDataUrl(file),
+    });
+  }
+  imageAttachments.value = [...imageAttachments.value, ...next].slice(0, 6);
+}
+
+async function addClipboardImageFallback() {
+  try {
+    const image = await desktopApi.readClipboardImage();
+    if (!image) return false;
+    imageAttachments.value = [
+      ...imageAttachments.value,
+      { ...image, id: createAttachmentId() },
+    ].slice(0, 6);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function onPromptPaste(event: ClipboardEvent) {
+  const clipboardFiles = [...(event.clipboardData?.files ?? [])].filter((file) => file.type.startsWith("image/"));
+  const files = clipboardFiles.length ? clipboardFiles : [...(event.clipboardData?.items ?? [])]
+    .filter((item) => item.type.startsWith("image/"))
+    .map((item) => item.getAsFile())
+    .filter((file): file is File => Boolean(file));
+  const seenFiles = new Set<string>();
+  const imageFiles = files.filter((file) => {
+    if (!file.type.startsWith("image/")) return false;
+    const key = `${file.name}:${file.type}:${file.size}`;
+    if (seenFiles.has(key)) return false;
+    seenFiles.add(key);
+    return true;
+  });
+  if (imageFiles.length) {
+    event.preventDefault();
+    await addImageFiles(imageFiles);
+    return;
+  }
+
+  const hasText = Boolean(event.clipboardData?.getData("text/plain"));
+  if (hasText) return;
+  if (await addClipboardImageFallback()) event.preventDefault();
+}
+
+function removeImageAttachment(id: string) {
+  imageAttachments.value = imageAttachments.value.filter((image) => image.id !== id);
+  if (previewImage.value?.id === id) previewImage.value = null;
+}
+
+function openImagePreview(image: ChatImageAttachment) {
+  previewImage.value = image;
+}
+
+function closeImagePreview() {
+  previewImage.value = null;
 }
 
 watch(
@@ -110,36 +202,41 @@ async function send() {
     return;
   }
   const value = prompt.value.trim();
-  if (!value) return;
+  const images = imageAttachments.value.map((image) => ({
+    id: image.id,
+    name: image.name,
+    mimeType: image.mimeType,
+    dataUrl: image.dataUrl,
+  }));
+  if (!value && !images.length) return;
   prompt.value = "";
+  imageAttachments.value = [];
   if (!ws.activeAiSession.value) {
     const project = projectForNewSession();
     if (!project) {
       await ws.chooseProject();
       prompt.value = value;
+      imageAttachments.value = images;
       return;
     }
     ws.selectedProviderId.value = selectedProvider.value?.id ?? "codex";
     const session = await ws.createAiSession();
     if (!session) {
       prompt.value = value;
+      imageAttachments.value = images;
       return;
     }
   }
-  await ws.sendPrompt(value);
+  await ws.sendPrompt(value, images);
 }
 
-async function createStartSession(providerId = "codex") {
+function selectStartProvider(providerId = "codex") {
   startMenuOpen.value = false;
-  const project = projectForNewSession();
-  if (!project) {
-    await ws.chooseProject();
-    return;
-  }
-  await ws.createAiSessionForProject(project.path, providerId);
+  ws.selectedProviderId.value = providerId;
 }
 
 function onPromptKeydown(event: KeyboardEvent) {
+  if (event.key === "Enter" && event.shiftKey) return;
   if (event.key === "Enter" && !event.shiftKey) {
     event.preventDefault();
     if (ws.activeChatIsRunning.value) return;
@@ -154,21 +251,55 @@ function onPromptKeydown(event: KeyboardEvent) {
       <div class="codex-start-inner">
         <h1>{{ startTitle }}</h1>
         <form ref="startPromptBox" class="codex-prompt-box" @submit.prevent="send">
+          <div v-if="imageAttachments.length" class="chat-image-attachments start-attachments">
+            <div
+              v-for="image in imageAttachments"
+              :key="image.id"
+              class="chat-image-chip"
+            >
+              <button class="chat-image-preview-trigger" type="button" title="预览图片" @click="openImagePreview(image)">
+                <img :src="image.dataUrl" :alt="image.name" />
+              </button>
+              <button class="chat-image-remove" type="button" title="移除图片" @click="removeImageAttachment(image.id)">x</button>
+            </div>
+          </div>
           <textarea
             v-model="prompt"
             rows="2"
             placeholder="输入你想做的事"
             @keydown="onPromptKeydown"
+            @paste="onPromptPaste"
           ></textarea>
-          <button class="codex-start-add" title="新建 AI 会话" type="button" @click="startMenuOpen = !startMenuOpen" aria-label="新建 AI 会话"></button>
+          <button
+            class="codex-start-add"
+            :class="{ open: startMenuOpen }"
+            title="选择 AI 会话类型"
+            type="button"
+            @click="startMenuOpen = !startMenuOpen"
+            aria-label="选择 AI 会话类型"
+          >
+            <img :src="providerIcon(selectedProvider?.id ?? 'codex')" alt="" aria-hidden="true" />
+            <span>{{ selectedProvider?.name ?? "Codex CLI" }}</span>
+            <svg class="codex-start-add-chevron" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+              <path d="M5 6.5 8 9.5l3-3" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" />
+            </svg>
+          </button>
           <div v-if="startMenuOpen" class="codex-start-menu">
-            <span class="codex-start-menu-label">新建 AI 会话</span>
-            <button v-for="provider in providerChoices" :key="provider.id" type="button" @click="createStartSession(provider.id)">
+            <span class="codex-start-menu-label">AI 会话类型</span>
+            <button
+              v-for="provider in providerChoices"
+              :key="provider.id"
+              type="button"
+              :class="{ active: provider.id === selectedProvider?.id }"
+              @click="selectStartProvider(provider.id)"
+            >
               <img :src="providerIcon(provider.id)" alt="" aria-hidden="true" />
-              <span>新建 {{ provider.name }} 会话</span>
+              <span>{{ provider.name }}</span>
             </button>
           </div>
-          <button class="codex-send-button" :disabled="!prompt.trim()" title="发送" type="submit">↑</button>
+          <button class="codex-send-button" :disabled="!prompt.trim() && !imageAttachments.length" title="发送" type="submit" aria-label="发送">
+            <img :src="sendIcon" alt="" aria-hidden="true" />
+          </button>
         </form>
         <div v-if="ws.createAiError.value && showCreateHint" class="chat-toast start-toast error">{{ ws.createAiResult.value }}</div>
       </div>
@@ -251,22 +382,41 @@ function onPromptKeydown(event: KeyboardEvent) {
         </div>
         <div v-if="showCreateHint" class="chat-toast" :class="{ error: ws.createAiError.value }">{{ ws.createAiResult.value }}</div>
         <div v-if="activeTab === 'chat'" class="chat-composer">
-          <textarea v-model="prompt" rows="3" placeholder="输入你想做的事" @keydown="onPromptKeydown"></textarea>
+          <div v-if="imageAttachments.length" class="chat-image-attachments">
+            <div
+              v-for="image in imageAttachments"
+              :key="image.id"
+              class="chat-image-chip"
+            >
+              <button class="chat-image-preview-trigger" type="button" title="预览图片" @click="openImagePreview(image)">
+                <img :src="image.dataUrl" :alt="image.name" />
+              </button>
+              <button class="chat-image-remove" type="button" title="移除图片" @click="removeImageAttachment(image.id)">x</button>
+            </div>
+          </div>
+          <textarea v-model="prompt" rows="3" placeholder="输入你想做的事" @keydown="onPromptKeydown" @paste="onPromptPaste"></textarea>
           <button
             class="codex-send-button chat-send-button"
             :class="{ stopping: ws.activeChatIsRunning.value }"
-            :disabled="!prompt.trim() && !ws.activeChatIsRunning.value"
+            :disabled="!canSend"
             :title="ws.activeChatIsRunning.value ? '中断' : '发送'"
             type="button"
             @click="send"
             :aria-label="ws.activeChatIsRunning.value ? '中断' : '发送'"
           >
             <span v-if="ws.activeChatIsRunning.value" class="chat-stop-icon" aria-hidden="true"></span>
-            <span v-else aria-hidden="true">↑</span>
+            <img v-else :src="sendIcon" alt="" aria-hidden="true" />
           </button>
         </div>
       </article>
     </section>
     </template>
+    <div v-if="previewImage" class="chat-image-preview-overlay" role="dialog" aria-modal="true" @click="closeImagePreview">
+      <figure class="chat-image-preview-dialog" @click.stop>
+        <button class="chat-image-preview-close" type="button" title="关闭预览" @click="closeImagePreview">x</button>
+        <img :src="previewImage.dataUrl" :alt="previewImage.name" />
+        <figcaption>{{ previewImage.name }}</figcaption>
+      </figure>
+    </div>
   </section>
 </template>

@@ -2,6 +2,8 @@
   "name": "ai-workbench-desktop",
   "version": "0.1.0",
   "description": "AI Workbench Desktop",
+  "author": "gaolin89898",
+  "homepage": "https://github.com/gaolin89898/ai-workbench",
   "main": "out/main/index.js",
   "scripts": {
     "dev": "electron-vite dev",

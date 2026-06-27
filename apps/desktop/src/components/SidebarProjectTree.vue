@@ -5,10 +5,6 @@ import type { AiProvider, AiSession, TerminalSession, ViewName, WorkspaceProject
 const archiveBoxIcon = new URL("../assets/icons/archive-box.svg", import.meta.url).href;
 const projectFolderIcon = new URL("../assets/icons/project-folder.svg", import.meta.url).href;
 const sessionPlusIcon = new URL("../assets/icons/session-plus.svg", import.meta.url).href;
-const providerClaudeIcon = new URL("../assets/icons/provider-claude.svg", import.meta.url).href;
-const providerCodexIcon = new URL("../assets/icons/provider-codex.svg", import.meta.url).href;
-const providerDeepseekIcon = new URL("../assets/icons/provider-deepseek.svg", import.meta.url).href;
-const providerOpencodeIcon = new URL("../assets/icons/provider-opencode.svg", import.meta.url).href;
 const settingsIcon = new URL("../assets/icons/settings.svg", import.meta.url).href;
 const pinIcon = new URL("../assets/icons/pin.svg", import.meta.url).href;
 const folderOpenIcon = new URL("../assets/icons/folder-open.svg", import.meta.url).href;
@@ -56,8 +52,7 @@ const emit = defineEmits<{
 
 const openProjectMenuPath = ref<string | null>(null);
 const openContextMenu = ref<{ session: AiSession; x: number; y: number } | null>(null);
-const collapsedGroups = ref<Record<string, boolean>>({});
-const expandedGroups = ref<Record<string, boolean>>({});
+const expandedProjectSessions = ref<Record<string, boolean>>({});
 const renameDialog = ref<{ target: AiSession | WorkspaceProject; kind: "session" | "project" } | null>(null);
 const renameDraft = ref("");
 const confirmDialog = ref<{ title: string; message: string; details?: string; action: () => void } | null>(null);
@@ -74,91 +69,31 @@ function toggleProjectCollapsed(path: string) {
   };
 }
 const COLLAPSED_SESSION_LIMIT = 5;
-type SessionProviderGroup = { id: string; label: string; sessions: AiSession[] };
-
-function groupCollapseKey(projectPath: string, groupId: string) {
-  return `${projectPath}::${groupId}`;
-}
-
-const providerIcons: Record<string, string> = {
-  claude: providerClaudeIcon,
-  codex: providerCodexIcon,
-  deepseek: providerDeepseekIcon,
-  opencode: providerOpencodeIcon,
-};
-
-const providerGroupLabels: Record<string, string> = {
-  claude: "Claude Code",
-  codex: "Codex",
-  opencode: "OpenCode",
-  deepseek: "DeepSeek",
-};
-
-const providerGroupOrder = ["codex", "claude", "opencode", "deepseek"];
-
-function providerIcon(providerId: string) {
-  return providerIcons[providerId] ?? providerCodexIcon;
-}
 
 function sessionsForProject(path: string) {
   return props.activeSessions.filter((session) => session.summary === path);
 }
 
-function providerLabel(providerId: string) {
-  return providerGroupLabels[providerId] ?? props.providers.find((provider) => provider.id === providerId)?.name ?? providerId;
+function visibleSessionsForProject(path: string) {
+  const sessions = sessionsForProject(path);
+  if (expandedProjectSessions.value[path]) return sessions;
+  return sessions.slice(0, COLLAPSED_SESSION_LIMIT);
 }
 
-function sessionGroupsForProject(path: string): SessionProviderGroup[] {
-  const groups = new Map<string, AiSession[]>();
-  for (const session of sessionsForProject(path)) {
-    groups.set(session.providerId, [...(groups.get(session.providerId) ?? []), session]);
-  }
-  return [...groups.entries()]
-    .map(([id, sessions]) => ({ id, label: providerLabel(id), sessions }))
-    .sort((left, right) => {
-      const leftIndex = providerGroupOrder.indexOf(left.id);
-      const rightIndex = providerGroupOrder.indexOf(right.id);
-      if (leftIndex !== -1 || rightIndex !== -1) {
-        return (leftIndex === -1 ? providerGroupOrder.length : leftIndex) - (rightIndex === -1 ? providerGroupOrder.length : rightIndex);
-      }
-      return left.label.localeCompare(right.label);
-    });
+function hiddenSessionCountForProject(path: string) {
+  if (expandedProjectSessions.value[path]) return 0;
+  return Math.max(0, sessionsForProject(path).length - COLLAPSED_SESSION_LIMIT);
 }
 
-function isGroupCollapsed(projectPath: string, groupId: string) {
-  return Boolean(collapsedGroups.value[groupCollapseKey(projectPath, groupId)]);
+function isProjectSessionsExpanded(path: string) {
+  return Boolean(expandedProjectSessions.value[path]);
 }
 
-function toggleGroupCollapsed(projectPath: string, groupId: string) {
-  const key = groupCollapseKey(projectPath, groupId);
-  collapsedGroups.value = {
-    ...collapsedGroups.value,
-    [key]: !collapsedGroups.value[key],
+function toggleProjectSessionsExpanded(path: string) {
+  expandedProjectSessions.value = {
+    ...expandedProjectSessions.value,
+    [path]: !expandedProjectSessions.value[path],
   };
-}
-
-function isGroupSessionsExpanded(projectPath: string, groupId: string) {
-  return Boolean(expandedGroups.value[groupCollapseKey(projectPath, groupId)]);
-}
-
-function toggleGroupSessionsExpanded(projectPath: string, groupId: string) {
-  const key = groupCollapseKey(projectPath, groupId);
-  expandedGroups.value = {
-    ...expandedGroups.value,
-    [key]: !expandedGroups.value[key],
-  };
-}
-
-function visibleSessionsForGroup(projectPath: string, group: SessionProviderGroup): AiSession[] {
-  if (isGroupCollapsed(projectPath, group.id)) return [];
-  if (isGroupSessionsExpanded(projectPath, group.id)) return group.sessions;
-  return group.sessions.slice(0, COLLAPSED_SESSION_LIMIT);
-}
-
-function hiddenSessionCountForGroup(projectPath: string, group: SessionProviderGroup) {
-  if (isGroupCollapsed(projectPath, group.id)) return 0;
-  if (isGroupSessionsExpanded(projectPath, group.id)) return 0;
-  return Math.max(0, group.sessions.length - COLLAPSED_SESSION_LIMIT);
 }
 
 function selectProject(path: string) {
@@ -465,7 +400,7 @@ onBeforeUnmount(() => {
       </div>
       <div class="project-tree">
         <button v-if="!projects.length" class="tree-empty" type="button" @click.stop="chooseProjectFromSidebar">
-          选择本地项目
+          读取项目
         </button>
         <section v-for="project in projects" :key="project.path" class="tree-project">
           <div class="tree-project-row" :class="{ active: selectedProjectPath === project.path, collapsed: isProjectCollapsedLocal(project.path) }">
@@ -521,75 +456,64 @@ onBeforeUnmount(() => {
           </div>
           <div v-if="!isProjectCollapsedLocal(project.path)" class="tree-chat-list">
             <template v-if="sessionsForProject(project.path).length">
-              <section v-for="group in sessionGroupsForProject(project.path)" :key="group.id" class="tree-provider-group">
+              <div
+                v-for="session in visibleSessionsForProject(project.path)"
+                :key="session.id"
+                class="tree-chat-row"
+                :class="{ active: activeAiSession?.id === session.id, terminal: Boolean(session.terminalSessionId) }"
+                @contextmenu.prevent.stop="openSessionContextMenu($event, session)"
+              >
                 <button
-                  type="button"
-                  class="tree-provider-group-heading"
-                  :class="{ collapsed: isGroupCollapsed(project.path, group.id) }"
-                  @click="toggleGroupCollapsed(project.path, group.id)"
-                >
-                  <img class="tree-provider-group-icon" :src="providerIcon(group.id)" alt="" aria-hidden="true" />
-                  <span class="tree-provider-group-label">{{ group.label }}</span>
-                </button>
-                <div
-                  v-for="session in visibleSessionsForGroup(project.path, group)"
-                  :key="session.id"
-                  class="tree-chat-row"
+                  class="tree-chat"
                   :class="{ active: activeAiSession?.id === session.id, terminal: Boolean(session.terminalSessionId) }"
-                  @contextmenu.prevent.stop="openSessionContextMenu($event, session)"
+                  type="button"
+                  @click="selectSession(session)"
                 >
-                  <button
-                    class="tree-chat"
-                    :class="{ active: activeAiSession?.id === session.id, terminal: Boolean(session.terminalSessionId) }"
-                    type="button"
-                    @click="selectSession(session)"
-                  >
-                    <span class="tree-chat-copy">
-                      <span class="tree-chat-title">
-                        <i
-                          v-if="isSessionPinnedLocal(session)"
-                          class="tree-chat-pin"
-                          :title="'已置顶'"
-                          aria-hidden="true"
-                        >▾</i>
-                        <span>{{ session.title }}</span>
-                      </span>
-                      <i v-if="isThinking(session)" class="tree-chat-spinner" aria-label="思考中"></i>
+                  <span class="tree-chat-copy">
+                    <span class="tree-chat-title">
                       <i
-                        v-else-if="isSessionUnreadLocal(session)"
-                        class="tree-chat-unread"
-                        :title="'未读'"
-                        aria-label="未读"
-                      ></i>
-                      <small v-else-if="sessionTimeLabel(session)">{{ sessionTimeLabel(session) }}</small>
+                        v-if="isSessionPinnedLocal(session)"
+                        class="tree-chat-pin"
+                        :title="'已置顶'"
+                        aria-hidden="true"
+                      >▾</i>
+                      <span>{{ session.title }}</span>
                     </span>
-                  </button>
-                  <button
-                    class="tree-chat-action"
-                    title="归档会话"
-                    type="button"
-                    @click.stop="archiveSession(session)"
-                  >
-                    <img :src="archiveBoxIcon" alt="" aria-hidden="true" />
-                  </button>
-                </div>
-                <button
-                  v-if="hiddenSessionCountForGroup(project.path, group) > 0"
-                  class="tree-chat-toggle"
-                  type="button"
-                  @click="toggleGroupSessionsExpanded(project.path, group.id)"
-                >
-                  <span>展开显示</span>
+                    <i v-if="isThinking(session)" class="tree-chat-spinner" aria-label="思考中"></i>
+                    <i
+                      v-else-if="isSessionUnreadLocal(session)"
+                      class="tree-chat-unread"
+                      :title="'未读'"
+                      aria-label="未读"
+                    ></i>
+                    <small v-else-if="sessionTimeLabel(session)">{{ sessionTimeLabel(session) }}</small>
+                  </span>
                 </button>
                 <button
-                  v-else-if="isGroupSessionsExpanded(project.path, group.id) && group.sessions.length > COLLAPSED_SESSION_LIMIT"
-                  class="tree-chat-toggle"
+                  class="tree-chat-action"
+                  title="归档会话"
                   type="button"
-                  @click="toggleGroupSessionsExpanded(project.path, group.id)"
+                  @click.stop="archiveSession(session)"
                 >
-                  <span>收起</span>
+                  <img :src="archiveBoxIcon" alt="" aria-hidden="true" />
                 </button>
-              </section>
+              </div>
+              <button
+                v-if="hiddenSessionCountForProject(project.path) > 0"
+                class="tree-chat-toggle"
+                type="button"
+                @click="toggleProjectSessionsExpanded(project.path)"
+              >
+                <span>展开显示</span>
+              </button>
+              <button
+                v-else-if="isProjectSessionsExpanded(project.path) && sessionsForProject(project.path).length > COLLAPSED_SESSION_LIMIT"
+                class="tree-chat-toggle"
+                type="button"
+                @click="toggleProjectSessionsExpanded(project.path)"
+              >
+                <span>收起</span>
+              </button>
             </template>
             <div v-else class="tree-chat muted tree-chat-empty">暂无会话</div>
           </div>

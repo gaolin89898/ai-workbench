@@ -1,6 +1,6 @@
 import { computed, ref, watch } from "vue";
 import router from "../router";
-import { desktopApi, type AiProvider, type AiSession, type ChatMessage, type ChatSegment, type DesktopPairingStatus, type ProviderStatus, type TerminalSession, type ViewName, type WorkspaceProject } from "../services/desktop";
+import { desktopApi, type AiProvider, type AiSession, type ChatImageAttachment, type ChatMessage, type ChatSegment, type DesktopPairingStatus, type ProviderStatus, type TerminalSession, type ViewName, type WorkspaceProject } from "../services/desktop";
 import { decodeAssistantMessageFromStorage, encodeAssistantMessageForStorage, extractAssistantText } from "../utils/chat";
 
 const providers = ref<AiProvider[]>([]);
@@ -97,7 +97,10 @@ const activeChatRunState = computed(() => {
   const sessionId = activeAiSession.value?.id;
   return sessionId ? chatRunStates.value[sessionId] : undefined;
 });
-const activeChatIsRunning = computed(() => Boolean(activeChatRunState.value?.active));
+const activeChatIsRunning = computed(() => {
+  const sessionId = activeAiSession.value?.id;
+  return Boolean(activeChatRunState.value?.active || (sessionId && pendingAssistants.has(sessionId)));
+});
 
 type PendingAssistant = {
   clientId: string;
@@ -129,6 +132,7 @@ let aiEventsInitPromise: Promise<void> | null = null;
 let workspaceEventsInitialized = false;
 let workspaceEventsInitPromise: Promise<void> | null = null;
 let qrPairingTimer: number | null = null;
+let runningElapsedTimer: number | null = null;
 const supportedChatProviders = new Set(["codex", "claude"]);
 
 function pushChatDebugEvent(message: string) {
@@ -144,7 +148,19 @@ function formatElapsedMs(elapsedMs: number) {
 
 function formatCompactElapsedMs(elapsedMs: number) {
   if (elapsedMs < 1000) return `${elapsedMs}ms`;
-  return `${(elapsedMs / 1000).toFixed(elapsedMs < 10_000 ? 1 : 0)}s`;
+  const totalSeconds = Math.max(1, Math.round(elapsedMs / 1000));
+  const seconds = totalSeconds % 60;
+  const totalMinutes = Math.floor(totalSeconds / 60);
+  if (!totalMinutes) return `${seconds}秒`;
+  const minutes = totalMinutes % 60;
+  const hours = Math.floor(totalMinutes / 60);
+  if (!hours) return seconds ? `${minutes}分${seconds}秒` : `${minutes}分`;
+  return seconds ? `${hours}时${minutes}分${seconds}秒` : `${hours}时${minutes}分`;
+}
+
+function elapsedStatusLabel(startedAt: number) {
+  const elapsedMs = Math.max(0, Math.round(performance.now() - startedAt));
+  return `已处理 ${formatCompactElapsedMs(elapsedMs)}`;
 }
 
 function providerDisplayName(providerId?: string | null) {
@@ -189,6 +205,32 @@ function clearChatRunStateSoon(sessionId: string) {
     delete next[sessionId];
     chatRunStates.value = next;
   }, 5_000);
+}
+
+function ensureRunningElapsedTimer() {
+  if (runningElapsedTimer !== null) return;
+  runningElapsedTimer = window.setInterval(updateRunningElapsedLabels, 1000);
+}
+
+function stopRunningElapsedTimerIfIdle() {
+  if (runningElapsedTimer === null || pendingAssistants.size > 0) return;
+  window.clearInterval(runningElapsedTimer);
+  runningElapsedTimer = null;
+}
+
+function updateRunningElapsedLabels() {
+  if (!pendingAssistants.size) {
+    stopRunningElapsedTimerIfIdle();
+    return;
+  }
+  for (const [sessionId, pending] of pendingAssistants) {
+    pending.steps.set("runtime-status", {
+      type: "status",
+      stepId: "runtime-status",
+      label: elapsedStatusLabel(pending.startedAt),
+    });
+    syncPendingAssistantSegments(sessionId, false);
+  }
 }
 
 function describeBackendStatus(text: string, providerName: string) {
@@ -538,7 +580,8 @@ async function loadAiSessionHistory(sessionId: string) {
     if (activeAiSession.value?.id !== sessionId) return;
     chatMessages.value = history.map((message) => {
       if (message.role !== "assistant") {
-        return { role: message.role, text: message.content };
+        const decoded = decodeAssistantMessageFromStorage(message.content);
+        return { role: message.role, text: decoded.text, images: decoded.images };
       }
       const decoded = decodeAssistantMessageFromStorage(message.content);
       return {
@@ -552,11 +595,17 @@ async function loadAiSessionHistory(sessionId: string) {
   }
 }
 
-async function sendPrompt(prompt: string) {
+async function sendPrompt(prompt: string, images: ChatImageAttachment[] = []) {
   pushChatDebugEvent("收到发送请求");
   await initAiEventListeners();
   const trimmed = prompt.trim();
-  if (!trimmed) return;
+  const plainImages = images.map((image) => ({
+    id: image.id,
+    name: image.name,
+    mimeType: image.mimeType,
+    dataUrl: image.dataUrl,
+  }));
+  if (!trimmed && !plainImages.length) return;
   if (!activeAiSession.value) {
     chatMessages.value = [{ role: "error", text: "请先点击左侧项目下的新建按钮，创建一个 AI 会话。" }];
     return;
@@ -591,8 +640,10 @@ async function sendPrompt(prompt: string) {
     return;
   }
   await saveAssistantDraft(sessionId);
-  renameUntitledSession(sessionId, trimmed);
-  chatMessages.value.push({ clientId: chatClientId("user"), role: "user", text: trimmed });
+  const promptForSession = trimmed || `查看这 ${plainImages.length} 张图片`;
+  const displayText = trimmed;
+  renameUntitledSession(sessionId, promptForSession);
+  chatMessages.value.push({ clientId: chatClientId("user"), role: "user", text: displayText, images: plainImages });
   const assistantClientId = chatClientId("assistant");
   const assistantMessage: ChatMessage = {
     clientId: assistantClientId,
@@ -609,7 +660,7 @@ async function sendPrompt(prompt: string) {
   pendingAssistants.set(sessionId, {
     clientId: assistantClientId,
     message: assistantMessage,
-    prompt: trimmed,
+    prompt: promptForSession,
     steps: new Map([["initial-thinking", assistantMessage.segments![0]]]),
     currentTextStepId: null,
     textSegmentCounter: 0,
@@ -618,6 +669,7 @@ async function sendPrompt(prompt: string) {
     hasBackendStatus: false,
     lastStatusText: "",
   });
+  ensureRunningElapsedTimer();
   setChatRunState(sessionId, {
     active: true,
     phase: "saving",
@@ -628,7 +680,10 @@ async function sendPrompt(prompt: string) {
   thinkingSessionIds.value = { ...thinkingSessionIds.value, [sessionId]: true };
   assistantDrafts.set(sessionId, { message: assistantMessage, savedText: "" });
   try {
-    await desktopApi.appendLocalAiMessage(sessionId, "user", trimmed);
+    await desktopApi.appendLocalAiMessage(sessionId, "user", encodeAssistantMessageForStorage({
+      text: displayText,
+      images: plainImages,
+    }));
     setChatRunState(sessionId, {
       active: true,
       phase: "starting",
@@ -641,7 +696,8 @@ async function sendPrompt(prompt: string) {
     void runChat({
       aiSessionId: sessionId,
       projectPath,
-      prompt: trimmed,
+      prompt: promptForSession,
+      images: plainImages,
     }).then((providerSessionId) => {
       const pending = pendingAssistants.get(sessionId);
       const startedAt = pending?.startedAt ?? chatRunStates.value[sessionId]?.startedAt ?? performance.now();
@@ -681,6 +737,7 @@ async function sendPrompt(prompt: string) {
       });
       pendingAssistants.delete(sessionId);
       assistantDrafts.delete(sessionId);
+      stopRunningElapsedTimerIfIdle();
       thinkingSessionIds.value = { ...thinkingSessionIds.value, [sessionId]: false };
       setChatRunState(sessionId, {
         active: false,
@@ -699,6 +756,7 @@ async function sendPrompt(prompt: string) {
     });
     pendingAssistants.delete(sessionId);
     assistantDrafts.delete(sessionId);
+    stopRunningElapsedTimerIfIdle();
     thinkingSessionIds.value = { ...thinkingSessionIds.value, [sessionId]: false };
     setChatRunState(sessionId, {
       active: false,
@@ -727,12 +785,11 @@ function updatePendingAssistantStatus(sessionId: string, text: string) {
   pending.steps.delete("initial-thinking");
   if (text.includes("会话已连接")) {
     pending.steps.delete("conversation-guided");
-  } else {
+  } else if (!pending.steps.has("runtime-status")) {
     pending.steps.set("runtime-status", {
       type: "status",
       stepId: "runtime-status",
-      label: text,
-      icon: "think",
+      label: elapsedStatusLabel(pending.startedAt),
     });
   }
   syncPendingAssistantSegments(sessionId, pending.message.pending === false);
@@ -797,11 +854,14 @@ function completePendingAssistantFromExec(sessionId: string) {
   thinkingSessionIds.value = { ...thinkingSessionIds.value, [sessionId]: false };
   pendingAssistants.delete(sessionId);
   assistantDrafts.delete(sessionId);
+  stopRunningElapsedTimerIfIdle();
 }
 
 async function stopActiveAiChat() {
   const sessionId = activeAiSession.value?.id;
-  if (!sessionId || !activeChatIsRunning.value) return;
+  if (!sessionId) return;
+  const pending = pendingAssistants.get(sessionId);
+  if (!activeChatIsRunning.value && !pending) return;
   stoppedAiSessions.add(sessionId);
   pushChatDebugEvent(`用户中断执行：${sessionId.slice(0, 8)}`);
   try {
@@ -809,7 +869,6 @@ async function stopActiveAiChat() {
   } catch (error) {
     pushChatDebugEvent(`中断请求失败：${String(error)}`);
   }
-  const pending = pendingAssistants.get(sessionId);
   if (pending) {
     if (pending.finalText.trim()) {
       replacePendingAssistantText(sessionId, pending.finalText, true);
@@ -828,6 +887,7 @@ async function stopActiveAiChat() {
       });
       pendingAssistants.delete(sessionId);
       assistantDrafts.delete(sessionId);
+      stopRunningElapsedTimerIfIdle();
     }
   }
   thinkingSessionIds.value = { ...thinkingSessionIds.value, [sessionId]: false };
@@ -860,8 +920,12 @@ function upsertPendingSegment(sessionId: string, segment: ChatSegment) {
     pending.steps.delete("initial-thinking");
     if (segment.label.includes("会话已连接")) {
       pending.steps.delete("conversation-guided");
-    } else {
-      pending.steps.set("runtime-status", { ...segment, stepId: "runtime-status" } as ChatSegment);
+    } else if (!pending.steps.has("runtime-status")) {
+      pending.steps.set("runtime-status", {
+        type: "status",
+        stepId: "runtime-status",
+        label: elapsedStatusLabel(pending.startedAt),
+      });
     }
     syncPendingAssistantSegments(sessionId, pending.message.pending === false);
     return;
@@ -896,7 +960,6 @@ function upsertCompletionSummary(sessionId: string) {
     type: "status",
     stepId: "final-summary",
     label: `已处理 ${formatCompactElapsedMs(elapsedMs)}`,
-    icon: "check",
   });
 }
 
@@ -1046,6 +1109,7 @@ async function initAiEventListeners() {
         });
         pendingAssistants.delete(event.aiSessionId);
         assistantDrafts.delete(event.aiSessionId);
+        stopRunningElapsedTimerIfIdle();
         thinkingSessionIds.value = { ...thinkingSessionIds.value, [event.aiSessionId]: false };
         setChatRunState(event.aiSessionId, {
           active: false,

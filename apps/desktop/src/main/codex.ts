@@ -6,7 +6,7 @@
 import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
 import { createInterface, type Interface } from "node:readline";
 import * as os from "node:os";
-import type { RunCodexChatRequest, AiChatOutputEvent, ChatSegment } from "../services/desktop";
+import type { RunCodexChatRequest, AiChatOutputEvent, ChatImageAttachment, ChatSegment } from "../services/desktop";
 import { getLocalAiSession } from "./db";
 
 // Structural sender — WebContents / BrowserWindow satisfy this, and test
@@ -48,6 +48,9 @@ interface CodexSession {
 
 const CODEX_TURN_TIMEOUT_MS = 30 * 60_000;
 const CODEX_WARMUP_TIMEOUT_MS = 60_000;
+const CODEX_RECONNECT_RETRY_MS = 1200;
+const CODEX_RECONNECT_MAX_RETRIES = 5;
+const CLI_INTERRUPT_FALLBACK_MS = 1500;
 const CODEX_CLIENT_INFO = { name: "AI Workbench", version: "0.1.0" };
 const activeCodexSessions = new Map<string, CodexSession>();
 
@@ -103,12 +106,61 @@ function errorMessage(err: unknown): string {
   return String(err);
 }
 
+function isCodexReconnectMessage(message: string): boolean {
+  return /^Reconnecting(?:\.\.\.)?\s+\d+\/\d+$/i.test(message.trim());
+}
+
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 function strOrUndef(v: unknown): string | undefined {
   return typeof v === "string" ? v : undefined;
 }
 
 function numOrUndef(v: unknown): number | undefined {
   return typeof v === "number" ? v : undefined;
+}
+
+function firstString(...values: unknown[]): string | undefined {
+  for (const value of values) {
+    if (typeof value === "string" && value.trim()) return value;
+  }
+  return undefined;
+}
+
+function extractFileEditPath(item: Record<string, unknown>, parent: Record<string, unknown>): string | undefined {
+  return firstString(
+    item["path"],
+    item["filePath"],
+    item["file_path"],
+    item["filename"],
+    parent["path"],
+    parent["filePath"],
+    parent["file_path"],
+    parent["filename"],
+  );
+}
+
+function extractFileEditDiff(item: Record<string, unknown>, parent: Record<string, unknown>): string | undefined {
+  const candidate = firstString(
+    item["diff"],
+    item["patch"],
+    item["changes"],
+    item["change"],
+    item["output"],
+    item["result"],
+    parent["diff"],
+    parent["patch"],
+    parent["changes"],
+    parent["change"],
+  );
+  if (!candidate) return undefined;
+  return looksLikeDiff(candidate) ? candidate : undefined;
+}
+
+function looksLikeDiff(value: string): boolean {
+  return /(^|\n)(diff --git|@@\s|---\s|\+\+\+\s|[+-][^\n]*)/.test(value);
 }
 
 // ---------- Field extraction (defensive — codex API shapes may vary) ----------
@@ -124,8 +176,15 @@ function extractThreadId(value: unknown): string | null {
   return null;
 }
 
-function buildUserInput(text: string): Array<Record<string, unknown>> {
-  return [{ type: "text", text, text_elements: [] }];
+function buildUserInput(text: string, images: ChatImageAttachment[] = []): Array<Record<string, unknown>> {
+  return [
+    { type: "text", text, text_elements: [] },
+    ...images.map((image) => ({
+      type: "image",
+      url: image.dataUrl,
+      detail: "auto",
+    })),
+  ];
 }
 
 function extractItemId(params: unknown): string | undefined {
@@ -182,8 +241,8 @@ function buildItemStartedSegment(params: unknown): ChatSegment {
       return {
         type: "tool",
         stepId,
-        toolName: "edit",
-        command: strOrUndef(item["path"]) ?? strOrUndef(item["filePath"]),
+        toolName: "修改文件",
+        command: extractFileEditPath(item, p),
         status: "running",
       };
     default:
@@ -228,10 +287,11 @@ function buildItemCompletedSegment(params: unknown): ChatSegment {
       return {
         type: "tool",
         stepId,
-        toolName: "edit",
-        command: strOrUndef(item["path"]) ?? strOrUndef(item["filePath"]),
+        toolName: "修改文件",
+        command: extractFileEditPath(item, p),
         status: "success",
         summary: strOrUndef(item["result"]) ?? strOrUndef(item["summary"]),
+        diff: extractFileEditDiff(item, p),
         additions,
         deletions,
       };
@@ -297,7 +357,12 @@ function handleLine(session: CodexSession, line: string): void {
       session.pendingRequests.delete(msg["id"] as number);
       const errorObj = msg["error"] as { message?: string } | undefined;
       if (errorObj) {
-        pending.reject(new Error(errorObj.message ?? "JSON-RPC error"));
+        const message = errorObj.message ?? "JSON-RPC error";
+        const error = new Error(message);
+        if (isCodexReconnectMessage(message)) {
+          (error as Error & { reconnecting?: boolean }).reconnecting = true;
+        }
+        pending.reject(error);
       } else {
         pending.resolve(msg as unknown as JsonRpcResponse);
       }
@@ -308,6 +373,39 @@ function handleLine(session: CodexSession, line: string): void {
   if (typeof msg["method"] === "string") {
     handleNotification(session, msg["method"] as string, msg["params"]);
   }
+}
+
+async function sendRequestWithReconnectRetry(
+  session: CodexSession,
+  method: string,
+  params?: unknown
+): Promise<JsonRpcResponse> {
+  let lastError: unknown;
+  for (let attempt = 0; attempt <= CODEX_RECONNECT_MAX_RETRIES; attempt += 1) {
+    try {
+      return await sendRequest(session, method, params);
+    } catch (error) {
+      lastError = error;
+      const message = errorMessage(error);
+      const reconnecting = (error as Error & { reconnecting?: boolean })?.reconnecting
+        || isCodexReconnectMessage(message);
+      if (!reconnecting || session.closed || attempt >= CODEX_RECONNECT_MAX_RETRIES) break;
+      emit(session.sender, {
+        aiSessionId: session.aiSessionId,
+        kind: "status",
+        text: message,
+        segment: {
+          type: "status",
+          stepId: `codex-reconnect-${attempt}`,
+          label: "Codex 正在重连",
+          detail: message,
+          icon: "warn",
+        },
+      });
+      await delay(CODEX_RECONNECT_RETRY_MS);
+    }
+  }
+  throw lastError instanceof Error ? lastError : new Error(errorMessage(lastError));
 }
 
 function handleNotification(
@@ -379,6 +477,21 @@ function handleNotification(
     }
     case "error": {
       const msg = extractErrorMessage(params) ?? "未知错误";
+      if (isCodexReconnectMessage(msg)) {
+        emit(sender, {
+          aiSessionId,
+          kind: "status",
+          text: msg,
+          segment: {
+            type: "status",
+            stepId: "codex-reconnecting",
+            label: "Codex 正在重连",
+            detail: msg,
+            icon: "warn",
+          },
+        });
+        break;
+      }
       emitSessionError(session, msg);
       if (session.turnResolver) {
         session.turnResolver.reject(new Error(msg));
@@ -449,7 +562,7 @@ function handleExit(
 ): void {
   const detail =
     session.stderrBuffer.trim() || `code=${code} signal=${signal}`;
-  if (!session.closed) {
+  if (!session.closed && !session.cancelled) {
     emitSessionError(session, `Codex 进程意外退出：${detail}`);
   }
   const err = new Error(`codex process exited: ${detail}`);
@@ -502,6 +615,34 @@ function killSession(session: CodexSession): void {
   }
 }
 
+function interruptSession(session: CodexSession): void {
+  if (session.closed) return;
+  session.closed = true;
+  try {
+    session.rl.close();
+  } catch {
+    // ignore
+  }
+  try {
+    session.child.kill("SIGINT");
+  } catch {
+    // ignore
+  }
+  setTimeout(() => {
+    if (session.child.killed || session.child.exitCode !== null || session.child.signalCode !== null) return;
+    try {
+      session.child.stdin.end();
+    } catch {
+      // ignore
+    }
+    try {
+      session.child.kill();
+    } catch {
+      // ignore
+    }
+  }, CLI_INTERRUPT_FALLBACK_MS);
+}
+
 // ---------- Thread management ----------
 
 function lookupExistingProviderSessionId(aiSessionId: string): string | null {
@@ -522,7 +663,7 @@ async function ensureThread(
   const existing = lookupExistingProviderSessionId(aiSessionId);
   if (existing) {
     try {
-      const resp = await sendRequest(session, "thread/resume", {
+      const resp = await sendRequestWithReconnectRetry(session, "thread/resume", {
         threadId: existing,
       });
       const tid = extractThreadId(resp.result) ?? existing;
@@ -533,7 +674,7 @@ async function ensureThread(
     }
   }
 
-  const resp = await sendRequest(session, "thread/start", {});
+  const resp = await sendRequestWithReconnectRetry(session, "thread/start", {});
   const tid = extractThreadId(resp.result);
   if (!tid) {
     throw new Error("未能从 codex 获取 threadId");
@@ -555,7 +696,7 @@ export async function runCodexChat(
   req: RunCodexChatRequest,
   sender: Sender
 ): Promise<string> {
-  const { aiSessionId, projectPath, prompt } = req;
+  const { aiSessionId, projectPath, prompt, images = [] } = req;
   const session = createSession(aiSessionId, projectPath, sender);
   activeCodexSessions.set(aiSessionId, session);
 
@@ -574,7 +715,7 @@ export async function runCodexChat(
 
   try {
     // 1. initialize
-    await sendRequest(session, "initialize", { clientInfo: CODEX_CLIENT_INFO });
+    await sendRequestWithReconnectRetry(session, "initialize", { clientInfo: CODEX_CLIENT_INFO });
 
     // 2. start or resume thread
     const threadId = await ensureThread(session, aiSessionId);
@@ -587,9 +728,9 @@ export async function runCodexChat(
 
     // 4. send turn/start with system instructions + prompt
     const fullPrompt = buildTurnMessage(prompt);
-    await sendRequest(session, "turn/start", {
+    await sendRequestWithReconnectRetry(session, "turn/start", {
       threadId,
-      input: buildUserInput(fullPrompt),
+      input: buildUserInput(fullPrompt, images),
     });
 
     // 5. wait for turn/completed or error
@@ -600,6 +741,10 @@ export async function runCodexChat(
     return threadId;
   } catch (err) {
     clearTimeout(timeout);
+    if (session.cancelled) {
+      killSession(session);
+      return session.threadId ?? "";
+    }
     if (!session.cancelled) {
       emitSessionError(session, errorMessage(err));
     }
@@ -616,6 +761,17 @@ export function stopCodexChat(aiSessionId: string): boolean {
   const session = activeCodexSessions.get(aiSessionId);
   if (!session) return false;
   session.cancelled = true;
+  emit(session.sender, {
+    aiSessionId,
+    kind: "done",
+    text: "",
+    segment: {
+      type: "status",
+      stepId: "interrupted",
+      label: "已中断",
+      icon: "warn",
+    },
+  });
   const error = new Error("AI chat stopped by user");
   for (const [, pending] of session.pendingRequests) {
     pending.reject(error);
@@ -625,7 +781,7 @@ export function stopCodexChat(aiSessionId: string): boolean {
     session.turnResolver.reject(error);
     session.turnResolver = null;
   }
-  killSession(session);
+  interruptSession(session);
   activeCodexSessions.delete(aiSessionId);
   return true;
 }
@@ -653,7 +809,7 @@ export async function warmupCodexSession(
   }, CODEX_WARMUP_TIMEOUT_MS);
 
   try {
-    await sendRequest(session, "initialize", { clientInfo: CODEX_CLIENT_INFO });
+    await sendRequestWithReconnectRetry(session, "initialize", { clientInfo: CODEX_CLIENT_INFO });
     const threadId = await ensureThread(session, aiSessionId);
     clearTimeout(timeout);
     killSession(session);
