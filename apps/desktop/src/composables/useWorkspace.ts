@@ -1468,7 +1468,6 @@ export function useWorkspace() {
     detectProviders,
     refreshTerminalSessions,
     chooseProject,
-    addProject,
     registerProject,
     renameProject,
     removeProject,

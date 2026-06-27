@@ -205,6 +205,23 @@ func (h *Handler) createProject(w http.ResponseWriter, r *http.Request) {
 		writeInternal(w)
 		return
 	}
+
+	// Forward project.created to the desktop so it can register the project
+	// locally without waiting for the next 10s snapshot.
+	h.forwardToDesktop(r.Context(), userID, deviceID, protocol.ProjectCreated{
+		BaseMessage: protocol.BaseMessage{Type: "project.created"},
+		DeviceId:    deviceID,
+		Project: protocol.WorkspaceProject{
+			Id:        p.Id,
+			DeviceId:  p.DeviceId,
+			Name:      p.Name,
+			Path:      p.Path,
+			GitBranch: p.GitBranch,
+			GitDirty:  p.GitDirty,
+			UpdatedAt: p.UpdatedAt,
+		},
+	})
+
 	writeJSON(w, http.StatusOK, p)
 }
 
@@ -365,7 +382,7 @@ func (h *Handler) getAiSession(w http.ResponseWriter, r *http.Request) {
 // forwardToDesktop mirrors ws::dispatch::forward_to_desktop. If the desktop
 // is connected and owned by userID, the message is sent over its WebSocket.
 // Otherwise an activity-log entry records that the desktop was offline.
-func (h *Handler) forwardToDesktop(ctx context.Context, userID, deviceID string, msg protocol.AiSessionCreate) {
+func (h *Handler) forwardToDesktop(ctx context.Context, userID, deviceID string, msg protocol.Message) {
 	deviceUUID, err := uuid.Parse(deviceID)
 	if err != nil {
 		return

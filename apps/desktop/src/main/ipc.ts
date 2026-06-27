@@ -106,6 +106,7 @@ export function registerIpcHandlers(win?: BrowserWindow): void {
   ipcMain.handle("add_workspace_project", async (_event, args: [string]) => {
     const project = await db.addWorkspaceProject(args[0]);
     getSender().send("workspace-changed");
+    getDesktopCloudSync()?.pushProjectSnapshot();
     return project;
   });
 
@@ -114,6 +115,7 @@ export function registerIpcHandlers(win?: BrowserWindow): void {
     if (!projectPath) return null;
     const project = await db.addWorkspaceProject(projectPath);
     getSender().send("workspace-changed");
+    getDesktopCloudSync()?.pushProjectSnapshot();
     return project;
   });
 
@@ -148,7 +150,7 @@ export function registerIpcHandlers(win?: BrowserWindow): void {
       }
     }
 
-    return db.createLocalAiSession({
+    const session = db.createLocalAiSession({
       id,
       providerId: req.providerId,
       terminalSessionId: req.terminalSessionId ?? null,
@@ -156,6 +158,12 @@ export function registerIpcHandlers(win?: BrowserWindow): void {
       status: "idle",
       summary: req.projectPath || null,
     });
+
+    // Immediately push the updated session list to the cloud so mobile clients
+    // see the new session without waiting for the next 10s snapshot tick.
+    getDesktopCloudSync()?.pushSessionSnapshot();
+
+    return session;
   });
 
   ipcMain.handle("restart_ai_session", async (_event, args: [string]) =>

@@ -274,10 +274,37 @@ class DesktopCloudSync {
       });
   }
 
+  /**
+   * Immediately push an ai.sessions.snapshot to the cloud so mobile clients
+   * see desktop-created sessions without waiting for the next 10s tick.
+   * No-op if the WebSocket is not connected.
+   */
+  pushSessionSnapshot(): void {
+    const config = loadStoredConfig();
+    if (!config) return;
+    const sessions = listLocalAiSessions();
+    this.send({ type: "ai.sessions.snapshot", deviceId: config.deviceId, sessions });
+  }
+
+  /**
+   * Immediately push a projects.snapshot to the cloud so mobile clients see
+   * desktop-added projects without waiting for the next 10s tick.
+   * No-op if the WebSocket is not connected.
+   */
+  pushProjectSnapshot(): void {
+    const config = loadStoredConfig();
+    if (!config) return;
+    const projects = listWorkspaceProjects();
+    this.send({ type: "projects.snapshot", deviceId: config.deviceId, projects });
+  }
+
   // ----- message dispatch -----
   private handleMessage(msg: any, deviceId: string): void {
     if (!msg || typeof msg.type !== "string") return;
     switch (msg.type) {
+      case "project.created":
+        void this.handleProjectCreated(msg, deviceId);
+        break;
       case "ai.session.create":
         void this.handleAiSessionCreate(msg, deviceId);
         break;
@@ -294,6 +321,20 @@ class DesktopCloudSync {
         // unknown message type — ignore
         break;
     }
+  }
+
+  /** project.created: register the project locally and notify the UI. */
+  private async handleProjectCreated(msg: any, _deviceId: string): Promise<void> {
+    const project = msg.project;
+    if (!project?.path) return;
+    try {
+      if (!getWorkspaceProjectByPath(project.path)) {
+        await addWorkspaceProject(project.path);
+      }
+    } catch {
+      // project path may not exist on this machine — ignore
+    }
+    this.notify("workspace-changed");
   }
 
   /** ai.session.create: create a local AI session record and notify the UI. */

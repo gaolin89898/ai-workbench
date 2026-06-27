@@ -162,6 +162,15 @@ type AiSessionsSnapshot struct {
 	Sessions []AiSession `json:"sessions"`
 }
 
+// ProjectCreated: "project.created". Pushed by the server to the desktop
+// when a mobile client creates a workspace project via HTTP, so the desktop
+// can register it locally without waiting for the next 10s snapshot.
+type ProjectCreated struct {
+	BaseMessage
+	DeviceId string           `json:"deviceId"`
+	Project  WorkspaceProject `json:"project"`
+}
+
 // AiSessionCreate: "ai.session.create".
 type AiSessionCreate struct {
 	BaseMessage
@@ -274,6 +283,10 @@ func ParseMessage(data []byte) (Message, error) {
 		return m, err
 	case "ai.sessions.snapshot":
 		var m AiSessionsSnapshot
+		err := json.Unmarshal(data, &m)
+		return m, err
+	case "project.created":
+		var m ProjectCreated
 		err := json.Unmarshal(data, &m)
 		return m, err
 	case "ai.session.create":
