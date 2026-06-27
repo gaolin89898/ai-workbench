@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed } from "vue";
-import type { ChatSegment as ChatSegmentType } from "../services/tauri";
+import type { ChatSegment as ChatSegmentType } from "../services/desktop";
 import { extractAssistantText } from "../utils/chat";
 
 const props = defineProps<{

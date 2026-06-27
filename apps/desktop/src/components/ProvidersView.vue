@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed } from "vue";
 import { useWorkspace } from "../composables/useWorkspace";
-import type { AiProvider, ProviderStatus } from "../services/tauri";
+import type { AiProvider, ProviderStatus } from "../services/desktop";
 
 const ws = useWorkspace();
 

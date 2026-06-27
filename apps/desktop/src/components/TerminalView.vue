@@ -4,7 +4,7 @@ import { Terminal } from "@xterm/xterm";
 import "@xterm/xterm/css/xterm.css";
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { useWorkspace } from "../composables/useWorkspace";
-import type { AiProvider } from "../services/tauri";
+import type { AiProvider } from "../services/desktop";
 
 const ws = useWorkspace();
 const terminalHost = ref<HTMLDivElement | null>(null);

@@ -7,3 +7,14 @@ dist/
 node_modules/
 *.log
 .env
+.cargo-home/
+
+# Electron 构建产物
+apps/desktop/out/
+apps/desktop/release/
+# pnpm 本地缓存
+.pnpm-store/
+# 设计稿（本地资源，不入库）
+ai-workbench-desktop-design/
+ai-workbench-desktop-light-design/
+ai-workbench-mobile-design/

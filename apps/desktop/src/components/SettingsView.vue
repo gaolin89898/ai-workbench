@@ -3,7 +3,7 @@ import { computed, ref, watch } from "vue";
 import { useRouter } from "vue-router";
 import QRCode from "qrcode";
 import { useWorkspace } from "../composables/useWorkspace";
-import type { AiProvider, ProviderStatus } from "../services/tauri";
+import type { AiProvider, ProviderStatus } from "../services/desktop";
 
 type SettingsPanel = "connection" | "security" | "pairing" | "updates" | "debug" | "archive";
 type ProviderRow = {

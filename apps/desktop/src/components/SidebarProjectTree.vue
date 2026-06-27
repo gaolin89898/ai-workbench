@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
-import type { AiProvider, AiSession, TerminalSession, ViewName, WorkspaceProject } from "../services/tauri";
+import type { AiProvider, AiSession, TerminalSession, ViewName, WorkspaceProject } from "../services/desktop";
 
 const archiveBoxIcon = new URL("../assets/icons/archive-box.svg", import.meta.url).href;
 const projectFolderIcon = new URL("../assets/icons/project-folder.svg", import.meta.url).href;

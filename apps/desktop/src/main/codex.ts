@@ -1,0 +1,606 @@
+// Codex app-server integration for the Electron main process.
+// Spawns `codex app-server --stdio`, communicates via JSON-RPC 2.0,
+// and streams AiChatOutputEvent to the renderer through the sender.
+// Mirrors the original Tauri Rust run_codex_chat implementation.
+
+import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
+import { createInterface, type Interface } from "node:readline";
+import * as os from "node:os";
+import type { RunCodexChatRequest, AiChatOutputEvent, ChatSegment } from "../services/desktop";
+import { getLocalAiSession } from "./db";
+
+// Structural sender — WebContents / BrowserWindow satisfy this, and test
+// stubs can be passed too.
+type Sender = { send: (channel: string, ...args: unknown[]) => void };
+
+// ---------- JSON-RPC 2.0 types ----------
+
+interface JsonRpcResponse {
+  jsonrpc: "2.0";
+  id: number;
+  result?: unknown;
+  error?: { code: number; message: string; data?: unknown };
+}
+
+interface PendingRequest {
+  resolve: (response: JsonRpcResponse) => void;
+  reject: (error: Error) => void;
+}
+
+// ---------- Session state ----------
+
+interface CodexSession {
+  aiSessionId: string;
+  child: ChildProcessWithoutNullStreams;
+  rl: Interface;
+  threadId: string | null;
+  nextRequestId: number;
+  pendingRequests: Map<number, PendingRequest>;
+  sender: Sender;
+  closed: boolean;
+  stderrBuffer: string;
+  turnResolver: { resolve: () => void; reject: (error: Error) => void } | null;
+  errorEmitted: boolean;
+}
+
+// ---------- Constants ----------
+
+const CODEX_TIMEOUT_MS = 60_000;
+
+// ---------- System instructions ----------
+
+function codexDesktopDeveloperInstructions(): string {
+  return [
+    "你是 AI Workbench 桌面端的编程助手。",
+    "请严格遵守以下规则：",
+    "1. 必须使用中文回复用户。",
+    "2. 必须实际执行读取命令（如 ls / cat / grep / find）来了解项目结构和文件内容，不能仅凭推测回答。",
+    "3. 在执行任何修改性命令前，先告知用户你打算做什么。",
+    "4. 命令执行结果要如实地反馈给用户。",
+  ].join("\n");
+}
+
+function buildTurnMessage(prompt: string): string {
+  return `${codexDesktopDeveloperInstructions()}\n\n---\n\n用户请求：${prompt}`;
+}
+
+// ---------- Helpers ----------
+
+function emit(sender: Sender, event: AiChatOutputEvent): void {
+  sender.send("ai-chat-output", event);
+}
+
+function emitSessionError(session: CodexSession, message: string, detail?: string): void {
+  if (session.errorEmitted) return;
+  session.errorEmitted = true;
+  emit(session.sender, {
+    aiSessionId: session.aiSessionId,
+    kind: "error",
+    segment: { type: "error", message, detail },
+  });
+}
+
+function errorMessage(err: unknown): string {
+  if (err instanceof Error) return err.message;
+  return String(err);
+}
+
+function strOrUndef(v: unknown): string | undefined {
+  return typeof v === "string" ? v : undefined;
+}
+
+function numOrUndef(v: unknown): number | undefined {
+  return typeof v === "number" ? v : undefined;
+}
+
+// ---------- Field extraction (defensive — codex API shapes may vary) ----------
+
+function extractThreadId(value: unknown): string | null {
+  if (typeof value === "string") return value;
+  if (value && typeof value === "object") {
+    const r = value as Record<string, unknown>;
+    const candidate = r["threadId"] ?? r["thread_id"] ?? r["id"];
+    if (typeof candidate === "string") return candidate;
+  }
+  return null;
+}
+
+function extractItemId(params: unknown): string | undefined {
+  if (!params || typeof params !== "object") return undefined;
+  const p = params as Record<string, unknown>;
+  const item = p["item"] as Record<string, unknown> | undefined;
+  const id = p["itemId"] ?? item?.["id"] ?? p["id"];
+  return typeof id === "string" ? id : undefined;
+}
+
+function extractDelta(params: unknown): string | undefined {
+  if (!params || typeof params !== "object") return undefined;
+  const p = params as Record<string, unknown>;
+  const delta = p["delta"] ?? p["text"] ?? p["content"];
+  return typeof delta === "string" ? delta : undefined;
+}
+
+function extractErrorMessage(params: unknown): string | undefined {
+  if (!params || typeof params !== "object") return undefined;
+  const p = params as Record<string, unknown>;
+  const errObj = p["error"] as Record<string, unknown> | undefined;
+  const msg = p["message"] ?? errObj?.["message"] ?? p["error"];
+  return typeof msg === "string" ? msg : undefined;
+}
+
+// ---------- ChatSegment builders ----------
+
+function buildItemStartedSegment(params: unknown): ChatSegment {
+  const p = (params ?? {}) as Record<string, unknown>;
+  const item = (p["item"] ?? p) as Record<string, unknown>;
+  const itemType = strOrUndef(item["type"]) ?? "unknown";
+  const stepId = extractItemId(params);
+
+  switch (itemType) {
+    case "agentMessage":
+      return { type: "text", stepId, text: "" };
+    case "commandExecution":
+      return {
+        type: "tool",
+        stepId,
+        toolName: strOrUndef(item["toolName"]) ?? "command",
+        command: strOrUndef(item["command"]) ?? strOrUndef(item["commandText"]),
+        status: "running",
+      };
+    case "fileEdit":
+    case "file_edit":
+      return {
+        type: "tool",
+        stepId,
+        toolName: "edit",
+        command: strOrUndef(item["path"]) ?? strOrUndef(item["filePath"]),
+        status: "running",
+      };
+    default:
+      return {
+        type: "status",
+        stepId,
+        label: `执行 ${itemType}`,
+        icon: "think",
+      };
+  }
+}
+
+function buildItemCompletedSegment(params: unknown): ChatSegment {
+  const p = (params ?? {}) as Record<string, unknown>;
+  const item = (p["item"] ?? p) as Record<string, unknown>;
+  const itemType = strOrUndef(item["type"]) ?? "unknown";
+  const stepId = extractItemId(params);
+  const additions = numOrUndef(item["additions"] ?? p["additions"]);
+  const deletions = numOrUndef(item["deletions"] ?? p["deletions"]);
+
+  switch (itemType) {
+    case "commandExecution":
+      return {
+        type: "tool",
+        stepId,
+        toolName: strOrUndef(item["toolName"]) ?? "command",
+        command: strOrUndef(item["command"]) ?? strOrUndef(item["commandText"]),
+        status: "success",
+        output: strOrUndef(item["output"]) ?? strOrUndef(item["result"]),
+        additions,
+        deletions,
+      };
+    case "fileEdit":
+    case "file_edit":
+      return {
+        type: "tool",
+        stepId,
+        toolName: "edit",
+        command: strOrUndef(item["path"]) ?? strOrUndef(item["filePath"]),
+        status: "success",
+        summary: strOrUndef(item["result"]) ?? strOrUndef(item["summary"]),
+        additions,
+        deletions,
+      };
+    default:
+      return {
+        type: "status",
+        stepId,
+        label: "完成",
+        icon: "check",
+        additions,
+        deletions,
+      };
+  }
+}
+
+// ---------- JSON-RPC communication ----------
+
+function sendRequest(
+  session: CodexSession,
+  method: string,
+  params?: unknown
+): Promise<JsonRpcResponse> {
+  const id = session.nextRequestId++;
+  const request = {
+    jsonrpc: "2.0" as const,
+    id,
+    method,
+    params: params ?? {},
+  };
+  return new Promise((resolve, reject) => {
+    session.pendingRequests.set(id, { resolve, reject });
+    try {
+      session.child.stdin.write(JSON.stringify(request) + "\n");
+    } catch (err) {
+      session.pendingRequests.delete(id);
+      reject(new Error(`failed to write request ${method}: ${errorMessage(err)}`));
+    }
+  });
+}
+
+// ---------- Line / notification handling ----------
+
+function handleLine(session: CodexSession, line: string): void {
+  if (session.closed) return; // session already ended — ignore stale lines
+  const trimmed = line.trim();
+  if (trimmed.length === 0) return;
+
+  let message: unknown;
+  try {
+    message = JSON.parse(trimmed);
+  } catch {
+    // non-JSON line — ignore
+    return;
+  }
+
+  if (!message || typeof message !== "object") return;
+  const msg = message as Record<string, unknown>;
+
+  // Response to a request (has numeric id)
+  if (typeof msg["id"] === "number") {
+    const pending = session.pendingRequests.get(msg["id"] as number);
+    if (pending) {
+      session.pendingRequests.delete(msg["id"] as number);
+      const errorObj = msg["error"] as { message?: string } | undefined;
+      if (errorObj) {
+        pending.reject(new Error(errorObj.message ?? "JSON-RPC error"));
+      } else {
+        pending.resolve(msg as unknown as JsonRpcResponse);
+      }
+    }
+  }
+
+  // Notification (has method)
+  if (typeof msg["method"] === "string") {
+    handleNotification(session, msg["method"] as string, msg["params"]);
+  }
+}
+
+function handleNotification(
+  session: CodexSession,
+  method: string,
+  params: unknown
+): void {
+  const { aiSessionId, sender } = session;
+
+  switch (method) {
+    case "thread/started": {
+      const tid = extractThreadId(params);
+      if (tid) session.threadId = tid;
+      break;
+    }
+    case "turn/started": {
+      emit(sender, {
+        aiSessionId,
+        kind: "status",
+        text: "running",
+        segment: { type: "status", label: "Codex 正在执行", icon: "think" },
+      });
+      break;
+    }
+    case "item/started": {
+      emit(sender, {
+        aiSessionId,
+        kind: "step-start",
+        stepId: extractItemId(params) ?? null,
+        segment: buildItemStartedSegment(params),
+      });
+      break;
+    }
+    case "item/agentMessage/delta": {
+      const delta = extractDelta(params);
+      if (delta) {
+        emit(sender, {
+          aiSessionId,
+          kind: "delta",
+          text: delta,
+          segment: { type: "text", text: delta },
+        });
+      }
+      break;
+    }
+    case "item/commandExecution/outputDelta": {
+      const delta = extractDelta(params);
+      if (delta) {
+        emit(sender, { aiSessionId, kind: "delta", text: delta });
+      }
+      break;
+    }
+    case "item/completed": {
+      emit(sender, {
+        aiSessionId,
+        kind: "step-update",
+        stepId: extractItemId(params) ?? null,
+        segment: buildItemCompletedSegment(params),
+      });
+      break;
+    }
+    case "turn/completed": {
+      emit(sender, { aiSessionId, kind: "done", text: "completed" });
+      if (session.turnResolver) {
+        session.turnResolver.resolve();
+        session.turnResolver = null;
+      }
+      break;
+    }
+    case "error": {
+      const msg = extractErrorMessage(params) ?? "未知错误";
+      emitSessionError(session, msg);
+      if (session.turnResolver) {
+        session.turnResolver.reject(new Error(msg));
+        session.turnResolver = null;
+      }
+      break;
+    }
+    default:
+      // unknown notification — ignore
+      break;
+  }
+}
+
+// ---------- Session lifecycle ----------
+
+function createSession(
+  aiSessionId: string,
+  cwd: string,
+  sender: Sender
+): CodexSession {
+  const child = spawn("codex", ["app-server", "--stdio"], {
+    cwd,
+    stdio: ["pipe", "pipe", "pipe"],
+  });
+
+  const session: CodexSession = {
+    aiSessionId,
+    child,
+    rl: createInterface({ input: child.stdout, terminal: false }),
+    threadId: null,
+    nextRequestId: 1,
+    pendingRequests: new Map(),
+    sender,
+    closed: false,
+    stderrBuffer: "",
+    turnResolver: null,
+    errorEmitted: false,
+  };
+
+  // stdout: parse JSON-RPC lines
+  session.rl.on("line", (line: string) => handleLine(session, line));
+
+  // stderr: accumulate for error reporting
+  child.stderr.on("data", (chunk: Buffer) => {
+    session.stderrBuffer += chunk.toString();
+  });
+
+  // stdin errors (e.g. EPIPE after child exit) — swallow
+  child.stdin.on("error", () => {
+    // best-effort; child probably already exited
+  });
+
+  // child exit
+  child.on("exit", (code: number | null, signal: NodeJS.Signals | null) => {
+    handleExit(session, code, signal);
+  });
+
+  // child spawn error (e.g. ENOENT when codex is not installed)
+  child.on("error", (err: Error) => {
+    handleSpawnError(session, err);
+  });
+
+  return session;
+}
+
+function handleExit(
+  session: CodexSession,
+  code: number | null,
+  signal: NodeJS.Signals | null
+): void {
+  const detail =
+    session.stderrBuffer.trim() || `code=${code} signal=${signal}`;
+  if (!session.closed) {
+    emitSessionError(session, `Codex 进程意外退出：${detail}`);
+  }
+  const err = new Error(`codex process exited: ${detail}`);
+  for (const [, pending] of session.pendingRequests) {
+    pending.reject(err);
+  }
+  session.pendingRequests.clear();
+  if (session.turnResolver) {
+    session.turnResolver.reject(err);
+    session.turnResolver = null;
+  }
+  session.closed = true;
+}
+
+function handleSpawnError(session: CodexSession, err: Error): void {
+  const errno = err as NodeJS.ErrnoException;
+  const message =
+    errno.code === "ENOENT"
+      ? "未找到 codex 命令，请先安装 Codex CLI"
+      : `Codex 进程错误：${err.message}`;
+  emitSessionError(session, message);
+  for (const [, pending] of session.pendingRequests) {
+    pending.reject(err);
+  }
+  session.pendingRequests.clear();
+  if (session.turnResolver) {
+    session.turnResolver.reject(err);
+    session.turnResolver = null;
+  }
+  session.closed = true;
+}
+
+function killSession(session: CodexSession): void {
+  if (session.closed) return;
+  session.closed = true;
+  try {
+    session.rl.close();
+  } catch {
+    // ignore
+  }
+  try {
+    session.child.stdin.end();
+  } catch {
+    // ignore
+  }
+  try {
+    session.child.kill();
+  } catch {
+    // ignore
+  }
+}
+
+// ---------- Thread management ----------
+
+function lookupExistingProviderSessionId(aiSessionId: string): string | null {
+  try {
+    return getLocalAiSession(aiSessionId)?.providerSessionId ?? null;
+  } catch {
+    return null;
+  }
+}
+
+async function ensureThread(
+  session: CodexSession,
+  aiSessionId: string
+): Promise<string> {
+  if (session.threadId) return session.threadId;
+
+  // Try to resume from a DB-stored providerSessionId
+  const existing = lookupExistingProviderSessionId(aiSessionId);
+  if (existing) {
+    try {
+      const resp = await sendRequest(session, "thread/resume", {
+        threadId: existing,
+      });
+      const tid = extractThreadId(resp.result) ?? existing;
+      session.threadId = tid;
+      return tid;
+    } catch {
+      // resume failed — fall back to thread/start
+    }
+  }
+
+  const resp = await sendRequest(session, "thread/start", {});
+  const tid = extractThreadId(resp.result);
+  if (!tid) {
+    throw new Error("未能从 codex 获取 threadId");
+  }
+  session.threadId = tid;
+  return tid;
+}
+
+// ---------- Public API ----------
+
+/**
+ * Run a Codex chat turn. Spawns `codex app-server --stdio`, initializes the
+ * JSON-RPC connection, starts (or resumes) a thread, sends turn/start, and
+ * streams AiChatOutputEvent to the sender until the turn completes.
+ *
+ * Returns the threadId (providerSessionId).
+ */
+export async function runCodexChat(
+  req: RunCodexChatRequest,
+  sender: Sender
+): Promise<string> {
+  const { aiSessionId, projectPath, prompt } = req;
+  const session = createSession(aiSessionId, projectPath, sender);
+
+  const timeout = setTimeout(() => {
+    emitSessionError(session, "Codex 会话超时（60s）");
+    if (session.turnResolver) {
+      session.turnResolver.reject(new Error("timeout"));
+      session.turnResolver = null;
+    }
+    for (const [, pending] of session.pendingRequests) {
+      pending.reject(new Error("timeout"));
+    }
+    session.pendingRequests.clear();
+    killSession(session);
+  }, CODEX_TIMEOUT_MS);
+
+  try {
+    // 1. initialize
+    await sendRequest(session, "initialize", {});
+
+    // 2. start or resume thread
+    const threadId = await ensureThread(session, aiSessionId);
+
+    // 3. set up turn-completion promise (resolved by turn/completed,
+    //    rejected by error notification / child exit / timeout)
+    const turnDone = new Promise<void>((resolve, reject) => {
+      session.turnResolver = { resolve, reject };
+    });
+
+    // 4. send turn/start with system instructions + prompt
+    const fullPrompt = buildTurnMessage(prompt);
+    await sendRequest(session, "turn/start", {
+      threadId,
+      message: fullPrompt,
+    });
+
+    // 5. wait for turn/completed or error
+    await turnDone;
+
+    clearTimeout(timeout);
+    killSession(session);
+    return threadId;
+  } catch (err) {
+    clearTimeout(timeout);
+    emitSessionError(session, errorMessage(err));
+    killSession(session);
+    throw err;
+  }
+}
+
+/**
+ * Pre-warm a Codex session by performing initialize + thread/start without
+ * sending a turn. Returns the threadId for later reuse via thread/resume.
+ *
+ * Best-effort: on any failure returns an empty string.
+ */
+export async function warmupCodexSession(
+  aiSessionId: string,
+  sender: Sender
+): Promise<{ providerSessionId: string }> {
+  // warmup has no projectPath — use home dir as a safe cwd
+  const cwd = os.homedir();
+  const session = createSession(aiSessionId, cwd, sender);
+
+  const timeout = setTimeout(() => {
+    for (const [, pending] of session.pendingRequests) {
+      pending.reject(new Error("timeout"));
+    }
+    session.pendingRequests.clear();
+    killSession(session);
+  }, CODEX_TIMEOUT_MS);
+
+  try {
+    await sendRequest(session, "initialize", {});
+    const threadId = await ensureThread(session, aiSessionId);
+    clearTimeout(timeout);
+    killSession(session);
+    return { providerSessionId: threadId };
+  } catch {
+    clearTimeout(timeout);
+    killSession(session);
+    return { providerSessionId: "" };
+  }
+}

@@ -1,4 +1,4 @@
-import type { ChatSegment } from "../services/tauri";
+import type { ChatSegment } from "../services/desktop";
 
 export function extractAssistantText(value: string) {
   const trimmed = value.trim();

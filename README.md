@@ -6,36 +6,33 @@ AI 工作台是一个多 AI Agent 桌面工作台原型，目标体验类似 Cod
 
 项目当前包含三端：
 
-- `crates/server`：Rust Axum 云端中转服务，负责账号、配对、设备、Provider 状态、项目元信息、AI 会话元信息、WebSocket 转发和高危内容检查。
-- `apps/desktop`：Tauri 桌面主应用，负责本机 AI 工具检测、项目登记、Git 状态读取、本地 SQLite 历史能力、本地 AI 会话、shell pty 调试终端和配对入口。
+- `backend`：Go 云端中转服务（`net/http` + `pgx`），负责账号、配对、设备、Provider 状态、项目元信息、AI 会话元信息、WebSocket 转发和高危内容检查。
+- `apps/desktop`：Electron 桌面主应用，负责本机 AI 工具检测、项目登记、Git 状态读取、本地 SQLite 历史能力、本地 AI 会话、shell pty 调试终端和配对入口。
 - `apps/mobile`：Flutter 移动端，负责登录、设备列表、项目、AI 工具状态、AI 会话、聊天式控制、日志和设置。
-- `crates/desktop-agent`：旧的命令行桌面代理，保留为 tmux/screen 兼容和调试路径。
 
 ## 项目速览
 
 ```text
 .
 ├── apps/
-│   ├── desktop/              # Vue 3 + Tauri 桌面端
-│   │   ├── src/              # 桌面端前端页面、路由和 Tauri API 封装
-│   │   └── src-tauri/        # 桌面端 Rust 命令、本地 SQLite、pty、本地 AI 会话
+│   ├── desktop/              # Vue 3 + Electron 桌面端
+│   │   ├── src/              # 桌面端前端页面、路由和渲染进程逻辑
+│   │   ├── src/main/         # Electron 主进程（本地 SQLite、pty、本地 AI 会话、自动更新）
+│   │   └── src/preload/      # Electron preload 脚本
 │   └── mobile/               # Flutter 移动端
-├── crates/
-│   ├── server/               # Axum 后端服务和数据库迁移
-│   ├── shared/               # 共享模型与实时协议类型
-│   └── desktop-agent/        # 旧 CLI 代理，主要用于兼容和调试
+├── backend/                  # Go 后端服务和数据库迁移
 ├── docs/protocol.md          # WebSocket 协议说明
 ├── docker-compose.yml        # 本地 PostgreSQL
-└── Cargo.toml                # Rust workspace
+└── Dockerfile                # 后端容器镜像
 ```
 
 主要入口：
 
-- 后端入口：[crates/server/src/main.rs](crates/server/src/main.rs)
-- 后端路由：[crates/server/src/routes/mod.rs](crates/server/src/routes/mod.rs)
+- 后端入口：[backend/cmd/server/main.go](backend/cmd/server/main.go)
+- 后端路由：[backend/internal/routes/router.go](backend/internal/routes/router.go)
 - 桌面前端入口：[apps/desktop/src/main.ts](apps/desktop/src/main.ts)
 - 桌面路由：[apps/desktop/src/router.ts](apps/desktop/src/router.ts)
-- 桌面 Tauri 命令：[apps/desktop/src-tauri/src/lib.rs](apps/desktop/src-tauri/src/lib.rs)
+- 桌面主进程：[apps/desktop/src/main/index.ts](apps/desktop/src/main/index.ts)
 - 移动端入口：[apps/mobile/lib/main.dart](apps/mobile/lib/main.dart)
 
 ## 当前定位
@@ -82,7 +79,7 @@ AI_WORKBENCH_DB
 - 添加本机项目目录并读取 `git branch --show-current`、`git status --short`。
 - 创建本地 AI 会话记录，并保存 provider、项目路径、标题、状态、摘要、归档状态和更新时间。
 - 本地 AI 会话可预热会话、记录 provider thread id，并在后续消息中 resume。
-- 支持 shell pty 调试终端：启动、输入、resize、读取缓冲、停止，并通过 Tauri event 推送输出。
+- 支持 shell pty 调试终端：启动、输入、resize、读取缓冲、停止，并通过主进程事件推送输出。
 - 接管已有 tmux/screen 会话的界面入口。
 - 本地 SQLite 表：`local_ai_sessions`、`local_ai_messages`。
 - 支持本地 AI 会话归档 / 取消归档。
@@ -101,6 +98,11 @@ AI_WORKBENCH_DB
 
 ## 启动后端
 
+后端基于 Go 1.22+，使用标准库 `net/http` 路由和 `pgx` 连接 PostgreSQL。需要先准备：
+
+- Go 1.22+
+- PostgreSQL（通过 docker-compose 启动）
+
 先启动 PostgreSQL：
 
 ```bash
@@ -112,20 +114,26 @@ docker compose up -d postgres
 ```bash
 export DATABASE_URL=postgres://remote_term:remote_term@127.0.0.1:5432/remote_term
 export JWT_SECRET=change-this-in-production
-cargo run -p remote-term-server
+cd backend && go run ./cmd/server
 ```
 
 默认监听：
 
 ```text
-http://127.0.0.1:8080
+http://127.0.0.1:3000
 ```
 
-服务启动时会自动执行 `crates/server/migrations` 里的数据库迁移。
+服务启动时会自动执行 `backend/migrations` 里的数据库迁移。
 
 ## 启动桌面端
 
-Linux 上首次编译 Tauri 可能需要系统依赖，例如 GTK / WebKit / pkg-config。依赖装好后运行：
+桌面端基于 Electron + Vue 3，使用 electron-vite 构建。需要先准备：
+
+- Node.js 22
+- pnpm 10
+- Electron 33（首次 `pnpm install` 时自动拉取）
+
+依赖装好后运行：
 
 ```bash
 cd apps/desktop
@@ -133,14 +141,7 @@ pnpm install
 pnpm dev
 ```
 
-如果使用 npm，也可以运行：
-
-```bash
-npm install
-npm run dev
-```
-
-如果 1420 端口被占用，修改 [apps/desktop/src-tauri/tauri.conf.json](apps/desktop/src-tauri/tauri.conf.json) 里的 `devUrl`，同时修改 [apps/desktop/package.json](apps/desktop/package.json) 里的 `vite:dev` 端口。默认窗口为 1440×900，最小 1024×640，可在 `tauri.conf.json` 的 `app.windows` 中调整。
+`pnpm dev` 等价于 `electron-vite dev`，会同时启动渲染进程的 Vite dev server 和 Electron 主进程。如果 dev server 端口被占用，修改 [apps/desktop/electron.vite.config.ts](apps/desktop/electron.vite.config.ts) 中的配置。默认窗口为 1440×900，最小 1024×640，可在主进程中调整。
 
 桌面端本机历史数据库默认在：
 
@@ -152,7 +153,7 @@ npm run dev
 
 ```bash
 export AI_WORKBENCH_DB=/path/to/history.db
-npm run dev
+pnpm dev
 ```
 
 ## 启动移动端
@@ -168,7 +169,7 @@ flutter run
 移动端登录页默认服务器地址可以填：
 
 ```text
-http://127.0.0.1:8080
+http://127.0.0.1:3000
 ```
 
 如果手机真机访问本机服务，需要把 `127.0.0.1` 换成电脑在局域网里的 IP，并确保防火墙允许访问。
@@ -178,15 +179,6 @@ http://127.0.0.1:8080
 1. 先在移动端登录，进入配对页生成一次性配对码。
 2. 在桌面端“配对”页填写服务器地址和配对码。
 3. 配对成功后，云端会返回 `deviceId` 和桌面访问 token。
-
-旧命令行代理仍可作为调试路径：
-
-```bash
-cargo run -p remote-term-desktop-agent -- pair \
-  --server http://127.0.0.1:8080 \
-  --code YOURCODE \
-  --name "Workstation"
-```
 
 ## 核心 HTTP API
 
@@ -243,35 +235,29 @@ AI 主协议包括：
 - `ai.history.response`
 - `git.status.snapshot`
 
-底层兼容协议继续保留：
-
-- `sessions.snapshot`
-- `terminal.input`
-- `terminal.control`
-- `terminal.output`
-- `terminal.error`
-
 更完整的消息示例见 [docs/protocol.md](docs/protocol.md)。
 
 ## 验证
 
-Rust 工作区：
+Go 后端：
 
 ```bash
-cargo test --workspace
+cd backend
+go test ./...
 ```
 
-桌面前端：
+桌面端构建：
 
 ```bash
 cd apps/desktop
-pnpm vite:build
+pnpm build
 ```
 
-或使用 npm：
+打包 Linux 安装包：
 
 ```bash
-npm run vite:build
+cd apps/desktop
+pnpm package:linux
 ```
 
 移动端静态检查：
@@ -285,9 +271,9 @@ flutter analyze
 
 ## 桌面端自动更新
 
-桌面端支持通过 GitHub Releases 自动更新。发布 `v*` 标签后，GitHub Actions 会构建 Tauri 安装包并上传 `latest.json`，桌面端可在“设置 -> 应用更新”里检查、下载并重启安装。
+桌面端使用 electron-updater 从 GitHub Releases 拉取更新。发布 `v*` 标签后，GitHub Actions 会构建 Electron 安装包并上传 `latest.yml`，桌面端可在“设置 -> 应用更新”里检查、下载并重启安装。
 
-配置签名私钥和发版步骤见 [docs/desktop-auto-update.md](docs/desktop-auto-update.md)。
+发版流程和配置细节见 [docs/desktop-auto-update.md](docs/desktop-auto-update.md)。
 
 ## 设计稿
 
@@ -296,7 +282,7 @@ flutter analyze
 - `icon.pen`：图标设计稿。
 - `pencil-new.pen`：整体 UI 设计稿（桌面端 + 移动端），包含工作台首页、AI 工具、新建 AI 会话、聊天会话、项目详情、设置，以及移动端工作台、项目、新建会话、AI 聊天、AI 工具、日志/设置等页面。
 
-设计稿导出的临时资源可能不会全部保留在仓库中，实际应用图标以 `apps/desktop/src/assets/icons/` 和 `apps/desktop/src-tauri/icons/` 为准。
+设计稿导出的临时资源可能不会全部保留在仓库中，实际应用图标以 `apps/desktop/src/assets/icons/` 为准。
 
 ## v1 边界
 

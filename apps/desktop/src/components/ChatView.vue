@@ -4,7 +4,7 @@ import ChatMessageRow from "./ChatMessageRow.vue";
 import TerminalView from "./TerminalView.vue";
 import { statusText } from "../utils/chat";
 import { useWorkspace } from "../composables/useWorkspace";
-import type { AiProvider } from "../services/tauri";
+import type { AiProvider } from "../services/desktop";
 
 const providerClaudeIcon = new URL("../assets/icons/provider-claude.svg", import.meta.url).href;
 const providerCodexIcon = new URL("../assets/icons/provider-codex.svg", import.meta.url).href;

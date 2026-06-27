@@ -1,6 +1,6 @@
 import { computed, ref, watch } from "vue";
 import router from "../router";
-import { tauriApi, type AiProvider, type AiSession, type ChatMessage, type ChatSegment, type DesktopPairingStatus, type ProviderStatus, type TerminalSession, type ViewName, type WorkspaceProject } from "../services/tauri";
+import { desktopApi, type AiProvider, type AiSession, type ChatMessage, type ChatSegment, type DesktopPairingStatus, type ProviderStatus, type TerminalSession, type ViewName, type WorkspaceProject } from "../services/desktop";
 import { extractAssistantText } from "../utils/chat";
 
 const providers = ref<AiProvider[]>([]);
@@ -243,7 +243,7 @@ async function refreshWorkspace() {
 
 async function loadCloudConfig() {
   try {
-    const config = await tauriApi.getCloudConfig();
+    const config = await desktopApi.getCloudConfig();
     if (!config) {
       settingsResult.value = "尚未配对桌面。";
       return;
@@ -258,14 +258,14 @@ async function loadCloudConfig() {
 }
 
 async function loadProviders() {
-  providers.value = await tauriApi.listAiProviders();
+  providers.value = await desktopApi.listAiProviders();
   if (!selectedProviderId.value && providers.value.length) selectedProviderId.value = providers.value[0].id;
 }
 
 async function loadLocalWorkspace() {
   const [storedProjects, storedSessions] = await Promise.all([
-    tauriApi.listWorkspaceProjects(),
-    tauriApi.listLocalAiSessions(),
+    desktopApi.listWorkspaceProjects(),
+    desktopApi.listLocalAiSessions(),
   ]);
   projects.value = storedProjects;
   aiSessions.value = storedSessions;
@@ -289,18 +289,18 @@ function ensureSelectedProject() {
 }
 
 async function detectProviders() {
-  providerStatuses.value = await tauriApi.detectAiProviders();
+  providerStatuses.value = await desktopApi.detectAiProviders();
 }
 
 async function refreshTerminalSessions() {
-  terminalSessions.value = await tauriApi.listSessions();
+  terminalSessions.value = await desktopApi.listSessions();
 }
 
 async function chooseProject() {
   projectResult.value = "正在打开文件夹选择器...";
   projectResultError.value = false;
   try {
-    const project = await tauriApi.chooseWorkspaceProject();
+    const project = await desktopApi.chooseWorkspaceProject();
     if (!project) {
       projectResult.value = "已取消选择。";
       return;
@@ -322,7 +322,7 @@ async function addProject(path: string) {
     return;
   }
   try {
-    const project = await tauriApi.addWorkspaceProject(trimmed);
+    const project = await desktopApi.addWorkspaceProject(trimmed);
     registerProject(project);
     projectResult.value = JSON.stringify(project, null, 2);
     projectResultError.value = false;
@@ -345,7 +345,7 @@ async function renameProject(project: WorkspaceProject, name: string) {
     return;
   }
   try {
-    const updated = await tauriApi.renameWorkspaceProject(project.id, trimmed);
+    const updated = await desktopApi.renameWorkspaceProject(project.id, trimmed);
     projects.value = projects.value.map((item) => (item.id === updated.id ? updated : item));
     projectResult.value = `已重命名：${updated.name}`;
     projectResultError.value = false;
@@ -357,7 +357,7 @@ async function renameProject(project: WorkspaceProject, name: string) {
 
 async function removeProject(project: WorkspaceProject) {
   try {
-    await tauriApi.removeWorkspaceProject(project.id);
+    await desktopApi.removeWorkspaceProject(project.id);
     projects.value = projects.value.filter((item) => item.id !== project.id);
     if (selectedProjectPath.value === project.path) {
       selectedProjectPath.value = projects.value[0]?.path ?? "";
@@ -376,7 +376,7 @@ async function removeProject(project: WorkspaceProject) {
 
 async function openProjectInFileManager(project: WorkspaceProject) {
   try {
-    await tauriApi.openProjectInFileManager(project.path);
+    await desktopApi.openProjectInFileManager(project.path);
     projectResult.value = `已在文件管理器中打开：${project.path}`;
     projectResultError.value = false;
   } catch (error) {
@@ -439,7 +439,7 @@ async function createAiSession(): Promise<AiSession | null> {
     return null;
   }
   try {
-    const session = await tauriApi.createAiSession({
+    const session = await desktopApi.createAiSession({
       providerId: selectedProviderId.value || providers.value[0]?.id || "codex",
       projectPath: selectedProjectPath.value,
       title: aiSessionTitle.value.trim() || "新的 AI CLI 会话",
@@ -462,7 +462,7 @@ async function createAiSession(): Promise<AiSession | null> {
 function warmupAiForSession(sessionId: string) {
   const providerName = providerNameForSession(sessionId);
   pushChatDebugEvent(`warmup ${providerName}: ${sessionId.slice(0, 8)}`);
-  void tauriApi.warmupAiSession(sessionId).then((session) => {
+  void desktopApi.warmupAiSession(sessionId).then((session) => {
     pushChatDebugEvent(`warmup resolved: ${session.providerSessionId ? "ready" : "no thread"}`);
     aiSessions.value = [session, ...aiSessions.value.filter((item) => item.id !== session.id)].sort(sortSessionsByUpdatedAt);
     if (activeAiSession.value?.id === session.id) {
@@ -485,7 +485,7 @@ async function startShellForActiveSession(forceRestart = false) {
       shellBuffers.value = { ...shellBuffers.value, [sessionId]: "" };
       liveShellSessions.value = { ...liveShellSessions.value, [sessionId]: false };
     }
-    await tauriApi.startShellPty({ aiSessionId: sessionId, cwd });
+    await desktopApi.startShellPty({ aiSessionId: sessionId, cwd });
     liveShellSessions.value = { ...liveShellSessions.value, [sessionId]: true };
   } catch (error) {
     liveShellSessions.value = { ...liveShellSessions.value, [sessionId]: false };
@@ -531,7 +531,7 @@ function selectAiSessionFromDropdown(sessionId: string) {
 
 async function loadAiSessionHistory(sessionId: string) {
   try {
-    const history = await tauriApi.listLocalAiHistory(sessionId);
+    const history = await desktopApi.listLocalAiHistory(sessionId);
     if (activeAiSession.value?.id !== sessionId) return;
     chatMessages.value = history.map((message) => ({
       role: message.role,
@@ -616,7 +616,7 @@ async function sendPrompt(prompt: string) {
   thinkingSessionIds.value = { ...thinkingSessionIds.value, [sessionId]: true };
   assistantDrafts.set(sessionId, { message: assistantMessage, savedText: "" });
   try {
-    await tauriApi.appendLocalAiMessage(sessionId, "user", trimmed);
+    await desktopApi.appendLocalAiMessage(sessionId, "user", trimmed);
     setChatRunState(sessionId, {
       active: true,
       phase: "starting",
@@ -625,7 +625,7 @@ async function sendPrompt(prompt: string) {
     });
     pushChatDebugEvent(`用户消息已保存：${sessionId.slice(0, 8)}`);
     pushChatDebugEvent(`已连接 ${runtimeName}`);
-    void tauriApi.runAiChat({
+    void desktopApi.runAiChat({
       aiSessionId: sessionId,
       projectPath,
       prompt: trimmed,
@@ -837,31 +837,31 @@ async function sendShellInput(text: string) {
   const sessionId = activeAiSession.value?.id;
   if (!sessionId || !text) return;
   if (liveShellSessions.value[sessionId] === false) return;
-  await tauriApi.sendShellInput({ aiSessionId: sessionId, text, submit: false });
+  await desktopApi.sendShellInput({ aiSessionId: sessionId, text, submit: false });
 }
 
 async function resizeShell(cols: number, rows: number) {
   const sessionId = activeAiSession.value?.id;
   if (!sessionId) return;
   if (liveShellSessions.value[sessionId] === false) return;
-  await tauriApi.resizeShell({ aiSessionId: sessionId, cols, rows });
+  await desktopApi.resizeShell({ aiSessionId: sessionId, cols, rows });
 }
 
 async function initAiEventListeners() {
   if (aiEventsInitialized) return;
   if (aiEventsInitPromise) return aiEventsInitPromise;
   aiEventsInitPromise = Promise.all([
-    tauriApi.onShellTerminalOutput((event) => {
+    desktopApi.onShellTerminalOutput((event) => {
     const previous = shellBuffers.value[event.aiSessionId] ?? "";
     shellBuffers.value = { ...shellBuffers.value, [event.aiSessionId]: previous + event.chunk };
     }),
-    tauriApi.onShellSessionStatus((event) => {
+    desktopApi.onShellSessionStatus((event) => {
     liveShellSessions.value = {
       ...liveShellSessions.value,
       [event.aiSessionId]: event.status === "running",
     };
     }),
-    tauriApi.onAiChatOutput((event) => {
+    desktopApi.onAiChatOutput((event) => {
       const pending = pendingAssistants.get(event.aiSessionId);
       const providerName = providerNameForSession(event.aiSessionId);
       const runtimeName = providerRuntimeName(activeAiSession.value?.id === event.aiSessionId ? activeAiSession.value.providerId : aiSessions.value.find((session) => session.id === event.aiSessionId)?.providerId);
@@ -963,12 +963,12 @@ async function initAiEventListeners() {
 async function initWorkspaceEventListeners() {
   if (workspaceEventsInitialized) return;
   if (workspaceEventsInitPromise) return workspaceEventsInitPromise;
-  workspaceEventsInitPromise = tauriApi.onWorkspaceChanged(() => {
+  workspaceEventsInitPromise = desktopApi.onWorkspaceChanged(() => {
     const activeSessionId = activeAiSession.value?.id;
     void loadLocalWorkspace();
     if (activeSessionId) void loadAiSessionHistory(activeSessionId);
   }).then(async () => {
-    await tauriApi.onAiHistoryChanged((event) => {
+    await desktopApi.onAiHistoryChanged((event) => {
       void loadLocalWorkspace();
       if (activeAiSession.value?.id === event.aiSessionId) {
         void loadAiSessionHistory(event.aiSessionId);
@@ -981,7 +981,7 @@ async function initWorkspaceEventListeners() {
 
 async function refreshShellLiveState(sessionId: string) {
   try {
-    const live = await tauriApi.isShellLive(sessionId);
+    const live = await desktopApi.isShellLive(sessionId);
     liveShellSessions.value = { ...liveShellSessions.value, [sessionId]: live };
     return live;
   } catch {
@@ -998,7 +998,7 @@ async function saveAssistantDraft(sessionId: string) {
   const draft = assistantDrafts.get(sessionId);
   const text = extractAssistantText(draft?.message.text?.trim() ?? "");
   if (!draft || !text || text === draft.savedText) return;
-  await tauriApi.appendLocalAiMessage(sessionId, "assistant", text);
+  await desktopApi.appendLocalAiMessage(sessionId, "assistant", text);
   assistantDrafts.set(sessionId, { ...draft, savedText: text });
 }
 
@@ -1031,7 +1031,7 @@ function sortSessionsByUpdatedAt(left: AiSession, right: AiSession) {
 async function archiveAiSession(sessionId: string, archived: boolean) {
   if (!sessionId) return;
   try {
-    const session = await tauriApi.archiveLocalAiSession(sessionId, archived);
+    const session = await desktopApi.archiveLocalAiSession(sessionId, archived);
     aiSessions.value = [session, ...aiSessions.value.filter((item) => item.id !== session.id)];
     if (archived && activeAiSession.value?.id === session.id) {
       activeAiSession.value = null;
@@ -1081,7 +1081,7 @@ async function renameAiSession(session: AiSession, title: string) {
     return;
   }
   try {
-    const updated = await tauriApi.renameLocalAiSession(session.id, trimmed);
+    const updated = await desktopApi.renameLocalAiSession(session.id, trimmed);
     aiSessions.value = aiSessions.value.map((item) => (item.id === updated.id ? updated : item));
     if (activeAiSession.value?.id === updated.id) {
       activeAiSession.value = updated;
@@ -1095,7 +1095,7 @@ async function renameAiSession(session: AiSession, title: string) {
 
 async function openAiSessionInNewWindow(session: AiSession) {
   try {
-    await tauriApi.openSessionInNewWindow(session.id);
+    await desktopApi.openSessionInNewWindow(session.id);
   } catch (error) {
     chatMessages.value.push({ role: "error", text: `打开新窗口失败：${String(error)}` });
   }
@@ -1123,7 +1123,7 @@ async function pairDesktop(server: string, code: string) {
     return;
   }
   try {
-    const value = await tauriApi.pairDesktop(trimmedServer, trimmedCode);
+    const value = await desktopApi.pairDesktop(trimmedServer, trimmedCode);
     pairResult.value = JSON.stringify(value, null, 2);
     pairResultError.value = false;
     settingsServer.value = trimmedServer;
@@ -1151,7 +1151,7 @@ async function pollQrPairing(server: string, code: string) {
   clearQrPairingTimer();
   if (!code || qrPairingStatus.value !== "pending") return;
   try {
-    const status = await tauriApi.getDesktopPairingStatus(server, code);
+    const status = await desktopApi.getDesktopPairingStatus(server, code);
     pairResult.value = describeQrPairingStatus(status);
     pairResultError.value = false;
     if (status.status === "approved") {
@@ -1185,8 +1185,8 @@ async function createQrPairingRequest(server: string) {
   qrPairingStatus.value = "creating";
   pairResult.value = "正在生成二维码...";
   try {
-    const request = await tauriApi.createDesktopPairingRequest(trimmedServer);
-    const payload = await tauriApi.buildDesktopPairingQrPayload(trimmedServer, request.code);
+    const request = await desktopApi.createDesktopPairingRequest(trimmedServer);
+    const payload = await desktopApi.buildDesktopPairingQrPayload(trimmedServer, request.code);
     qrPairingCode.value = request.code;
     qrPairingPayload.value = payload;
     qrPairingExpiresAt.value = request.expiresAt;
@@ -1213,7 +1213,7 @@ async function checkAppUpdate() {
   updateResultError.value = false;
   updateResult.value = "正在检查 GitHub Releases...";
   try {
-    const update = await tauriApi.checkAppUpdate();
+    const update = await desktopApi.checkAppUpdate();
     if (!update.available) {
       updateAvailableVersion.value = "";
       updateResult.value = "当前已经是最新版本。";
@@ -1234,7 +1234,7 @@ async function installAppUpdate() {
   updateResultError.value = false;
   updateResult.value = "正在下载并安装更新...";
   try {
-    const installed = await tauriApi.installAppUpdate();
+    const installed = await desktopApi.installAppUpdate();
     if (!installed) {
       updateAvailableVersion.value = "";
       updateResult.value = "没有可安装的更新。";

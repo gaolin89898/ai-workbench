@@ -3,7 +3,7 @@ import { computed, onMounted } from "vue";
 import { useRoute } from "vue-router";
 import SidebarProjectTree from "./components/SidebarProjectTree.vue";
 import { useWorkspace } from "./composables/useWorkspace";
-import type { ViewName } from "./services/tauri";
+import type { ViewName } from "./services/desktop";
 
 const ws = useWorkspace();
 const route = useRoute();

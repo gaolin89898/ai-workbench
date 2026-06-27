@@ -1,0 +1,40 @@
+appId: com.gaolin89898.aiworkbench
+productName: AI Workbench
+directories:
+  output: dist-electron
+  buildResources: build
+files:
+  - out/**/*
+  - package.json
+  - "!**/node_modules/*/{CHANGELOG.md,README.md,README,readme.md,readme}"
+  - "!**/node_modules/*/{test,__tests__,tests,powered-test,example,examples}"
+  - "!**/*.{md,markdown}"
+  - "!**/.{idea,git,cache,vscode,DS_Store}"
+asarUnpack:
+  - "**/*.{node,dll}"
+linux:
+  target:
+    - AppImage
+    - deb
+  category: Development
+  maintainer: gaolin89898
+  artifactName: ${productName}-${version}-${arch}.${ext}
+deb:
+  depends:
+    - libgtk-3-0
+    - libnotify4
+    - libnss3
+    - libxss1
+    - libxtst6
+    - xdg-utils
+    - libatspi2.0-0
+    - libdrm2
+    - libgbm1
+    - libasound2
+appImage:
+  artifactName: ${productName}-${version}-${arch}.AppImage
+publish:
+  provider: github
+  owner: gaolin89898
+  repo: ai-workbench
+  releaseType: release
