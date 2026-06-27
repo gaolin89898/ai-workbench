@@ -1,4 +1,4 @@
-CREATE TABLE desktop_pairing_requests (
+CREATE TABLE IF NOT EXISTS desktop_pairing_requests (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   code TEXT NOT NULL UNIQUE,
   name TEXT NOT NULL,
@@ -10,5 +10,5 @@ CREATE TABLE desktop_pairing_requests (
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
-CREATE INDEX idx_desktop_pairing_requests_code ON desktop_pairing_requests(code);
-CREATE INDEX idx_desktop_pairing_requests_expires_at ON desktop_pairing_requests(expires_at);
+CREATE INDEX IF NOT EXISTS idx_desktop_pairing_requests_code ON desktop_pairing_requests(code);
+CREATE INDEX IF NOT EXISTS idx_desktop_pairing_requests_expires_at ON desktop_pairing_requests(expires_at);

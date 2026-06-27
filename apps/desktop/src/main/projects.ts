@@ -2,16 +2,19 @@
 // Handles folder selection dialogs, git status reading, and opening
 // a project in the host file manager.
 
-import { dialog, shell } from "electron";
+import { BrowserWindow, dialog, shell } from "electron";
 import simpleGit from "simple-git";
 import path from "node:path";
 
 // Select a folder via the native open dialog. Returns the chosen path or null.
-export async function chooseWorkspaceProjectPath(): Promise<string | null> {
-  const result = await dialog.showOpenDialog({
+export async function chooseWorkspaceProjectPath(parent?: BrowserWindow | null): Promise<string | null> {
+  const options: Electron.OpenDialogOptions = {
     properties: ["openDirectory"],
     title: "选择项目目录",
-  });
+  };
+  const result = parent && !parent.isDestroyed()
+    ? await dialog.showOpenDialog(parent, options)
+    : await dialog.showOpenDialog(options);
   if (result.canceled || result.filePaths.length === 0) return null;
   return result.filePaths[0];
 }

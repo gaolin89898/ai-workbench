@@ -41,11 +41,29 @@ interface CodexSession {
   stderrBuffer: string;
   turnResolver: { resolve: () => void; reject: (error: Error) => void } | null;
   errorEmitted: boolean;
+  cancelled: boolean;
 }
 
 // ---------- Constants ----------
 
-const CODEX_TIMEOUT_MS = 60_000;
+const CODEX_TURN_TIMEOUT_MS = 30 * 60_000;
+const CODEX_WARMUP_TIMEOUT_MS = 60_000;
+const CODEX_CLIENT_INFO = { name: "AI Workbench", version: "0.1.0" };
+const activeCodexSessions = new Map<string, CodexSession>();
+
+function spawnCodex(args: string[], cwd: string): ChildProcessWithoutNullStreams {
+  if (process.platform === "win32") {
+    return spawn("cmd.exe", ["/d", "/s", "/c", "codex.cmd", ...args], {
+      cwd,
+      stdio: ["pipe", "pipe", "pipe"],
+      windowsHide: true,
+    });
+  }
+  return spawn("codex", args, {
+    cwd,
+    stdio: ["pipe", "pipe", "pipe"],
+  });
+}
 
 // ---------- System instructions ----------
 
@@ -99,10 +117,15 @@ function extractThreadId(value: unknown): string | null {
   if (typeof value === "string") return value;
   if (value && typeof value === "object") {
     const r = value as Record<string, unknown>;
-    const candidate = r["threadId"] ?? r["thread_id"] ?? r["id"];
+    const thread = r["thread"] as Record<string, unknown> | undefined;
+    const candidate = r["threadId"] ?? r["thread_id"] ?? r["id"] ?? thread?.["id"];
     if (typeof candidate === "string") return candidate;
   }
   return null;
+}
+
+function buildUserInput(text: string): Array<Record<string, unknown>> {
+  return [{ type: "text", text, text_elements: [] }];
 }
 
 function extractItemId(params: unknown): string | undefined {
@@ -137,6 +160,13 @@ function buildItemStartedSegment(params: unknown): ChatSegment {
   const stepId = extractItemId(params);
 
   switch (itemType) {
+    case "reasoning":
+      return {
+        type: "status",
+        stepId,
+        label: "正在思考",
+        icon: "think",
+      };
     case "agentMessage":
       return { type: "text", stepId, text: "" };
     case "commandExecution":
@@ -175,6 +205,13 @@ function buildItemCompletedSegment(params: unknown): ChatSegment {
   const deletions = numOrUndef(item["deletions"] ?? p["deletions"]);
 
   switch (itemType) {
+    case "reasoning":
+      return {
+        type: "status",
+        stepId,
+        label: "正在思考",
+        icon: "think",
+      };
     case "commandExecution":
       return {
         type: "tool",
@@ -333,7 +370,7 @@ function handleNotification(
       break;
     }
     case "turn/completed": {
-      emit(sender, { aiSessionId, kind: "done", text: "completed" });
+      emit(sender, { aiSessionId, kind: "done" });
       if (session.turnResolver) {
         session.turnResolver.resolve();
         session.turnResolver = null;
@@ -362,10 +399,7 @@ function createSession(
   cwd: string,
   sender: Sender
 ): CodexSession {
-  const child = spawn("codex", ["app-server", "--stdio"], {
-    cwd,
-    stdio: ["pipe", "pipe", "pipe"],
-  });
+  const child = spawnCodex(["app-server", "--stdio"], cwd);
 
   const session: CodexSession = {
     aiSessionId,
@@ -379,6 +413,7 @@ function createSession(
     stderrBuffer: "",
     turnResolver: null,
     errorEmitted: false,
+    cancelled: false,
   };
 
   // stdout: parse JSON-RPC lines
@@ -522,9 +557,10 @@ export async function runCodexChat(
 ): Promise<string> {
   const { aiSessionId, projectPath, prompt } = req;
   const session = createSession(aiSessionId, projectPath, sender);
+  activeCodexSessions.set(aiSessionId, session);
 
   const timeout = setTimeout(() => {
-    emitSessionError(session, "Codex 会话超时（60s）");
+    emitSessionError(session, "Codex 会话超时（30 分钟）");
     if (session.turnResolver) {
       session.turnResolver.reject(new Error("timeout"));
       session.turnResolver = null;
@@ -534,11 +570,11 @@ export async function runCodexChat(
     }
     session.pendingRequests.clear();
     killSession(session);
-  }, CODEX_TIMEOUT_MS);
+  }, CODEX_TURN_TIMEOUT_MS);
 
   try {
     // 1. initialize
-    await sendRequest(session, "initialize", {});
+    await sendRequest(session, "initialize", { clientInfo: CODEX_CLIENT_INFO });
 
     // 2. start or resume thread
     const threadId = await ensureThread(session, aiSessionId);
@@ -553,7 +589,7 @@ export async function runCodexChat(
     const fullPrompt = buildTurnMessage(prompt);
     await sendRequest(session, "turn/start", {
       threadId,
-      message: fullPrompt,
+      input: buildUserInput(fullPrompt),
     });
 
     // 5. wait for turn/completed or error
@@ -564,10 +600,34 @@ export async function runCodexChat(
     return threadId;
   } catch (err) {
     clearTimeout(timeout);
-    emitSessionError(session, errorMessage(err));
+    if (!session.cancelled) {
+      emitSessionError(session, errorMessage(err));
+    }
     killSession(session);
     throw err;
+  } finally {
+    if (activeCodexSessions.get(aiSessionId) === session) {
+      activeCodexSessions.delete(aiSessionId);
+    }
   }
+}
+
+export function stopCodexChat(aiSessionId: string): boolean {
+  const session = activeCodexSessions.get(aiSessionId);
+  if (!session) return false;
+  session.cancelled = true;
+  const error = new Error("AI chat stopped by user");
+  for (const [, pending] of session.pendingRequests) {
+    pending.reject(error);
+  }
+  session.pendingRequests.clear();
+  if (session.turnResolver) {
+    session.turnResolver.reject(error);
+    session.turnResolver = null;
+  }
+  killSession(session);
+  activeCodexSessions.delete(aiSessionId);
+  return true;
 }
 
 /**
@@ -590,10 +650,10 @@ export async function warmupCodexSession(
     }
     session.pendingRequests.clear();
     killSession(session);
-  }, CODEX_TIMEOUT_MS);
+  }, CODEX_WARMUP_TIMEOUT_MS);
 
   try {
-    await sendRequest(session, "initialize", {});
+    await sendRequest(session, "initialize", { clientInfo: CODEX_CLIENT_INFO });
     const threadId = await ensureThread(session, aiSessionId);
     clearTimeout(timeout);
     killSession(session);

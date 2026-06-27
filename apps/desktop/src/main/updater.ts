@@ -12,33 +12,43 @@ export function initUpdater(win: BrowserWindow): void {
   mainWindow = win;
 
   autoUpdater.on("update-available", (info) => {
-    mainWindow?.send("update-available", info);
+    mainWindow?.webContents.send("update-available", info);
   });
 
   autoUpdater.on("update-not-available", () => {
-    mainWindow?.send("update-not-available");
+    mainWindow?.webContents.send("update-not-available");
   });
 
   autoUpdater.on("download-progress", (progress) => {
-    mainWindow?.send("download-progress", progress);
+    mainWindow?.webContents.send("download-progress", progress);
   });
 
   autoUpdater.on("update-downloaded", (info) => {
-    mainWindow?.send("update-downloaded", info);
+    mainWindow?.webContents.send("update-downloaded", info);
   });
 
   autoUpdater.on("error", (err) => {
-    mainWindow?.send("update-error", { message: err?.message ?? String(err) });
+    mainWindow?.webContents.send("update-error", { message: err?.message ?? String(err) });
   });
 }
 
 // 将 electron-updater 的 releaseNotes 归一化为 string | null
-function normalizeBody(releaseNotes: string | string[] | null | undefined): string | null {
+function normalizeBody(releaseNotes: unknown): string | null {
   if (releaseNotes == null) return null;
   if (Array.isArray(releaseNotes)) {
-    return releaseNotes.length > 0 ? releaseNotes.join("\n") : null;
+    const notes = releaseNotes
+      .map((note) => {
+        if (typeof note === "string") return note;
+        if (note && typeof note === "object" && "note" in note) {
+          const value = (note as { note?: unknown }).note;
+          return typeof value === "string" ? value : "";
+        }
+        return "";
+      })
+      .filter(Boolean);
+    return notes.length > 0 ? notes.join("\n") : null;
   }
-  return releaseNotes;
+  return typeof releaseNotes === "string" ? releaseNotes : null;
 }
 
 // 检查更新（对应 tauri.ts 的 checkAppUpdate）

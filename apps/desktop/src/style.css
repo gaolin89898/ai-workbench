@@ -2038,13 +2038,13 @@ dd {
   flex: 1;
   flex-direction: column;
   gap: 12px;
-  overflow-y: auto;
+  overflow: hidden;
   background: #fff;
   padding: 28px max(28px, calc((100% - 760px) / 2));
-  scrollbar-gutter: stable;
 }
 
 .chat-logs-panel > header {
+  flex: 0 0 auto;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -2074,6 +2074,7 @@ dd {
 }
 
 .chat-log-current {
+  flex: 0 0 auto;
   display: grid;
   grid-template-columns: 18px minmax(0, 1fr);
   align-items: start;
@@ -2124,14 +2125,19 @@ dd {
 
 .chat-log-list {
   display: flex;
+  min-height: 0;
+  flex: 1;
   flex-direction: column;
   gap: 0;
   margin: 0;
   border: 1px solid #e5eaf2;
   border-radius: 8px;
   background: #fbfdff;
+  overflow-y: auto;
+  overflow-x: hidden;
   padding: 0;
   list-style: none;
+  scrollbar-gutter: stable;
 }
 
 .chat-log-list li {
@@ -2430,23 +2436,24 @@ dd {
 .chat-process-details {
   width: 100%;
   max-width: min(860px, 100%);
-  border-bottom: 1px solid #edf0f4;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
   color: #8a94a6;
-  padding: 0 0 8px;
 }
 
 .chat-process-details summary {
-  display: flex;
+  display: inline-flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 6px;
-  width: 100%;
+  gap: 5px;
+  width: auto;
   cursor: pointer;
   list-style: none;
   list-style-type: none;
   color: #7c8797;
   font-size: 13px;
   line-height: 22px;
+  padding: 0;
 }
 
 .chat-process-details summary::-webkit-details-marker {
@@ -2460,12 +2467,12 @@ dd {
 
 .chat-process-chevron {
   display: block;
-  width: 16px;
-  height: 16px;
+  width: 14px;
+  height: 14px;
   color: #9aa3af;
   flex: 0 0 auto;
-  opacity: 0;
-  visibility: hidden;
+  opacity: 1;
+  visibility: visible;
   transition: transform 160ms ease, color 160ms ease, opacity 140ms ease, visibility 140ms ease;
 }
 
@@ -2473,18 +2480,63 @@ dd {
   transform: rotate(-90deg);
 }
 
-.chat-process-details summary:hover .chat-process-chevron,
-.chat-process-details summary:focus-visible .chat-process-chevron {
-  color: #6b7280;
+.chat-process-body {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  border-top: 0;
+  padding: 14px 0 0;
+}
+
+.chat-process-group {
+  width: fit-content;
+  max-width: 100%;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: #737d8c;
+}
+
+.chat-process-group summary {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-height: 22px;
+  cursor: pointer;
+  list-style: none;
+  list-style-type: none;
+  padding: 0;
+  color: #667085;
+  font-size: 13px;
+  font-weight: 560;
+}
+
+.chat-process-group summary::-webkit-details-marker {
+  display: none;
+}
+
+.chat-process-group summary::marker {
+  content: "";
+  font-size: 0;
+}
+
+.chat-process-group .chat-process-chevron {
   opacity: 1;
   visibility: visible;
 }
 
-.chat-process-body {
+.chat-process-group:not([open]) .chat-process-chevron {
+  transform: rotate(-90deg);
+}
+
+.chat-process-group-body {
   display: flex;
   flex-direction: column;
-  gap: 7px;
-  margin-top: 8px;
+  gap: 10px;
+  border-top: 0;
+  padding: 10px 0 0 18px;
+  width: min(760px, calc(100vw - 120px));
+  max-width: 100%;
 }
 
 .chat-markdown {
@@ -3171,6 +3223,22 @@ dd {
 .chat-composer .chat-send-button {
   right: 12px;
   bottom: 12px;
+}
+
+.chat-send-button.stopping {
+  background: #ef4444;
+}
+
+.chat-send-button.stopping:hover {
+  background: #dc2626;
+}
+
+.chat-stop-icon {
+  display: block;
+  width: 11px;
+  height: 11px;
+  border-radius: 2px;
+  background: #fff;
 }
 
 .chat-send-spinner {

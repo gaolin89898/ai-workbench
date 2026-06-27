@@ -12,5 +12,5 @@
     "types": ["node"],
     "outDir": "./out/tsconfig.node"
   },
-  "include": ["src/main/**/*.ts", "src/preload/**/*.ts"]
+  "include": ["src/main/**/*.ts", "src/preload/**/*.ts", "src/services/desktop.ts", "src/env.d.ts"]
 }

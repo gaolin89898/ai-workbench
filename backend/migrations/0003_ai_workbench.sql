@@ -1,4 +1,4 @@
-CREATE TABLE ai_providers (
+CREATE TABLE IF NOT EXISTS ai_providers (
   id TEXT PRIMARY KEY,
   name TEXT NOT NULL,
   command TEXT NOT NULL,
@@ -14,7 +14,7 @@ INSERT INTO ai_providers (id, name, command, built_in, enabled) VALUES
   ('deepseek', 'DeepSeek TUI', 'deepseek', TRUE, TRUE)
 ON CONFLICT (id) DO NOTHING;
 
-CREATE TABLE desktop_provider_status (
+CREATE TABLE IF NOT EXISTS desktop_provider_status (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   device_id UUID NOT NULL REFERENCES desktop_devices(id) ON DELETE CASCADE,
   provider_id TEXT NOT NULL REFERENCES ai_providers(id) ON DELETE CASCADE,
@@ -25,7 +25,7 @@ CREATE TABLE desktop_provider_status (
   UNIQUE(device_id, provider_id)
 );
 
-CREATE TABLE workspace_projects (
+CREATE TABLE IF NOT EXISTS workspace_projects (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   device_id UUID NOT NULL REFERENCES desktop_devices(id) ON DELETE CASCADE,
   name TEXT NOT NULL,
@@ -37,7 +37,7 @@ CREATE TABLE workspace_projects (
   UNIQUE(device_id, path)
 );
 
-CREATE TABLE ai_sessions (
+CREATE TABLE IF NOT EXISTS ai_sessions (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   device_id UUID NOT NULL REFERENCES desktop_devices(id) ON DELETE CASCADE,
@@ -52,7 +52,7 @@ CREATE TABLE ai_sessions (
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
-CREATE INDEX idx_desktop_provider_status_device_id ON desktop_provider_status(device_id);
-CREATE INDEX idx_workspace_projects_device_id ON workspace_projects(device_id);
-CREATE INDEX idx_ai_sessions_device_id_updated_at ON ai_sessions(device_id, updated_at DESC);
-CREATE INDEX idx_ai_sessions_user_id_updated_at ON ai_sessions(user_id, updated_at DESC);
+CREATE INDEX IF NOT EXISTS idx_desktop_provider_status_device_id ON desktop_provider_status(device_id);
+CREATE INDEX IF NOT EXISTS idx_workspace_projects_device_id ON workspace_projects(device_id);
+CREATE INDEX IF NOT EXISTS idx_ai_sessions_device_id_updated_at ON ai_sessions(device_id, updated_at DESC);
+CREATE INDEX IF NOT EXISTS idx_ai_sessions_user_id_updated_at ON ai_sessions(user_id, updated_at DESC);

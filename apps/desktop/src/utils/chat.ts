@@ -1,6 +1,35 @@
 import type { ChatSegment } from "../services/desktop";
 
+const STRUCTURED_MESSAGE_PREFIX = "__AI_WORKBENCH_MESSAGE_V1__";
+
+export type StoredAssistantMessage = {
+  text: string;
+  segments?: ChatSegment[];
+};
+
+export function encodeAssistantMessageForStorage(message: StoredAssistantMessage) {
+  return `${STRUCTURED_MESSAGE_PREFIX}${JSON.stringify({
+    text: message.text,
+    segments: message.segments,
+  })}`;
+}
+
+export function decodeAssistantMessageFromStorage(value: string): StoredAssistantMessage {
+  if (!value.startsWith(STRUCTURED_MESSAGE_PREFIX)) return { text: value };
+  try {
+    const parsed = JSON.parse(value.slice(STRUCTURED_MESSAGE_PREFIX.length));
+    if (!parsed || typeof parsed !== "object") return { text: value };
+    const record = parsed as Record<string, unknown>;
+    const text = typeof record.text === "string" ? record.text : "";
+    const segments = Array.isArray(record.segments) ? (record.segments as ChatSegment[]) : undefined;
+    return { text, segments };
+  } catch {
+    return { text: value };
+  }
+}
+
 export function extractAssistantText(value: string) {
+  value = decodeAssistantMessageFromStorage(value).text;
   const trimmed = value.trim();
   if (!trimmed || !(trimmed.startsWith("{") || trimmed.startsWith("["))) return value;
   try {
@@ -32,6 +61,7 @@ export function cleanAssistantOutput(output: string, prompt: string) {
 export function assistantOutputToSegments(output: string, prompt: string): ChatSegment[] {
   const lines = assistantDisplayLines(extractAssistantText(output), prompt);
   if (!lines.length) return [];
+  const cleanedOutput = lines.join("\n").trim();
   const segments: ChatSegment[] = [];
   let textLines: string[] = [];
   let index = 0;

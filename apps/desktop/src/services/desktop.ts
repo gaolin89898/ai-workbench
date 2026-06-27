@@ -197,83 +197,100 @@ export type AppUpdateInfo = {
   body?: string | null;
 };
 
+function requireDesktopApi() {
+  if (!window.desktop?.invoke) {
+    throw new Error("当前不是 Electron 桌面端窗口，无法打开本地文件夹选择器。请使用 pnpm dev 启动桌面端，不要只在浏览器里打开 Vite 页面。");
+  }
+  return window.desktop;
+}
+
+function ipc<T>(channel: string, ...args: unknown[]): Promise<T> {
+  return requireDesktopApi().invoke(channel, ...args) as Promise<T>;
+}
+
+function on(channel: string, handler: (...args: unknown[]) => void): () => void {
+  return requireDesktopApi().on(channel, handler);
+}
+
 export const desktopApi = {
   listSessions: (): Promise<TerminalSession[]> =>
-    window.desktop.ipc.list_sessions() as Promise<TerminalSession[]>,
+    ipc<TerminalSession[]>("list_sessions"),
   pairDesktop: (server: string, code: string): Promise<PairResponse> =>
-    window.desktop.ipc.pair_desktop(server, code) as Promise<PairResponse>,
+    ipc<PairResponse>("pair_desktop", server, code),
   createDesktopPairingRequest: (server: string): Promise<DesktopPairingRequest> =>
-    window.desktop.ipc.create_desktop_pairing_request(server) as Promise<DesktopPairingRequest>,
+    ipc<DesktopPairingRequest>("create_desktop_pairing_request", server),
   getDesktopPairingStatus: (server: string, code: string): Promise<DesktopPairingStatus> =>
-    window.desktop.ipc.get_desktop_pairing_status(server, code) as Promise<DesktopPairingStatus>,
+    ipc<DesktopPairingStatus>("get_desktop_pairing_status", server, code),
   buildDesktopPairingQrPayload: (server: string, code: string): Promise<string> =>
-    window.desktop.ipc.build_desktop_pairing_qr_payload(server, code) as Promise<string>,
+    ipc<string>("build_desktop_pairing_qr_payload", server, code),
   getCloudConfig: (): Promise<SavedCloudConfig | null> =>
-    window.desktop.ipc.get_cloud_config() as Promise<SavedCloudConfig | null>,
+    ipc<SavedCloudConfig | null>("get_cloud_config"),
   listAiProviders: (): Promise<AiProvider[]> =>
-    window.desktop.ipc.list_ai_providers() as Promise<AiProvider[]>,
+    ipc<AiProvider[]>("list_ai_providers"),
   detectAiProviders: (): Promise<ProviderStatus[]> =>
-    window.desktop.ipc.detect_ai_providers() as Promise<ProviderStatus[]>,
+    ipc<ProviderStatus[]>("detect_ai_providers"),
   addWorkspaceProject: (path: string): Promise<WorkspaceProject> =>
-    window.desktop.ipc.add_workspace_project(path) as Promise<WorkspaceProject>,
+    ipc<WorkspaceProject>("add_workspace_project", path),
   chooseWorkspaceProject: (): Promise<WorkspaceProject | null> =>
-    window.desktop.ipc.choose_workspace_project() as Promise<WorkspaceProject | null>,
+    ipc<WorkspaceProject | null>("choose_workspace_project"),
   listWorkspaceProjects: (): Promise<WorkspaceProject[]> =>
-    window.desktop.ipc.list_workspace_projects() as Promise<WorkspaceProject[]>,
+    ipc<WorkspaceProject[]>("list_workspace_projects"),
   renameWorkspaceProject: (id: string, name: string): Promise<WorkspaceProject> =>
-    window.desktop.ipc.rename_workspace_project(id, name) as Promise<WorkspaceProject>,
+    ipc<WorkspaceProject>("rename_workspace_project", id, name),
   removeWorkspaceProject: (id: string): Promise<void> =>
-    window.desktop.ipc.remove_workspace_project(id) as Promise<void>,
+    ipc<void>("remove_workspace_project", id),
   openProjectInFileManager: (path: string): Promise<void> =>
-    window.desktop.ipc.open_project_in_file_manager(path) as Promise<void>,
+    ipc<void>("open_project_in_file_manager", path),
   createAiSession: (req: CreateAiSessionRequest): Promise<AiSession> =>
-    window.desktop.ipc.create_ai_session(req) as Promise<AiSession>,
+    ipc<AiSession>("create_ai_session", req),
   restartAiSession: (aiSessionId: string): Promise<AiSession> =>
-    window.desktop.ipc.restart_ai_session(aiSessionId) as Promise<AiSession>,
+    ipc<AiSession>("restart_ai_session", aiSessionId),
   appendLocalAiMessage: (aiSessionId: string, role: ChatMessage["role"], content: string): Promise<void> =>
-    window.desktop.ipc.append_local_ai_message(aiSessionId, role, content) as Promise<void>,
+    ipc<void>("append_local_ai_message", aiSessionId, role, content),
   startShellPty: (req: StartShellPtyRequest): Promise<void> =>
-    window.desktop.ipc.start_shell_pty(req) as Promise<void>,
+    ipc<void>("start_shell_pty", req),
   sendShellInput: (req: ShellInputRequest): Promise<void> =>
-    window.desktop.ipc.send_shell_input(req) as Promise<void>,
+    ipc<void>("send_shell_input", req),
   resizeShell: (req: ResizeShellRequest): Promise<void> =>
-    window.desktop.ipc.resize_shell(req) as Promise<void>,
+    ipc<void>("resize_shell", req),
   getShellBuffer: (aiSessionId: string): Promise<string> =>
-    window.desktop.ipc.get_shell_buffer(aiSessionId) as Promise<string>,
+    ipc<string>("get_shell_buffer", aiSessionId),
   runAiChat: (req: RunAiChatRequest): Promise<string> =>
-    window.desktop.ipc.run_ai_chat(req) as Promise<string>,
+    ipc<string>("run_ai_chat", req),
   runCodexChat: (req: RunCodexChatRequest): Promise<string> =>
-    window.desktop.ipc.run_codex_chat(req) as Promise<string>,
+    ipc<string>("run_codex_chat", req),
+  stopAiChat: (aiSessionId: string): Promise<boolean> =>
+    ipc<boolean>("stop_ai_chat", aiSessionId),
   warmupAiSession: (aiSessionId: string): Promise<AiSession> =>
-    window.desktop.ipc.warmup_ai_session(aiSessionId) as Promise<AiSession>,
+    ipc<AiSession>("warmup_ai_session", aiSessionId),
   warmupCodexSession: (aiSessionId: string): Promise<AiSession> =>
-    window.desktop.ipc.warmup_codex_session(aiSessionId) as Promise<AiSession>,
+    ipc<AiSession>("warmup_codex_session", aiSessionId),
   stopShellPty: (aiSessionId: string): Promise<void> =>
-    window.desktop.ipc.stop_shell_pty(aiSessionId) as Promise<void>,
+    ipc<void>("stop_shell_pty", aiSessionId),
   isShellLive: (aiSessionId: string): Promise<boolean> =>
-    window.desktop.ipc.is_shell_live(aiSessionId) as Promise<boolean>,
+    ipc<boolean>("is_shell_live", aiSessionId),
   listLocalAiHistory: (aiSessionId: string): Promise<AiHistoryMessage[]> =>
-    window.desktop.ipc.list_local_ai_history(aiSessionId) as Promise<AiHistoryMessage[]>,
+    ipc<AiHistoryMessage[]>("list_local_ai_history", aiSessionId),
   listLocalAiSessions: (): Promise<AiSession[]> =>
-    window.desktop.ipc.list_local_ai_sessions() as Promise<AiSession[]>,
+    ipc<AiSession[]>("list_local_ai_sessions"),
   archiveLocalAiSession: (aiSessionId: string, archived: boolean): Promise<AiSession> =>
-    window.desktop.ipc.archive_local_ai_session(aiSessionId, archived) as Promise<AiSession>,
+    ipc<AiSession>("archive_local_ai_session", aiSessionId, archived),
   renameLocalAiSession: (aiSessionId: string, title: string): Promise<AiSession> =>
-    window.desktop.ipc.rename_local_ai_session(aiSessionId, title) as Promise<AiSession>,
+    ipc<AiSession>("rename_local_ai_session", aiSessionId, title),
   openSessionInNewWindow: (aiSessionId: string): Promise<void> =>
-    window.desktop.ipc.open_session_in_new_window(aiSessionId) as Promise<void>,
+    ipc<void>("open_session_in_new_window", aiSessionId),
   checkAppUpdate: (): Promise<AppUpdateInfo> =>
-    window.desktop.ipc.check_app_update() as Promise<AppUpdateInfo>,
+    ipc<AppUpdateInfo>("check_app_update"),
   installAppUpdate: (): Promise<boolean> =>
-    window.desktop.ipc.install_app_update() as Promise<boolean>,
+    ipc<boolean>("install_app_update"),
   onShellTerminalOutput: (handler: (event: ShellTerminalEvent) => void): Promise<() => void> =>
-    Promise.resolve(window.desktop.on["shell-terminal-output"](handler as (event: unknown) => void)),
+    Promise.resolve(on("shell-terminal-output", handler as (event: unknown) => void)),
   onShellSessionStatus: (handler: (event: ShellSessionStatusEvent) => void): Promise<() => void> =>
-    Promise.resolve(window.desktop.on["shell-session-status"](handler as (event: unknown) => void)),
+    Promise.resolve(on("shell-session-status", handler as (event: unknown) => void)),
   onAiChatOutput: (handler: (event: AiChatOutputEvent) => void): Promise<() => void> =>
-    Promise.resolve(window.desktop.on["ai-chat-output"](handler as (event: unknown) => void)),
+    Promise.resolve(on("ai-chat-output", handler as (event: unknown) => void)),
   onWorkspaceChanged: (handler: () => void): Promise<() => void> =>
-    Promise.resolve(window.desktop.on["workspace-changed"](handler as (...args: unknown[]) => void)),
+    Promise.resolve(on("workspace-changed", handler as (...args: unknown[]) => void)),
   onAiHistoryChanged: (handler: (event: AiHistoryChangedEvent) => void): Promise<() => void> =>
-    Promise.resolve(window.desktop.on["ai-history-changed"](handler as (event: unknown) => void)),
+    Promise.resolve(on("ai-history-changed", handler as (event: unknown) => void)),
 };

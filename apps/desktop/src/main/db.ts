@@ -153,11 +153,16 @@ export async function addWorkspaceProject(
   const now = new Date().toISOString();
   db.prepare(
     `INSERT INTO local_projects (id, name, path, git_branch, git_dirty, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?)`
+     VALUES (?, ?, ?, ?, ?, ?)
+     ON CONFLICT(path) DO UPDATE SET
+       name = excluded.name,
+       git_branch = excluded.git_branch,
+       git_dirty = excluded.git_dirty,
+       updated_at = excluded.updated_at`
   ).run(id, name, projectPath, branch, dirty ? 1 : 0, now);
   const row = db
-    .prepare("SELECT * FROM local_projects WHERE id = ?")
-    .get(id) as ProjectRow;
+    .prepare("SELECT * FROM local_projects WHERE path = ?")
+    .get(projectPath) as ProjectRow;
   return rowToProject(row);
 }
 

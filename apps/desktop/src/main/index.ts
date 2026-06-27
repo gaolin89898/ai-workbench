@@ -30,6 +30,17 @@ function createWindow(): BrowserWindow {
     return { action: "deny" };
   });
 
+  mainWindow.webContents.on("before-input-event", (event, input) => {
+    const isToggleDevTools =
+      input.key === "F12" ||
+      ((input.control || input.meta) && input.shift && input.key.toLowerCase() === "i");
+
+    if (isToggleDevTools) {
+      event.preventDefault();
+      mainWindow.webContents.toggleDevTools();
+    }
+  });
+
   const rendererUrl = process.env["ELECTRON_RENDERER_URL"];
   if (rendererUrl) {
     mainWindow.loadURL(rendererUrl);

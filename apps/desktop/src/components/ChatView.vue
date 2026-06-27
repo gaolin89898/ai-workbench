@@ -2,7 +2,6 @@
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import ChatMessageRow from "./ChatMessageRow.vue";
 import TerminalView from "./TerminalView.vue";
-import { statusText } from "../utils/chat";
 import { useWorkspace } from "../composables/useWorkspace";
 import type { AiProvider } from "../services/desktop";
 
@@ -74,6 +73,12 @@ function closeStartMenuOnOutsideClick(event: PointerEvent) {
   startMenuOpen.value = false;
 }
 
+function onWindowKeydown(event: KeyboardEvent) {
+  if (event.key !== "Escape" || !ws.activeChatIsRunning.value) return;
+  event.preventDefault();
+  void ws.stopActiveAiChat();
+}
+
 function projectForNewSession() {
   const project = currentProject.value ?? ws.projects.value[0];
   if (project) ws.selectedProjectPath.value = project.path;
@@ -91,13 +96,19 @@ watch(
 
 onMounted(() => {
   document.addEventListener("pointerdown", closeStartMenuOnOutsideClick);
+  window.addEventListener("keydown", onWindowKeydown);
 });
 
 onBeforeUnmount(() => {
   document.removeEventListener("pointerdown", closeStartMenuOnOutsideClick);
+  window.removeEventListener("keydown", onWindowKeydown);
 });
 
 async function send() {
+  if (ws.activeChatIsRunning.value) {
+    await ws.stopActiveAiChat();
+    return;
+  }
   const value = prompt.value.trim();
   if (!value) return;
   prompt.value = "";
@@ -131,6 +142,7 @@ async function createStartSession(providerId = "codex") {
 function onPromptKeydown(event: KeyboardEvent) {
   if (event.key === "Enter" && !event.shiftKey) {
     event.preventDefault();
+    if (ws.activeChatIsRunning.value) return;
     void send();
   }
 }
@@ -156,7 +168,7 @@ function onPromptKeydown(event: KeyboardEvent) {
               <span>新建 {{ provider.name }} 会话</span>
             </button>
           </div>
-          <button class="codex-send-button" :disabled="!prompt.trim() || ws.activeChatIsRunning.value" title="发送" type="submit">↑</button>
+          <button class="codex-send-button" :disabled="!prompt.trim()" title="发送" type="submit">↑</button>
         </form>
         <div v-if="ws.createAiError.value && showCreateHint" class="chat-toast start-toast error">{{ ws.createAiResult.value }}</div>
       </div>
@@ -168,10 +180,11 @@ function onPromptKeydown(event: KeyboardEvent) {
         <span>{{ chatHeaderMeta }}</span>
       </div>
       <span
+        v-if="ws.activeChatRunState.value?.active"
         class="chat-topbar-status"
-        :class="{ active: Boolean(ws.activeAiSession.value), running: ws.activeChatIsRunning.value }"
+        :class="{ running: ws.activeChatIsRunning.value }"
       >
-        {{ ws.activeChatRunState.value?.active ? ws.activeChatRunState.value.title : (ws.activeAiSession.value ? statusText(ws.activeAiSession.value.status) : "未创建") }}
+        {{ ws.activeChatRunState.value.title }}
       </span>
     </header>
     <nav class="chat-mode-tabs" aria-label="聊天视图切换">
@@ -237,17 +250,18 @@ function onPromptKeydown(event: KeyboardEvent) {
           </div>
         </div>
         <div v-if="showCreateHint" class="chat-toast" :class="{ error: ws.createAiError.value }">{{ ws.createAiResult.value }}</div>
-        <div v-if="activeTab !== 'logs' && ws.activeChatRunState.value" class="chat-run-panel" :class="[ws.activeChatRunState.value.phase, { active: ws.activeChatRunState.value.active }]">
-          <span class="chat-run-pulse" aria-hidden="true"></span>
-          <div>
-            <strong>{{ ws.activeChatRunState.value.title }}</strong>
-            <p>{{ ws.activeChatRunState.value.detail }}</p>
-          </div>
-        </div>
         <div v-if="activeTab === 'chat'" class="chat-composer">
           <textarea v-model="prompt" rows="3" placeholder="输入你想做的事" @keydown="onPromptKeydown"></textarea>
-          <button class="codex-send-button chat-send-button" :disabled="!prompt.trim() || ws.activeChatIsRunning.value" title="发送" type="button" @click="send" aria-label="发送">
-            <span v-if="ws.activeChatIsRunning.value" class="chat-send-spinner" aria-hidden="true"></span>
+          <button
+            class="codex-send-button chat-send-button"
+            :class="{ stopping: ws.activeChatIsRunning.value }"
+            :disabled="!prompt.trim() && !ws.activeChatIsRunning.value"
+            :title="ws.activeChatIsRunning.value ? '中断' : '发送'"
+            type="button"
+            @click="send"
+            :aria-label="ws.activeChatIsRunning.value ? '中断' : '发送'"
+          >
+            <span v-if="ws.activeChatIsRunning.value" class="chat-stop-icon" aria-hidden="true"></span>
             <span v-else aria-hidden="true">↑</span>
           </button>
         </div>

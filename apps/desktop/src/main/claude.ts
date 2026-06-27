@@ -14,6 +14,21 @@ type Sender = { send: (channel: string, ...args: unknown[]) => void };
 // ---------- Constants ----------
 
 const CLAUDE_TIMEOUT_MS = 120_000;
+const activeClaudeRuns = new Map<string, () => void>();
+
+function spawnClaude(args: string[], options?: { cwd?: string }): ChildProcessWithoutNullStreams {
+  if (process.platform === "win32") {
+    return spawn("cmd.exe", ["/d", "/s", "/c", "claude.cmd", ...args], {
+      cwd: options?.cwd,
+      stdio: ["pipe", "pipe", "pipe"],
+      windowsHide: true,
+    });
+  }
+  return spawn("claude", args, {
+    cwd: options?.cwd,
+    stdio: ["pipe", "pipe", "pipe"],
+  });
+}
 
 // ---------- System instructions ----------
 
@@ -101,10 +116,7 @@ function runClaudeOnce(
   }
   args.push(prompt);
 
-  const child: ChildProcessWithoutNullStreams = spawn("claude", args, {
-    cwd: projectPath,
-    stdio: ["pipe", "pipe", "pipe"],
-  });
+  const child: ChildProcessWithoutNullStreams = spawnClaude(args, { cwd: projectPath });
 
   const rl: Interface = createInterface({
     input: child.stdout,
@@ -160,6 +172,7 @@ function runClaudeOnce(
       if (closed) return;
       closed = true;
       clearTimeout(timeout);
+      activeClaudeRuns.delete(aiSessionId);
       try {
         rl.close();
       } catch {
@@ -176,6 +189,11 @@ function runClaudeOnce(
         // ignore
       }
     }
+
+    activeClaudeRuns.set(aiSessionId, () => {
+      killChild();
+      reject(new Error("AI chat stopped by user"));
+    });
 
     // ----- stdout: parse stream-json lines -----
     rl.on("line", (line: string) => {
@@ -251,7 +269,7 @@ function runClaudeOnce(
             });
           } else {
             sessionId = extractSessionId(msg) ?? "";
-            emit(sender, { aiSessionId, kind: "done", text: "completed" });
+            emit(sender, { aiSessionId, kind: "done" });
             killChild();
             resolve(sessionId);
           }
@@ -279,6 +297,7 @@ function runClaudeOnce(
       if (closed) return;
       closed = true;
       clearTimeout(timeout);
+      activeClaudeRuns.delete(aiSessionId);
 
       if (resultReceived) return; // already resolved/rejected via result message
 
@@ -310,6 +329,7 @@ function runClaudeOnce(
       if (closed) return;
       closed = true;
       clearTimeout(timeout);
+      activeClaudeRuns.delete(aiSessionId);
 
       const errno = err as NodeJS.ErrnoException;
       const message =
@@ -377,6 +397,13 @@ export async function runAiChat(
   return await runClaudeOnce(req, sender, null);
 }
 
+export function stopAiChat(aiSessionId: string): boolean {
+  const stop = activeClaudeRuns.get(aiSessionId);
+  if (!stop) return false;
+  stop();
+  return true;
+}
+
 /**
  * Pre-warm a Claude session. Claude's session_id is only generated after the
  * first real conversation, so warmup simply verifies the CLI is available
@@ -389,9 +416,7 @@ export async function warmupAiSession(
   _sender: Sender
 ): Promise<{ providerSessionId: string }> {
   return new Promise((resolve) => {
-    const child = spawn("claude", ["--version"], {
-      stdio: ["pipe", "pipe", "pipe"],
-    });
+    const child = spawnClaude(["--version"]);
 
     const timeout = setTimeout(() => {
       try {

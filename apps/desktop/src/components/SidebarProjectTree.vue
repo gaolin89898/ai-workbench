@@ -340,6 +340,12 @@ function selectSession(session: AiSession) {
   emit("switchView", "aiSessions");
 }
 
+function chooseProjectFromSidebar() {
+  openProjectMenuPath.value = null;
+  openContextMenu.value = null;
+  emit("chooseProject");
+}
+
 function archiveSession(session: AiSession) {
   openContextMenu.value = null;
   emit("archiveSession", session.id, true);
@@ -455,10 +461,10 @@ onBeforeUnmount(() => {
     <section class="sidebar-section">
       <div class="sidebar-heading">
         <span>项目</span>
-        <button class="icon-button" title="选择本地项目" type="button" @click="emit('chooseProject')">＋</button>
+        <button class="icon-button" title="选择本地项目" type="button" @click.stop="chooseProjectFromSidebar">＋</button>
       </div>
       <div class="project-tree">
-        <button v-if="!projects.length" class="tree-empty" type="button" @click="emit('chooseProject')">
+        <button v-if="!projects.length" class="tree-empty" type="button" @click.stop="chooseProjectFromSidebar">
           选择本地项目
         </button>
         <section v-for="project in projects" :key="project.path" class="tree-project">

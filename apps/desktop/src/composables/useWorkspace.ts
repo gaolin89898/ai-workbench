@@ -1,7 +1,7 @@
 import { computed, ref, watch } from "vue";
 import router from "../router";
 import { desktopApi, type AiProvider, type AiSession, type ChatMessage, type ChatSegment, type DesktopPairingStatus, type ProviderStatus, type TerminalSession, type ViewName, type WorkspaceProject } from "../services/desktop";
-import { extractAssistantText } from "../utils/chat";
+import { decodeAssistantMessageFromStorage, encodeAssistantMessageForStorage, extractAssistantText } from "../utils/chat";
 
 const providers = ref<AiProvider[]>([]);
 const providerStatuses = ref<ProviderStatus[]>([]);
@@ -104,6 +104,8 @@ type PendingAssistant = {
   message: ChatMessage;
   prompt: string;
   steps: Map<string, ChatSegment>;
+  currentTextStepId: string | null;
+  textSegmentCounter: number;
   finalText: string;
   startedAt: number;
   hasBackendStatus: boolean;
@@ -121,6 +123,7 @@ type ChatRunState = {
 
 const pendingAssistants = new Map<string, PendingAssistant>();
 const assistantDrafts = new Map<string, { message: ChatMessage; savedText: string }>();
+const stoppedAiSessions = new Set<string>();
 let aiEventsInitialized = false;
 let aiEventsInitPromise: Promise<void> | null = null;
 let workspaceEventsInitialized = false;
@@ -131,7 +134,7 @@ const supportedChatProviders = new Set(["codex", "claude"]);
 function pushChatDebugEvent(message: string) {
   const time = new Date().toLocaleTimeString();
   if (chatDebugEvents.value[0]?.endsWith(message)) return;
-  chatDebugEvents.value = [`${time} ${message}`, ...chatDebugEvents.value].slice(0, 8);
+  chatDebugEvents.value = [`${time} ${message}`, ...chatDebugEvents.value].slice(0, 80);
 }
 
 function formatElapsedMs(elapsedMs: number) {
@@ -533,10 +536,17 @@ async function loadAiSessionHistory(sessionId: string) {
   try {
     const history = await desktopApi.listLocalAiHistory(sessionId);
     if (activeAiSession.value?.id !== sessionId) return;
-    chatMessages.value = history.map((message) => ({
-      role: message.role,
-      text: message.content,
-    }));
+    chatMessages.value = history.map((message) => {
+      if (message.role !== "assistant") {
+        return { role: message.role, text: message.content };
+      }
+      const decoded = decodeAssistantMessageFromStorage(message.content);
+      return {
+        role: message.role,
+        text: decoded.text,
+        segments: decoded.segments,
+      };
+    });
   } catch (error) {
     chatMessages.value = [{ role: "error", text: `读取历史失败：${String(error)}` }];
   }
@@ -601,6 +611,8 @@ async function sendPrompt(prompt: string) {
     message: assistantMessage,
     prompt: trimmed,
     steps: new Map([["initial-thinking", assistantMessage.segments![0]]]),
+    currentTextStepId: null,
+    textSegmentCounter: 0,
     finalText: "",
     startedAt: performance.now(),
     hasBackendStatus: false,
@@ -625,16 +637,17 @@ async function sendPrompt(prompt: string) {
     });
     pushChatDebugEvent(`用户消息已保存：${sessionId.slice(0, 8)}`);
     pushChatDebugEvent(`已连接 ${runtimeName}`);
-    void desktopApi.runAiChat({
+    const runChat = providerId === "codex" ? desktopApi.runCodexChat : desktopApi.runAiChat;
+    void runChat({
       aiSessionId: sessionId,
       projectPath,
       prompt: trimmed,
-    }).then((reply) => {
+    }).then((providerSessionId) => {
       const pending = pendingAssistants.get(sessionId);
       const startedAt = pending?.startedAt ?? chatRunStates.value[sessionId]?.startedAt ?? performance.now();
       const elapsedMs = Math.round(performance.now() - startedAt);
       if (!pending) {
-        pushChatDebugEvent(`${providerName} 进程已退出：之前已收到完成事件，返回 ${reply.length} 字符`);
+        pushChatDebugEvent(`${providerName} 进程已退出：providerSessionId ${providerSessionId ? "已更新" : "为空"}`);
         setChatRunState(sessionId, {
           active: false,
           phase: "done",
@@ -643,16 +656,20 @@ async function sendPrompt(prompt: string) {
         });
         return;
       }
-      pushChatDebugEvent(`${providerName} 已返回结果：${reply.length} 字符，用时 ${formatElapsedMs(elapsedMs)}`);
-      replacePendingAssistantText(sessionId, reply, true);
+      pushChatDebugEvent(`${providerName} 进程已退出：用时 ${formatElapsedMs(elapsedMs)}`);
+      replacePendingAssistantText(sessionId, pending.finalText, true);
       completePendingAssistantFromExec(sessionId);
       setChatRunState(sessionId, {
         active: false,
         phase: "done",
         title: `${providerName} 已完成`,
-        detail: `已返回 ${reply.length} 个字符，用时 ${formatElapsedMs(elapsedMs)}。正在等待下一条消息。`,
+        detail: `执行已结束，用时 ${formatElapsedMs(elapsedMs)}。正在等待下一条消息。`,
       });
     }).catch((error) => {
+      if (stoppedAiSessions.delete(sessionId)) {
+        pushChatDebugEvent(`${providerName} 执行已中断`);
+        return;
+      }
       pushChatDebugEvent(`${providerName} 执行失败：${String(error)}`);
       const pending = pendingAssistants.get(sessionId);
       if (!pending) return;
@@ -725,8 +742,37 @@ function replacePendingAssistantText(sessionId: string, text: string, done = fal
   const pending = pendingAssistants.get(sessionId);
   if (!pending) return;
   pending.finalText = extractAssistantText(text);
+  const textSegments = [...pending.steps.entries()].filter(([, segment]) => segment.type === "text");
+  if (pending.finalText.trim() && textSegments.length === 0) {
+    const stepId = nextPendingTextStepId(pending);
+    pending.currentTextStepId = stepId;
+    pending.steps.delete("initial-thinking");
+    pending.steps.set(stepId, { type: "text", stepId, text: pending.finalText });
+  } else if (textSegments.length === 1) {
+    const [stepId, segment] = textSegments[0];
+    pending.steps.set(stepId, { ...segment, text: pending.finalText } as ChatSegment);
+  }
   syncPendingAssistantSegments(sessionId, done);
   thinkingSessionIds.value = { ...thinkingSessionIds.value, [sessionId]: !done };
+}
+
+function appendPendingAssistantText(sessionId: string, text: string) {
+  const pending = pendingAssistants.get(sessionId);
+  if (!pending || !text) return;
+  pending.finalText = extractAssistantText(`${pending.finalText}${text}`);
+  pending.steps.delete("initial-thinking");
+  const stepId = pending.currentTextStepId ?? nextPendingTextStepId(pending);
+  pending.currentTextStepId = stepId;
+  const segment = pending.steps.get(stepId);
+  const previous = segment?.type === "text" ? segment.text : "";
+  pending.steps.set(stepId, { type: "text", stepId, text: `${previous}${text}` });
+  syncPendingAssistantSegments(sessionId, false);
+  thinkingSessionIds.value = { ...thinkingSessionIds.value, [sessionId]: true };
+}
+
+function nextPendingTextStepId(pending: PendingAssistant) {
+  pending.textSegmentCounter += 1;
+  return `assistant-text-${pending.textSegmentCounter}`;
 }
 
 function completePendingAssistantFromExec(sessionId: string) {
@@ -736,9 +782,61 @@ function completePendingAssistantFromExec(sessionId: string) {
   if (!text) return;
   upsertCompletionSummary(sessionId);
   syncPendingAssistantSegments(sessionId, true);
+  const finalText = extractAssistantText(pending.finalText.trim());
+  const finalSegments = pending.message.segments;
+  const draft = assistantDrafts.get(sessionId);
+  if (draft && finalText && finalText !== draft.savedText) {
+    assistantDrafts.set(sessionId, { ...draft, savedText: finalText });
+    void desktopApi.appendLocalAiMessage(sessionId, "assistant", encodeAssistantMessageForStorage({
+      text: finalText,
+      segments: finalSegments,
+    })).catch((error) => {
+      pushChatDebugEvent(`保存回答失败：${String(error)}`);
+    });
+  }
   thinkingSessionIds.value = { ...thinkingSessionIds.value, [sessionId]: false };
   pendingAssistants.delete(sessionId);
   assistantDrafts.delete(sessionId);
+}
+
+async function stopActiveAiChat() {
+  const sessionId = activeAiSession.value?.id;
+  if (!sessionId || !activeChatIsRunning.value) return;
+  stoppedAiSessions.add(sessionId);
+  pushChatDebugEvent(`用户中断执行：${sessionId.slice(0, 8)}`);
+  try {
+    await desktopApi.stopAiChat(sessionId);
+  } catch (error) {
+    pushChatDebugEvent(`中断请求失败：${String(error)}`);
+  }
+  const pending = pendingAssistants.get(sessionId);
+  if (pending) {
+    if (pending.finalText.trim()) {
+      replacePendingAssistantText(sessionId, pending.finalText, true);
+      completePendingAssistantFromExec(sessionId);
+    } else {
+      patchPendingAssistant(sessionId, {
+        pending: false,
+        role: "assistant",
+        text: "",
+        segments: [{
+          type: "status",
+          stepId: "interrupted",
+          label: "已中断",
+          icon: "warn",
+        }],
+      });
+      pendingAssistants.delete(sessionId);
+      assistantDrafts.delete(sessionId);
+    }
+  }
+  thinkingSessionIds.value = { ...thinkingSessionIds.value, [sessionId]: false };
+  setChatRunState(sessionId, {
+    active: false,
+    phase: "done",
+    title: "已中断",
+    detail: "本次执行已停止，可以继续发送新消息。",
+  });
 }
 
 function upsertPendingSegment(sessionId: string, segment: ChatSegment) {
@@ -768,6 +866,8 @@ function upsertPendingSegment(sessionId: string, segment: ChatSegment) {
     syncPendingAssistantSegments(sessionId, pending.message.pending === false);
     return;
   }
+  const isNewStep = !pending.steps.has(stepId);
+  if (isNewStep) pending.currentTextStepId = null;
   pending.steps.set(stepId, { ...(pending.steps.get(stepId) ?? {}), ...segment } as ChatSegment);
   syncPendingAssistantSegments(sessionId, pending.message.pending === false);
 }
@@ -778,9 +878,6 @@ function syncPendingAssistantSegments(sessionId: string, done = false) {
   const segments = [...pending.steps.values()].filter((segment) => (
     !done || segment.type !== "status" || isPersistentStatusSegment(segment)
   ));
-  if (pending.finalText.trim()) {
-    segments.push({ type: "text", text: pending.finalText });
-  }
   patchPendingAssistant(sessionId, {
     pending: !done,
     role: "assistant",
@@ -883,7 +980,7 @@ async function initAiEventListeners() {
       if (event.kind === "delta") {
         const pending = pendingAssistants.get(event.aiSessionId);
         if (!pending) return;
-        replacePendingAssistantText(event.aiSessionId, `${pending.finalText}${event.text ?? ""}`, false);
+        appendPendingAssistantText(event.aiSessionId, event.text ?? "");
         setChatRunState(event.aiSessionId, {
           active: true,
           phase: "running",
@@ -901,7 +998,11 @@ async function initAiEventListeners() {
           return;
         }
         const doneElapsedMs = pending ? Math.round(performance.now() - pending.startedAt) : undefined;
-        replacePendingAssistantText(event.aiSessionId, event.text ?? pending.finalText, true);
+        if (event.text) {
+          replacePendingAssistantText(event.aiSessionId, event.text, true);
+        } else {
+          replacePendingAssistantText(event.aiSessionId, pending.finalText, true);
+        }
         completePendingAssistantFromExec(event.aiSessionId);
         setChatRunState(event.aiSessionId, {
           active: false,
@@ -998,7 +1099,10 @@ async function saveAssistantDraft(sessionId: string) {
   const draft = assistantDrafts.get(sessionId);
   const text = extractAssistantText(draft?.message.text?.trim() ?? "");
   if (!draft || !text || text === draft.savedText) return;
-  await desktopApi.appendLocalAiMessage(sessionId, "assistant", text);
+  await desktopApi.appendLocalAiMessage(sessionId, "assistant", encodeAssistantMessageForStorage({
+    text,
+    segments: draft.message.segments,
+  }));
   assistantDrafts.set(sessionId, { ...draft, savedText: text });
 }
 
@@ -1317,6 +1421,7 @@ export function useWorkspace() {
     selectAiSessionFromDropdown,
     loadAiSessionHistory,
     sendPrompt,
+    stopActiveAiChat,
     sendShellInput,
     resizeShell,
     archiveAiSession,

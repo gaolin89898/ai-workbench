@@ -1,6 +1,6 @@
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 
-CREATE TABLE users (
+CREATE TABLE IF NOT EXISTS users (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   email TEXT NOT NULL UNIQUE,
   password_hash TEXT NOT NULL,
@@ -8,7 +8,7 @@ CREATE TABLE users (
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
-CREATE TABLE desktop_devices (
+CREATE TABLE IF NOT EXISTS desktop_devices (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   name TEXT NOT NULL,
@@ -18,7 +18,7 @@ CREATE TABLE desktop_devices (
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
-CREATE TABLE mobile_devices (
+CREATE TABLE IF NOT EXISTS mobile_devices (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   name TEXT NOT NULL,
@@ -26,7 +26,7 @@ CREATE TABLE mobile_devices (
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
-CREATE TABLE pairing_codes (
+CREATE TABLE IF NOT EXISTS pairing_codes (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   code TEXT NOT NULL UNIQUE,
@@ -35,7 +35,7 @@ CREATE TABLE pairing_codes (
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
-CREATE TABLE terminal_sessions (
+CREATE TABLE IF NOT EXISTS terminal_sessions (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   device_id UUID NOT NULL REFERENCES desktop_devices(id) ON DELETE CASCADE,
   session_id TEXT NOT NULL,
@@ -49,7 +49,7 @@ CREATE TABLE terminal_sessions (
   UNIQUE(device_id, session_id)
 );
 
-CREATE TABLE command_audit_logs (
+CREATE TABLE IF NOT EXISTS command_audit_logs (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   device_id UUID NOT NULL REFERENCES desktop_devices(id) ON DELETE CASCADE,
@@ -61,6 +61,6 @@ CREATE TABLE command_audit_logs (
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
-CREATE INDEX idx_desktop_devices_user_id ON desktop_devices(user_id);
-CREATE INDEX idx_terminal_sessions_device_id ON terminal_sessions(device_id);
-CREATE INDEX idx_command_audit_logs_user_id ON command_audit_logs(user_id);
+CREATE INDEX IF NOT EXISTS idx_desktop_devices_user_id ON desktop_devices(user_id);
+CREATE INDEX IF NOT EXISTS idx_terminal_sessions_device_id ON terminal_sessions(device_id);
+CREATE INDEX IF NOT EXISTS idx_command_audit_logs_user_id ON command_audit_logs(user_id);

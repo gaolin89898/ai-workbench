@@ -34,6 +34,7 @@ import { runAiChat } from "./claude";
 
 // ---------- Cloud config persistence ----------
 
+const STRUCTURED_MESSAGE_PREFIX = "__AI_WORKBENCH_MESSAGE_V1__";
 const configPath = path.join(app.getPath("userData"), "cloud-config.json");
 
 interface StoredCloudConfig {
@@ -41,6 +42,16 @@ interface StoredCloudConfig {
   deviceId: string;
   accessToken: string;
   paired: boolean;
+}
+
+function decodeHistoryContent(content: string): string {
+  if (!content.startsWith(STRUCTURED_MESSAGE_PREFIX)) return content;
+  try {
+    const parsed = JSON.parse(content.slice(STRUCTURED_MESSAGE_PREFIX.length));
+    return typeof parsed?.text === "string" ? parsed.text : content;
+  } catch {
+    return content;
+  }
 }
 
 function loadStoredConfig(): StoredCloudConfig | null {
@@ -313,6 +324,7 @@ class DesktopCloudSync {
           terminalSessionId: terminalSessionId ?? null,
           title: title || "Mobile session",
           status: "idle",
+          summary: projectPath ?? null,
         });
       }
 
@@ -362,7 +374,7 @@ class DesktopCloudSync {
         return;
       }
 
-      const projectPath = this.sessionProjectPaths.get(aiSessionId) ?? os.homedir();
+      const projectPath = this.sessionProjectPaths.get(aiSessionId) ?? session.summary ?? os.homedir();
       this.notify("ai-chat-output", {
         aiSessionId,
         kind: "status",
@@ -374,12 +386,12 @@ class DesktopCloudSync {
         if (session.providerId === "codex") {
           providerSessionId = await runCodexChat(
             { aiSessionId, projectPath, prompt: content },
-            this.mainWindow
+            this.mainWindow.webContents
           );
         } else {
           providerSessionId = await runAiChat(
             { aiSessionId, projectPath, prompt: content },
-            this.mainWindow,
+            this.mainWindow.webContents,
             session.providerSessionId ?? null
           );
         }
@@ -424,7 +436,10 @@ class DesktopCloudSync {
   private handleAiHistoryRequest(msg: any, deviceId: string): void {
     const aiSessionId: string = msg.aiSessionId;
     const requestId: string = msg.requestId;
-    const messages = listLocalAiHistory(aiSessionId);
+    const messages = listLocalAiHistory(aiSessionId).map((message) => ({
+      ...message,
+      content: decodeHistoryContent(message.content),
+    }));
     this.send({
       type: "ai.history.response",
       deviceId,
@@ -463,7 +478,7 @@ class DesktopCloudSync {
   private notify(channel: string, ...args: unknown[]): void {
     try {
       if (!this.mainWindow.isDestroyed()) {
-        this.mainWindow.send(channel, ...args);
+        this.mainWindow.webContents.send(channel, ...args);
       }
     } catch (e) {
       console.error(`Failed to send '${channel}' to renderer:`, e);

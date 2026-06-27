@@ -22,8 +22,8 @@ import {
   buildDesktopPairingQrPayload,
   getCloudConfig,
 } from "./sync";
-import { runCodexChat } from "./codex";
-import { runAiChat } from "./claude";
+import { runCodexChat, stopCodexChat } from "./codex";
+import { runAiChat, stopAiChat } from "./claude";
 import { checkAppUpdate, installAppUpdate, initUpdater } from "./updater";
 import type {
   CreateAiSessionRequest,
@@ -93,14 +93,18 @@ export function registerIpcHandlers(win?: BrowserWindow): void {
 
   // ---------- workspace projects ----------
 
-  ipcMain.handle("add_workspace_project", async (_event, args: [string]) =>
-    db.addWorkspaceProject(args[0])
-  );
+  ipcMain.handle("add_workspace_project", async (_event, args: [string]) => {
+    const project = await db.addWorkspaceProject(args[0]);
+    getSender().send("workspace-changed");
+    return project;
+  });
 
   ipcMain.handle("choose_workspace_project", async () => {
-    const projectPath = await projects.chooseWorkspaceProjectPath();
+    const projectPath = await projects.chooseWorkspaceProjectPath(mainWindow);
     if (!projectPath) return null;
-    return db.addWorkspaceProject(projectPath);
+    const project = await db.addWorkspaceProject(projectPath);
+    getSender().send("workspace-changed");
+    return project;
   });
 
   ipcMain.handle("list_workspace_projects", async () => db.listWorkspaceProjects());
@@ -140,6 +144,7 @@ export function registerIpcHandlers(win?: BrowserWindow): void {
       terminalSessionId: req.terminalSessionId ?? null,
       title: req.title,
       status: "idle",
+      summary: req.projectPath || null,
     });
   });
 
@@ -191,12 +196,28 @@ export function registerIpcHandlers(win?: BrowserWindow): void {
     // Resume an existing Claude session if we have a providerSessionId stored.
     const session = db.getLocalAiSession(req.aiSessionId);
     const existingSessionId = session?.providerSessionId ?? null;
-    return runAiChat(req, sender, existingSessionId);
+    const providerSessionId = await runAiChat(req, sender, existingSessionId);
+    db.updateLocalAiSession(req.aiSessionId, {
+      providerSessionId: providerSessionId || existingSessionId,
+      status: "completed",
+    });
+    return providerSessionId;
   });
 
-  ipcMain.handle("run_codex_chat", async (_event, args: [RunCodexChatRequest]) =>
-    runCodexChat(args[0], getSender())
-  );
+  ipcMain.handle("run_codex_chat", async (_event, args: [RunCodexChatRequest]) => {
+    const req = args[0];
+    const providerSessionId = await runCodexChat(req, getSender());
+    db.updateLocalAiSession(req.aiSessionId, {
+      providerSessionId: providerSessionId || null,
+      status: "completed",
+    });
+    return providerSessionId;
+  });
+
+  ipcMain.handle("stop_ai_chat", async (_event, args: [string]) => {
+    const aiSessionId = args[0];
+    return stopCodexChat(aiSessionId) || stopAiChat(aiSessionId);
+  });
 
   // Simplified warmup: return the current session record. (Full pre-warm of
   // the provider subprocess is handled lazily on the first chat turn.)
