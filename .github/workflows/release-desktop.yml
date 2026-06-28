@@ -81,6 +81,19 @@ jobs:
           Get-ChildItem dist-electron -File |
             Where-Object { $_.Extension -in '.exe', '.blockmap', '.AppImage', '.deb', '.yml' -and $_.Name -ne 'builder-debug.yml' } |
             Copy-Item -Destination release-assets
+          $latest = Get-Content release-assets/latest.yml -Raw
+          if ($latest -match '(?m)^path:\s*(.+)$') {
+            $expectedExeName = $Matches[1].Trim()
+            $actualExe = Get-ChildItem release-assets -Filter '*.exe' | Select-Object -First 1
+            if ($actualExe -and $actualExe.Name -ne $expectedExeName) {
+              Move-Item -LiteralPath $actualExe.FullName -Destination (Join-Path $actualExe.DirectoryName $expectedExeName) -Force
+            }
+            $expectedBlockmapName = "$expectedExeName.blockmap"
+            $actualBlockmap = Get-ChildItem release-assets -Filter '*.exe.blockmap' | Select-Object -First 1
+            if ($actualBlockmap -and $actualBlockmap.Name -ne $expectedBlockmapName) {
+              Move-Item -LiteralPath $actualBlockmap.FullName -Destination (Join-Path $actualBlockmap.DirectoryName $expectedBlockmapName) -Force
+            }
+          }
           Get-ChildItem release-assets | Format-Table Name,Length
 
       - name: Upload release assets
