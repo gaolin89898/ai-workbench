@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:http/http.dart' as http;
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../models/workbench_models.dart';
 
@@ -8,9 +9,25 @@ class ApiClient {
   ApiClient({required String baseUrl}) : baseUrl = normalizeBaseUrl(baseUrl);
 
   static const defaultBaseUrl = 'http://8.162.12.148:3000';
+  static const _tokenKey = 'auth_token';
 
   final String baseUrl;
   String? token;
+
+  static Future<String?> loadStoredToken() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getString(_tokenKey);
+  }
+
+  static Future<void> saveStoredToken(String token) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_tokenKey, token);
+  }
+
+  static Future<void> clearStoredToken() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove(_tokenKey);
+  }
 
   static String normalizeBaseUrl(String input) {
     var value = input.trim().replaceFirst(RegExp(r'/+$'), '');
@@ -56,6 +73,7 @@ class ApiClient {
     }
     _throwIfBad(response);
     token = jsonDecode(response.body)['accessToken'] as String;
+    await saveStoredToken(token!);
   }
 
   Future<void> register(String email, String password) async {
@@ -66,6 +84,7 @@ class ApiClient {
     );
     _throwIfBad(response);
     token = jsonDecode(response.body)['accessToken'] as String;
+    await saveStoredToken(token!);
   }
 
   Future<List<DesktopDevice>> devices() =>

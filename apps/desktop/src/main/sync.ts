@@ -86,15 +86,6 @@ function getStoredAccessToken(): string | null {
 
 // ---------- HTTP helpers (Node.js built-in fetch) ----------
 
-class HttpError extends Error {
-  constructor(
-    readonly status: number,
-    readonly detail: string
-  ) {
-    super(`HTTP ${status}: ${detail}`);
-  }
-}
-
 async function fetchJson(url: string, init?: RequestInit): Promise<any> {
   const resp = await fetch(url, init);
   if (!resp.ok) {
@@ -105,7 +96,7 @@ async function fetchJson(url: string, init?: RequestInit): Promise<any> {
     } catch {
       // ignore body read error
     }
-    throw new HttpError(resp.status, detail);
+    throw new Error(`HTTP ${resp.status}: ${detail}`);
   }
   return resp.json();
 }
@@ -144,17 +135,16 @@ export async function loginDesktop(
   password: string
 ): Promise<PairResponse> {
   const normalizedServer = normalizeServerUrl(server);
-  let resp: any;
-  try {
-    resp = await requestDesktopLogin(normalizedServer, email, password);
-  } catch (error) {
-    if (error instanceof HttpError && (error.status === 401 || error.status === 404)) {
-      await registerDesktopUser(normalizedServer, email, password);
-      resp = await requestDesktopLogin(normalizedServer, email, password);
-    } else {
-      throw error;
-    }
-  }
+  const resp = await fetchJson(`${normalizedServer}/desktop/login`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      email,
+      password,
+      name: os.hostname(),
+      os: process.platform,
+    }),
+  });
 
   const deviceId: string | undefined = resp.deviceId ?? resp.device_id;
   const accessToken: string | undefined = resp.accessToken ?? resp.access_token;
@@ -171,25 +161,17 @@ export async function loginDesktop(
   return result;
 }
 
-function requestDesktopLogin(server: string, email: string, password: string): Promise<any> {
-  return fetchJson(`${server}/desktop/login`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      email,
-      password,
-      name: os.hostname(),
-      os: process.platform,
-    }),
-  });
-}
-
-function registerDesktopUser(server: string, email: string, password: string): Promise<any> {
-  return fetchJson(`${server}/auth/register`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ email, password }),
-  });
+// logoutDesktop clears the persisted cloud config and stops the WebSocket sync,
+// effectively signing the user out and returning them to the login page.
+export function logoutDesktop(): void {
+  syncInstance?.stop();
+  try {
+    if (fs.existsSync(configPath)) {
+      fs.unlinkSync(configPath);
+    }
+  } catch (e) {
+    console.error("Failed to remove cloud config on logout:", e);
+  }
 }
 
 export async function pairDesktop(

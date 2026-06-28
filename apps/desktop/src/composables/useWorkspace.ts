@@ -1301,13 +1301,11 @@ async function loginDesktop(server: string, email: string, password: string) {
   } catch (error) {
     const message = String(error);
     if (message.includes("HTTP 401")) {
-      pairResult.value = "登录失败：账号或密码不正确。";
-    } else if (message.includes("email already registered")) {
-      pairResult.value = "登录失败：账号已存在，请检查密码是否正确。";
+      pairResult.value = "密码不正确。";
     } else if (message.includes("password must be at least 8 characters")) {
-      pairResult.value = "登录失败：密码至少需要 8 位。";
+      pairResult.value = "密码至少需要 8 位。";
     } else if (message.includes("email is invalid")) {
-      pairResult.value = "登录失败：邮箱格式不正确。";
+      pairResult.value = "邮箱格式不正确。";
     } else {
       pairResult.value = `登录失败：${message}`;
     }

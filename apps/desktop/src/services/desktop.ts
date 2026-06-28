@@ -240,6 +240,8 @@ export const desktopApi = {
     ipc<TerminalSession[]>("list_sessions"),
   loginDesktop: (server: string, email: string, password: string): Promise<PairResponse> =>
     ipc<PairResponse>("login_desktop", server, email, password),
+  logoutDesktop: (): Promise<void> =>
+    ipc<void>("logout_desktop"),
   pairDesktop: (server: string, code: string): Promise<PairResponse> =>
     ipc<PairResponse>("pair_desktop", server, code),
   createDesktopPairingRequest: (server: string): Promise<DesktopPairingRequest> =>

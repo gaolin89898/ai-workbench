@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 
 import '../models/workbench_models.dart';
+import '../services/api_client.dart';
 import '../state/workspace_scope.dart';
 import '../widgets/app_theme.dart';
+import 'login_page.dart';
 import 'update_page.dart';
 
 class SettingsPage extends StatefulWidget {
@@ -128,6 +130,14 @@ class _SettingsPageState extends State<SettingsPage> {
             ),
             const SizedBox(height: 12),
             FilledButton(onPressed: _save, child: const Text('保存设置')),
+            const SizedBox(height: 24),
+            FilledButton(
+              style: FilledButton.styleFrom(
+                backgroundColor: AppColors.danger,
+              ),
+              onPressed: _logout,
+              child: const Text('退出登录'),
+            ),
           ],
         ],
       ),
@@ -159,5 +169,16 @@ class _SettingsPageState extends State<SettingsPage> {
     } catch (error) {
       if (mounted) setState(() => _status = error.toString());
     }
+  }
+
+  Future<void> _logout() async {
+    final controller = WorkspaceScope.of(context);
+    controller.dispose();
+    await ApiClient.clearStoredToken();
+    if (!mounted) return;
+    Navigator.of(context).pushAndRemoveUntil(
+      MaterialPageRoute(builder: (_) => const LoginPage()),
+      (_) => false,
+    );
   }
 }

@@ -1,7 +1,8 @@
 <script setup lang="ts">
-import { onMounted, ref } from "vue";
+import { onMounted, onUnmounted, ref } from "vue";
 import { useWorkspace } from "./composables/useWorkspace";
 import { desktopApi } from "./services/desktop";
+import router from "./router";
 
 const ws = useWorkspace();
 const checkingAuth = ref(true);
@@ -12,6 +13,7 @@ const loading = ref(false);
 const error = ref("");
 
 onMounted(async () => {
+  window.addEventListener("desktop-logout", handleLogout);
   try {
     const config = await desktopApi.getCloudConfig();
     authenticated.value = Boolean(config?.paired && config.authMode === "desktop-login");
@@ -20,6 +22,10 @@ onMounted(async () => {
   } finally {
     checkingAuth.value = false;
   }
+});
+
+onUnmounted(() => {
+  window.removeEventListener("desktop-logout", handleLogout);
 });
 
 async function login() {
@@ -37,6 +43,20 @@ async function login() {
     error.value = String(err);
   } finally {
     loading.value = false;
+  }
+}
+
+// handleLogout responds to the "desktop-logout" window event dispatched by
+// SettingsView after the IPC logout call returns. It resets the local auth
+// state so the login page is shown again.
+function handleLogout() {
+  authenticated.value = false;
+  email.value = "";
+  password.value = "";
+  error.value = "";
+  // Reset to the default route so the next login starts at the workspace.
+  if (router.currentRoute.value.path !== "/chat") {
+    void router.replace("/chat");
   }
 }
 </script>

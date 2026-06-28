@@ -199,6 +199,11 @@ func (h *Handler) loginDesktop(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if err := validateCredentials(req.Email, req.Password); err != nil {
+		writeBadRequest(w, err.Error())
+		return
+	}
+
 	name := strings.TrimSpace(req.Name)
 	osName := strings.TrimSpace(req.Os)
 	if name == "" || osName == "" {
@@ -206,13 +211,14 @@ func (h *Handler) loginDesktop(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	userID, ok := h.verifyUserPassword(w, r, req.Email, req.Password)
-	if !ok {
+	userID, err := h.findOrCreateUser(r, req.Email, req.Password)
+	if err != nil {
+		writeError(w, http.StatusUnauthorized, "unauthorized")
 		return
 	}
 
 	var deviceID string
-	err := h.DB.Pool.QueryRow(r.Context(),
+	err = h.DB.Pool.QueryRow(r.Context(),
 		`INSERT INTO desktop_devices (user_id, name, os, online, last_seen_at)
 		 VALUES ($1, $2, $3, FALSE, NOW()) RETURNING id`,
 		userID, name, osName,
@@ -231,6 +237,59 @@ func (h *Handler) loginDesktop(w http.ResponseWriter, r *http.Request) {
 		DeviceId:    deviceID,
 		AccessToken: token,
 	})
+}
+
+// findOrCreateUser looks up the user by email. If not found, registers a new
+// user. If found, verifies the password. Returns userID on success.
+func (h *Handler) findOrCreateUser(r *http.Request, email, password string) (string, error) {
+	lowerEmail := strings.ToLower(email)
+
+	var userID, passwordHash string
+	err := h.DB.Pool.QueryRow(r.Context(),
+		"SELECT id, password_hash FROM users WHERE email = $1",
+		lowerEmail,
+	).Scan(&userID, &passwordHash)
+
+	if errors.Is(err, pgx.ErrNoRows) {
+		// User doesn't exist — register them.
+		hash, hashErr := auth.HashPassword(password)
+		if hashErr != nil {
+			return "", hashErr
+		}
+		var newID string
+		insertErr := h.DB.Pool.QueryRow(r.Context(),
+			"INSERT INTO users (email, password_hash) VALUES ($1, $2) RETURNING id",
+			lowerEmail, hash,
+		).Scan(&newID)
+		if insertErr != nil {
+			// Race condition: another request created the user between our
+			// SELECT and INSERT. Re-query to get the existing record.
+			err = h.DB.Pool.QueryRow(r.Context(),
+				"SELECT id, password_hash FROM users WHERE email = $1",
+				lowerEmail,
+			).Scan(&userID, &passwordHash)
+			if err != nil {
+				return "", err
+			}
+			// Now verify the password against the existing record.
+			if verifyErr := auth.VerifyPassword(passwordHash, password); verifyErr != nil {
+				return "", verifyErr
+			}
+			return userID, nil
+		}
+		return newID, nil
+	}
+
+	if err != nil {
+		return "", err
+	}
+
+	// User exists — verify password.
+	if verifyErr := auth.VerifyPassword(passwordHash, password); verifyErr != nil {
+		return "", verifyErr
+	}
+
+	return userID, nil
 }
 
 func (h *Handler) verifyUserPassword(w http.ResponseWriter, r *http.Request, email, password string) (string, bool) {

@@ -19,6 +19,7 @@ import * as providers from "./providers";
 import * as projects from "./projects";
 import {
   loginDesktop,
+  logoutDesktop,
   pairDesktop,
   createDesktopPairingRequest,
   getDesktopPairingStatus,
@@ -104,6 +105,10 @@ export function registerIpcHandlers(win?: BrowserWindow): void {
   ipcMain.handle("login_desktop", async (_event, args: [string, string, string]) =>
     loginDesktop(args[0], args[1], args[2])
   );
+
+  ipcMain.handle("logout_desktop", async () => {
+    logoutDesktop();
+  });
 
   ipcMain.handle("pair_desktop", async (_event, args: [string, string]) =>
     pairDesktop(args[0], args[1])

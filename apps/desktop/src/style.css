@@ -4632,6 +4632,25 @@ textarea:focus {
   padding: 18px;
 }
 
+.settings-logout-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 18px;
+}
+
+.settings-logout-info {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.settings-logout-info small {
+  color: var(--color-text-muted);
+  font-size: 12px;
+}
+
 .settings-toggle-divider {
   position: relative;
   padding-top: 16px;
