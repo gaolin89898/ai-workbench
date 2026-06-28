@@ -1,0 +1,11 @@
+FROM scratch
+WORKDIR /app
+COPY ai-workbench-server /app/ai-workbench-server
+COPY migrations /app/migrations
+
+ENV PORT=3000
+ENV MIGRATIONS_DIR=/app/migrations
+
+EXPOSE 3000
+
+CMD ["/app/ai-workbench-server"]

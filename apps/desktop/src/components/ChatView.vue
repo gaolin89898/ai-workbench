@@ -10,6 +10,7 @@ const providerCodexIcon = new URL("../assets/icons/provider-codex.svg", import.m
 const providerDeepseekIcon = new URL("../assets/icons/provider-deepseek.svg", import.meta.url).href;
 const providerOpencodeIcon = new URL("../assets/icons/provider-opencode.svg", import.meta.url).href;
 const sendIcon = new URL("../assets/icons/send.svg", import.meta.url).href;
+const imageRemoveIcon = new URL("../assets/icons/image-remove.svg", import.meta.url).href;
 const ws = useWorkspace();
 
 const prompt = ref("");
@@ -58,6 +59,21 @@ const activeProviderName = computed(() => {
     ?? builtInProviders.find((provider) => provider.id === providerId)?.name
     ?? "AI";
 });
+
+function logEventLevel(event: string): "info" | "success" | "error" {
+  const text = event.slice(9);
+  if (/失败|错误|中断|异常/.test(text)) return "error";
+  if (/完成|成功|已保存|已连接|已启动|已结束/.test(text)) return "success";
+  return "info";
+}
+
+function logEventMessage(event: string): string {
+  return event.slice(9);
+}
+
+function logEventTime(event: string): string {
+  return event.slice(0, 8);
+}
 const canSend = computed(() => Boolean(prompt.value.trim() || imageAttachments.value.length || ws.activeChatIsRunning.value));
 const providerIcons: Record<string, string> = {
   claude: providerClaudeIcon,
@@ -260,7 +276,9 @@ function onPromptKeydown(event: KeyboardEvent) {
               <button class="chat-image-preview-trigger" type="button" title="预览图片" @click="openImagePreview(image)">
                 <img :src="image.dataUrl" :alt="image.name" />
               </button>
-              <button class="chat-image-remove" type="button" title="移除图片" @click="removeImageAttachment(image.id)">x</button>
+              <button class="chat-image-remove" type="button" title="移除图片" @click="removeImageAttachment(image.id)">
+                <img :src="imageRemoveIcon" alt="" aria-hidden="true" />
+              </button>
             </div>
           </div>
           <textarea
@@ -306,17 +324,19 @@ function onPromptKeydown(event: KeyboardEvent) {
     </section>
     <template v-else>
     <header class="chat-topbar">
-      <div>
+      <div class="chat-topbar-title">
         <strong>{{ conversationTitle }}</strong>
+        <span
+          v-if="ws.activeChatRunState.value?.active"
+          class="chat-topbar-status"
+          :class="{ running: ws.activeChatIsRunning.value }"
+        >
+          {{ ws.activeChatRunState.value.title }}
+        </span>
+      </div>
+      <div class="chat-topbar-meta">
         <span>{{ chatHeaderMeta }}</span>
       </div>
-      <span
-        v-if="ws.activeChatRunState.value?.active"
-        class="chat-topbar-status"
-        :class="{ running: ws.activeChatIsRunning.value }"
-      >
-        {{ ws.activeChatRunState.value.title }}
-      </span>
     </header>
     <nav class="chat-mode-tabs" aria-label="聊天视图切换">
       <button type="button" :class="{ active: activeTab === 'chat' }" @click="activeTab = 'chat'">聊天</button>
@@ -370,9 +390,16 @@ function onPromptKeydown(event: KeyboardEvent) {
             </div>
           </div>
           <ol v-if="ws.chatDebugEvents.value.length" class="chat-log-list">
-            <li v-for="event in ws.chatDebugEvents.value" :key="event">
-              <span>{{ event.slice(0, 8) }}</span>
-              <p>{{ event.slice(9) }}</p>
+            <li
+              v-for="event in ws.chatDebugEvents.value"
+              :key="event"
+              :class="logEventLevel(event)"
+            >
+              <span class="chat-log-time">{{ logEventTime(event) }}</span>
+              <div class="chat-log-entry">
+                <span class="chat-log-level">{{ logEventLevel(event) }}</span>
+                <p>{{ logEventMessage(event) }}</p>
+              </div>
             </li>
           </ol>
           <div v-else class="chat-log-empty">
@@ -391,7 +418,9 @@ function onPromptKeydown(event: KeyboardEvent) {
               <button class="chat-image-preview-trigger" type="button" title="预览图片" @click="openImagePreview(image)">
                 <img :src="image.dataUrl" :alt="image.name" />
               </button>
-              <button class="chat-image-remove" type="button" title="移除图片" @click="removeImageAttachment(image.id)">x</button>
+              <button class="chat-image-remove" type="button" title="移除图片" @click="removeImageAttachment(image.id)">
+                <img :src="imageRemoveIcon" alt="" aria-hidden="true" />
+              </button>
             </div>
           </div>
           <textarea v-model="prompt" rows="3" placeholder="输入你想做的事" @keydown="onPromptKeydown" @paste="onPromptPaste"></textarea>
@@ -413,7 +442,9 @@ function onPromptKeydown(event: KeyboardEvent) {
     </template>
     <div v-if="previewImage" class="chat-image-preview-overlay" role="dialog" aria-modal="true" @click="closeImagePreview">
       <figure class="chat-image-preview-dialog" @click.stop>
-        <button class="chat-image-preview-close" type="button" title="关闭预览" @click="closeImagePreview">x</button>
+        <button class="chat-image-preview-close" type="button" title="关闭预览" @click="closeImagePreview">
+          <img :src="imageRemoveIcon" alt="" aria-hidden="true" />
+        </button>
         <img :src="previewImage.dataUrl" :alt="previewImage.name" />
         <figcaption>{{ previewImage.name }}</figcaption>
       </figure>

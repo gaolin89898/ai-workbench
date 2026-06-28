@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
-import type { AiProvider, AiSession, TerminalSession, ViewName, WorkspaceProject } from "../services/desktop";
+import { desktopApi, type AiProvider, type AiSession, type TerminalSession, type ViewName, type WorkspaceFileEntry, type WorkspaceProject } from "../services/desktop";
 
 const archiveBoxIcon = new URL("../assets/icons/archive-box.svg", import.meta.url).href;
 const projectFolderIcon = new URL("../assets/icons/project-folder.svg", import.meta.url).href;
@@ -8,6 +8,7 @@ const sessionPlusIcon = new URL("../assets/icons/session-plus.svg", import.meta.
 const settingsIcon = new URL("../assets/icons/settings.svg", import.meta.url).href;
 const pinIcon = new URL("../assets/icons/pin.svg", import.meta.url).href;
 const folderOpenIcon = new URL("../assets/icons/folder-open.svg", import.meta.url).href;
+const fileListIcon = new URL("../assets/icons/file-list.svg", import.meta.url).href;
 const gitBranchIcon = new URL("../assets/icons/git-branch.svg", import.meta.url).href;
 const editIcon = new URL("../assets/icons/edit.svg", import.meta.url).href;
 const trashIcon = new URL("../assets/icons/trash.svg", import.meta.url).href;
@@ -57,6 +58,11 @@ const renameDialog = ref<{ target: AiSession | WorkspaceProject; kind: "session"
 const renameDraft = ref("");
 const confirmDialog = ref<{ title: string; message: string; details?: string; action: () => void } | null>(null);
 const collapsedProjects = ref<Record<string, boolean>>({});
+const fileListProjectPath = ref<string | null>(null);
+const directoryFiles = ref<Record<string, WorkspaceFileEntry[]>>({});
+const directoryLoading = ref<Record<string, boolean>>({});
+const directoryErrors = ref<Record<string, string>>({});
+const expandedDirectories = ref<Record<string, boolean>>({});
 
 function isProjectCollapsedLocal(path: string) {
   return Boolean(collapsedProjects.value[path]);
@@ -94,6 +100,106 @@ function toggleProjectSessionsExpanded(path: string) {
     ...expandedProjectSessions.value,
     [path]: !expandedProjectSessions.value[path],
   };
+}
+
+function isProjectFileListOpen(path: string) {
+  return fileListProjectPath.value === path;
+}
+
+function normalizeFilePath(value: string) {
+  return value.replaceAll("\\", "/");
+}
+
+function directoryKey(path: string) {
+  return normalizeFilePath(path).toLowerCase();
+}
+
+async function loadDirectoryFiles(project: WorkspaceProject, directoryPath = project.path) {
+  const key = directoryKey(directoryPath);
+  directoryLoading.value = { ...directoryLoading.value, [key]: true };
+  directoryErrors.value = { ...directoryErrors.value, [key]: "" };
+  try {
+    const files = await desktopApi.listProjectFiles(project.path, directoryPath);
+    directoryFiles.value = { ...directoryFiles.value, [key]: files };
+  } catch (error) {
+    directoryErrors.value = { ...directoryErrors.value, [key]: String(error) };
+  } finally {
+    directoryLoading.value = { ...directoryLoading.value, [key]: false };
+  }
+}
+
+async function toggleProjectFileList(project: WorkspaceProject) {
+  openProjectMenuPath.value = null;
+  openContextMenu.value = null;
+  if (fileListProjectPath.value === project.path) {
+    fileListProjectPath.value = null;
+    return;
+  }
+  fileListProjectPath.value = project.path;
+  collapsedProjects.value = { ...collapsedProjects.value, [project.path]: false };
+  expandedDirectories.value = { ...expandedDirectories.value, [directoryKey(project.path)]: true };
+  if (directoryFiles.value[directoryKey(project.path)] || directoryLoading.value[directoryKey(project.path)]) return;
+  await loadDirectoryFiles(project);
+}
+
+async function toggleDirectoryNode(project: WorkspaceProject, directoryPath: string) {
+  const key = directoryKey(directoryPath);
+  const nextExpanded = !expandedDirectories.value[key];
+  expandedDirectories.value = { ...expandedDirectories.value, [key]: nextExpanded };
+  if (!nextExpanded) return;
+  if (directoryFiles.value[key] || directoryLoading.value[key]) return;
+  await loadDirectoryFiles(project, directoryPath);
+}
+
+async function openProjectFileEntry(project: WorkspaceProject, file: WorkspaceFileEntry) {
+  if (file.kind === "directory") {
+    await toggleDirectoryNode(project, file.path);
+    return;
+  }
+  await copyText(file.path);
+}
+
+type VisibleFileNode = {
+  file: WorkspaceFileEntry;
+  depth: number;
+  status: string;
+};
+
+function filesForDirectory(path: string) {
+  return directoryFiles.value[directoryKey(path)] ?? [];
+}
+
+function visibleFileTree(project: WorkspaceProject) {
+  const nodes: VisibleFileNode[] = [];
+  const walk = (directoryPath: string, depth: number) => {
+    for (const file of filesForDirectory(directoryPath)) {
+      nodes.push({ file, depth, status: file.kind === "directory" ? directoryStatus(file.path) : "" });
+      if (file.kind === "directory" && isDirectoryExpanded(file.path)) {
+        walk(file.path, depth + 1);
+      }
+    }
+  };
+  walk(project.path, 0);
+  return nodes;
+}
+
+function isDirectoryExpanded(path: string) {
+  return Boolean(expandedDirectories.value[directoryKey(path)]);
+}
+
+function directoryStatus(path: string) {
+  const key = directoryKey(path);
+  if (directoryLoading.value[key]) return "正在读取...";
+  if (directoryErrors.value[key]) return `读取失败：${directoryErrors.value[key]}`;
+  if (isDirectoryExpanded(path) && directoryFiles.value[key] && !directoryFiles.value[key].length) return "空文件夹";
+  return "";
+}
+
+function fileSizeLabel(file: WorkspaceFileEntry) {
+  if (file.kind === "directory") return "";
+  if (file.size < 1024) return `${file.size} B`;
+  if (file.size < 1024 * 1024) return `${(file.size / 1024).toFixed(1)} KB`;
+  return `${(file.size / 1024 / 1024).toFixed(1)} MB`;
 }
 
 function selectProject(path: string) {
@@ -155,8 +261,8 @@ function removeProjectAction(project: WorkspaceProject) {
   openContextMenu.value = null;
   confirmDialog.value = {
     title: "从项目列表移除",
-    message: `确定要从项目列表移除「${project.name}」吗？`,
-    details: "磁盘上的目录不会被删除。",
+    message: `将「${project.name}」从侧边栏项目列表中移除？`,
+    details: "不会删除磁盘上的目录和文件。",
     action: () => emit("removeProject", project),
   };
 }
@@ -372,9 +478,9 @@ onBeforeUnmount(() => {
       </footer>
     </div>
   </div>
-  <div v-if="confirmDialog" class="rename-dialog-overlay" @click.self="closeConfirmDialog">
+  <div v-if="confirmDialog" class="rename-dialog-overlay confirm-dialog-overlay" @click.self="closeConfirmDialog">
     <div
-      class="rename-dialog"
+      class="rename-dialog confirm-dialog"
       role="alertdialog"
       aria-modal="true"
       aria-labelledby="confirm-dialog-title"
@@ -388,7 +494,7 @@ onBeforeUnmount(() => {
       <p v-if="confirmDialog.details" class="rename-dialog-hint">{{ confirmDialog.details }}</p>
       <footer class="rename-dialog-footer">
         <button class="button secondary" type="button" @click="closeConfirmDialog">取消</button>
-        <button class="button danger" type="button" autofocus @click="performConfirmAction">确定</button>
+        <button class="button danger" type="button" autofocus @click="performConfirmAction">移除</button>
       </footer>
     </div>
   </div>
@@ -400,7 +506,8 @@ onBeforeUnmount(() => {
       </div>
       <div class="project-tree">
         <button v-if="!projects.length" class="tree-empty" type="button" @click.stop="chooseProjectFromSidebar">
-          读取项目
+          <img class="tree-empty-icon" :src="projectFolderIcon" alt="" aria-hidden="true" />
+          <span>选择项目</span>
         </button>
         <section v-for="project in projects" :key="project.path" class="tree-project">
           <div class="tree-project-row" :class="{ active: selectedProjectPath === project.path, collapsed: isProjectCollapsedLocal(project.path) }">
@@ -411,8 +518,18 @@ onBeforeUnmount(() => {
               @click="toggleProjectCollapsed(project.path)"
               @contextmenu="openProjectMenu($event, project.path)"
             >
+              <span class="tree-project-chevron">{{ isProjectCollapsedLocal(project.path) ? "▸" : "▾" }}</span>
               <img class="tree-icon" :src="projectFolderIcon" alt="" aria-hidden="true" />
               <strong>{{ project.name }}</strong>
+            </button>
+            <button
+              class="tree-project-add"
+              :class="{ active: isProjectFileListOpen(project.path) }"
+              title="查看当前文件夹文件列表"
+              type="button"
+              @click.stop="toggleProjectFileList(project)"
+            >
+              <img :src="fileListIcon" alt="" aria-hidden="true" />
             </button>
             <button
               class="tree-project-add"
@@ -455,7 +572,31 @@ onBeforeUnmount(() => {
             </div>
           </div>
           <div v-if="!isProjectCollapsedLocal(project.path)" class="tree-chat-list">
-            <template v-if="sessionsForProject(project.path).length">
+            <template v-if="isProjectFileListOpen(project.path)">
+              <div v-if="directoryStatus(project.path)" class="tree-chat muted tree-chat-empty">{{ directoryStatus(project.path) }}</div>
+              <template v-else>
+                <div
+                  v-for="node in visibleFileTree(project)"
+                  :key="node.file.path"
+                  class="tree-file-node"
+                >
+                  <button
+                    class="tree-file-row"
+                    type="button"
+                    :class="{ directory: node.file.kind === 'directory', expanded: isDirectoryExpanded(node.file.path) }"
+                    :style="{ paddingLeft: `${node.depth * 16}px` }"
+                    :title="node.file.path"
+                    @click.stop="openProjectFileEntry(project, node.file)"
+                  >
+                    <span class="tree-file-icon">{{ node.file.kind === "directory" ? (isDirectoryExpanded(node.file.path) ? "▾" : "▸") : "•" }}</span>
+                    <span class="tree-file-name">{{ node.file.name }}</span>
+                    <small>{{ fileSizeLabel(node.file) }}</small>
+                  </button>
+                  <div v-if="node.status" class="tree-file-status" :style="{ paddingLeft: `${(node.depth + 1) * 16}px` }">{{ node.status }}</div>
+                </div>
+              </template>
+            </template>
+            <template v-else-if="sessionsForProject(project.path).length">
               <div
                 v-for="session in visibleSessionsForProject(project.path)"
                 :key="session.id"

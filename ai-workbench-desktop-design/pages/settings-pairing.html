@@ -1,0 +1,410 @@
+<!DOCTYPE html>
+<html lang="zh-CN" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Workbench — 设置 · 配对</title>
+    <style id="theme-vars">
+/* AI Workbench Desktop — Dark Theme */
+/* Based on actual project style.css, inverted to dark */
+:root {
+  /* Brand */
+  --color-primary: #2563eb;
+  --color-primary-hover: #1d4ed8;
+  --color-primary-muted: rgba(37, 99, 235, 0.15);
+  --color-primary-soft: rgba(37, 99, 235, 0.08);
+  --color-primary-ring: rgba(37, 99, 235, 0.25);
+
+  /* Surface & Background */
+  --color-bg-app: #0f1117;
+  --color-bg-body: #111318;
+  --color-bg-sidebar: #161822;
+  --color-bg-main: #1a1d2e;
+  --color-bg-content: #1e2235;
+  --color-bg-surface: #1e2235;
+  --color-bg-elevated: #252a3a;
+  --color-bg-input: #1e2235;
+  --color-bg-hover: rgba(255, 255, 255, 0.06);
+  --color-bg-active: rgba(37, 99, 235, 0.12);
+
+  /* Text */
+  --color-text-primary: #e8eaed;
+  --color-text-body: #d1d5db;
+  --color-text-secondary: #9aa0b4;
+  --color-text-muted: #6b7280;
+  --color-text-placeholder: #6b7280;
+  --color-text-inverse: #ffffff;
+
+  /* Border */
+  --color-border: rgba(255, 255, 255, 0.1);
+  --color-border-subtle: rgba(255, 255, 255, 0.06);
+  --color-border-active: rgba(37, 99, 235, 0.5);
+
+  /* State Colors */
+  --state-success: #22c55e;
+  --state-success-bg: rgba(34, 197, 94, 0.12);
+  --state-success-ring: rgba(34, 197, 94, 0.25);
+  --state-warning: #f59e0b;
+  --state-warning-bg: rgba(245, 158, 11, 0.12);
+  --state-error: #ef4444;
+  --state-error-bg: rgba(239, 68, 68, 0.12);
+  --state-info: #3b82f6;
+  --state-info-bg: rgba(59, 130, 246, 0.12);
+
+  /* Radius */
+  --radius-sm: 4px;
+  --radius-md: 7px;
+  --radius-lg: 8px;
+  --radius-xl: 12px;
+  --radius-full: 999px;
+
+  /* Typography */
+  --font-sans: "Inter", ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+
+  --text-xs: 11px;
+  --text-sm: 12px;
+  --text-base: 13px;
+  --text-md: 14px;
+  --text-lg: 16px;
+  --text-xl: 20px;
+  --text-2xl: 28px;
+
+  --leading-tight: 1.25;
+  --leading-normal: 1.5;
+  --leading-relaxed: 1.625;
+  --leading-chat: 1.62;
+
+  /* Font Weights */
+  --fw-normal: 400;
+  --fw-medium: 500;
+  --fw-semibold: 620;
+  --fw-bold: 700;
+  --fw-extrabold: 800;
+  --fw-black: 850;
+
+  /* Shadows */
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.15);
+  --shadow-md: 0 10px 24px rgba(0, 0, 0, 0.25);
+  --shadow-lg: 0 24px 56px rgba(0, 0, 0, 0.35);
+  --shadow-composer: 0 16px 42px rgba(0, 0, 0, 0.3);
+
+  /* Spacing */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-10: 40px;
+  --space-14: 56px;
+  --space-18: 72px;
+
+  /* Layout */
+  --sidebar-width: 286px;
+  --topbar-height: 56px;
+  --composer-max-width: 760px;
+
+  /* Transitions */
+  --transition-fast: 120ms ease;
+  --transition-normal: 200ms ease;
+}
+
+    </style>
+    <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4.3.1/dist/index.global.js"></script>
+    <script src="https://unpkg.com/lucide@1.8.0/dist/umd/lucide.min.js"></script>
+    <style type="text/tailwindcss">
+  @theme inline {
+    --color-primary: var(--color-primary);
+    --color-border: var(--color-border);
+  }
+  @layer base {
+    body { background: var(--color-background); color: var(--color-text-primary); }
+    td, th { @apply break-words; word-break: break-all; word-break: auto-phrase; }
+    th { @apply whitespace-nowrap; }
+  }
+    </style>
+    <style>
+      .no-scrollbar::-webkit-scrollbar { display: none; }
+      .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+      [data-icon] {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        -webkit-mask-size: contain;
+        mask-size: contain;
+        -webkit-mask-repeat: no-repeat;
+        mask-repeat: no-repeat;
+        -webkit-mask-position: center;
+        mask-position: center;
+        background-color: currentColor;
+      }
+    </style>
+</head>
+<body class="min-h-screen font-sans antialiased overflow-hidden" style="background:var(--color-bg-body); color:var(--color-text-primary); font-family:var(--font-sans);">
+    <main class="flex" style="height:100vh; background:var(--color-bg-body);">
+
+        <!-- ========== LEFT SETTINGS NAV (286px) ========== -->
+        <aside class="flex flex-col shrink-0" style="width:286px; border-right:1px solid var(--color-border); background:var(--color-bg-sidebar); padding:18px 12px 14px;">
+
+            <!-- Top Section -->
+            <div class="flex flex-col" style="gap:18px; padding-bottom:18px;">
+                <!-- Back Button -->
+                <button class="inline-flex items-center gap-1.5 cursor-pointer" style="min-height:32px; border-radius:var(--radius-md); color:var(--color-text-secondary); font-size:13px; font-weight:760; background:none; border:none;">
+                    <i data-lucide="arrow-left" style="width:14px; height:14px;"></i>
+                    <span>返回</span>
+                </button>
+                <!-- Title -->
+                <div>
+                    <div style="font-size:22px; font-weight:860; color:var(--color-text-body); line-height:1.2;">设置</div>
+                    <div style="font-size:12px; color:var(--color-text-secondary); font-weight:700; margin-top:2px;">应用配置</div>
+                </div>
+            </div>
+
+            <!-- Nav List -->
+            <nav class="grid" style="gap:3px;">
+                <!-- Inactive: 连接 -->
+                <button class="grid items-center cursor-pointer" style="grid-template-columns:10px minmax(0,1fr) auto; gap:10px; min-height:68px; border:1px solid transparent; border-radius:var(--radius-lg); padding:10px; background:none;">
+                    <span style="width:8px; height:8px; border-radius:var(--radius-full); background:var(--color-border);"></span>
+                    <div class="flex flex-col items-start min-w-0" style="gap:2px;">
+                        <div class="flex items-center gap-2 min-w-0">
+                            <i data-lucide="server" style="width:18px; height:18px; color:var(--color-text-secondary); flex-shrink:0;"></i>
+                            <strong class="truncate" style="font-size:14px; font-weight:820; color:var(--color-text-secondary);">连接</strong>
+                        </div>
+                        <small style="font-size:12px; color:var(--color-text-muted);">服务器与网络配置</small>
+                    </div>
+                </button>
+
+                <!-- Active: 配对 -->
+                <button class="grid items-center cursor-pointer" style="grid-template-columns:10px minmax(0,1fr) auto; gap:10px; min-height:68px; border:1px solid var(--color-primary-muted); border-radius:var(--radius-lg); padding:10px; background:var(--color-bg-elevated); box-shadow:var(--shadow-sm);">
+                    <span style="width:8px; height:8px; border-radius:var(--radius-full); background:var(--color-primary); box-shadow:0 0 0 4px var(--color-primary-muted);"></span>
+                    <div class="flex flex-col items-start min-w-0" style="gap:2px;">
+                        <div class="flex items-center gap-2 min-w-0">
+                            <i data-lucide="link" style="width:18px; height:18px; color:var(--color-text-body); flex-shrink:0;"></i>
+                            <strong class="truncate" style="font-size:14px; font-weight:820; color:var(--color-text-body);">配对</strong>
+                        </div>
+                        <small style="font-size:12px; color:var(--color-text-secondary);">设备配对管理</small>
+                    </div>
+                    <span class="inline-flex items-center shrink-0" style="min-height:24px; border-radius:var(--radius-md); background:var(--color-primary-muted); color:var(--color-primary); font-size:11px; font-weight:850; padding:0 8px;">配对</span>
+                </button>
+
+                <!-- Inactive: 数据库 -->
+                <button class="grid items-center cursor-pointer" style="grid-template-columns:10px minmax(0,1fr) auto; gap:10px; min-height:68px; border:1px solid transparent; border-radius:var(--radius-lg); padding:10px; background:none;">
+                    <span style="width:8px; height:8px; border-radius:var(--radius-full); background:var(--color-border);"></span>
+                    <div class="flex flex-col items-start min-w-0" style="gap:2px;">
+                        <div class="flex items-center gap-2 min-w-0">
+                            <i data-lucide="database" style="width:18px; height:18px; color:var(--color-text-secondary); flex-shrink:0;"></i>
+                            <strong class="truncate" style="font-size:14px; font-weight:820; color:var(--color-text-secondary);">数据库</strong>
+                        </div>
+                        <small style="font-size:12px; color:var(--color-text-muted);">本地存储配置</small>
+                    </div>
+                </button>
+
+                <!-- Inactive: 更新 -->
+                <button class="grid items-center cursor-pointer" style="grid-template-columns:10px minmax(0,1fr) auto; gap:10px; min-height:68px; border:1px solid transparent; border-radius:var(--radius-lg); padding:10px; background:none;">
+                    <span style="width:8px; height:8px; border-radius:var(--radius-full); background:var(--color-border);"></span>
+                    <div class="flex flex-col items-start min-w-0" style="gap:2px;">
+                        <div class="flex items-center gap-2 min-w-0">
+                            <i data-lucide="download" style="width:18px; height:18px; color:var(--color-text-secondary); flex-shrink:0;"></i>
+                            <strong class="truncate" style="font-size:14px; font-weight:820; color:var(--color-text-secondary);">更新</strong>
+                        </div>
+                        <small style="font-size:12px; color:var(--color-text-muted);">应用版本与更新</small>
+                    </div>
+                </button>
+
+                <!-- Inactive: 关于 -->
+                <button class="grid items-center cursor-pointer" style="grid-template-columns:10px minmax(0,1fr) auto; gap:10px; min-height:68px; border:1px solid transparent; border-radius:var(--radius-lg); padding:10px; background:none;">
+                    <span style="width:8px; height:8px; border-radius:var(--radius-full); background:var(--color-border);"></span>
+                    <div class="flex flex-col items-start min-w-0" style="gap:2px;">
+                        <div class="flex items-center gap-2 min-w-0">
+                            <i data-lucide="info" style="width:18px; height:18px; color:var(--color-text-secondary); flex-shrink:0;"></i>
+                            <strong class="truncate" style="font-size:14px; font-weight:820; color:var(--color-text-secondary);">关于</strong>
+                        </div>
+                        <small style="font-size:12px; color:var(--color-text-muted);">应用详细信息</small>
+                    </div>
+                </button>
+            </nav>
+
+            <!-- Foot -->
+            <div class="mt-auto" style="margin-top:auto; border:1px solid var(--color-border); border-radius:var(--radius-lg); background:var(--color-bg-elevated); padding:12px;">
+                <div style="font-size:11px; font-weight:850; color:var(--color-text-muted);">版本</div>
+                <div style="font-size:12px; font-weight:760; color:var(--color-text-secondary); margin-top:2px;">v0.3.2</div>
+            </div>
+        </aside>
+
+        <!-- ========== RIGHT CONTENT AREA ========== -->
+        <div class="flex-1 overflow-y-auto" style="padding:42px 0 36px;">
+            <div class="mx-auto" style="max-width:860px; padding:0 36px;">
+
+                <!-- Header -->
+                <div class="flex flex-col" style="gap:6px; margin-bottom:28px;">
+                    <span style="font-size:11px; font-weight:880; color:var(--color-primary); text-transform:uppercase; letter-spacing:0.05em;">配对</span>
+                    <h1 style="font-size:28px; font-weight:880; color:var(--color-text-primary); line-height:1.2;">设备配对</h1>
+                    <p class="max-w-[660px]" style="font-size:13px; color:var(--color-text-secondary); line-height:var(--leading-normal);">将移动设备与桌面工作台配对，实现远程控制。</p>
+                </div>
+
+                <!-- Overview Cards -->
+                <div class="grid" style="grid-template-columns:1.35fr 0.8fr 0.8fr; gap:12px; margin-bottom:24px;">
+                    <!-- Card 1: 已配对设备 -->
+                    <div class="rounded-lg p-4" style="background:var(--color-bg-surface); border:1px solid var(--color-border);">
+                        <div class="flex items-center gap-2 mb-2">
+                            <span class="flex items-center justify-center shrink-0" style="width:8px; height:8px; border-radius:var(--radius-full); background:var(--state-success);"></span>
+                            <span style="font-size:12px; color:var(--color-text-secondary); font-weight:700;">已配对设备</span>
+                        </div>
+                        <div style="font-size:22px; font-weight:900; color:var(--color-primary); line-height:1;">1</div>
+                    </div>
+
+                    <!-- Card 2: 设备 ID -->
+                    <div class="rounded-lg p-4" style="background:var(--color-bg-surface); border:1px solid var(--color-border);">
+                        <div class="mb-2">
+                            <span style="font-size:12px; color:var(--color-text-secondary); font-weight:700;">设备 ID</span>
+                        </div>
+                        <div class="flex items-center gap-2 min-w-0">
+                            <code class="truncate" style="font-size:13px; font-weight:700; color:var(--color-text-body); font-family:var(--font-mono);">a1b2c3d4-e5f6-...7890</code>
+                            <button class="inline-flex items-center justify-center shrink-0" style="width:26px; height:26px; border-radius:var(--radius-sm); background:var(--color-bg-elevated); border:1px solid var(--color-border); cursor:pointer;">
+                                <i data-lucide="copy" style="width:12px; height:12px; color:var(--color-text-secondary);"></i>
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Card 3: 上次配对 -->
+                    <div class="rounded-lg p-4" style="background:var(--color-bg-surface); border:1px solid var(--color-border);">
+                        <div class="mb-2">
+                            <span style="font-size:12px; color:var(--color-text-secondary); font-weight:700;">上次配对</span>
+                        </div>
+                        <div style="font-size:22px; font-weight:900; color:var(--color-text-primary); line-height:1;">2 分钟前</div>
+                    </div>
+                </div>
+
+                <!-- Section: 配对码 -->
+                <div class="flex flex-col" style="gap:14px;">
+                    <h2 style="font-size:17px; font-weight:840; color:var(--color-text-body); line-height:1.3;">配对码</h2>
+
+                    <div class="rounded-lg flex flex-col items-center" style="background:var(--color-bg-surface); border:1px solid var(--color-border); border-radius:var(--radius-lg); padding:18px; gap:16px;">
+
+                        <!-- Generate Button -->
+                        <button class="inline-flex items-center justify-center shrink-0 cursor-pointer" style="height:42px; border-radius:var(--radius-md); background:var(--color-primary); color:#fff; font-size:13px; font-weight:800; padding:0 14px; border:none;">
+                            生成配对码
+                        </button>
+
+                        <!-- QR Code Placeholder -->
+                        <div class="flex flex-col items-center" style="width:100%; max-width:260px; margin:14px auto 12px; border:1px solid var(--color-border); border-radius:var(--radius-lg); background:var(--color-bg-elevated); padding:14px; aspect-ratio:1;">
+                            <!-- Simulated QR code grid 20x20 -->
+                            <div style="display:grid; grid-template-columns:repeat(20,1fr); gap:0; width:100%; height:100%;">
+                                <span style="background:var(--color-text-primary);border-radius:1px;"></span><span style="background:var(--color-text-primary);border-radius:1px;"></span><span style="background:var(--color-text-primary);border-radius:1px;"></span><span style="background:var(--color-text-primary);border-radius:1px;"></span><span style="background:var(--color-text-primary);border-radius:1px;"></span><span style="background:var(--color-text-primary);border-radius:1px;"></span><span style="background:var(--color-text-primary);border-radius:1px;"></span><span style="background:var(--color-text-primary);border-radius:1px;"></span><span style="background:transparent;border-radius:1px;"></span><span style="background:transparent;border-radius:1px;"></span><span style="background:var(--color-text-primary);border-radius:1px;"></span><span style="background:transparent;border-radius:1px;"></span><span style="background:var(--color-text-primary);border-radius:1px;"></span><span style="background:var(--color-text-primary);border-radius:1px;"></span><span style="background:transparent;border-radius:1px;"></span><span style="background:transparent;border-radius:1px;"></span><span style="background:transparent;border-radius:1px;"></span><span style="background:transparent;border-radius:1px;"></span><span style="background:transparent;border-radius:1px;"></span><span style="background:transparent;border-radius:1px;"></span>
+                                <span style="background:var(--color-text-primary);border-radius:1px;"></span><span style="background:transparent;border-radius:1px;"></span><span style="background:transparent;border-radius:1px;"></span><span style="background:transparent;border-radius:1px;"></span><span style="background:transparent;border-radius:1px;"></span><span style="background:var(--color-text-primary);border-radius:1px;"></span><span style="background:transparent;border-radius:1px;"></span><span style="background:var(--color-text-primary);border-radius:1px;"></span><span style="background:transparent;border-radius:1px;"></span><span style="background:var(--color-text-primary);border-radius:1px;"></span><span style="background:transparent;border-radius:1px;"></span><span style="background:transparent;border-radius:1px;"></span><span style="background:transparent;border-radius:1px;"></span><span style="background:transparent;border-radius:1px;"></span><span style="background:var(--color-text-primary);border-radius:1px;"></span><span style="background:transparent;border-radius:1px;"></span><span style="background:var(--color-text-primary);border-radius:1px;"></span><span style="background:transparent;border-radius:1px;"></span><span style="background:transparent;border-radius:1px;"></span><span style="background:var(--color-text-primary);border-radius:1px;"></span>
+                                <span style="background:var(--color-text-primary);border-radius:1px;"></span><span style="background:transparent;border-radius:1px;"></span><span style="background:var(--color-text-primary);border-radius:1px;"></span><span style="background:var(--color-text-primary);border-radius:1px;"></span><span style="background:transparent;border-radius:1px;"></span><span style="background:var(--color-text-primary);border-radius:1px;"></span><span style="background:var(--color-text-primary);border-radius:1px;"></span><span style="background:transparent;border-radius:1px;"></span><span style="background:var(--color-text-primary);border-radius:1px;"></span><span style="background:transparent;border-radius:1px;"></span><span style="background:var(--color-text-primary);border-radius:1px;"></span><span style="background:var(--color-text-primary);border-radius:1px;"></span><span style="background:transparent;border-radius:1px;"></span><span style="background:var(--color-text-primary);border-radius:1px;"></span><span style="background:transparent;border-radius:1px;"></span><span style="background:var(--color-text-primary);border-radius:1px;"></span><span style="background:transparent;border-radius:1px;"></span><span style="background:var(--color-text-primary);border-radius:1px;"></span><span style="background:transparent;border-radius:1px;"></span><span style="background:transparent;border-radius:1px;"></span>
+                                <span style="background:var(--color-text-primary);border-radius:1px;"></span><span style="background:transparent;border-radius:1px;"></span><span style="background:var(--color-text-primary);border-radius:1px;"></span><span style="background:var(--color-text-primary);border-radius:1px;"></span><span style="background:transparent;border-radius:1px;"></span><span style="background:transparent;border-radius:1px;"></span><span style="background:var(--color-text-primary);border-radius:1px;"></span><span style="background:transparent;border-radius:1px;"></span><span style="background:var(--color-text-primary);border-radius:1px;"></span><span style="background:var(--color-text-primary);border-radius:1px;"></span><span style="background:transparent;border-radius:1px;"></span><span style="background:transparent;border-radius:1px;"></span><span style="background:var(--color-text-primary);border-radius:1px;"></span><span style="background:transparent;border-radius:1px;"></span><span style="background:transparent;border-radius:1px;"></span><span style="background:var(--color-text-primary);border-radius:1px;"></span><span style="background:transparent;border-radius:1px;"></span><span style="background:var(--color-text-primary);border-radius:1px;"></span><span style="background:transparent;border-radius:1px;"></span><span style="background:transparent;border-radius:1px;"></span>
+                                <span style="background:var(--color-text-primary);border-radius:1px;"></span><span style="background:transparent;border-radius:1px;"></span><span style="background:var(--color-text-primary);border-radius:1px;"></span><span style="background:var(--color-text-primary);border-radius:1px;"></span><span style="background:var(--color-text-primary);border-radius:1px;"></span><span style="background:transparent;border-radius:1px;"></span><span style="background:transparent;border-radius:1px;"></span><span style="background:transparent;border-radius:1px;"></span><span style="background:transparent;border-radius:1px;"></span><span style="background:transparent;border-radius:1px;"></span><span style="background:var(--color-text-primary);border-radius:1px;"></span><span style="background:var(--color-text-primary);border-radius:1px;"></span><span style="background:transparent;border-radius:1px;"></span><span style="background:var(--color-text-primary);border-radius:1px;"></span><span style="background:transparent;border-radius:1px;"></span><span style="background:transparent;border-radius:1px;"></span><span style="background:var(--color-text-primary);border-radius:1px;"></span><span style="background:transparent;border-radius:1px;"></span><span style="background:var(--color-text-primary);border-radius:1px;"></span><span style="background:transparent;border-radius:1px;"></span>
+                                <span style="background:var(--color-text-primary);border-radius:1px;"></span><span style="background:var(--color-text-primary);border-radius:1px;"></span><span style="background:var(--color-text-primary);border-radius:1px;"></span><span style="background:var(--color-text-primary);border-radius:1px;"></span><span style="background:transparent;border-radius:1px;"></span><span style="background:var(--color-text-primary);border-radius:1px;"></span><span style="background:transparent;border-radius:1px;"></span><span style="background:var(--color-text-primary);border-radius:1px;"></span><span style="background:transparent;border-radius:1px;"></span><span style="background:transparent;border-radius:1px;"></span><span style="background:transparent;border-radius:1px;"></span><span style="background:var(--color-text-primary);border-radius:1px;"></span><span style="background:var(--color-text-primary);border-radius:1px;"></span><span style="background:transparent;border-radius:1px;"></span><span style="background:var(--color-text-primary);border-radius:1px;"></span><span style="background:var(--color-text-primary);border-radius:1px;"></span><span style="background:transparent;border-radius:1px;"></span><span style="background:var(--color-text-primary);border-radius:1px;"></span><span style="background:transparent;border-radius:1px;"></span><span style="background:var(--color-text-primary);border-radius:1px;"></span>
+                                <span style="background:transparent;border-radius:1px;"></span><span style="background:transparent;border-radius:1px;"></span><span style="background:transparent;border-radius:1px;"></span><span style="background:transparent;border-radius:1px;"></span><span style="background:var(--color-text-primary);border-radius:1px;"></span><span style="background:transparent;border-radius:1px;"></span><span style="background:var(--color-text-primary);border-radius:1px;"></span><span style="background:transparent;border-radius:1px;"></span><span style="background:var(--color-text-primary);border-radius:1px;"></span><span style="background:var(--color-text-primary);border-radius:1px;"></span><span style="background:var(--color-text-primary);border-radius:1px;"></span><span style="background:transparent;border-radius:1px;"></span><span style="background:transparent;border-radius:1px;"></span><span style="background:var(--color-text-primary);border-radius:1px;"></span><span style="background:transparent;border-radius:1px;"></span><span style="background:var(--color-text-primary);border-radius:1px;"></span><span style="background:var(--color-text-primary);border-radius:1px;"></span><span style="background:transparent;border-radius:1px;"></span><span style="background:transparent;border-radius:1px;"></span><span style="background:var(--color-text-primary);border-radius:1px;"></span>
+                                <span style="background:var(--color-text-primary);border-radius:1px;"></span><span style="background:transparent;border-radius:1px;"></span><span style="background:var(--color-text-primary);border-radius:1px;"></span><span style="background:transparent;border-radius:1px;"></span><span style="background:var(--color-text-primary);border-radius:1px;"></span><span style="background:transparent;border-radius:1px;"></span><span style="background:transparent;border-radius:1px;"></span><span style="background:transparent;border-radius:1px;"></span><span style="background:transparent;border-radius:1px;"></span><span style="background:transparent;border-radius:1px;"></span><span style="background:transparent;border-radius:1px;"></span><span style="background:var(--color-text-primary);border-radius:1px;"></span><span style="background:var(--color-text-primary);border-radius:1px;"></span><span style="background:transparent;border-radius:1px;"></span><span style="background:transparent;border-radius:1px;"></span><span style="background:var(--color-text-primary);border-radius:1px;"></span><span style="background:transparent;border-radius:1px;"></span><span style="background:var(--color-text-primary);border-radius:1px;"></span><span style="background:var(--color-text-primary);border-radius:1px;"></span><span style="background:transparent;border-radius:1px;"></span><span style="background:transparent;border-radius:1px;"></span>
+                                <span style="background:transparent;border-radius:1px;"></span><span style="background:var(--color-text-primary);border-radius:1px;"></span><span style="background:transparent;border-radius:1px;"></span><span style="background:var(--color-text-primary);border-radius:1px;"></span><span style="background:transparent;border-radius:1px;"></span><span style="background:var(--color-text-primary);border-radius:1px;"></span><span style="background:var(--color-text-primary);border-radius:1px;"></span><span style="background:transparent;border-radius:1px;"></span><span style="background:var(--color-text-primary);border-radius:1px;"></span><span style="background:transparent;border-radius:1px;"></span><span style="background:var(--color-text-primary);border-radius:1px;"></span><span style="background:transparent;border-radius:1px;"></span><span style="background:var(--color-text-primary);border-radius:1px;"></span><span style="background:transparent;border-radius:1px;"></span><span style="background:var(--color-text-primary);border-radius:1px;"></span><span style="background:transparent;border-radius:1px;"></span><span style="background:var(--color-text-primary);border-radius:1px;"></span><span style="background:transparent;border-radius:1px;"></span><span style="background:var(--color-text-primary);border-radius:1px;"></span><span style="background:transparent;border-radius:1px;"></span><span style="background:var(--color-text-primary);border-radius:1px;"></span>
+                                <span style="background:var(--color-text-primary);border-radius:1px;"></span><span style="background:transparent;border-radius:1px;"></span><span style="background:var(--color-text-primary);border-radius:1px;"></span><span style="background:transparent;border-radius:1px;"></span><span style="background:var(--color-text-primary);border-radius:1px;"></span><span style="background:transparent;border-radius:1px;"></span><span style="background:transparent;border-radius:1px;"></span><span style="background:var(--color-text-primary);border-radius:1px;"></span><span style="background:transparent;border-radius:1px;"></span><span style="background:var(--color-text-primary);border-radius:1px;"></span><span style="background:transparent;border-radius:1px;"></span><span style="background:var(--color-text-primary);border-radius:1px;"></span><span style="background:transparent;border-radius:1px;"></span><span style="background:var(--color-text-primary);border-radius:1px;"></span><span style="background:transparent;border-radius:1px;"></span><span style="background:var(--color-text-primary);border-radius:1px;"></span><span style="background:transparent;border-radius:1px;"></span><span style="background:var(--color-text-primary);border-radius:1px;"></span><span style="background:transparent;border-radius:1px;"></span><span style="background:var(--color-text-primary);border-radius:1px;"></span><span style="background:transparent;border-radius:1px;"></span>
+                                <span style="background:transparent;border-radius:1px;"></span><span style="background:var(--color-text-primary);border-radius:1px;"></span><span style="background:var(--color-text-primary);border-radius:1px;"></span><span style="background:transparent;border-radius:1px;"></span><span style="background:transparent;border-radius:1px;"></span><span style="background:transparent;border-radius:1px;"></span><span style="background:var(--color-text-primary);border-radius:1px;"></span><span style="background:transparent;border-radius:1px;"></span><span style="background:var(--color-text-primary);border-radius:1px;"></span><span style="background:var(--color-text-primary);border-radius:1px;"></span><span style="background:transparent;border-radius:1px;"></span><span style="background:var(--color-text-primary);border-radius:1px;"></span><span style="background:transparent;border-radius:1px;"></span><span style="background:transparent;border-radius:1px;"></span><span style="background:var(--color-text-primary);border-radius:1px;"></span><span style="background:var(--color-text-primary);border-radius:1px;"></span><span style="background:transparent;border-radius:1px;"></span><span style="background:transparent;border-radius:1px;"></span><span style="background:var(--color-text-primary);border-radius:1px;"></span><span style="background:transparent;border-radius:1px;"></span><span style="background:transparent;border-radius:1px;"></span><span style="background:var(--color-text-primary);border-radius:1px;"></span>
+                                <span style="background:var(--color-text-primary);border-radius:1px;"></span><span style="background:transparent;border-radius:1px;"></span><span style="background:transparent;border-radius:1px;"></span><span style="background:var(--color-text-primary);border-radius:1px;"></span><span style="background:var(--color-text-primary);border-radius:1px;"></span><span style="background:transparent;border-radius:1px;"></span><span style="background:transparent;border-radius:1px;"></span><span style="background:transparent;border-radius:1px;"></span><span style="background:var(--color-text-primary);border-radius:1px;"></span><span style="background:transparent;border-radius:1px;"></span><span style="background:var(--color-text-primary);border-radius:1px;"></span><span style="background:transparent;border-radius:1px;"></span><span style="background:var(--color-text-primary);border-radius:1px;"></span><span style="background:var(--color-text-primary);border-radius:1px;"></span><span style="background:transparent;border-radius:1px;"></span><span style="background:transparent;border-radius:1px;"></span><span style="background:var(--color-text-primary);border-radius:1px;"></span><span style="background:transparent;border-radius:1px;"></span><span style="background:var(--color-text-primary);border-radius:1px;"></span><span style="background:var(--color-text-primary);border-radius:1px;"></span><span style="background:transparent;border-radius:1px;"></span><span style="background:transparent;border-radius:1px;"></span>
+                                <span style="background:transparent;border-radius:1px;"></span><span style="background:var(--color-text-primary);border-radius:1px;"></span><span style="background:var(--color-text-primary);border-radius:1px;"></span><span style="background:transparent;border-radius:1px;"></span><span style="background:transparent;border-radius:1px;"></span><span style="background:var(--color-text-primary);border-radius:1px;"></span><span style="background:var(--color-text-primary);border-radius:1px;"></span><span style="background:transparent;border-radius:1px;"></span><span style="background:transparent;border-radius:1px;"></span><span style="background:var(--color-text-primary);border-radius:1px;"></span><span style="background:var(--color-text-primary);border-radius:1px;"></span><span style="background:transparent;border-radius:1px;"></span><span style="background:var(--color-text-primary);border-radius:1px;"></span><span style="background:transparent;border-radius:1px;"></span><span style="background:var(--color-text-primary);border-radius:1px;"></span><span style="background:transparent;border-radius:1px;"></span><span style="background:var(--color-text-primary);border-radius:1px;"></span><span style="background:transparent;border-radius:1px;"></span><span style="background:transparent;border-radius:1px;"></span><span style="background:var(--color-text-primary);border-radius:1px;"></span><span style="background:transparent;border-radius:1px;"></span><span style="background:transparent;border-radius:1px;"></span>
+                                <span style="background:var(--color-text-primary);border-radius:1px;"></span><span style="background:transparent;border-radius:1px;"></span><span style="background:var(--color-text-primary);border-radius:1px;"></span><span style="background:transparent;border-radius:1px;"></span><span style="background:var(--color-text-primary);border-radius:1px;"></span><span style="background:transparent;border-radius:1px;"></span><span style="background:transparent;border-radius:1px;"></span><span style="background:var(--color-text-primary);border-radius:1px;"></span><span style="background:transparent;border-radius:1px;"></span><span style="background:var(--color-text-primary);border-radius:1px;"></span><span style="background:transparent;border-radius:1px;"></span><span style="background:var(--color-text-primary);border-radius:1px;"></span><span style="background:transparent;border-radius:1px;"></span><span style="background:transparent;border-radius:1px;"></span><span style="background:transparent;border-radius:1px;"></span><span style="background:transparent;border-radius:1px;"></span><span style="background:var(--color-text-primary);border-radius:1px;"></span><span style="background:var(--color-text-primary);border-radius:1px;"></span><span style="background:transparent;border-radius:1px;"></span><span style="background:var(--color-text-primary);border-radius:1px;"></span><span style="background:transparent;border-radius:1px;"></span><span style="background:transparent;border-radius:1px;"></span>
+                                <span style="background:transparent;border-radius:1px;"></span><span style="background:var(--color-text-primary);border-radius:1px;"></span><span style="background:transparent;border-radius:1px;"></span><span style="background:var(--color-text-primary);border-radius:1px;"></span><span style="background:transparent;border-radius:1px;"></span><span style="background:var(--color-text-primary);border-radius:1px;"></span><span style="background:transparent;border-radius:1px;"></span><span style="background:transparent;border-radius:1px;"></span><span style="background:var(--color-text-primary);border-radius:1px;"></span><span style="background:transparent;border-radius:1px;"></span><span style="background:var(--color-text-primary);border-radius:1px;"></span><span style="background:transparent;border-radius:1px;"></span><span style="background:var(--color-text-primary);border-radius:1px;"></span><span style="background:var(--color-text-primary);border-radius:1px;"></span><span style="background:transparent;border-radius:1px;"></span><span style="background:var(--color-text-primary);border-radius:1px;"></span><span style="background:transparent;border-radius:1px;"></span><span style="background:var(--color-text-primary);border-radius:1px;"></span><span style="background:transparent;border-radius:1px;"></span><span style="background:var(--color-text-primary);border-radius:1px;"></span><span style="background:transparent;border-radius:1px;"></span><span style="background:transparent;border-radius:1px;"></span>
+                                <span style="background:var(--color-text-primary);border-radius:1px;"></span><span style="background:transparent;border-radius:1px;"></span><span style="background:var(--color-text-primary);border-radius:1px;"></span><span style="background:var(--color-text-primary);border-radius:1px;"></span><span style="background:transparent;border-radius:1px;"></span><span style="background:transparent;border-radius:1px;"></span><span style="background:var(--color-text-primary);border-radius:1px;"></span><span style="background:transparent;border-radius:1px;"></span><span style="background:transparent;border-radius:1px;"></span><span style="background:transparent;border-radius:1px;"></span><span style="background:transparent;border-radius:1px;"></span><span style="background:var(--color-text-primary);border-radius:1px;"></span><span style="background:transparent;border-radius:1px;"></span><span style="background:transparent;border-radius:1px;"></span><span style="background:transparent;border-radius:1px;"></span><span style="background:transparent;border-radius:1px;"></span><span style="background:var(--color-text-primary);border-radius:1px;"></span><span style="background:transparent;border-radius:1px;"></span><span style="background:var(--color-text-primary);border-radius:1px;"></span><span style="background:var(--color-text-primary);border-radius:1px;"></span><span style="background:transparent;border-radius:1px;"></span><span style="background:transparent;border-radius:1px;"></span><span style="background:transparent;border-radius:1px;"></span>
+                                <span style="background:var(--color-text-primary);border-radius:1px;"></span><span style="background:var(--color-text-primary);border-radius:1px;"></span><span style="background:transparent;border-radius:1px;"></span><span style="background:transparent;border-radius:1px;"></span><span style="background:var(--color-text-primary);border-radius:1px;"></span><span style="background:transparent;border-radius:1px;"></span><span style="background:var(--color-text-primary);border-radius:1px;"></span><span style="background:var(--color-text-primary);border-radius:1px;"></span><span style="background:transparent;border-radius:1px;"></span><span style="background:var(--color-text-primary);border-radius:1px;"></span><span style="background:var(--color-text-primary);border-radius:1px;"></span><span style="background:transparent;border-radius:1px;"></span><span style="background:var(--color-text-primary);border-radius:1px;"></span><span style="background:transparent;border-radius:1px;"></span><span style="background:var(--color-text-primary);border-radius:1px;"></span><span style="background:transparent;border-radius:1px;"></span><span style="background:var(--color-text-primary);border-radius:1px;"></span><span style="background:var(--color-text-primary);border-radius:1px;"></span><span style="background:transparent;border-radius:1px;"></span><span style="background:transparent;border-radius:1px;"></span><span style="background:transparent;border-radius:1px;"></span><span style="background:transparent;border-radius:1px;"></span>
+                                <span style="background:transparent;border-radius:1px;"></span><span style="background:transparent;border-radius:1px;"></span><span style="background:var(--color-text-primary);border-radius:1px;"></span><span style="background:transparent;border-radius:1px;"></span><span style="background:var(--color-text-primary);border-radius:1px;"></span><span style="background:var(--color-text-primary);border-radius:1px;"></span><span style="background:transparent;border-radius:1px;"></span><span style="background:transparent;border-radius:1px;"></span><span style="background:var(--color-text-primary);border-radius:1px;"></span><span style="background:transparent;border-radius:1px;"></span><span style="background:transparent;border-radius:1px;"></span><span style="background:var(--color-text-primary);border-radius:1px;"></span><span style="background:var(--color-text-primary);border-radius:1px;"></span><span style="background:transparent;border-radius:1px;"></span><span style="background:var(--color-text-primary);border-radius:1px;"></span><span style="background:transparent;border-radius:1px;"></span><span style="background:transparent;border-radius:1px;"></span><span style="background:var(--color-text-primary);border-radius:1px;"></span><span style="background:transparent;border-radius:1px;"></span><span style="background:var(--color-text-primary);border-radius:1px;"></span><span style="background:transparent;border-radius:1px;"></span><span style="background:var(--color-text-primary);border-radius:1px;"></span>
+                                <span style="background:var(--color-text-primary);border-radius:1px;"></span><span style="background:var(--color-text-primary);border-radius:1px;"></span><span style="background:transparent;border-radius:1px;"></span><span style="background:var(--color-text-primary);border-radius:1px;"></span><span style="background:transparent;border-radius:1px;"></span><span style="background:transparent;border-radius:1px;"></span><span style="background:var(--color-text-primary);border-radius:1px;"></span><span style="background:transparent;border-radius:1px;"></span><span style="background:transparent;border-radius:1px;"></span><span style="background:var(--color-text-primary);border-radius:1px;"></span><span style="background:transparent;border-radius:1px;"></span><span style="background:var(--color-text-primary);border-radius:1px;"></span><span style="background:transparent;border-radius:1px;"></span><span style="background:var(--color-text-primary);border-radius:1px;"></span><span style="background:var(--color-text-primary);border-radius:1px;"></span><span style="background:transparent;border-radius:1px;"></span><span style="background:var(--color-text-primary);border-radius:1px;"></span><span style="background:transparent;border-radius:1px;"></span><span style="background:transparent;border-radius:1px;"></span><span style="background:var(--color-text-primary);border-radius:1px;"></span><span style="background:transparent;border-radius:1px;"></span><span style="background:var(--color-text-primary);border-radius:1px;"></span>
+                                <span style="background:var(--color-text-primary);border-radius:1px;"></span><span style="background:var(--color-text-primary);border-radius:1px;"></span><span style="background:var(--color-text-primary);border-radius:1px;"></span><span style="background:var(--color-text-primary);border-radius:1px;"></span><span style="background:var(--color-text-primary);border-radius:1px;"></span><span style="background:var(--color-text-primary);border-radius:1px;"></span><span style="background:var(--color-text-primary);border-radius:1px;"></span><span style="background:var(--color-text-primary);border-radius:1px;"></span><span style="background:transparent;border-radius:1px;"></span><span style="background:transparent;border-radius:1px;"></span><span style="background:var(--color-text-primary);border-radius:1px;"></span><span style="background:transparent;border-radius:1px;"></span><span style="background:var(--color-text-primary);border-radius:1px;"></span><span style="background:var(--color-text-primary);border-radius:1px;"></span><span style="background:transparent;border-radius:1px;"></span><span style="background:transparent;border-radius:1px;"></span><span style="background:transparent;border-radius:1px;"></span><span style="background:transparent;border-radius:1px;"></span><span style="background:transparent;border-radius:1px;"></span><span style="background:transparent;border-radius:1px;"></span><span style="background:transparent;border-radius:1px;"></span><span style="background:transparent;border-radius:1px;"></span><span style="background:transparent;border-radius:1px;"></span>
+                            </div>
+                            <p style="font-size:12px; color:var(--color-text-muted); text-align:center; margin-top:12px;">配对码有效期: 5 分钟</p>
+                        </div>
+
+                    </div>
+                </div>
+
+                <!-- Section: 已配对设备 -->
+                <div class="flex flex-col" style="gap:14px; margin-top:24px;">
+                    <h2 style="font-size:17px; font-weight:840; color:var(--color-text-body); line-height:1.3;">已配对设备</h2>
+
+                    <!-- Device Card -->
+                    <div class="flex items-center" style="gap:12px; background:var(--color-bg-surface); border:1px solid var(--color-border); border-radius:var(--radius-lg); padding:12px 16px;">
+                        <!-- Phone Icon -->
+                        <i data-lucide="smartphone" style="width:18px; height:18px; color:var(--color-primary); flex-shrink:0;"></i>
+
+                        <!-- Device Info -->
+                        <div class="flex flex-col min-w-0 flex-1" style="gap:2px;">
+                            <span class="truncate" style="font-size:14px; font-weight:760; color:var(--color-text-body);">iPhone 15 Pro</span>
+                            <span class="truncate" style="font-size:12px; color:var(--color-text-muted);">上次在线: 2 分钟前</span>
+                        </div>
+
+                        <!-- Online Badge -->
+                        <div class="inline-flex items-center shrink-0" style="gap:6px;">
+                            <span style="width:8px; height:8px; border-radius:var(--radius-full); background:var(--state-success);"></span>
+                            <span class="inline-flex items-center" style="min-height:24px; border-radius:var(--radius-md); background:var(--state-success-bg); color:var(--state-success); font-size:12px; font-weight:800; padding:0 8px;">在线</span>
+                        </div>
+
+                        <!-- Unpair Button -->
+                        <button class="inline-flex items-center justify-center shrink-0 cursor-pointer" style="height:32px; border-radius:var(--radius-md); background:transparent; border:1px solid var(--color-border); color:var(--color-text-secondary); font-size:12px; font-weight:700; padding:0 12px;">
+                            解除配对
+                        </button>
+                    </div>
+                </div>
+
+            </div>
+        </div>
+
+    </main>
+
+    <!-- Custom Styles (must be in body, not head) -->
+    <style>
+        /* Nav button hover */
+        aside nav button:hover {
+            background: var(--color-bg-hover);
+        }
+
+        /* Scrollbar styling */
+        .overflow-y-auto::-webkit-scrollbar {
+            width: 6px;
+        }
+        .overflow-y-auto::-webkit-scrollbar-track {
+            background: transparent;
+        }
+        .overflow-y-auto::-webkit-scrollbar-thumb {
+            background: var(--color-border);
+            border-radius: 3px;
+        }
+
+        /* Responsive: stack nav on smaller screens */
+        @media (max-width: 768px) {
+            main {
+                flex-direction: column !important;
+                height: auto !important;
+                min-height: 100vh;
+                overflow-y: auto;
+            }
+            aside {
+                width: 100% !important;
+                border-right: none !important;
+                border-bottom: 1px solid var(--color-border) !important;
+                padding: 12px 16px !important;
+            }
+            aside nav {
+                display: flex !important;
+                overflow-x: auto;
+                gap: 2px !important;
+            }
+            aside nav button {
+                min-width: max-content;
+            }
+            .overflow-y-auto {
+                padding: 24px 16px !important;
+            }
+            .overflow-y-auto > div {
+                padding: 0 !important;
+            }
+            .grid[style*="1.35fr"] {
+                grid-template-columns: 1fr !important;
+            }
+        }
+    </style>
+
+    <script>lucide.createIcons();</script>
+</body>
+</html>

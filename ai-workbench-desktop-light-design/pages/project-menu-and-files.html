@@ -109,20 +109,9 @@
   /* Transitions */
   --transition-fast: 120ms ease;
   --transition-normal: 200ms ease;
-  /* Aliases for backwards compatibility with dark-theme var names */
-  --color-bg-body: var(--color-bg-main);
-  --font-weight-normal: var(--fw-normal);
-  --font-weight-medium: var(--fw-medium);
-  --font-weight-semibold: var(--fw-semibold);
-  --font-weight-bold: var(--fw-bold);
-  --font-weight-extrabold: var(--fw-extrabold);
-  --shadow-card: var(--shadow-sm);
-  --shadow-elevated: var(--shadow-md);
-  --shadow-modal: var(--shadow-lg);
-  --composer-height: auto;
-
 }
-    
+
+    </style>
     <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4.3.1/dist/index.global.js"></script>
     <script src="https://unpkg.com/lucide@1.8.0/dist/umd/lucide.min.js"></script>
     <style type="text/tailwindcss">
@@ -157,7 +146,7 @@
     <main style="display: grid; grid-template-columns: 286px minmax(760px, 1fr); height: 100vh; overflow: hidden;">
 
       <!-- ============================================================ -->
-      <!-- LEFT SIDEBAR — SidebarProjectTree.vue                       -->
+      <!-- LEFT SIDEBAR                                                  -->
       <!-- ============================================================ -->
       <aside style="background: var(--color-bg-sidebar); border-right: 1px solid var(--color-border); padding: 18px 10px 14px; display: flex; flex-direction: column; gap: 16px; overflow-y: auto;">
 
@@ -172,7 +161,7 @@
         <!-- Project tree -->
         <div style="display: flex; flex-direction: column; gap: 2px;">
 
-          <!-- my-saas-app project (expanded) -->
+          <!-- my-saas-app project (expanded, file list active) -->
           <div style="display: flex; flex-direction: column;">
             <!-- Project row -->
             <div style="display: flex; align-items: center; gap: 6px; padding: 4px 6px; border-radius: 6px;">
@@ -180,24 +169,52 @@
               <i data-lucide="folder" style="width: 18px; height: 18px; color: var(--color-text-secondary); flex-shrink: 0;"></i>
               <span style="font-size: 14px; font-weight: 620; color: var(--color-text-primary); flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">my-saas-app</span>
               <span style="font-size: 11px; color: var(--color-text-muted); background: var(--color-bg-elevated); padding: 1px 7px; border-radius: 999px; white-space: nowrap; line-height: 1.5;">main</span>
+              <!-- File list icon (active/highlighted) -->
+              <button style="width: 28px; height: 28px; border-radius: 6px; border: none; background: var(--color-bg-hover); color: var(--color-text-primary); cursor: pointer; display: flex; align-items: center; justify-content: center; flex-shrink: 0;" aria-label="文件列表">
+                <i data-lucide="list" style="width: 15px; height: 15px;"></i>
+              </button>
             </div>
 
-            <!-- Session list under my-saas-app -->
-            <div style="padding-left: 32px; display: flex; flex-direction: column; gap: 3px;">
+            <!-- File list under my-saas-app -->
+            <div style="padding-left: 0; display: flex; flex-direction: column; gap: 0;">
 
-              <!-- 修复认证 bug (active) -->
-              <div style="padding: 5px 8px 5px 10px; border-radius: 6px; background: var(--color-bg-hover); cursor: pointer;">
-                <span style="font-size: 13px; color: var(--color-text-body); display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">修复认证 bug</span>
+              <!-- ▸ src (folder) -->
+              <div style="display: flex; align-items: center; gap: 8px; min-height: 32px; padding: 0 8px 0 32px; cursor: pointer;">
+                <span style="font-size: 14px; color: var(--color-text-muted); flex-shrink: 0; width: 14px; text-align: center;">▸</span>
+                <span style="font-size: 14px; color: var(--color-text-body); flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">src</span>
               </div>
 
-              <!-- 优化 API 性能 -->
-              <div style="padding: 5px 8px 5px 10px; border-radius: 6px; cursor: pointer;">
-                <span style="font-size: 13px; color: var(--color-text-muted); display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">优化 API 性能</span>
+              <!-- ▸ public (folder) -->
+              <div style="display: flex; align-items: center; gap: 8px; min-height: 32px; padding: 0 8px 0 32px; cursor: pointer;">
+                <span style="font-size: 14px; color: var(--color-text-muted); flex-shrink: 0; width: 14px; text-align: center;">▸</span>
+                <span style="font-size: 14px; color: var(--color-text-body); flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">public</span>
               </div>
 
-              <!-- 添加单元测试 -->
-              <div style="padding: 5px 8px 5px 10px; border-radius: 6px; cursor: pointer;">
-                <span style="font-size: 13px; color: var(--color-text-muted); display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">添加单元测试</span>
+              <!-- ▸ tests (folder) -->
+              <div style="display: flex; align-items: center; gap: 8px; min-height: 32px; padding: 0 8px 0 32px; cursor: pointer;">
+                <span style="font-size: 14px; color: var(--color-text-muted); flex-shrink: 0; width: 14px; text-align: center;">▸</span>
+                <span style="font-size: 14px; color: var(--color-text-body); flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">tests</span>
+              </div>
+
+              <!-- • package.json (1.2 KB) -->
+              <div style="display: flex; align-items: center; gap: 8px; min-height: 32px; padding: 0 8px 0 32px; cursor: pointer;">
+                <span style="font-size: 14px; color: var(--color-text-muted); flex-shrink: 0; width: 14px; text-align: center;">•</span>
+                <span style="font-size: 14px; color: var(--color-text-body); flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">package.json</span>
+                <span style="font-size: 12px; color: var(--color-text-muted); margin-left: auto; white-space: nowrap; flex-shrink: 0;">1.2 KB</span>
+              </div>
+
+              <!-- • tsconfig.json (0.8 KB) -->
+              <div style="display: flex; align-items: center; gap: 8px; min-height: 32px; padding: 0 8px 0 32px; cursor: pointer;">
+                <span style="font-size: 14px; color: var(--color-text-muted); flex-shrink: 0; width: 14px; text-align: center;">•</span>
+                <span style="font-size: 14px; color: var(--color-text-body); flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">tsconfig.json</span>
+                <span style="font-size: 12px; color: var(--color-text-muted); margin-left: auto; white-space: nowrap; flex-shrink: 0;">0.8 KB</span>
+              </div>
+
+              <!-- • README.md (3.4 KB) -->
+              <div style="display: flex; align-items: center; gap: 8px; min-height: 32px; padding: 0 8px 0 32px; cursor: pointer;">
+                <span style="font-size: 14px; color: var(--color-text-muted); flex-shrink: 0; width: 14px; text-align: center;">•</span>
+                <span style="font-size: 14px; color: var(--color-text-body); flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">README.md</span>
+                <span style="font-size: 12px; color: var(--color-text-muted); margin-left: auto; white-space: nowrap; flex-shrink: 0;">3.4 KB</span>
               </div>
 
             </div>
@@ -214,12 +231,10 @@
 
             <!-- Session list under ai-workbench -->
             <div style="padding-left: 32px; display: flex; flex-direction: column; gap: 3px;">
-
               <!-- 重构数据库查询 -->
               <div style="padding: 5px 8px 5px 10px; border-radius: 6px; cursor: pointer;">
                 <span style="font-size: 13px; color: var(--color-text-muted); display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">重构数据库查询</span>
               </div>
-
             </div>
           </div>
 
@@ -281,6 +296,49 @@
       </div>
 
     </main>
+
+    <!-- ============================================================ -->
+    <!-- PROJECT CONTEXT MENU (fixed overlay)                         -->
+    <!-- ============================================================ -->
+    <div style="position: fixed; z-index: 100; top: 90px; left: 240px; width: 196px; border: 1px solid rgba(255,255,255,0.12); border-radius: 8px; background: var(--color-bg-elevated); padding: 4px; box-shadow: var(--shadow-md);">
+
+      <!-- 置顶项目 (DISABLED) -->
+      <button disabled style="display: flex; align-items: center; gap: 8px; min-height: 32px; border-radius: 6px; padding: 0 8px; font-size: 14px; font-weight: 520; border: 0; background: transparent; color: var(--color-text-muted); cursor: default; width: 100%; font-family: var(--font-sans);">
+        <span style="font-size: 18px; opacity: 0.55; flex-shrink: 0; width: 18px; text-align: center; line-height: 1;">📌</span>
+        <span>置顶项目</span>
+      </button>
+
+      <!-- 在文件管理器中打开 -->
+      <button style="display: flex; align-items: center; gap: 8px; min-height: 32px; border-radius: 6px; padding: 0 8px; font-size: 14px; font-weight: 520; border: 0; background: transparent; color: var(--color-text-body); cursor: pointer; width: 100%; font-family: var(--font-sans);">
+        <span style="font-size: 18px; opacity: 0.85; flex-shrink: 0; width: 18px; text-align: center; line-height: 1;">📂</span>
+        <span>在文件管理器中打开</span>
+      </button>
+
+      <!-- 创建永久工作树 (DISABLED) -->
+      <button disabled style="display: flex; align-items: center; gap: 8px; min-height: 32px; border-radius: 6px; padding: 0 8px; font-size: 14px; font-weight: 520; border: 0; background: transparent; color: var(--color-text-muted); cursor: default; width: 100%; font-family: var(--font-sans);">
+        <span style="font-size: 18px; opacity: 0.55; flex-shrink: 0; width: 18px; text-align: center; line-height: 1;">🌿</span>
+        <span>创建永久工作树</span>
+      </button>
+
+      <!-- 重命名项目 -->
+      <button style="display: flex; align-items: center; gap: 8px; min-height: 32px; border-radius: 6px; padding: 0 8px; font-size: 14px; font-weight: 520; border: 0; background: transparent; color: var(--color-text-body); cursor: pointer; width: 100%; font-family: var(--font-sans);">
+        <span style="font-size: 18px; opacity: 0.85; flex-shrink: 0; width: 18px; text-align: center; line-height: 1;">✏️</span>
+        <span>重命名项目</span>
+      </button>
+
+      <!-- 归档对话 -->
+      <button style="display: flex; align-items: center; gap: 8px; min-height: 32px; border-radius: 6px; padding: 0 8px; font-size: 14px; font-weight: 520; border: 0; background: transparent; color: var(--color-text-body); cursor: pointer; width: 100%; font-family: var(--font-sans);">
+        <span style="font-size: 18px; opacity: 0.85; flex-shrink: 0; width: 18px; text-align: center; line-height: 1;">📦</span>
+        <span>归档对话</span>
+      </button>
+
+      <!-- 从列表移除 -->
+      <button style="display: flex; align-items: center; gap: 8px; min-height: 32px; border-radius: 6px; padding: 0 8px; font-size: 14px; font-weight: 520; border: 0; background: transparent; color: var(--color-text-body); cursor: pointer; width: 100%; font-family: var(--font-sans);">
+        <span style="font-size: 18px; opacity: 0.85; flex-shrink: 0; width: 18px; text-align: center; line-height: 1;">🗑️</span>
+        <span>从列表移除</span>
+      </button>
+
+    </div>
 
     <style>
       textarea::placeholder { color: var(--color-text-placeholder); }

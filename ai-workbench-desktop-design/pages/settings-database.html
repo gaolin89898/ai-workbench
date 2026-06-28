@@ -1,0 +1,503 @@
+<!DOCTYPE html>
+<html lang="zh-CN" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Workbench — 数据库</title>
+    <style id="theme-vars">
+/* AI Workbench Desktop — Dark Theme */
+/* Based on actual project style.css, inverted to dark */
+:root {
+  /* Brand */
+  --color-primary: #2563eb;
+  --color-primary-hover: #1d4ed8;
+  --color-primary-muted: rgba(37, 99, 235, 0.15);
+  --color-primary-soft: rgba(37, 99, 235, 0.08);
+  --color-primary-ring: rgba(37, 99, 235, 0.25);
+
+  /* Surface & Background */
+  --color-bg-app: #0f1117;
+  --color-bg-body: #111318;
+  --color-bg-sidebar: #161822;
+  --color-bg-main: #1a1d2e;
+  --color-bg-content: #1e2235;
+  --color-bg-surface: #1e2235;
+  --color-bg-elevated: #252a3a;
+  --color-bg-input: #1e2235;
+  --color-bg-hover: rgba(255, 255, 255, 0.06);
+  --color-bg-active: rgba(37, 99, 235, 0.12);
+
+  /* Text */
+  --color-text-primary: #e8eaed;
+  --color-text-body: #d1d5db;
+  --color-text-secondary: #9aa0b4;
+  --color-text-muted: #6b7280;
+  --color-text-placeholder: #6b7280;
+  --color-text-inverse: #ffffff;
+
+  /* Border */
+  --color-border: rgba(255, 255, 255, 0.1);
+  --color-border-subtle: rgba(255, 255, 255, 0.06);
+  --color-border-active: rgba(37, 99, 235, 0.5);
+
+  /* State Colors */
+  --state-success: #22c55e;
+  --state-success-bg: rgba(34, 197, 94, 0.12);
+  --state-success-ring: rgba(34, 197, 94, 0.25);
+  --state-warning: #f59e0b;
+  --state-warning-bg: rgba(245, 158, 11, 0.12);
+  --state-error: #ef4444;
+  --state-error-bg: rgba(239, 68, 68, 0.12);
+  --state-info: #3b82f6;
+  --state-info-bg: rgba(59, 130, 246, 0.12);
+
+  /* Radius */
+  --radius-sm: 4px;
+  --radius-md: 7px;
+  --radius-lg: 8px;
+  --radius-xl: 12px;
+  --radius-full: 999px;
+
+  /* Typography */
+  --font-sans: "Inter", ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+
+  --text-xs: 11px;
+  --text-sm: 12px;
+  --text-base: 13px;
+  --text-md: 14px;
+  --text-lg: 16px;
+  --text-xl: 20px;
+  --text-2xl: 28px;
+
+  --leading-tight: 1.25;
+  --leading-normal: 1.5;
+  --leading-relaxed: 1.625;
+  --leading-chat: 1.62;
+
+  /* Font Weights */
+  --fw-normal: 400;
+  --fw-medium: 500;
+  --fw-semibold: 620;
+  --fw-bold: 700;
+  --fw-extrabold: 800;
+  --fw-black: 850;
+
+  /* Shadows */
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.15);
+  --shadow-md: 0 10px 24px rgba(0, 0, 0, 0.25);
+  --shadow-lg: 0 24px 56px rgba(0, 0, 0, 0.35);
+  --shadow-composer: 0 16px 42px rgba(0, 0, 0, 0.3);
+
+  /* Spacing */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-10: 40px;
+  --space-14: 56px;
+  --space-18: 72px;
+
+  /* Layout */
+  --sidebar-width: 286px;
+  --topbar-height: 56px;
+  --composer-max-width: 760px;
+
+  /* Transitions */
+  --transition-fast: 120ms ease;
+  --transition-normal: 200ms ease;
+}
+
+    </style>
+    <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4.3.1/dist/index.global.js"></script>
+    <script src="https://unpkg.com/lucide@1.8.0/dist/umd/lucide.min.js"></script>
+    <style type="text/tailwindcss">
+  @theme inline {
+    --color-primary: var(--color-primary);
+    --color-border: var(--color-border);
+  }
+  @layer base {
+    body { background: var(--color-background); color: var(--color-text-primary); }
+    td, th { @apply break-words; word-break: break-all; word-break: auto-phrase; }
+    th { @apply whitespace-nowrap; }
+  }
+    </style>
+    <style>
+      .no-scrollbar::-webkit-scrollbar { display: none; }
+      .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+      [data-icon] {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        -webkit-mask-size: contain;
+        mask-size: contain;
+        -webkit-mask-repeat: no-repeat;
+        mask-repeat: no-repeat;
+        -webkit-mask-position: center;
+        mask-position: center;
+        background-color: currentColor;
+      }
+    </style>
+</head>
+<body class="min-h-screen font-sans antialiased overflow-hidden" style="background:var(--color-bg-body); color:var(--color-text-primary); font-family:var(--font-sans);">
+    <main class="flex" style="height:100vh; background:var(--color-bg-body);">
+
+        <!-- ========== LEFT SETTINGS NAV (286px) ========== -->
+        <aside class="flex flex-col shrink-0" style="width:286px; border-right:1px solid var(--color-border); background:var(--color-bg-sidebar); padding:18px 12px 14px;">
+
+            <!-- Top Section -->
+            <div class="flex flex-col" style="gap:18px; padding-bottom:18px;">
+                <!-- Back Button -->
+                <button class="inline-flex items-center gap-1.5 cursor-pointer" style="min-height:32px; border-radius:var(--radius-md); color:var(--color-text-secondary); font-size:13px; font-weight:760; background:none; border:none;">
+                    <i data-lucide="arrow-left" style="width:14px; height:14px;"></i>
+                    <span>返回</span>
+                </button>
+                <!-- Title -->
+                <div>
+                    <div style="font-size:22px; font-weight:860; color:var(--color-text-body); line-height:1.2;">设置</div>
+                    <div style="font-size:12px; color:var(--color-text-secondary); font-weight:700; margin-top:2px;">应用配置</div>
+                </div>
+            </div>
+
+            <!-- Nav List -->
+            <nav class="grid" style="gap:3px;">
+                <!-- Inactive: 连接 -->
+                <button class="grid items-center cursor-pointer" style="grid-template-columns:10px minmax(0,1fr) auto; gap:10px; min-height:68px; border:1px solid transparent; border-radius:var(--radius-lg); padding:10px; background:none;">
+                    <span style="width:8px; height:8px; border-radius:var(--radius-full); background:var(--color-border);"></span>
+                    <div class="flex flex-col items-start min-w-0" style="gap:2px;">
+                        <div class="flex items-center gap-2 min-w-0">
+                            <i data-lucide="server" style="width:18px; height:18px; color:var(--color-text-secondary); flex-shrink:0;"></i>
+                            <strong class="truncate" style="font-size:14px; font-weight:820; color:var(--color-text-secondary);">连接</strong>
+                        </div>
+                        <small style="font-size:12px; color:var(--color-text-muted);">服务器与网络配置</small>
+                    </div>
+                </button>
+
+                <!-- Inactive: 配对 -->
+                <button class="grid items-center cursor-pointer" style="grid-template-columns:10px minmax(0,1fr) auto; gap:10px; min-height:68px; border:1px solid transparent; border-radius:var(--radius-lg); padding:10px; background:none;">
+                    <span style="width:8px; height:8px; border-radius:var(--radius-full); background:var(--color-border);"></span>
+                    <div class="flex flex-col items-start min-w-0" style="gap:2px;">
+                        <div class="flex items-center gap-2 min-w-0">
+                            <i data-lucide="link" style="width:18px; height:18px; color:var(--color-text-secondary); flex-shrink:0;"></i>
+                            <strong class="truncate" style="font-size:14px; font-weight:820; color:var(--color-text-secondary);">配对</strong>
+                        </div>
+                        <small style="font-size:12px; color:var(--color-text-muted);">设备配对管理</small>
+                    </div>
+                </button>
+
+                <!-- Active: 数据库 -->
+                <button class="grid items-center cursor-pointer" style="grid-template-columns:10px minmax(0,1fr) auto; gap:10px; min-height:68px; border:1px solid var(--color-primary-muted); border-radius:var(--radius-lg); padding:10px; background:var(--color-bg-elevated); box-shadow:var(--shadow-sm);">
+                    <span style="width:8px; height:8px; border-radius:var(--radius-full); background:var(--color-primary); box-shadow:0 0 0 4px var(--color-primary-muted);"></span>
+                    <div class="flex flex-col items-start min-w-0" style="gap:2px;">
+                        <div class="flex items-center gap-2 min-w-0">
+                            <i data-lucide="database" style="width:18px; height:18px; color:var(--color-text-body); flex-shrink:0;"></i>
+                            <strong class="truncate" style="font-size:14px; font-weight:820; color:var(--color-text-body);">数据库</strong>
+                        </div>
+                        <small style="font-size:12px; color:var(--color-text-secondary);">本地存储配置</small>
+                    </div>
+                    <span class="inline-flex items-center shrink-0" style="min-height:24px; border-radius:var(--radius-md); background:var(--color-primary-muted); color:var(--color-primary); font-size:11px; font-weight:850; padding:0 8px;">156 条</span>
+                </button>
+
+                <!-- Inactive: 更新 -->
+                <button class="grid items-center cursor-pointer" style="grid-template-columns:10px minmax(0,1fr) auto; gap:10px; min-height:68px; border:1px solid transparent; border-radius:var(--radius-lg); padding:10px; background:none;">
+                    <span style="width:8px; height:8px; border-radius:var(--radius-full); background:var(--color-border);"></span>
+                    <div class="flex flex-col items-start min-w-0" style="gap:2px;">
+                        <div class="flex items-center gap-2 min-w-0">
+                            <i data-lucide="download" style="width:18px; height:18px; color:var(--color-text-secondary); flex-shrink:0;"></i>
+                            <strong class="truncate" style="font-size:14px; font-weight:820; color:var(--color-text-secondary);">更新</strong>
+                        </div>
+                        <small style="font-size:12px; color:var(--color-text-muted);">应用版本与更新</small>
+                    </div>
+                </button>
+
+                <!-- Inactive: 关于 -->
+                <button class="grid items-center cursor-pointer" style="grid-template-columns:10px minmax(0,1fr) auto; gap:10px; min-height:68px; border:1px solid transparent; border-radius:var(--radius-lg); padding:10px; background:none;">
+                    <span style="width:8px; height:8px; border-radius:var(--radius-full); background:var(--color-border);"></span>
+                    <div class="flex flex-col items-start min-w-0" style="gap:2px;">
+                        <div class="flex items-center gap-2 min-w-0">
+                            <i data-lucide="info" style="width:18px; height:18px; color:var(--color-text-secondary); flex-shrink:0;"></i>
+                            <strong class="truncate" style="font-size:14px; font-weight:820; color:var(--color-text-secondary);">关于</strong>
+                        </div>
+                        <small style="font-size:12px; color:var(--color-text-muted);">应用详细信息</small>
+                    </div>
+                </button>
+            </nav>
+
+            <!-- Foot -->
+            <div class="mt-auto" style="margin-top:auto; border:1px solid var(--color-border); border-radius:var(--radius-lg); background:var(--color-bg-elevated); padding:12px;">
+                <div style="font-size:11px; font-weight:850; color:var(--color-text-muted);">版本</div>
+                <div style="font-size:12px; font-weight:760; color:var(--color-text-secondary); margin-top:2px;">v0.3.2</div>
+            </div>
+        </aside>
+
+        <!-- ========== RIGHT CONTENT AREA ========== -->
+        <div class="flex-1 overflow-y-auto" style="padding:42px 0 36px;">
+            <div class="mx-auto" style="max-width:860px; padding:0 36px;">
+
+                <!-- 1. Header -->
+                <div class="flex flex-col" style="gap:6px; margin-bottom:28px;">
+                    <span style="font-size:11px; font-weight:880; color:var(--color-primary); text-transform:uppercase; letter-spacing:0.05em;">数据库</span>
+                    <h1 style="font-size:28px; font-weight:880; color:var(--color-text-primary); line-height:1.2;">会话数据库</h1>
+                    <p class="max-w-[660px]" style="font-size:13px; color:var(--color-text-secondary); line-height:var(--leading-normal);">管理本地会话历史和归档记录。</p>
+                </div>
+
+                <!-- 2. Overview Cards -->
+                <div class="grid" style="grid-template-columns:1.35fr 0.8fr 0.8fr; gap:12px; margin-bottom:24px;">
+                    <!-- Card: 总会话 -->
+                    <div class="rounded-lg p-4" style="background:var(--color-bg-surface); border:1px solid var(--color-border);">
+                        <div class="mb-2">
+                            <span style="font-size:12px; color:var(--color-text-secondary); font-weight:700;">总会话</span>
+                        </div>
+                        <div class="flex items-baseline gap-1.5">
+                            <span style="font-size:22px; font-weight:900; color:var(--color-text-primary); line-height:1;">156</span>
+                        </div>
+                    </div>
+
+                    <!-- Card: 总消息 -->
+                    <div class="rounded-lg p-4" style="background:var(--color-bg-surface); border:1px solid var(--color-border);">
+                        <div class="mb-2">
+                            <span style="font-size:12px; color:var(--color-text-secondary); font-weight:700;">总消息</span>
+                        </div>
+                        <div class="flex items-baseline gap-1.5">
+                            <span style="font-size:22px; font-weight:900; color:var(--color-text-primary); line-height:1;">2,340</span>
+                        </div>
+                    </div>
+
+                    <!-- Card: 数据库大小 -->
+                    <div class="rounded-lg p-4" style="background:var(--color-bg-surface); border:1px solid var(--color-border);">
+                        <div class="mb-2">
+                            <span style="font-size:12px; color:var(--color-text-secondary); font-weight:700;">数据库大小</span>
+                        </div>
+                        <div class="flex items-baseline gap-1.5">
+                            <span style="font-size:22px; font-weight:900; color:var(--color-text-primary); line-height:1;">12.4</span>
+                            <span style="font-size:12px; color:var(--color-text-muted); font-weight:700;">MB</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 3. Note Panel — 数据库信息 -->
+                <div class="rounded-lg flex flex-col" style="background:var(--color-bg-surface); border:1px solid var(--color-border); border-radius:var(--radius-lg); padding:16px; margin-bottom:24px; gap:12px;">
+                    <strong style="font-size:14px; font-weight:860; color:var(--color-text-body);">数据库信息</strong>
+
+                    <!-- Row: 存储路径 -->
+                    <div class="grid items-center" style="grid-template-columns:1fr auto; gap:18px; border-top:1px solid var(--color-border-subtle); padding-top:8px;">
+                        <span class="truncate" style="font-size:13px; color:var(--color-text-secondary);">存储路径</span>
+                        <code class="truncate" style="font-size:12px; color:var(--color-text-body); font-family:var(--font-mono);">~/.ai-workbench/history.db</code>
+                    </div>
+
+                    <!-- Row: 引擎 -->
+                    <div class="grid items-center" style="grid-template-columns:1fr auto; gap:18px; border-top:1px solid var(--color-border-subtle); padding-top:8px;">
+                        <span style="font-size:13px; color:var(--color-text-secondary);">引擎</span>
+                        <span style="font-size:12px; color:var(--color-text-body);">SQLite 3.42.0</span>
+                    </div>
+
+                    <!-- Row: 最后备份 -->
+                    <div class="grid items-center" style="grid-template-columns:1fr auto; gap:18px; border-top:1px solid var(--color-border-subtle); padding-top:8px;">
+                        <span style="font-size:13px; color:var(--color-text-secondary);">最后备份</span>
+                        <span style="font-size:12px; color:var(--color-text-body);">昨天 18:30</span>
+                    </div>
+
+                    <!-- Button -->
+                    <div style="margin-top:2px;">
+                        <button class="inline-flex items-center gap-1.5 cursor-pointer" style="border:1px solid var(--color-border); border-radius:var(--radius-md); background:transparent; color:var(--color-text-secondary); font-size:13px; font-weight:var(--fw-medium); padding:6px 14px; font-family:var(--font-sans);">
+                            <i data-lucide="folder-open" style="width:14px; height:14px;"></i>
+                            <span>打开数据库文件夹</span>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- 4. Section: 归档会话 -->
+                <div class="flex flex-col" style="gap:14px;">
+                    <!-- Section Header -->
+                    <div class="flex items-center justify-between">
+                        <h2 style="font-size:17px; font-weight:840; color:var(--color-text-body); line-height:1.3;">归档会话</h2>
+                        <button class="inline-flex items-center gap-1.5 cursor-pointer" style="border:1px solid var(--color-border); border-radius:var(--radius-md); background:transparent; color:var(--color-text-secondary); font-size:13px; font-weight:var(--fw-medium); padding:6px 14px; font-family:var(--font-sans);">
+                            <i data-lucide="download" style="width:14px; height:14px;"></i>
+                            <span>导出</span>
+                        </button>
+                    </div>
+
+                    <!-- Archive List -->
+                    <div class="flex flex-col" style="gap:10px;">
+
+                        <!-- Archive Item 1 -->
+                        <div class="archive-item flex items-center" style="min-height:64px; border:1px solid var(--color-border); border-radius:var(--radius-lg); background:var(--color-bg-elevated); padding:12px 16px; gap:12px; transition:background var(--transition-fast);">
+                            <span class="flex items-center justify-center shrink-0" style="width:28px; height:28px; border-radius:var(--radius-md); background:var(--color-primary-muted);">
+                                <i data-lucide="sparkles" style="width:14px; height:14px; color:var(--color-primary);"></i>
+                            </span>
+                            <div class="flex flex-col min-w-0 flex-1" style="gap:2px;">
+                                <strong class="truncate" style="font-size:13px; font-weight:760; color:var(--color-text-body);">添加认证流程</strong>
+                                <span class="truncate" style="font-size:11px; color:var(--color-text-muted);">codex · my-saas-app</span>
+                            </div>
+                            <span class="shrink-0 archive-meta" style="font-size:12px; color:var(--color-text-muted);">3 天前</span>
+                            <button class="archive-restore shrink-0 cursor-pointer" style="border:none; background:none; color:var(--color-primary); font-size:12px; font-weight:var(--fw-medium); font-family:var(--font-sans); padding:4px 10px; border-radius:var(--radius-sm); opacity:0; transition:opacity var(--transition-fast);">恢复</button>
+                        </div>
+
+                        <!-- Archive Item 2 -->
+                        <div class="archive-item flex items-center" style="min-height:64px; border:1px solid var(--color-border); border-radius:var(--radius-lg); background:var(--color-bg-elevated); padding:12px 16px; gap:12px; transition:background var(--transition-fast);">
+                            <span class="flex items-center justify-center shrink-0" style="width:28px; height:28px; border-radius:var(--radius-md); background:var(--color-primary-muted);">
+                                <i data-lucide="sparkles" style="width:14px; height:14px; color:var(--color-primary);"></i>
+                            </span>
+                            <div class="flex flex-col min-w-0 flex-1" style="gap:2px;">
+                                <strong class="truncate" style="font-size:13px; font-weight:760; color:var(--color-text-body);">优化数据库查询</strong>
+                                <span class="truncate" style="font-size:11px; color:var(--color-text-muted);">claude · my-saas-app</span>
+                            </div>
+                            <span class="shrink-0 archive-meta" style="font-size:12px; color:var(--color-text-muted);">上周</span>
+                            <button class="archive-restore shrink-0 cursor-pointer" style="border:none; background:none; color:var(--color-primary); font-size:12px; font-weight:var(--fw-medium); font-family:var(--font-sans); padding:4px 10px; border-radius:var(--radius-sm); opacity:0; transition:opacity var(--transition-fast);">恢复</button>
+                        </div>
+
+                        <!-- Archive Item 3 -->
+                        <div class="archive-item flex items-center" style="min-height:64px; border:1px solid var(--color-border); border-radius:var(--radius-lg); background:var(--color-bg-elevated); padding:12px 16px; gap:12px; transition:background var(--transition-fast);">
+                            <span class="flex items-center justify-center shrink-0" style="width:28px; height:28px; border-radius:var(--radius-md); background:var(--color-primary-muted);">
+                                <i data-lucide="sparkles" style="width:14px; height:14px; color:var(--color-primary);"></i>
+                            </span>
+                            <div class="flex flex-col min-w-0 flex-1" style="gap:2px;">
+                                <strong class="truncate" style="font-size:13px; font-weight:760; color:var(--color-text-body);">修复导航栏响应式</strong>
+                                <span class="truncate" style="font-size:11px; color:var(--color-text-muted);">codex · portfolio-site</span>
+                            </div>
+                            <span class="shrink-0 archive-meta" style="font-size:12px; color:var(--color-text-muted);">2 周前</span>
+                            <button class="archive-restore shrink-0 cursor-pointer" style="border:none; background:none; color:var(--color-primary); font-size:12px; font-weight:var(--fw-medium); font-family:var(--font-sans); padding:4px 10px; border-radius:var(--radius-sm); opacity:0; transition:opacity var(--transition-fast);">恢复</button>
+                        </div>
+
+                        <!-- Archive Item 4 -->
+                        <div class="archive-item flex items-center" style="min-height:64px; border:1px solid var(--color-border); border-radius:var(--radius-lg); background:var(--color-bg-elevated); padding:12px 16px; gap:12px; transition:background var(--transition-fast);">
+                            <span class="flex items-center justify-center shrink-0" style="width:28px; height:28px; border-radius:var(--radius-md); background:var(--color-primary-muted);">
+                                <i data-lucide="sparkles" style="width:14px; height:14px; color:var(--color-primary);"></i>
+                            </span>
+                            <div class="flex flex-col min-w-0 flex-1" style="gap:2px;">
+                                <strong class="truncate" style="font-size:13px; font-weight:760; color:var(--color-text-body);">添加单元测试</strong>
+                                <span class="truncate" style="font-size:11px; color:var(--color-text-muted);">claude · my-saas-app</span>
+                            </div>
+                            <span class="shrink-0 archive-meta" style="font-size:12px; color:var(--color-text-muted);">1 个月前</span>
+                            <button class="archive-restore shrink-0 cursor-pointer" style="border:none; background:none; color:var(--color-primary); font-size:12px; font-weight:var(--fw-medium); font-family:var(--font-sans); padding:4px 10px; border-radius:var(--radius-sm); opacity:0; transition:opacity var(--transition-fast);">恢复</button>
+                        </div>
+
+                    </div>
+
+                    <!-- 5. Toggle Row: 自动清理 -->
+                    <div class="grid items-center" style="grid-template-columns:minmax(0,1fr) auto; gap:18px; min-height:78px; border-top:1px solid var(--color-border-subtle); padding-top:16px; margin-top:4px;">
+                        <div class="flex flex-col min-w-0" style="gap:2px;">
+                            <strong style="font-size:14px; font-weight:780; color:var(--color-text-body);">自动清理</strong>
+                            <small style="font-size:13px; color:var(--color-text-secondary);">30 天后自动归档不活跃的会话</small>
+                        </div>
+                        <!-- Toggle Switch -->
+                        <button class="toggle-switch active shrink-0" type="button" role="switch" aria-checked="true" aria-label="自动清理">
+                            <span class="toggle-track">
+                                <span class="toggle-thumb"></span>
+                            </span>
+                        </button>
+                    </div>
+
+                </div>
+
+            </div>
+        </div>
+
+    </main>
+
+    <!-- Custom Styles (must be in body, not head) -->
+    <style>
+        /* Toggle Switch — macOS System Settings style */
+        .toggle-switch {
+            background: none;
+            border: none;
+            padding: 0;
+            cursor: pointer;
+            outline: none;
+        }
+        .toggle-track {
+            display: block;
+            position: relative;
+            width: 40px;
+            height: 22px;
+            border-radius: 11px;
+            background: var(--color-border);
+            transition: background var(--transition-fast);
+        }
+        .toggle-thumb {
+            position: absolute;
+            top: 2px;
+            left: 2px;
+            width: 18px;
+            height: 18px;
+            border-radius: 50%;
+            background: #ffffff;
+            box-shadow: var(--shadow-sm);
+            transition: transform var(--transition-fast), background var(--transition-fast);
+        }
+        .toggle-switch.active .toggle-track {
+            background: var(--color-primary);
+        }
+        .toggle-switch.active .toggle-thumb {
+            transform: translateX(18px);
+            background: #ffffff;
+        }
+
+        /* Nav button hover */
+        aside nav button:hover {
+            background: var(--color-bg-hover);
+        }
+
+        /* Archive item hover — show restore button + subtle bg */
+        .archive-item:hover {
+            background: var(--color-bg-hover);
+        }
+        .archive-item:hover .archive-restore {
+            opacity: 1;
+        }
+        .archive-item:hover .archive-meta {
+            opacity: 0;
+        }
+
+        /* Scrollbar styling */
+        .overflow-y-auto::-webkit-scrollbar {
+            width: 6px;
+        }
+        .overflow-y-auto::-webkit-scrollbar-track {
+            background: transparent;
+        }
+        .overflow-y-auto::-webkit-scrollbar-thumb {
+            background: var(--color-border);
+            border-radius: 3px;
+        }
+
+        /* Responsive: stack nav on smaller screens */
+        @media (max-width: 768px) {
+            main {
+                flex-direction: column !important;
+                height: auto !important;
+                min-height: 100vh;
+                overflow-y: auto;
+            }
+            aside {
+                width: 100% !important;
+                border-right: none !important;
+                border-bottom: 1px solid var(--color-border) !important;
+                padding: 12px 16px !important;
+            }
+            aside nav {
+                display: flex !important;
+                overflow-x: auto;
+                gap: 2px !important;
+            }
+            aside nav button {
+                min-width: max-content;
+            }
+            .overflow-y-auto {
+                padding: 24px 16px !important;
+            }
+            .overflow-y-auto > div {
+                padding: 0 !important;
+            }
+            .grid[style*="1.35fr"] {
+                grid-template-columns: 1fr !important;
+            }
+        }
+    </style>
+
+    <script>lucide.createIcons();</script>
+</body>
+</html>

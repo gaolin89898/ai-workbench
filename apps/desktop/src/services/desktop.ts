@@ -34,6 +34,14 @@ export type WorkspaceProject = {
   gitDirty: boolean;
 };
 
+export type WorkspaceFileEntry = {
+  name: string;
+  path: string;
+  kind: "file" | "directory";
+  size: number;
+  modifiedAt: string;
+};
+
 export type AiSession = {
   id: string;
   providerId: string;
@@ -256,6 +264,8 @@ export const desktopApi = {
     ipc<void>("remove_workspace_project", id),
   openProjectInFileManager: (path: string): Promise<void> =>
     ipc<void>("open_project_in_file_manager", path),
+  listProjectFiles: (path: string, directoryPath?: string | null): Promise<WorkspaceFileEntry[]> =>
+    ipc<WorkspaceFileEntry[]>("list_project_files", path, directoryPath ?? null),
   createAiSession: (req: CreateAiSessionRequest): Promise<AiSession> =>
     ipc<AiSession>("create_ai_session", req),
   restartAiSession: (aiSessionId: string): Promise<AiSession> =>

@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AI 工作台</title>
+    <title>Untitled</title>
     <style id="theme-vars">
 /* AI Workbench Desktop — Light Theme */
 /* Matching actual project style.css exactly */
@@ -109,20 +109,9 @@
   /* Transitions */
   --transition-fast: 120ms ease;
   --transition-normal: 200ms ease;
-  /* Aliases for backwards compatibility with dark-theme var names */
-  --color-bg-body: var(--color-bg-main);
-  --font-weight-normal: var(--fw-normal);
-  --font-weight-medium: var(--fw-medium);
-  --font-weight-semibold: var(--fw-semibold);
-  --font-weight-bold: var(--fw-bold);
-  --font-weight-extrabold: var(--fw-extrabold);
-  --shadow-card: var(--shadow-sm);
-  --shadow-elevated: var(--shadow-md);
-  --shadow-modal: var(--shadow-lg);
-  --composer-height: auto;
-
 }
-    
+
+    </style>
     <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4.3.1/dist/index.global.js"></script>
     <script src="https://unpkg.com/lucide@1.8.0/dist/umd/lucide.min.js"></script>
     <style type="text/tailwindcss">
@@ -157,7 +146,7 @@
     <main style="display: grid; grid-template-columns: 286px minmax(760px, 1fr); height: 100vh; overflow: hidden;">
 
       <!-- ============================================================ -->
-      <!-- LEFT SIDEBAR — SidebarProjectTree.vue                       -->
+      <!-- LEFT SIDEBAR — Session Expand/Collapse State                -->
       <!-- ============================================================ -->
       <aside style="background: var(--color-bg-sidebar); border-right: 1px solid var(--color-border); padding: 18px 10px 14px; display: flex; flex-direction: column; gap: 16px; overflow-y: auto;">
 
@@ -172,7 +161,7 @@
         <!-- Project tree -->
         <div style="display: flex; flex-direction: column; gap: 2px;">
 
-          <!-- my-saas-app project (expanded) -->
+          <!-- my-saas-app project (expanded, 7 sessions) -->
           <div style="display: flex; flex-direction: column;">
             <!-- Project row -->
             <div style="display: flex; align-items: center; gap: 6px; padding: 4px 6px; border-radius: 6px;">
@@ -182,23 +171,56 @@
               <span style="font-size: 11px; color: var(--color-text-muted); background: var(--color-bg-elevated); padding: 1px 7px; border-radius: 999px; white-space: nowrap; line-height: 1.5;">main</span>
             </div>
 
-            <!-- Session list under my-saas-app -->
+            <!-- Session list under my-saas-app — EXPANDED STATE (all 7 visible) -->
             <div style="padding-left: 32px; display: flex; flex-direction: column; gap: 3px;">
 
-              <!-- 修复认证 bug (active) -->
-              <div style="padding: 5px 8px 5px 10px; border-radius: 6px; background: var(--color-bg-hover); cursor: pointer;">
-                <span style="font-size: 13px; color: var(--color-text-body); display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">修复认证 bug</span>
+              <!-- 1. 修复认证 bug — ACTIVE -->
+              <div style="padding: 5px 8px 5px 10px; border-radius: 6px; background: var(--color-bg-hover); cursor: pointer; display: flex; align-items: center; gap: 6px;">
+                <span style="color: #6366f1; font-size: 11px; flex-shrink: 0;">▾</span>
+                <span style="font-size: 13px; color: var(--color-text-body); flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">修复认证 bug</span>
+                <span style="font-size: 11px; color: var(--color-text-muted); flex-shrink: 0; white-space: nowrap;">运行中</span>
               </div>
 
-              <!-- 优化 API 性能 -->
-              <div style="padding: 5px 8px 5px 10px; border-radius: 6px; cursor: pointer;">
-                <span style="font-size: 13px; color: var(--color-text-muted); display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">优化 API 性能</span>
+              <!-- 2. 优化 API 性能 — with unread dot -->
+              <div style="padding: 5px 8px 5px 10px; border-radius: 6px; cursor: pointer; display: flex; align-items: center; gap: 6px;">
+                <span style="width: 8px; height: 8px; border-radius: 999px; background: var(--state-error); box-shadow: 0 0 0 2px rgba(239,68,68,0.18); flex-shrink: 0; display: inline-block;"></span>
+                <span style="font-size: 13px; color: var(--color-text-muted); flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">优化 API 性能</span>
               </div>
 
-              <!-- 添加单元测试 -->
-              <div style="padding: 5px 8px 5px 10px; border-radius: 6px; cursor: pointer;">
-                <span style="font-size: 13px; color: var(--color-text-muted); display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">添加单元测试</span>
+              <!-- 3. 添加单元测试 -->
+              <div style="padding: 5px 8px 5px 10px; border-radius: 6px; cursor: pointer; display: flex; align-items: center; gap: 6px;">
+                <span style="font-size: 13px; color: var(--color-text-muted); flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">添加单元测试</span>
+                <span style="font-size: 11px; color: var(--color-text-muted); flex-shrink: 0; white-space: nowrap;">2 小时</span>
               </div>
+
+              <!-- 4. 重构侧边栏组件 -->
+              <div style="padding: 5px 8px 5px 10px; border-radius: 6px; cursor: pointer; display: flex; align-items: center; gap: 6px;">
+                <span style="font-size: 13px; color: var(--color-text-muted); flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">重构侧边栏组件</span>
+                <span style="font-size: 11px; color: var(--color-text-muted); flex-shrink: 0; white-space: nowrap;">昨天</span>
+              </div>
+
+              <!-- 5. 设计落地页 -->
+              <div style="padding: 5px 8px 5px 10px; border-radius: 6px; cursor: pointer; display: flex; align-items: center; gap: 6px;">
+                <span style="font-size: 13px; color: var(--color-text-muted); flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">设计落地页</span>
+                <span style="font-size: 11px; color: var(--color-text-muted); flex-shrink: 0; white-space: nowrap;">3 天前</span>
+              </div>
+
+              <!-- 6. 部署到生产环境 (expanded — visible) -->
+              <div style="padding: 5px 8px 5px 10px; border-radius: 6px; cursor: pointer; display: flex; align-items: center; gap: 6px;">
+                <span style="font-size: 13px; color: var(--color-text-muted); flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">部署到生产环境</span>
+                <span style="font-size: 11px; color: var(--color-text-muted); flex-shrink: 0; white-space: nowrap;">上周</span>
+              </div>
+
+              <!-- 7. 更新依赖版本 (expanded — visible) -->
+              <div style="padding: 5px 8px 5px 10px; border-radius: 6px; cursor: pointer; display: flex; align-items: center; gap: 6px;">
+                <span style="font-size: 13px; color: var(--color-text-muted); flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">更新依赖版本</span>
+                <span style="font-size: 11px; color: var(--color-text-muted); flex-shrink: 0; white-space: nowrap;">2 周前</span>
+              </div>
+
+              <!-- 收起 button -->
+              <button style="display: flex; width: 100%; margin-top: 6px; padding: 6px 8px 6px 32px; border: 0; border-radius: 7px; background: transparent; color: var(--color-text-muted); font-size: 12.5px; font-weight: 500; cursor: pointer; font-family: var(--font-sans);">
+                收起
+              </button>
 
             </div>
           </div>
@@ -210,16 +232,6 @@
               <i data-lucide="chevron-right" style="width: 14px; height: 14px; color: var(--color-text-muted); flex-shrink: 0;"></i>
               <i data-lucide="folder" style="width: 18px; height: 18px; color: var(--color-text-secondary); flex-shrink: 0;"></i>
               <span style="font-size: 14px; font-weight: 620; color: var(--color-text-primary); flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">ai-workbench</span>
-            </div>
-
-            <!-- Session list under ai-workbench -->
-            <div style="padding-left: 32px; display: flex; flex-direction: column; gap: 3px;">
-
-              <!-- 重构数据库查询 -->
-              <div style="padding: 5px 8px 5px 10px; border-radius: 6px; cursor: pointer;">
-                <span style="font-size: 13px; color: var(--color-text-muted); display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">重构数据库查询</span>
-              </div>
-
             </div>
           </div>
 

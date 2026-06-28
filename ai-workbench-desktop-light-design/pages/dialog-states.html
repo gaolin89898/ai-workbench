@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AI 工作台</title>
+    <title>AI 工作台 — 对话框状态</title>
     <style id="theme-vars">
 /* AI Workbench Desktop — Light Theme */
 /* Matching actual project style.css exactly */
@@ -109,20 +109,9 @@
   /* Transitions */
   --transition-fast: 120ms ease;
   --transition-normal: 200ms ease;
-  /* Aliases for backwards compatibility with dark-theme var names */
-  --color-bg-body: var(--color-bg-main);
-  --font-weight-normal: var(--fw-normal);
-  --font-weight-medium: var(--fw-medium);
-  --font-weight-semibold: var(--fw-semibold);
-  --font-weight-bold: var(--fw-bold);
-  --font-weight-extrabold: var(--fw-extrabold);
-  --shadow-card: var(--shadow-sm);
-  --shadow-elevated: var(--shadow-md);
-  --shadow-modal: var(--shadow-lg);
-  --composer-height: auto;
-
 }
-    
+
+    </style>
     <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4.3.1/dist/index.global.js"></script>
     <script src="https://unpkg.com/lucide@1.8.0/dist/umd/lucide.min.js"></script>
     <style type="text/tailwindcss">
@@ -157,7 +146,7 @@
     <main style="display: grid; grid-template-columns: 286px minmax(760px, 1fr); height: 100vh; overflow: hidden;">
 
       <!-- ============================================================ -->
-      <!-- LEFT SIDEBAR — SidebarProjectTree.vue                       -->
+      <!-- LEFT SIDEBAR                                                  -->
       <!-- ============================================================ -->
       <aside style="background: var(--color-bg-sidebar); border-right: 1px solid var(--color-border); padding: 18px 10px 14px; display: flex; flex-direction: column; gap: 16px; overflow-y: auto;">
 
@@ -214,12 +203,10 @@
 
             <!-- Session list under ai-workbench -->
             <div style="padding-left: 32px; display: flex; flex-direction: column; gap: 3px;">
-
               <!-- 重构数据库查询 -->
               <div style="padding: 5px 8px 5px 10px; border-radius: 6px; cursor: pointer;">
                 <span style="font-size: 13px; color: var(--color-text-muted); display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">重构数据库查询</span>
               </div>
-
             </div>
           </div>
 
@@ -237,11 +224,9 @@
       </aside>
 
       <!-- ============================================================ -->
-      <!-- MAIN CONTENT — ChatView codex-start empty state              -->
+      <!-- MAIN CONTENT — Empty state (same as workspace.html)          -->
       <!-- ============================================================ -->
       <div style="background: var(--color-bg-content); display: flex; flex-direction: column; height: 100vh; overflow: hidden;">
-
-        <!-- No topbar — this is the empty start state -->
 
         <!-- Center area -->
         <div style="display: grid; place-items: center; min-height: 100vh; padding: 48px 32px;">
@@ -282,12 +267,48 @@
 
     </main>
 
+    <!-- ============================================================ -->
+    <!-- OVERLAY — Rename Dialog                                       -->
+    <!-- ============================================================ -->
+    <div style="position: fixed; inset: 0; z-index: 200; display: grid; place-items: center; background: rgba(15, 23, 42, 0.45); backdrop-filter: blur(2px); -webkit-backdrop-filter: blur(2px); padding: 24px;">
+
+      <!-- Dialog box -->
+      <div style="max-width: 440px; width: 100%; background: var(--color-bg-content); border-radius: 12px; box-shadow: var(--shadow-lg); padding: 22px 24px 18px; display: flex; flex-direction: column; gap: 14px;">
+
+        <!-- Header -->
+        <div style="display: flex; justify-content: space-between; align-items: center;">
+          <h3 style="margin: 0; font-size: 16px; font-weight: 700; color: var(--color-text-primary);">重命名对话</h3>
+          <button style="width: 28px; height: 28px; display: grid; place-items: center; border: 0; background: transparent; color: var(--color-text-muted); font-size: 18px; border-radius: 6px; cursor: pointer; font-family: var(--font-sans); line-height: 1;" aria-label="关闭">&times;</button>
+        </div>
+
+        <!-- Hint -->
+        <p style="margin: 0; font-size: 12.5px; color: var(--color-text-secondary); line-height: 1.4;">保持简短且易识别</p>
+
+        <!-- Input field (focused state) -->
+        <input
+          type="text"
+          value="修复认证 bug"
+          style="width: 100%; padding: 10px 12px; border: 1px solid var(--color-primary); border-radius: 8px; background: var(--color-bg-content); color: var(--color-text-primary); font-size: 14px; font-family: var(--font-sans); outline: none; box-shadow: 0 0 0 3px var(--color-primary-ring);"
+          aria-label="对话名称"
+        >
+
+        <!-- Footer -->
+        <div style="display: flex; gap: 10px; margin-top: 4px; justify-content: flex-end;">
+          <button style="border: 1px solid var(--color-border); background: transparent; color: var(--color-text-body); border-radius: 7px; min-height: 38px; font-size: 13px; font-weight: 800; padding: 0 14px; cursor: pointer; font-family: var(--font-sans);">取消</button>
+          <button style="border: 0; background: var(--color-primary); color: #fff; border-radius: 7px; min-height: 38px; font-size: 13px; font-weight: 800; padding: 0 14px; cursor: pointer; font-family: var(--font-sans);">保存</button>
+        </div>
+
+      </div>
+
+    </div>
+
     <style>
       textarea::placeholder { color: var(--color-text-placeholder); }
       ::-webkit-scrollbar { width: 6px; }
       ::-webkit-scrollbar-track { background: transparent; }
       ::-webkit-scrollbar-thumb { background: var(--color-bg-elevated); border-radius: 999px; }
       ::-webkit-scrollbar-thumb:hover { background: var(--color-text-muted); }
+      input::selection { background: var(--color-primary-muted); color: var(--color-text-primary); }
     </style>
     <script>lucide.createIcons();</script>
 </body>

@@ -1,0 +1,32 @@
+services:
+  postgres:
+    image: postgres:17
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: remote_term
+      POSTGRES_USER: remote_term
+      POSTGRES_PASSWORD: remote_term
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U remote_term -d remote_term"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  backend:
+    image: ai-workbench-backend:latest
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgres://remote_term:remote_term@postgres:5432/remote_term
+      JWT_SECRET: ${JWT_SECRET:-change-this-in-production}
+      PORT: 3000
+      MIGRATIONS_DIR: /app/migrations
+    ports:
+      - "3000:3000"
+
+volumes:
+  postgres-data:

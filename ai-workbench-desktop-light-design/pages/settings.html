@@ -5,35 +5,63 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>AI Workbench — 设置</title>
     <style id="theme-vars">
+/* AI Workbench Desktop — Light Theme */
+/* Matching actual project style.css exactly */
 :root {
+  /* Brand */
   --color-primary: #2563eb;
   --color-primary-hover: #1d4ed8;
   --color-primary-muted: rgba(37, 99, 235, 0.12);
   --color-primary-soft: rgba(37, 99, 235, 0.06);
-  --color-bg-app: #f8fafc;
-  --color-bg-sidebar: #ffffff;
-  --color-bg-main: #f8fafc;
-  --color-bg-surface: #ffffff;
+  --color-primary-ring: rgba(37, 99, 235, 0.18);
+
+  /* Surface & Background */
+  --color-bg-app: #f6f8fb;
+  --color-bg-body: #fafafa;
+  --color-bg-sidebar: #f7f7f7;
+  --color-bg-main: #fafafa;
+  --color-bg-content: #ffffff;
+  --color-bg-surface: #f8fafc;
   --color-bg-elevated: #f1f5f9;
-  --color-bg-input: #f1f5f9;
-  --color-bg-hover: rgba(0, 0, 0, 0.03);
-  --color-bg-active: rgba(37, 99, 235, 0.08);
+  --color-bg-input: #f8fafc;
+  --color-bg-hover: #e9ecef;
+  --color-bg-active: #eff6ff;
+
+  /* Text */
   --color-text-primary: #0f172a;
-  --color-text-secondary: #475569;
+  --color-text-body: #111827;
+  --color-text-secondary: #64748b;
   --color-text-muted: #94a3b8;
+  --color-text-placeholder: #b7bcc5;
   --color-text-inverse: #ffffff;
-  --color-border: #e2e8f0;
-  --color-border-active: rgba(37, 99, 235, 0.4);
-  --state-success: #22c55e;
+
+  /* Border */
+  --color-border: #e5e7eb;
+  --color-border-subtle: #eceff3;
+  --color-border-active: #cbd5e1;
+
+  /* State Colors */
+  --state-success: #16a34a;
+  --state-success-bg: #ecfdf5;
+  --state-success-ring: #dcfce7;
   --state-warning: #f59e0b;
-  --state-error: #ef4444;
-  --state-info: #3b82f6;
+  --state-warning-bg: #fff7ed;
+  --state-error: #dc2626;
+  --state-error-bg: #fef2f2;
+  --state-info: #2563eb;
+  --state-info-bg: #eff6ff;
+
+  /* Radius */
   --radius-sm: 4px;
-  --radius-md: 8px;
-  --radius-lg: 12px;
-  --radius-full: 9999px;
+  --radius-md: 7px;
+  --radius-lg: 8px;
+  --radius-xl: 12px;
+  --radius-full: 999px;
+
+  /* Typography */
   --font-sans: "Inter", ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-  --font-mono: "JetBrains Mono", "Fira Code", ui-monospace, "Cascadia Code", monospace;
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+
   --text-xs: 11px;
   --text-sm: 12px;
   --text-base: 13px;
@@ -41,17 +69,27 @@
   --text-lg: 16px;
   --text-xl: 20px;
   --text-2xl: 28px;
+
   --leading-tight: 1.25;
   --leading-normal: 1.5;
   --leading-relaxed: 1.625;
-  --font-weight-normal: 400;
-  --font-weight-medium: 500;
-  --font-weight-semibold: 600;
-  --font-weight-bold: 700;
-  --font-weight-extrabold: 800;
-  --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.05);
-  --shadow-elevated: 0 4px 12px rgba(0, 0, 0, 0.08);
-  --shadow-modal: 0 8px 32px rgba(0, 0, 0, 0.12);
+  --leading-chat: 1.62;
+
+  /* Font Weights */
+  --fw-normal: 400;
+  --fw-medium: 500;
+  --fw-semibold: 620;
+  --fw-bold: 700;
+  --fw-extrabold: 800;
+  --fw-black: 850;
+
+  /* Shadows */
+  --shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.04);
+  --shadow-md: 0 10px 24px rgba(15, 23, 42, 0.12);
+  --shadow-lg: 0 24px 56px rgba(15, 23, 42, 0.18);
+  --shadow-composer: 0 16px 42px rgba(15, 23, 42, 0.07);
+
+  /* Spacing */
   --space-1: 4px;
   --space-2: 8px;
   --space-3: 12px;
@@ -60,12 +98,31 @@
   --space-6: 24px;
   --space-8: 32px;
   --space-10: 40px;
-  --sidebar-width: 272px;
-  --topbar-height: 48px;
-  --composer-height: auto;
-}
+  --space-14: 56px;
+  --space-18: 72px;
 
-    </style>
+  /* Layout */
+  --sidebar-width: 286px;
+  --topbar-height: 56px;
+  --composer-max-width: 760px;
+
+  /* Transitions */
+  --transition-fast: 120ms ease;
+  --transition-normal: 200ms ease;
+  /* Aliases for backwards compatibility with dark-theme var names */
+  --color-bg-body: var(--color-bg-main);
+  --font-weight-normal: var(--fw-normal);
+  --font-weight-medium: var(--fw-medium);
+  --font-weight-semibold: var(--fw-semibold);
+  --font-weight-bold: var(--fw-bold);
+  --font-weight-extrabold: var(--fw-extrabold);
+  --shadow-card: var(--shadow-sm);
+  --shadow-elevated: var(--shadow-md);
+  --shadow-modal: var(--shadow-lg);
+  --composer-height: auto;
+
+}
+    
     <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4.3.1/dist/index.global.js"></script>
     <script src="https://unpkg.com/lucide@1.8.0/dist/umd/lucide.min.js"></script>
     <style type="text/tailwindcss">
@@ -96,178 +153,181 @@
       }
     </style>
 </head>
-<body class="min-h-screen font-sans antialiased" style="background:var(--color-bg-app); color:var(--color-text-primary); font-family:var(--font-sans);">
-    <main>
-        <!-- Page Header -->
-        <header class="flex items-center gap-4 px-10 pt-8 pb-2">
-            <a href="#" class="inline-flex items-center gap-1.5 shrink-0 transition-colors hover:opacity-80" style="color:var(--color-primary); font-size:var(--text-md); font-weight:var(--font-weight-medium);">
-                <i data-lucide="arrow-left" class="w-4 h-4"></i>
-                <span>返回工作台</span>
-            </a>
-            <h1 style="font-size:var(--text-2xl); font-weight:var(--font-weight-bold); color:var(--color-text-primary); line-height:var(--leading-tight);">设置</h1>
-        </header>
+<body class="min-h-screen font-sans antialiased overflow-hidden" style="background:var(--color-bg-body); color:var(--color-text-primary); font-family:var(--font-sans);">
+    <main class="flex" style="height:100vh; background:var(--color-bg-body);">
 
-        <!-- Two-Column Card Grid -->
-        <div class="px-10 pt-6 pb-16">
-            <div class="grid gap-5" style="grid-template-columns: 55fr 45fr;">
+        <!-- ========== LEFT SETTINGS NAV (286px) ========== -->
+        <aside class="flex flex-col shrink-0" style="width:286px; border-right:1px solid var(--color-border); background:var(--color-bg-sidebar); padding:18px 12px 14px;">
 
-                <!-- ========== LEFT COLUMN ========== -->
+            <!-- Top Section -->
+            <div class="flex flex-col" style="gap:18px; padding-bottom:18px;">
+                <!-- Back Button -->
+                <button class="inline-flex items-center gap-1.5 cursor-pointer" style="min-height:32px; border-radius:var(--radius-md); color:var(--color-text-secondary); font-size:13px; font-weight:760; background:none; border:none;">
+                    <i data-lucide="arrow-left" style="width:14px; height:14px;"></i>
+                    <span>返回</span>
+                </button>
+                <!-- Title -->
+                <div>
+                    <div style="font-size:22px; font-weight:860; color:var(--color-text-body); line-height:1.2;">设置</div>
+                    <div style="font-size:12px; color:var(--color-text-secondary); font-weight:700; margin-top:2px;">应用配置</div>
+                </div>
+            </div>
 
-                <!-- Card: 服务器连接 -->
-                <section class="rounded-lg p-5" style="background:var(--color-bg-surface); border:1px solid var(--color-border);">
-                    <div class="flex items-center gap-2.5 mb-4">
-                        <div class="flex items-center justify-center w-8 h-8 rounded-md shrink-0" style="background:var(--color-primary-muted);">
-                            <i data-lucide="server" class="w-4 h-4" style="color:var(--color-primary);"></i>
-                        </div>
-                        <h2 style="font-size:var(--text-lg); font-weight:var(--font-weight-semibold); color:var(--color-text-primary); line-height:var(--leading-tight);">服务器连接</h2>
-                    </div>
-
-                    <div class="mb-3.5">
-                        <label class="block mb-1.5" style="font-size:var(--text-sm); font-weight:var(--font-weight-medium); color:var(--color-text-secondary);">服务器地址</label>
-                        <div class="flex items-center gap-2">
-                            <input type="text" value="http://127.0.0.1:8080" readonly class="flex-1 px-3 py-2 rounded-md text-sm outline-none truncate" style="background:var(--color-bg-input); color:var(--color-text-primary); border:1px solid var(--color-border); font-family:var(--font-mono); font-size:var(--text-sm);">
-                            <button class="flex items-center justify-center w-9 h-9 rounded-md shrink-0 transition-colors hover:opacity-80" style="background:var(--color-bg-elevated); color:var(--color-text-secondary); border:1px solid var(--color-border);" aria-label="复制服务器地址">
-                                <i data-lucide="copy" class="w-3.5 h-3.5"></i>
-                            </button>
-                        </div>
-                    </div>
-
-                    <div class="flex items-center gap-4">
-                        <div class="flex items-center gap-2">
-                            <span class="w-2 h-2 rounded-full shrink-0" style="background:var(--state-success);"></span>
-                            <span style="font-size:var(--text-sm); color:var(--state-success); font-weight:var(--font-weight-medium);">已连接</span>
-                        </div>
-                        <span style="font-size:var(--text-sm); color:var(--color-text-muted);">延迟: 12ms</span>
-                    </div>
-                </section>
-
-                <!-- Card: 配对 -->
-                <section class="rounded-lg p-5" style="background:var(--color-bg-surface); border:1px solid var(--color-border);">
-                    <div class="flex items-center gap-2.5 mb-4">
-                        <div class="flex items-center justify-center w-8 h-8 rounded-md shrink-0" style="background:var(--color-primary-muted);">
-                            <i data-lucide="link" class="w-4 h-4" style="color:var(--color-primary);"></i>
-                        </div>
-                        <h2 style="font-size:var(--text-lg); font-weight:var(--font-weight-semibold); color:var(--color-text-primary); line-height:var(--leading-tight);">配对</h2>
-                    </div>
-
-                    <div class="mb-3.5">
-                        <label class="block mb-1.5" style="font-size:var(--text-sm); font-weight:var(--font-weight-medium); color:var(--color-text-secondary);">设备 ID</label>
-                        <div class="flex items-center gap-2">
-                            <code class="flex-1 px-3 py-2 rounded-md truncate block" style="background:var(--color-bg-input); color:var(--color-text-primary); border:1px solid var(--color-border); font-family:var(--font-mono); font-size:var(--text-sm);">a1b2c3d4-e5f6-7890-abcd-ef1234567890</code>
-                            <button class="flex items-center justify-center w-9 h-9 rounded-md shrink-0 transition-colors hover:opacity-80" style="background:var(--color-bg-elevated); color:var(--color-text-secondary); border:1px solid var(--color-border);" aria-label="复制设备 ID">
-                                <i data-lucide="copy" class="w-3.5 h-3.5"></i>
-                            </button>
-                        </div>
-                    </div>
-
-                    <div class="mb-4">
-                        <button class="px-4 py-2 rounded-md text-sm font-medium transition-colors shrink-0" style="background:var(--color-primary); color:#ffffff;">
-                            生成配对码
-                        </button>
-                    </div>
-
-                    <div>
-                        <label class="block mb-2.5" style="font-size:var(--text-sm); font-weight:var(--font-weight-medium); color:var(--color-text-secondary);">已配对设备</label>
-                        <div class="flex items-center justify-between py-2.5 px-3.5 rounded-md" style="background:var(--color-bg-hover);">
-                            <div class="flex items-center gap-3 min-w-0">
-                                <i data-lucide="smartphone" class="w-4 h-4 shrink-0" style="color:var(--color-text-muted);"></i>
-                                <span class="truncate" style="font-size:var(--text-sm); color:var(--color-text-primary); font-weight:var(--font-weight-medium);">iPhone 15 Pro</span>
-                            </div>
-                            <span class="shrink-0 ml-3" style="font-size:var(--text-xs); color:var(--color-text-muted);">2 分钟前</span>
-                        </div>
-                    </div>
-                </section>
-
-                <!-- ========== RIGHT COLUMN ========== -->
-
-                <!-- Card: 数据库 -->
-                <section class="rounded-lg p-5" style="background:var(--color-bg-surface); border:1px solid var(--color-border);">
-                    <div class="flex items-center gap-2.5 mb-4">
-                        <div class="flex items-center justify-center w-8 h-8 rounded-md shrink-0" style="background:var(--color-primary-muted);">
-                            <i data-lucide="database" class="w-4 h-4" style="color:var(--color-primary);"></i>
-                        </div>
-                        <h2 style="font-size:var(--text-lg); font-weight:var(--font-weight-semibold); color:var(--color-text-primary); line-height:var(--leading-tight);">数据库</h2>
-                    </div>
-
-                    <div class="mb-3.5">
-                        <div class="flex items-center gap-2">
-                            <div class="flex-1 px-3 py-2 rounded-md truncate" style="background:var(--color-bg-input); color:var(--color-text-primary); border:1px solid var(--color-border); font-family:var(--font-mono); font-size:var(--text-sm);">~/.ai-workbench/history.db</div>
-                            <button class="flex items-center gap-1.5 px-3 py-2 rounded-md text-sm font-medium shrink-0 transition-colors hover:opacity-80" style="background:var(--color-bg-elevated); color:var(--color-text-secondary); border:1px solid var(--color-border);">
-                                <i data-lucide="folder-open" class="w-3.5 h-3.5"></i>
-                                <span>打开</span>
-                            </button>
-                        </div>
-                    </div>
-
-                    <div class="flex items-center gap-2">
-                        <i data-lucide="bar-chart-3" class="w-3.5 h-3.5 shrink-0" style="color:var(--color-text-muted);"></i>
-                        <span style="font-size:var(--text-sm); color:var(--color-text-muted);">156 个会话，2,340 条消息</span>
-                    </div>
-                </section>
-
-                <!-- Card: 应用更新 -->
-                <section class="rounded-lg p-5" style="background:var(--color-bg-surface); border:1px solid var(--color-border);">
-                    <div class="flex items-center gap-2.5 mb-4">
-                        <div class="flex items-center justify-center w-8 h-8 rounded-md shrink-0" style="background:var(--color-primary-muted);">
-                            <i data-lucide="download" class="w-4 h-4" style="color:var(--color-primary);"></i>
-                        </div>
-                        <h2 style="font-size:var(--text-lg); font-weight:var(--font-weight-semibold); color:var(--color-text-primary); line-height:var(--leading-tight);">应用更新</h2>
-                    </div>
-
-                    <div class="flex items-center justify-between mb-4">
+            <!-- Nav List -->
+            <nav class="grid" style="gap:3px;">
+                <!-- Active: 连接 -->
+                <button class="grid items-center cursor-pointer" style="grid-template-columns:10px minmax(0,1fr) auto; gap:10px; min-height:68px; border:1px solid var(--color-primary-muted); border-radius:var(--radius-lg); padding:10px; background:var(--color-bg-elevated); box-shadow:var(--shadow-sm);">
+                    <span style="width:8px; height:8px; border-radius:var(--radius-full); background:var(--color-primary); box-shadow:0 0 0 4px var(--color-primary-muted);"></span>
+                    <div class="flex flex-col items-start min-w-0" style="gap:2px;">
                         <div class="flex items-center gap-2 min-w-0">
-                            <span style="font-size:var(--text-sm); color:var(--color-text-secondary);">当前版本</span>
-                            <span class="px-2 py-0.5 rounded-md shrink-0" style="background:var(--color-primary-muted); color:var(--color-primary); font-family:var(--font-mono); font-size:var(--text-sm); font-weight:var(--font-weight-medium);">v0.3.2</span>
+                            <i data-lucide="server" style="width:18px; height:18px; color:var(--color-text-body); flex-shrink:0;"></i>
+                            <strong class="truncate" style="font-size:14px; font-weight:820; color:var(--color-text-body);">连接</strong>
                         </div>
-                        <button class="px-4 py-2 rounded-md text-sm font-medium shrink-0 transition-colors hover:opacity-80" style="background:var(--color-bg-elevated); color:var(--color-text-primary); border:1px solid var(--color-border);">
-                            检查更新
-                        </button>
+
+                    </div>
+                    <span class="inline-flex items-center shrink-0" style="min-height:24px; border-radius:var(--radius-md); background:var(--color-primary-muted); color:var(--color-primary); font-size:11px; font-weight:850; padding:0 8px;">基础</span>
+                </button>
+
+                <!-- Inactive: 安全与历史 -->
+                <button class="grid items-center cursor-pointer" style="grid-template-columns:10px minmax(0,1fr) auto; gap:10px; min-height:68px; border:1px solid transparent; border-radius:var(--radius-lg); padding:10px; background:none;">
+                    <span style="width:8px; height:8px; border-radius:var(--radius-full); background:var(--color-border);"></span>
+                    <div class="flex flex-col items-start min-w-0" style="gap:2px;">
+                        <div class="flex items-center gap-2 min-w-0">
+                            <i data-lucide="shield" style="width:18px; height:18px; color:var(--color-text-secondary); flex-shrink:0;"></i>
+                            <strong class="truncate" style="font-size:14px; font-weight:820; color:var(--color-text-secondary);">安全与历史</strong>
+                        </div>
+
+                    </div>
+                    <span class="inline-flex items-center shrink-0" style="min-height:24px; border-radius:var(--radius-md); background:var(--color-bg-elevated); color:var(--color-text-muted); font-size:11px; font-weight:850; padding:0 8px;">保护</span>
+                </button>
+
+                <!-- Inactive: 设备配对 -->
+                <button class="grid items-center cursor-pointer" style="grid-template-columns:10px minmax(0,1fr) auto; gap:10px; min-height:68px; border:1px solid transparent; border-radius:var(--radius-lg); padding:10px; background:none;">
+                    <span style="width:8px; height:8px; border-radius:var(--radius-full); background:var(--color-border);"></span>
+                    <div class="flex flex-col items-start min-w-0" style="gap:2px;">
+                        <div class="flex items-center gap-2 min-w-0">
+                            <i data-lucide="link" style="width:18px; height:18px; color:var(--color-text-secondary); flex-shrink:0;"></i>
+                            <strong class="truncate" style="font-size:14px; font-weight:820; color:var(--color-text-secondary);">设备配对</strong>
+                        </div>
+
+                    </div>
+                    <span class="inline-flex items-center shrink-0" style="min-height:24px; border-radius:var(--radius-md); background:var(--color-bg-elevated); color:var(--color-text-muted); font-size:11px; font-weight:850; padding:0 8px;">移动端</span>
+                </button>
+
+                <!-- Inactive: 关于 -->
+                <button class="grid items-center cursor-pointer" style="grid-template-columns:10px minmax(0,1fr) auto; gap:10px; min-height:68px; border:1px solid transparent; border-radius:var(--radius-lg); padding:10px; background:none;">
+                    <span style="width:8px; height:8px; border-radius:var(--radius-full); background:var(--color-border);"></span>
+                    <div class="flex flex-col items-start min-w-0" style="gap:2px;">
+                        <div class="flex items-center gap-2 min-w-0">
+                            <i data-lucide="info" style="width:18px; height:18px; color:var(--color-text-secondary); flex-shrink:0;"></i>
+                            <strong class="truncate" style="font-size:14px; font-weight:820; color:var(--color-text-secondary);">关于</strong>
+                        </div>
+
+                    </div>
+                    <span class="inline-flex items-center shrink-0" style="min-height:24px; border-radius:var(--radius-md); background:var(--color-bg-elevated); color:var(--color-text-muted); font-size:11px; font-weight:850; padding:0 8px;">信息</span>
+                </button>
+
+                <!-- Inactive: 已归档对话 -->
+                <button class="grid items-center cursor-pointer" style="grid-template-columns:10px minmax(0,1fr) auto; gap:10px; min-height:68px; border:1px solid transparent; border-radius:var(--radius-lg); padding:10px; background:none;">
+                    <span style="width:8px; height:8px; border-radius:var(--radius-full); background:var(--color-border);"></span>
+                    <div class="flex flex-col items-start min-w-0" style="gap:2px;">
+                        <div class="flex items-center gap-2 min-w-0">
+                            <i data-lucide="archive" style="width:18px; height:18px; color:var(--color-text-secondary); flex-shrink:0;"></i>
+                            <strong class="truncate" style="font-size:14px; font-weight:820; color:var(--color-text-secondary);">已归档对话</strong>
+                        </div>
+
+                    </div>
+                    <span class="inline-flex items-center shrink-0" style="min-height:24px; border-radius:var(--radius-md); background:var(--color-bg-elevated); color:var(--color-text-muted); font-size:11px; font-weight:850; padding:0 8px;">历史</span>
+                </button>
+            </nav>
+
+            <!-- Foot -->
+            <div class="mt-auto" style="margin-top:auto; border:1px solid var(--color-border); border-radius:var(--radius-lg); background:var(--color-bg-elevated); padding:12px;">
+                <div style="font-size:11px; font-weight:850; color:var(--color-text-muted);">版本</div>
+                <div style="font-size:12px; font-weight:760; color:var(--color-text-secondary); margin-top:2px;">v0.3.2</div>
+            </div>
+        </aside>
+
+        <!-- ========== RIGHT CONTENT AREA ========== -->
+        <div class="flex-1 overflow-y-auto" style="padding:42px 0 36px;">
+            <div class="mx-auto" style="max-width:860px; padding:0 36px;">
+
+                <!-- Header -->
+                <div class="flex flex-col" style="gap:6px; margin-bottom:28px;">
+                    <span style="font-size:11px; font-weight:880; color:var(--color-primary); text-transform:uppercase; letter-spacing:0.05em;">服务器</span>
+                    <h1 style="font-size:28px; font-weight:880; color:var(--color-text-primary); line-height:1.2;">服务器连接</h1>
+                    <p class="max-w-[660px]" style="font-size:13px; color:var(--color-text-secondary); line-height:var(--leading-normal);">配置桌面工作台的服务器连接。</p>
+                </div>
+
+                <!-- Overview Cards -->
+                <div class="grid" style="grid-template-columns:1.35fr 0.8fr 0.8fr; gap:12px; margin-bottom:24px;">
+                    <!-- Card 1: 状态 -->
+                    <div class="rounded-lg p-4" style="background:var(--color-bg-surface); border:1px solid var(--color-border);">
+                        <div class="flex items-center gap-2 mb-2">
+                            <span class="flex items-center justify-center shrink-0" style="width:8px; height:8px; border-radius:var(--radius-full); background:var(--state-success);"></span>
+                            <span style="font-size:12px; color:var(--color-text-secondary); font-weight:700;">状态</span>
+                        </div>
+                        <div style="font-size:22px; font-weight:900; color:var(--state-success); line-height:1;">已连接</div>
                     </div>
 
-                    <div class="flex items-center justify-between">
-                        <div class="min-w-0 mr-3">
-                            <div style="font-size:var(--text-sm); color:var(--color-text-primary); font-weight:var(--font-weight-medium);">自动更新</div>
-                            <div style="font-size:var(--text-xs); color:var(--color-text-muted);">自动下载并安装更新</div>
+                    <!-- Card 2: 延迟 -->
+                    <div class="rounded-lg p-4" style="background:var(--color-bg-surface); border:1px solid var(--color-border);">
+                        <div class="mb-2">
+                            <span style="font-size:12px; color:var(--color-text-secondary); font-weight:700;">延迟</span>
                         </div>
-                        <button class="toggle-switch active shrink-0" type="button" role="switch" aria-checked="true" aria-label="自动更新开关">
-                            <span class="toggle-track">
-                                <span class="toggle-thumb"></span>
-                            </span>
-                        </button>
-                    </div>
-                </section>
-
-                <!-- Card: 关于 -->
-                <section class="rounded-lg p-5" style="background:var(--color-bg-surface); border:1px solid var(--color-border);">
-                    <div class="flex items-center gap-2.5 mb-4">
-                        <div class="flex items-center justify-center w-8 h-8 rounded-md shrink-0" style="background:var(--color-primary-muted);">
-                            <i data-lucide="info" class="w-4 h-4" style="color:var(--color-primary);"></i>
+                        <div class="flex items-baseline gap-1.5">
+                            <span style="font-size:22px; font-weight:900; color:var(--color-text-primary); line-height:1;">12</span>
+                            <span style="font-size:12px; color:var(--color-text-muted); font-weight:700;">毫秒</span>
                         </div>
-                        <h2 style="font-size:var(--text-lg); font-weight:var(--font-weight-semibold); color:var(--color-text-primary); line-height:var(--leading-tight);">关于</h2>
                     </div>
 
-                    <div class="space-y-3">
-                        <div class="flex items-baseline gap-3">
-                            <span class="shrink-0" style="font-size:var(--text-sm); color:var(--color-text-muted); min-width:72px;">应用</span>
-                            <span class="truncate" style="font-size:var(--text-sm); color:var(--color-text-primary); font-weight:var(--font-weight-medium);">AI Workbench</span>
+                    <!-- Card 3: 设备 ID -->
+                    <div class="rounded-lg p-4" style="background:var(--color-bg-surface); border:1px solid var(--color-border);">
+                        <div class="mb-2">
+                            <span style="font-size:12px; color:var(--color-text-secondary); font-weight:700;">设备 ID</span>
                         </div>
-                        <div class="flex items-baseline gap-3">
-                            <span class="shrink-0" style="font-size:var(--text-sm); color:var(--color-text-muted); min-width:72px;">版本</span>
-                            <span class="truncate" style="font-size:var(--text-sm); color:var(--color-text-primary); font-family:var(--font-mono);">v0.3.2</span>
-                        </div>
-                        <div class="flex items-baseline gap-3">
-                            <span class="shrink-0" style="font-size:var(--text-sm); color:var(--color-text-muted); min-width:72px;">构建</span>
-                            <span class="truncate" style="font-size:var(--text-sm); color:var(--color-text-primary); font-family:var(--font-mono);">2024.12.15-a8f3c</span>
-                        </div>
-                        <div class="flex items-baseline gap-3">
-                            <span class="shrink-0" style="font-size:var(--text-sm); color:var(--color-text-muted); min-width:72px;">运行时</span>
-                            <span class="truncate" style="font-size:var(--text-sm); color:var(--color-text-primary); font-family:var(--font-mono);">Electron 28.1.0 / Node 18.19.0</span>
+                        <div class="flex items-center gap-2 min-w-0">
+                            <code class="truncate" style="font-size:13px; font-weight:700; color:var(--color-text-body); font-family:var(--font-mono);">a1b2c3d4-e5f6-...7890</code>
+                            <button class="inline-flex items-center justify-center shrink-0" style="width:26px; height:26px; border-radius:var(--radius-sm); background:var(--color-bg-elevated); border:1px solid var(--color-border); cursor:pointer;">
+                                <i data-lucide="copy" style="width:12px; height:12px; color:var(--color-text-secondary);"></i>
+                            </button>
                         </div>
                     </div>
-                </section>
+                </div>
+
+                <!-- Section: 连接设置 -->
+                <div class="flex flex-col" style="gap:14px;">
+                    <h2 style="font-size:17px; font-weight:840; color:var(--color-text-body); line-height:1.3;">连接设置</h2>
+
+                    <!-- Settings Card -->
+                    <div class="rounded-lg flex flex-col" style="background:var(--color-bg-surface); border:1px solid var(--color-border); padding:18px; gap:16px;">
+
+                        <!-- Field: 服务器地址 -->
+                        <div class="flex flex-col" style="gap:6px;">
+                            <label style="font-size:14px; font-weight:780; color:var(--color-text-body);">服务器地址</label>
+                            <input type="text" value="http://127.0.0.1:8080" readonly class="outline-none" style="height:42px; border:1px solid var(--color-border); border-radius:var(--radius-lg); background:var(--color-bg-input); padding:0 12px; font-size:13px; color:var(--color-text-primary); font-family:var(--font-mono); width:100%;">
+                        </div>
+
+                        <!-- Toggle Row: 自动重连 -->
+                        <div class="grid items-center" style="grid-template-columns:minmax(0,1fr) auto; gap:18px; min-height:78px; border-top:1px solid var(--color-border-subtle); padding-top:16px;">
+                            <div class="flex flex-col min-w-0" style="gap:2px;">
+                                <strong style="font-size:14px; font-weight:780; color:var(--color-text-body);">自动重连</strong>
+                                <small style="font-size:13px; color:var(--color-text-secondary);">断开后自动尝试重新连接</small>
+                            </div>
+                            <!-- Toggle Switch -->
+                            <button class="toggle-switch active shrink-0" type="button" role="switch" aria-checked="true" aria-label="自动重连">
+                                <span class="toggle-track">
+                                    <span class="toggle-thumb"></span>
+                                </span>
+                            </button>
+                        </div>
+
+                    </div>
+                </div>
 
             </div>
         </div>
+
     </main>
 
     <!-- Custom Styles (must be in body, not head) -->
@@ -287,7 +347,7 @@
             height: 22px;
             border-radius: 11px;
             background: var(--color-border);
-            transition: background 0.2s ease;
+            transition: background var(--transition-fast);
         }
         .toggle-thumb {
             position: absolute;
@@ -296,8 +356,9 @@
             width: 18px;
             height: 18px;
             border-radius: 50%;
-            background: var(--color-text-muted);
-            transition: transform 0.2s ease, background 0.2s ease;
+            background: #ffffff;
+            box-shadow: var(--shadow-sm);
+            transition: transform var(--transition-fast), background var(--transition-fast);
         }
         .toggle-switch.active .toggle-track {
             background: var(--color-primary);
@@ -307,23 +368,58 @@
             background: #ffffff;
         }
 
+        /* Nav button hover */
+        aside nav button:hover {
+            background: var(--color-bg-hover);
+        }
+
         /* Input focus */
         input:focus {
             border-color: var(--color-border-active) !important;
-            box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.15);
+            box-shadow: 0 0 0 2px var(--color-primary-ring);
         }
 
-        /* Button hover states */
-        button:hover {
-            opacity: 0.9;
+        /* Scrollbar styling */
+        .overflow-y-auto::-webkit-scrollbar {
+            width: 6px;
         }
-        button:active {
-            opacity: 0.8;
+        .overflow-y-auto::-webkit-scrollbar-track {
+            background: transparent;
+        }
+        .overflow-y-auto::-webkit-scrollbar-thumb {
+            background: var(--color-border);
+            border-radius: 3px;
         }
 
-        /* Responsive: stack to single column on smaller screens */
-        @media (max-width: 860px) {
-            div[style*="grid-template-columns: 55fr"] {
+        /* Responsive: stack nav on smaller screens */
+        @media (max-width: 768px) {
+            main {
+                flex-direction: column !important;
+                height: auto !important;
+                min-height: 100vh;
+                overflow-y: auto;
+            }
+            aside {
+                width: 100% !important;
+                border-right: none !important;
+                border-bottom: 1px solid var(--color-border) !important;
+                padding: 12px 16px !important;
+            }
+            aside nav {
+                display: flex !important;
+                overflow-x: auto;
+                gap: 2px !important;
+            }
+            aside nav button {
+                min-width: max-content;
+            }
+            .overflow-y-auto {
+                padding: 24px 16px !important;
+            }
+            .overflow-y-auto > div {
+                padding: 0 !important;
+            }
+            .grid[style*="1.35fr"] {
                 grid-template-columns: 1fr !important;
             }
         }

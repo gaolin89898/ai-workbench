@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="zh-CN" class="light">
+<html class="light">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>设置</title>
+    <title>设置 - AI Workbench</title>
     <style id="theme-vars">
 /* AI Workbench Mobile — Light Task-Oriented Theme */
 /* Inspired by Trae Work clean aesthetic */
@@ -115,124 +115,159 @@
       }
     </style>
 </head>
-<body style="margin:0; padding:0; background:var(--color-bg-app); font-family:var(--font-sans); color:var(--color-text-primary);">
-
-  <!-- Top App Bar -->
-  <header style="position:sticky; top:0; z-index:30; border-bottom:1px solid var(--color-border); background:var(--color-bg-surface);">
-    <div style="display:flex; align-items:center; justify-content:center; height:56px;">
-      <h1 style="font-size:var(--text-lg); font-weight:var(--font-weight-semibold); color:var(--color-text-primary); margin:0;">设置</h1>
+<body class="font-sans antialiased" style="font-family: var(--font-sans); background: #f6f8fb;">
+  <main class="min-h-screen pb-6">
+    <!-- Header -->
+    <div class="sticky top-0 z-20 bg-white border-b" style="border-bottom: 1px solid #eceff3;">
+      <div class="flex items-center justify-between px-4" style="height: 56px;">
+        <div class="flex items-center gap-2">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#0f172a" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+        </div>
+        <h1 class="font-semibold truncate" style="font-size: 17px; font-weight: 600; color: #0f172a;">设置</h1>
+        <div class="w-5"></div>
+      </div>
     </div>
-  </header>
 
-  <!-- Main Content -->
-  <main style="padding:var(--space-6) 0 var(--space-10);">
+    <!-- Settings Content -->
+    <div class="px-4 pt-5">
 
-    <!-- Section: 连接 -->
-    <section style="margin-bottom:var(--space-6);">
-      <h2 style="font-size:var(--text-sm); color:var(--color-text-muted); font-weight:var(--font-weight-medium); margin:0 0 var(--space-2) var(--space-4); text-transform:uppercase; letter-spacing:0.05em;">连接</h2>
-      <div style="margin:0 var(--space-4); background:var(--color-bg-surface); border-radius:var(--radius-lg); box-shadow:var(--shadow-card); overflow:hidden;">
-        <!-- 服务器 -->
-        <div style="display:flex; align-items:center; justify-content:space-between; padding:var(--space-3) var(--space-4); border-bottom:1px solid var(--color-border);">
-          <span style="flex-shrink:0; font-size:var(--text-md); color:var(--color-text-primary);">服务器</span>
-          <div style="display:flex; align-items:center; gap:4px; flex:1; min-width:0; justify-content:flex-end;">
-            <span style="font-size:var(--text-md); color:var(--color-text-muted); overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">http://127.0.0.1:8080</span>
-            <i data-lucide="chevron-right" style="width:16px; height:16px; color:var(--color-text-muted); flex-shrink:0;"></i>
+      <!-- Section: Account -->
+      <h2 class="mb-2 px-1" style="font-size: 12px; font-weight: 650; color: #9ca3af; text-transform: uppercase; letter-spacing: 0.05em;">账户</h2>
+      <div class="overflow-hidden mb-5" style="border-radius: 8px; background: #ffffff;">
+        <!-- Row 1 -->
+        <div class="flex items-center justify-between px-4" style="height: 52px; border-bottom: 1px solid #eceff3;">
+          <span class="truncate" style="font-size: 14px; color: #0f172a;">头像</span>
+          <div class="flex items-center gap-2 shrink-0">
+            <div class="w-8 h-8 rounded-full flex items-center justify-center" style="background: #eff6ff; border: 1px solid #e2e8f0;">
+              <span style="font-size: 12px; font-weight: 600; color: #2563eb;">李</span>
+            </div>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#cbd5e1" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
           </div>
         </div>
-        <!-- 状态 -->
-        <div style="display:flex; align-items:center; justify-content:space-between; padding:var(--space-3) var(--space-4); border-bottom:1px solid var(--color-border);">
-          <span style="flex-shrink:0; font-size:var(--text-md); color:var(--color-text-primary);">状态</span>
-          <div style="display:flex; align-items:center; gap:var(--space-2);">
-            <span style="display:inline-block; width:8px; height:8px; border-radius:50%; background:var(--state-success);"></span>
-            <span style="font-size:var(--text-md); color:var(--state-success);">已连接</span>
+        <!-- Row 2 -->
+        <div class="flex items-center justify-between px-4" style="height: 52px; border-bottom: 1px solid #eceff3;">
+          <span class="truncate" style="font-size: 14px; color: #0f172a;">用户名</span>
+          <div class="flex items-center gap-2 shrink-0">
+            <span class="truncate" style="font-size: 13px; color: #94a3b8;">李明</span>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#cbd5e1" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
           </div>
         </div>
-        <!-- 账户 -->
-        <div style="display:flex; align-items:center; justify-content:space-between; padding:var(--space-3) var(--space-4);">
-          <span style="flex-shrink:0; font-size:var(--text-md); color:var(--color-text-primary);">账户</span>
-          <div style="display:flex; align-items:center; gap:4px; flex:1; min-width:0; justify-content:flex-end;">
-            <span style="font-size:var(--text-md); color:var(--color-text-muted); overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">user@example.com</span>
-            <i data-lucide="chevron-right" style="width:16px; height:16px; color:var(--color-text-muted); flex-shrink:0;"></i>
+        <!-- Row 3 -->
+        <div class="flex items-center justify-between px-4" style="height: 52px;">
+          <span class="truncate" style="font-size: 14px; color: #0f172a;">邮箱</span>
+          <div class="flex items-center gap-2 shrink-0">
+            <span class="truncate" style="font-size: 13px; color: #94a3b8;">li@workbench.ai</span>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#cbd5e1" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
           </div>
         </div>
       </div>
-    </section>
 
-    <!-- Section: 桌面端 -->
-    <section style="margin-bottom:var(--space-6);">
-      <h2 style="font-size:var(--text-sm); color:var(--color-text-muted); font-weight:var(--font-weight-medium); margin:0 0 var(--space-2) var(--space-4); text-transform:uppercase; letter-spacing:0.05em;">桌面端</h2>
-      <div style="margin:0 var(--space-4); background:var(--color-bg-surface); border-radius:var(--radius-lg); box-shadow:var(--shadow-card); overflow:hidden;">
-        <!-- 已配对设备 -->
-        <div style="display:flex; align-items:center; justify-content:space-between; padding:var(--space-3) var(--space-4); border-bottom:1px solid var(--color-border);">
-          <span style="flex-shrink:0; font-size:var(--text-md); color:var(--color-text-primary);">已配对设备</span>
-          <div style="display:flex; align-items:center; gap:4px; flex:1; min-width:0; justify-content:flex-end;">
-            <span style="font-size:var(--text-md); color:var(--color-text-muted); overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">Workstation</span>
-            <i data-lucide="chevron-right" style="width:16px; height:16px; color:var(--color-text-muted); flex-shrink:0;"></i>
+      <!-- Section: General -->
+      <h2 class="mb-2 px-1" style="font-size: 12px; font-weight: 650; color: #9ca3af; text-transform: uppercase; letter-spacing: 0.05em;">通用</h2>
+      <div class="overflow-hidden mb-5" style="border-radius: 8px; background: #ffffff;">
+        <!-- Row 1: Language -->
+        <div class="flex items-center justify-between px-4" style="height: 52px; border-bottom: 1px solid #eceff3;">
+          <span class="truncate" style="font-size: 14px; color: #0f172a;">语言</span>
+          <div class="flex items-center gap-2 shrink-0">
+            <span class="truncate" style="font-size: 13px; color: #94a3b8;">简体中文</span>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#cbd5e1" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
           </div>
         </div>
-        <!-- 自动同步 (toggle ON) -->
-        <div style="display:flex; align-items:center; justify-content:space-between; padding:var(--space-3) var(--space-4);">
-          <span style="flex-shrink:0; font-size:var(--text-md); color:var(--color-text-primary);">自动同步</span>
-          <div style="width:51px; height:31px; border-radius:var(--radius-full); background:var(--color-primary); position:relative; cursor:pointer;">
-            <div style="width:27px; height:27px; border-radius:50%; background:#ffffff; box-shadow:0 1px 3px rgba(0,0,0,0.15); position:absolute; top:2px; left:22px;"></div>
+        <!-- Row 2: Theme -->
+        <div class="flex items-center justify-between px-4" style="height: 52px; border-bottom: 1px solid #eceff3;">
+          <span class="truncate" style="font-size: 14px; color: #0f172a;">主题</span>
+          <div class="flex items-center gap-2 shrink-0">
+            <span class="truncate" style="font-size: 13px; color: #94a3b8;">浅色</span>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#cbd5e1" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+          </div>
+        </div>
+        <!-- Row 3: Font Size -->
+        <div class="flex items-center justify-between px-4" style="height: 52px;">
+          <span class="truncate" style="font-size: 14px; color: #0f172a;">字体大小</span>
+          <div class="flex items-center gap-2 shrink-0">
+            <span class="truncate" style="font-size: 13px; color: #94a3b8;">标准</span>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#cbd5e1" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
           </div>
         </div>
       </div>
-    </section>
 
-    <!-- Section: 通用 -->
-    <section style="margin-bottom:var(--space-6);">
-      <h2 style="font-size:var(--text-sm); color:var(--color-text-muted); font-weight:var(--font-weight-medium); margin:0 0 var(--space-2) var(--space-4); text-transform:uppercase; letter-spacing:0.05em;">通用</h2>
-      <div style="margin:0 var(--space-4); background:var(--color-bg-surface); border-radius:var(--radius-lg); box-shadow:var(--shadow-card); overflow:hidden;">
-        <!-- 语言 -->
-        <div style="display:flex; align-items:center; justify-content:space-between; padding:var(--space-3) var(--space-4); border-bottom:1px solid var(--color-border);">
-          <span style="flex-shrink:0; font-size:var(--text-md); color:var(--color-text-primary);">语言</span>
-          <div style="display:flex; align-items:center; gap:4px; flex:1; min-width:0; justify-content:flex-end;">
-            <span style="font-size:var(--text-md); color:var(--color-text-muted); overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">中文</span>
-            <i data-lucide="chevron-right" style="width:16px; height:16px; color:var(--color-text-muted); flex-shrink:0;"></i>
+      <!-- Section: Notifications -->
+      <h2 class="mb-2 px-1" style="font-size: 12px; font-weight: 650; color: #9ca3af; text-transform: uppercase; letter-spacing: 0.05em;">通知</h2>
+      <div class="overflow-hidden mb-5" style="border-radius: 8px; background: #ffffff;">
+        <!-- Row 1: Push Notifications -->
+        <div class="flex items-center justify-between px-4" style="height: 52px; border-bottom: 1px solid #eceff3;">
+          <span class="truncate" style="font-size: 14px; color: #0f172a;">推送通知</span>
+          <!-- Toggle ON -->
+          <div style="width: 40px; height: 22px; background: #2563eb; border-radius: 11px; position: relative; cursor: pointer;">
+            <div style="width: 18px; height: 18px; background: #ffffff; border-radius: 50%; position: absolute; top: 2px; right: 2px; box-shadow: 0 1px 2px rgba(0,0,0,0.1);"></div>
           </div>
         </div>
-        <!-- 通知 (toggle ON) -->
-        <div style="display:flex; align-items:center; justify-content:space-between; padding:var(--space-3) var(--space-4); border-bottom:1px solid var(--color-border);">
-          <span style="flex-shrink:0; font-size:var(--text-md); color:var(--color-text-primary);">通知</span>
-          <div style="width:51px; height:31px; border-radius:var(--radius-full); background:var(--color-primary); position:relative; cursor:pointer;">
-            <div style="width:27px; height:27px; border-radius:50%; background:#ffffff; box-shadow:0 1px 3px rgba(0,0,0,0.15); position:absolute; top:2px; left:22px;"></div>
+        <!-- Row 2: Sound -->
+        <div class="flex items-center justify-between px-4" style="height: 52px; border-bottom: 1px solid #eceff3;">
+          <span class="truncate" style="font-size: 14px; color: #0f172a;">提示音</span>
+          <!-- Toggle ON -->
+          <div style="width: 40px; height: 22px; background: #2563eb; border-radius: 11px; position: relative; cursor: pointer;">
+            <div style="width: 18px; height: 18px; background: #ffffff; border-radius: 50%; position: absolute; top: 2px; right: 2px; box-shadow: 0 1px 2px rgba(0,0,0,0.1);"></div>
           </div>
         </div>
-        <!-- 紧凑模式 (toggle OFF) -->
-        <div style="display:flex; align-items:center; justify-content:space-between; padding:var(--space-3) var(--space-4);">
-          <span style="flex-shrink:0; font-size:var(--text-md); color:var(--color-text-primary);">紧凑模式</span>
-          <div style="width:51px; height:31px; border-radius:var(--radius-full); background:var(--color-border); position:relative; cursor:pointer;">
-            <div style="width:27px; height:27px; border-radius:50%; background:#ffffff; box-shadow:0 1px 3px rgba(0,0,0,0.15); position:absolute; top:2px; left:2px;"></div>
+        <!-- Row 3: Email Notifications -->
+        <div class="flex items-center justify-between px-4" style="height: 52px;">
+          <span class="truncate" style="font-size: 14px; color: #0f172a;">邮件通知</span>
+          <!-- Toggle OFF -->
+          <div style="width: 40px; height: 22px; background: #cbd5e1; border-radius: 11px; position: relative; cursor: pointer;">
+            <div style="width: 18px; height: 18px; background: #ffffff; border-radius: 50%; position: absolute; top: 2px; left: 2px; box-shadow: 0 1px 2px rgba(0,0,0,0.1);"></div>
           </div>
         </div>
       </div>
-    </section>
 
-    <!-- Section: 关于 -->
-    <section style="margin-bottom:var(--space-6);">
-      <h2 style="font-size:var(--text-sm); color:var(--color-text-muted); font-weight:var(--font-weight-medium); margin:0 0 var(--space-2) var(--space-4); text-transform:uppercase; letter-spacing:0.05em;">关于</h2>
-      <div style="margin:0 var(--space-4); background:var(--color-bg-surface); border-radius:var(--radius-lg); box-shadow:var(--shadow-card); overflow:hidden;">
-        <!-- 版本 -->
-        <div style="display:flex; align-items:center; justify-content:space-between; padding:var(--space-3) var(--space-4); border-bottom:1px solid var(--color-border);">
-          <span style="flex-shrink:0; font-size:var(--text-md); color:var(--color-text-primary);">版本</span>
-          <span style="font-size:var(--text-md); color:var(--color-text-muted);">0.3.2</span>
+      <!-- Section: Security -->
+      <h2 class="mb-2 px-1" style="font-size: 12px; font-weight: 650; color: #9ca3af; text-transform: uppercase; letter-spacing: 0.05em;">安全</h2>
+      <div class="overflow-hidden mb-5" style="border-radius: 8px; background: #ffffff;">
+        <!-- Row 1 -->
+        <div class="flex items-center justify-between px-4" style="height: 52px; border-bottom: 1px solid #eceff3;">
+          <span class="truncate" style="font-size: 14px; color: #0f172a;">修改密码</span>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#cbd5e1" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
         </div>
-        <!-- 检查更新 -->
-        <div style="display:flex; align-items:center; justify-content:space-between; padding:var(--space-3) var(--space-4); border-bottom:1px solid var(--color-border);">
-          <span style="flex-shrink:0; font-size:var(--text-md); color:var(--color-text-primary);">检查更新</span>
-          <i data-lucide="chevron-right" style="width:16px; height:16px; color:var(--color-text-muted); flex-shrink:0;"></i>
+        <!-- Row 2 -->
+        <div class="flex items-center justify-between px-4" style="height: 52px; border-bottom: 1px solid #eceff3;">
+          <span class="truncate" style="font-size: 14px; color: #0f172a;">双因素认证</span>
+          <div class="flex items-center gap-2 shrink-0">
+            <span class="shrink-0 inline-flex items-center px-1.5 py-0.5 whitespace-nowrap" style="font-size: 10px; font-weight: 500; background: #ecfdf5; color: #22c55e; border-radius: 7px;">已开启</span>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#cbd5e1" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+          </div>
         </div>
-        <!-- 隐私政策 -->
-        <div style="display:flex; align-items:center; justify-content:space-between; padding:var(--space-3) var(--space-4);">
-          <span style="flex-shrink:0; font-size:var(--text-md); color:var(--color-text-primary);">隐私政策</span>
-          <i data-lucide="chevron-right" style="width:16px; height:16px; color:var(--color-text-muted); flex-shrink:0;"></i>
+        <!-- Row 3 -->
+        <div class="flex items-center justify-between px-4" style="height: 52px;">
+          <span class="truncate" style="font-size: 14px; color: #0f172a;">登录设备管理</span>
+          <div class="flex items-center gap-2 shrink-0">
+            <span class="truncate" style="font-size: 13px; color: #94a3b8;">3 台设备</span>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#cbd5e1" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+          </div>
         </div>
       </div>
-    </section>
 
+      <!-- Section: About -->
+      <h2 class="mb-2 px-1" style="font-size: 12px; font-weight: 650; color: #9ca3af; text-transform: uppercase; letter-spacing: 0.05em;">关于</h2>
+      <div class="overflow-hidden" style="border-radius: 8px; background: #ffffff;">
+        <!-- Row 1 -->
+        <div class="flex items-center justify-between px-4" style="height: 52px; border-bottom: 1px solid #eceff3;">
+          <span class="truncate" style="font-size: 14px; color: #0f172a;">版本</span>
+          <span class="shrink-0" style="font-size: 13px; color: #94a3b8;">v1.2.0</span>
+        </div>
+        <!-- Row 2 -->
+        <div class="flex items-center justify-between px-4" style="height: 52px;">
+          <span class="truncate" style="font-size: 14px; color: #0f172a;">服务条款</span>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#cbd5e1" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+        </div>
+      </div>
+
+      <!-- Logout -->
+      <div class="mt-6">
+        <button class="w-full flex items-center justify-center" style="height: 48px; border: 1px solid #cbd5e1; border-radius: 8px; background: #ffffff; font-size: 14px; font-weight: 500; color: #ef4444; cursor: pointer;">
+          退出登录
+        </button>
+      </div>
+    </div>
   </main>
-
-  <script>lucide.createIcons();</script>
 </body>
 </html>

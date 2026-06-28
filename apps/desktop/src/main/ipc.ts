@@ -11,6 +11,8 @@
 
 import { ipcMain, BrowserWindow, clipboard, type WebContents } from "electron";
 import { randomUUID } from "node:crypto";
+import { readdir, stat } from "node:fs/promises";
+import path from "node:path";
 import * as db from "./db";
 import * as pty from "./pty";
 import * as providers from "./providers";
@@ -21,6 +23,7 @@ import {
   getDesktopPairingStatus,
   buildDesktopPairingQrPayload,
   getCloudConfig,
+  getDesktopCloudSync,
 } from "./sync";
 import { runCodexChat, stopCodexChat } from "./codex";
 import { runAiChat, stopAiChat } from "./claude";
@@ -51,6 +54,36 @@ function getSender(): WebContents {
     return wins[0].webContents;
   }
   throw new Error("no BrowserWindow available to send events");
+}
+
+async function listProjectFiles(projectPath: string, directoryPath?: string | null) {
+  const project = db.getWorkspaceProjectByPath(projectPath);
+  if (!project) throw new Error("project is not registered");
+  const root = path.resolve(project.path);
+  const target = directoryPath ? path.resolve(directoryPath) : root;
+  const relative = path.relative(root, target);
+  if (relative.startsWith("..") || path.isAbsolute(relative)) throw new Error("directory is outside project");
+  const targetStat = await stat(target);
+  if (!targetStat.isDirectory()) throw new Error("target is not a directory");
+  const entries = await readdir(target, { withFileTypes: true });
+  const visibleEntries = entries.filter((entry) => entry.name !== ".git" && !entry.name.startsWith("."));
+  const files = await Promise.all(
+    visibleEntries.map(async (entry) => {
+      const fullPath = path.join(target, entry.name);
+      const info = await stat(fullPath);
+      return {
+        name: entry.name,
+        path: fullPath,
+        kind: entry.isDirectory() ? "directory" : "file",
+        size: info.size,
+        modifiedAt: info.mtime.toISOString(),
+      };
+    })
+  );
+  return files.sort((left, right) => {
+    if (left.kind !== right.kind) return left.kind === "directory" ? -1 : 1;
+    return left.name.localeCompare(right.name, "zh-Hans-CN", { numeric: true, sensitivity: "base" });
+  });
 }
 
 export function registerIpcHandlers(win?: BrowserWindow): void {
@@ -131,6 +164,10 @@ export function registerIpcHandlers(win?: BrowserWindow): void {
 
   ipcMain.handle("open_project_in_file_manager", async (_event, args: [string]) =>
     projects.openProjectInFileManager(args[0])
+  );
+
+  ipcMain.handle("list_project_files", async (_event, args: [string, string | null]) =>
+    listProjectFiles(args[0], args[1])
   );
 
   // ---------- AI sessions ----------

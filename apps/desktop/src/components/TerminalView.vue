@@ -13,6 +13,7 @@ const selectedProject = computed(() => ws.projects.value.find((project) => proje
 const fallbackProvider: AiProvider = { id: "codex", name: "Codex", command: "codex", builtIn: true, enabled: true };
 const providerChoices = computed(() => ws.providers.value.length ? ws.providers.value : [fallbackProvider]);
 const activeBuffer = computed(() => ws.shellBuffers.value[activeSessionId.value] ?? "");
+const activeProviderId = computed(() => ws.activeAiSession.value?.providerId ?? ws.selectedProviderId.value ?? providerChoices.value[0]?.id ?? "");
 const activeLiveState = computed(() => {
   if (!activeSessionId.value) return null;
   return ws.liveShellSessions.value[activeSessionId.value];
@@ -152,14 +153,28 @@ async function fitTerminal() {
 <template>
   <div class="terminal-frame" :class="{ 'no-session': terminalState === 'no-session' }">
     <div ref="terminalHost" class="terminal-view"></div>
-    <button
-      v-if="terminalState === 'ready'"
-      class="terminal-restart-button"
-      type="button"
-      @click="ws.restartShellForActiveSession"
-    >
-      重启 shell
-    </button>
+    <div v-if="terminalState !== 'no-session'" class="terminal-bottombar">
+      <div class="terminal-tabs">
+        <button
+          v-for="provider in providerChoices"
+          :key="provider.id"
+          class="terminal-tab"
+          :class="{ active: activeProviderId === provider.id }"
+          type="button"
+          @click="createSession(provider.id)"
+        >
+          {{ provider.name }}
+        </button>
+      </div>
+      <button
+        v-if="terminalState === 'ready'"
+        class="terminal-restart-button"
+        type="button"
+        @click="ws.restartShellForActiveSession"
+      >
+        重启 shell
+      </button>
+    </div>
     <div v-if="terminalState === 'no-session'" class="terminal-session-placeholder">
       <div class="terminal-session-placeholder-inner">
         <span class="terminal-placeholder-kicker">项目 shell</span>

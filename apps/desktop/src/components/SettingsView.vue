@@ -1,11 +1,19 @@
 <script setup lang="ts">
-import { computed, ref, watch } from "vue";
+import { computed, onMounted, ref, watch } from "vue";
 import { useRouter } from "vue-router";
 import QRCode from "qrcode";
 import { useWorkspace } from "../composables/useWorkspace";
-import type { AiProvider, ProviderStatus } from "../services/desktop";
+import { desktopApi, type AiProvider, type ProviderStatus } from "../services/desktop";
 
-type SettingsPanel = "connection" | "security" | "pairing" | "updates" | "debug" | "archive";
+const settingsIcon = new URL("../assets/icons/settings.svg", import.meta.url).href;
+const riskGuardIcon = new URL("../assets/icons/risk-guard.svg", import.meta.url).href;
+const linkIcon = new URL("../assets/icons/link.svg", import.meta.url).href;
+const aiProvidersIcon = new URL("../assets/icons/ai-providers.svg", import.meta.url).href;
+const archiveBoxIcon = new URL("../assets/icons/archive-box.svg", import.meta.url).href;
+const fingerprintIcon = new URL("../assets/icons/fingerprint.svg", import.meta.url).href;
+const clipboardIcon = new URL("../assets/icons/clipboard.svg", import.meta.url).href;
+
+type SettingsPanel = "connection" | "security" | "pairing" | "about" | "archive";
 type ProviderRow = {
   provider: AiProvider;
   status?: ProviderStatus;
@@ -15,6 +23,7 @@ type SettingsPanelItem = {
   label: string;
   eyebrow: string;
   description: string;
+  icon: string;
 };
 
 const ws = useWorkspace();
@@ -24,13 +33,12 @@ const localServer = ref(ws.settingsServer.value);
 const settingsPanel = ref<SettingsPanel>("connection");
 const pairingCode = ref("");
 const qrImageUrl = ref("");
-const deviceName = ref("gl-H610M");
-const historyDb = ref("~/.ai-workbench/history.db");
 const riskGuard = ref(true);
 const commandLog = ref(true);
 const localHistory = ref(true);
 const autoReconnect = ref(true);
-const terminalDebug = ref(true);
+const cloudDeviceId = ref<string>("");
+const cloudPaired = ref<boolean>(false);
 
 const settingsPanels: SettingsPanelItem[] = [
   {
@@ -38,36 +46,35 @@ const settingsPanels: SettingsPanelItem[] = [
     label: "连接",
     eyebrow: "基础",
     description: "服务器、设备名称和本机历史位置",
+    icon: settingsIcon,
   },
   {
     id: "security",
     label: "安全与历史",
     eyebrow: "保护",
     description: "高危确认、命令摘要和重连策略",
+    icon: riskGuardIcon,
   },
   {
     id: "pairing",
     label: "设备配对",
     eyebrow: "移动端",
     description: "把这台桌面绑定到移动端账号",
+    icon: linkIcon,
   },
   {
-    id: "updates",
-    label: "应用更新",
-    eyebrow: "Release",
-    description: "从 GitHub Releases 检查和安装桌面端更新",
-  },
-  {
-    id: "debug",
-    label: "调试入口",
-    eyebrow: "诊断",
-    description: "Provider 检测和本地 PTY 状态",
+    id: "about",
+    label: "关于",
+    eyebrow: "信息",
+    description: "版本更新、Provider 诊断和桌面端信息",
+    icon: aiProvidersIcon,
   },
   {
     id: "archive",
     label: "已归档对话",
     eyebrow: "历史",
     description: "查看和恢复已归档的 AI 会话",
+    icon: archiveBoxIcon,
   },
 ];
 
@@ -85,9 +92,20 @@ watch(() => ws.qrPairingPayload.value, async (payload) => {
     : "";
 });
 
+const builtInProviders: AiProvider[] = [
+  { id: "codex", name: "Codex", command: "codex", builtIn: true, enabled: true },
+  { id: "claude", name: "Claude Code", command: "claude", builtIn: true, enabled: true },
+  { id: "opencode", name: "OpenCode", command: "opencode", builtIn: true, enabled: true },
+  { id: "deepseek", name: "DeepSeek TUI", command: "deepseek", builtIn: true, enabled: true },
+];
+const providerOrder = new Map(builtInProviders.map((provider, index) => [provider.id, index]));
+
 const providerRows = computed<ProviderRow[]>(() => {
   const map = new Map<string, ProviderRow>();
-  for (const provider of ws.providers.value) map.set(provider.id, { provider });
+  for (const provider of builtInProviders) map.set(provider.id, { provider });
+  for (const provider of ws.providers.value) {
+    if (!map.has(provider.id)) map.set(provider.id, { provider });
+  }
   for (const status of ws.providerStatuses.value) {
     const existing = map.get(status.providerId);
     if (existing) {
@@ -105,7 +123,7 @@ const providerRows = computed<ProviderRow[]>(() => {
       });
     }
   }
-  return [...map.values()];
+  return [...map.values()].sort((left, right) => (providerOrder.get(left.provider.id) ?? 99) - (providerOrder.get(right.provider.id) ?? 99));
 });
 
 const activePanelMeta = computed(() => {
@@ -116,12 +134,16 @@ const installedProviderCount = computed(() => {
   return providerRows.value.filter((row) => row.status?.installed).length;
 });
 
+const missingProviderCount = computed(() => {
+  return providerRows.value.filter((row) => !row.status?.installed).length;
+});
+
 const signedInProviderCount = computed(() => {
   return providerRows.value.filter((row) => row.status?.authStatus === "signedIn").length;
 });
 
 const enabledGuardCount = computed(() => {
-  return [riskGuard.value, commandLog.value, localHistory.value, autoReconnect.value].filter(Boolean).length;
+  return [riskGuard.value, commandLog.value, localHistory.value].filter(Boolean).length;
 });
 
 const qrStatusLabel = computed(() => {
@@ -176,6 +198,36 @@ function goBack() {
   }
 }
 
+async function copyDeviceId() {
+  if (!cloudDeviceId.value) return;
+  try {
+    await navigator.clipboard.writeText(cloudDeviceId.value);
+  } catch {
+    /* ignore clipboard errors */
+  }
+}
+
+async function refreshCloudConfig() {
+  try {
+    const config = await desktopApi.getCloudConfig();
+    cloudDeviceId.value = config?.deviceId ?? "";
+    cloudPaired.value = Boolean(config?.paired);
+  } catch {
+    /* ignore */
+  }
+}
+
+const deviceIdDisplay = computed(() => {
+  if (!cloudDeviceId.value) return "未配对";
+  const id = cloudDeviceId.value;
+  if (id.length <= 16) return id;
+  return `${id.slice(0, 8)}...${id.slice(-4)}`;
+});
+
+onMounted(() => {
+  void refreshCloudConfig();
+});
+
 function archivedAtLabel(value?: string | null) {
   if (!value) return "时间未知";
   const date = new Date(value);
@@ -219,8 +271,10 @@ async function restoreSession(sessionId: string) {
           >
             <span class="settings-nav-marker" aria-hidden="true"></span>
             <span class="settings-nav-copy">
-              <strong>{{ panel.label }}</strong>
-              <small>{{ panel.description }}</small>
+              <span class="settings-nav-title-row">
+                <img :src="panel.icon" alt="" class="settings-nav-icon" />
+                <strong>{{ panel.label }}</strong>
+              </span>
             </span>
             <span class="settings-nav-eyebrow">{{ panel.eyebrow }}</span>
           </button>
@@ -234,73 +288,69 @@ async function restoreSession(sessionId: string) {
 
       <div class="settings-content">
         <div class="settings-scroll">
-          <header v-if="settingsPanel === 'connection'" class="settings-header">
+          <header class="settings-header">
             <div>
               <span class="settings-kicker">Desktop Settings</span>
               <h1>{{ activePanelMeta.label }}</h1>
-              <p>{{ activePanelMeta.description }}。配置会尽量保存在本机，移动端只拿到必要的连接信息。</p>
+              <p>{{ activePanelMeta.description }}。</p>
             </div>
-            <button class="button primary narrow" type="button" @click="ws.saveSettings">保存设置</button>
+            <button v-if="settingsPanel === 'connection'" class="button primary narrow" type="button" @click="ws.saveSettings">保存设置</button>
           </header>
 
-          <div v-if="settingsPanel === 'connection'" class="settings-overview" aria-label="设置概览">
-            <article>
-              <span>服务器</span>
-              <strong>{{ localServer || "未设置" }}</strong>
-              <small>移动端和桌面端转发地址</small>
+          <div v-if="settingsPanel === 'connection'" class="settings-overview settings-overview-status" aria-label="连接概览">
+            <article class="settings-overview-card">
+              <div class="settings-overview-card-head">
+                <span class="settings-overview-dot" :class="{ on: cloudPaired }" aria-hidden="true"></span>
+                <span>状态</span>
+              </div>
+              <strong :class="{ 'stat-success': cloudPaired, 'stat-muted': !cloudPaired }">{{ cloudPaired ? "已配对" : "未配对" }}</strong>
             </article>
-            <article>
-              <span>Provider</span>
-              <strong>{{ installedProviderCount }}/{{ providerRows.length || 0 }}</strong>
-              <small>{{ signedInProviderCount }} 个已登录</small>
+            <article class="settings-overview-card">
+              <div class="settings-overview-card-head">
+                <span>设备 ID</span>
+              </div>
+              <div class="settings-overview-device-row">
+                <code>{{ deviceIdDisplay }}</code>
+                <button
+                  v-if="cloudDeviceId"
+                  class="settings-overview-copy"
+                  type="button"
+                  aria-label="复制设备 ID"
+                  @click="copyDeviceId"
+                >
+                  <img :src="clipboardIcon" alt="" />
+                </button>
+              </div>
             </article>
-            <article>
-              <span>保护项</span>
-              <strong>{{ enabledGuardCount }}/4</strong>
-              <small>风险保护、日志、历史、重连</small>
+            <article class="settings-overview-card">
+              <div class="settings-overview-card-head">
+                <span>服务器</span>
+              </div>
+              <strong class="stat-primary">{{ localServer || "未设置" }}</strong>
             </article>
           </div>
 
           <section v-if="settingsPanel === 'connection'" class="settings-section">
             <div class="settings-section-heading">
               <div>
-                <h2 class="settings-section-title">连接配置</h2>
-                <p class="settings-section-description">桌面端启动后会用这里的信息完成配对、移动端转发和本机历史读取。</p>
+                <h2 class="settings-section-title">连接设置</h2>
+                <p class="settings-section-description">配置桌面工作台的服务器连接，保存后用于配对和移动端转发。</p>
               </div>
               <span class="settings-section-chip">本机优先</span>
             </div>
-            <div class="settings-grid">
-              <div class="settings-card settings-card-main">
-                <label class="settings-field">
-                  <span>服务器地址</span>
-                  <input v-model="localServer" class="settings-field-input" placeholder="http://118.196.78.91" />
-                  <small>桌面端配对和移动端转发使用的云端地址。</small>
-                </label>
-                <label class="settings-field">
-                  <span>设备名称</span>
-                  <input v-model="deviceName" class="settings-field-input" />
-                  <small>移动端设备列表里显示的桌面名称。</small>
-                </label>
-                <label class="settings-field">
-                  <span>本地历史</span>
-                  <input v-model="historyDb" class="settings-field-input" />
-                  <small>完整聊天记录默认只保存在这台电脑。</small>
-                </label>
-              </div>
-              <aside class="settings-note-panel">
-                <strong>连接策略</strong>
-                <p>前端会把服务器地址写入本地配置；配对和移动端控制都从这个地址开始。保存失败时，下方反馈区会显示错误信息。</p>
-                <dl>
-                  <div>
-                    <dt>历史</dt>
-                    <dd>保留在本机 SQLite</dd>
-                  </div>
-                  <div>
-                    <dt>移动端</dt>
-                    <dd>通过服务器发现桌面</dd>
-                  </div>
-                </dl>
-              </aside>
+            <div class="settings-card settings-connection-card">
+              <label class="settings-field">
+                <span>服务器地址</span>
+                <input v-model="localServer" class="settings-field-input" placeholder="http://118.196.78.91" />
+                <small>桌面端配对和移动端转发使用的云端地址。</small>
+              </label>
+              <label class="settings-row settings-toggle-row settings-toggle-divider">
+                <span class="settings-row-copy">
+                  <strong>自动重连</strong>
+                  <small>断开后自动尝试重新连接</small>
+                </span>
+                <input v-model="autoReconnect" class="settings-switch" type="checkbox" />
+              </label>
             </div>
           </section>
 
@@ -334,52 +384,54 @@ async function restoreSession(sessionId: string) {
                 </span>
                 <input v-model="localHistory" class="settings-switch" type="checkbox" />
               </label>
-              <label class="settings-row settings-toggle-row">
-                <span class="settings-row-copy">
-                  <strong>自动重连</strong>
-                  <small>断线后恢复移动端和桌面连接</small>
-                </span>
-                <input v-model="autoReconnect" class="settings-switch" type="checkbox" />
-              </label>
             </div>
           </section>
 
-          <section v-else-if="settingsPanel === 'pairing'" class="settings-section">
-            <div class="settings-section-heading">
-              <div>
-                <h2 class="settings-section-title">设备配对</h2>
-                <p class="settings-section-description">把当前桌面绑定到移动端账号。成功后，移动端可以看到这台桌面并控制 AI 会话。</p>
-              </div>
-              <span class="settings-section-chip">{{ qrStatusLabel }}</span>
+          <section v-else-if="settingsPanel === 'pairing'" class="settings-section settings-pairing-page">
+            <div class="settings-pairing-overview">
+              <article class="settings-pairing-stat">
+                <div class="settings-pairing-stat-head">
+                  <span class="settings-pairing-dot" :class="{ on: cloudPaired }" aria-hidden="true"></span>
+                  <span>配对状态</span>
+                </div>
+                <strong>{{ cloudPaired ? "已配对" : "未配对" }}</strong>
+              </article>
+              <article class="settings-pairing-stat">
+                <div class="settings-pairing-stat-head">
+                  <span>设备 ID</span>
+                </div>
+                <div class="settings-pairing-device-row">
+                  <code>{{ deviceIdDisplay }}</code>
+                  <button
+                    v-if="cloudDeviceId"
+                    class="settings-pairing-copy"
+                    type="button"
+                    aria-label="复制设备 ID"
+                    @click="copyDeviceId"
+                  >
+                    <img :src="clipboardIcon" alt="" />
+                  </button>
+                </div>
+              </article>
+              <article class="settings-pairing-stat">
+                <div class="settings-pairing-stat-head">
+                  <span>服务器</span>
+                </div>
+                <strong>{{ localServer || "未设置" }}</strong>
+              </article>
             </div>
-            <div class="settings-grid">
-              <div class="settings-card settings-form-card">
-                <label class="settings-field">
-                  <span>服务器地址</span>
-                  <input v-model="localServer" class="settings-field-input" />
-                  <small>请填写手机能访问到的地址。默认服务器为 118.196.78.91。</small>
-                </label>
+
+            <div class="settings-pairing-block">
+              <h2 class="settings-pairing-block-title">扫码配对</h2>
+              <div class="settings-pairing-qr-card">
                 <button
-                  class="button primary"
+                  class="button primary settings-pairing-generate"
                   type="button"
                   :disabled="ws.qrPairingStatus.value === 'creating' || ws.qrPairingStatus.value === 'pending'"
                   @click="ws.createQrPairingRequest(localServer)"
                 >
-                  {{ ws.qrPairingStatus.value === 'pending' ? '等待手机扫码' : '生成扫码配对二维码' }}
+                  {{ ws.qrPairingStatus.value === 'pending' ? '等待手机扫码' : '生成配对码' }}
                 </button>
-                <div class="settings-manual-pair">
-                  <span>备用短码配对</span>
-                  <p>如果手机摄像头不可用，也可以在手机端生成短码后手动输入。</p>
-                </div>
-                <label class="settings-field">
-                  <span>配对码</span>
-                  <input v-model="pairingCode" class="settings-field-input pairing-code-input" placeholder="A7K9Q2LM" maxlength="16" />
-                  <small>输入移动端生成的短码，最长 16 位。</small>
-                </label>
-                <button class="button primary" type="button" @click="ws.pairDesktop(localServer, pairingCode)">配对这台桌面</button>
-              </div>
-              <aside class="settings-pair-result" :class="{ error: ws.pairResultError.value }">
-                <span>扫码配对</span>
                 <div class="settings-qr-frame" :class="{ empty: !qrImageUrl }">
                   <img v-if="qrImageUrl" :src="qrImageUrl" alt="桌面配对二维码" />
                   <strong v-else>等待生成</strong>
@@ -388,58 +440,103 @@ async function restoreSession(sessionId: string) {
                   <code>{{ ws.qrPairingCode.value }}</code>
                   <small>过期时间：{{ ws.qrPairingExpiresAt.value }}</small>
                 </div>
-                <p>{{ ws.pairResult.value }}</p>
-              </aside>
+                <p class="settings-pairing-result" :class="{ error: ws.pairResultError.value }">{{ ws.pairResult.value }}</p>
+              </div>
+            </div>
+
+            <div class="settings-pairing-block">
+              <h2 class="settings-pairing-block-title">备用短码配对</h2>
+              <div class="settings-card settings-form-card settings-pairing-manual">
+                <p class="settings-pairing-manual-hint">如果手机摄像头不可用，也可以在手机端生成短码后手动输入。</p>
+                <label class="settings-field">
+                  <span>配对码</span>
+                  <input v-model="pairingCode" class="settings-field-input pairing-code-input" placeholder="A7K9Q2LM" maxlength="16" />
+                  <small>输入移动端生成的短码，最长 16 位。</small>
+                </label>
+                <button class="button primary" type="button" @click="ws.pairDesktop(localServer, pairingCode)">配对这台桌面</button>
+              </div>
             </div>
           </section>
 
-          <section v-else-if="settingsPanel === 'updates'" class="settings-section">
-            <div class="settings-section-heading">
-              <div>
-                <h2 class="settings-section-title">应用更新</h2>
-                <p class="settings-section-description">桌面端会从 GitHub Releases 读取最新版本，下载签名更新包并重启安装。</p>
-              </div>
-              <span class="settings-section-chip">{{ ws.updateAvailableVersion.value ? `可更新 ${ws.updateAvailableVersion.value}` : "GitHub Releases" }}</span>
+          <section v-else-if="settingsPanel === 'about'" class="settings-section settings-about-page">
+            <div class="settings-about-summary">
+              <article class="settings-about-stat-card">
+                <span>可用</span>
+                <strong class="stat-success">{{ installedProviderCount }}</strong>
+              </article>
+              <article class="settings-about-stat-card">
+                <span>缺失</span>
+                <strong class="stat-warning">{{ missingProviderCount }}</strong>
+              </article>
+              <article class="settings-about-stat-card">
+                <span>总计</span>
+                <strong class="stat-primary">{{ providerRows.length || 0 }}</strong>
+              </article>
             </div>
-            <div class="settings-grid">
-              <div class="settings-card settings-form-card">
-                <div class="settings-row">
-                  <span class="settings-row-copy">
-                    <strong>更新来源</strong>
-                    <small>gaolin89898/ai-workbench 的 latest.json</small>
-                  </span>
-                  <code>GitHub</code>
+
+            <div class="settings-provider-grid-block">
+              <div class="settings-provider-grid-head">
+                <div>
+                  <h2 class="settings-pairing-block-title">本地环境检查</h2>
+                  <p class="settings-provider-grid-sub">管理和监控已安装的 AI 编程工具</p>
                 </div>
-                <div class="settings-row">
-                  <span class="settings-row-copy">
-                    <strong>签名校验</strong>
-                    <small>安装前会校验 Release 更新包签名</small>
-                  </span>
-                  <span class="badge success">已启用</span>
+                <div class="settings-provider-grid-actions">
+                  <button class="button secondary mini" type="button" :disabled="ws.updateChecking.value" @click="ws.checkAppUpdate">
+                    {{ ws.updateChecking.value ? "检查中" : "诊断更新" }}
+                  </button>
+                  <button class="button secondary mini" type="button" @click="ws.detectProviders">刷新</button>
                 </div>
-                <div class="button-row">
+              </div>
+              <div class="settings-provider-grid">
+                <div v-if="!providerRows.length" class="empty-state">暂无 Provider。</div>
+                <article v-for="row in providerRows" :key="row.provider.id" class="settings-provider-card">
+                  <div class="settings-provider-card-head">
+                    <div class="settings-provider-card-id">
+                      <span class="settings-provider-card-icon" :class="installedTone(row.status)" aria-hidden="true"></span>
+                      <strong>{{ row.provider.name }}</strong>
+                    </div>
+                    <span class="settings-provider-card-platform">Win</span>
+                  </div>
+                  <div class="settings-provider-card-rows">
+                    <div class="settings-provider-card-row">
+                      <span>当前版本</span>
+                      <code v-if="row.status?.installed">{{ row.status?.version || "未知" }}</code>
+                      <span v-else class="muted">未安装</span>
+                    </div>
+                    <div class="settings-provider-card-row">
+                      <span>登录状态</span>
+                      <span :class="['muted', authTone(row.status)]">{{ authLabel(row.status) }}</span>
+                    </div>
+                  </div>
+                  <div class="settings-provider-card-foot">
+                    <span class="badge" :class="installedTone(row.status)">{{ installedLabel(row.status) }}</span>
+                    <code class="settings-provider-card-command">{{ row.provider.command }}</code>
+                  </div>
+                </article>
+              </div>
+            </div>
+
+            <div class="settings-about-update">
+              <h2 class="settings-pairing-block-title">应用更新</h2>
+              <div class="settings-about-update-card">
+                <div class="settings-about-update-row">
+                  <div class="settings-about-update-copy">
+                    <strong>当前版本</strong>
+                    <small>{{ ws.updateAvailableVersion.value ? "发现可更新版本" : "已是最新或尚未检查" }}</small>
+                  </div>
+                  <code class="settings-about-update-tag">{{ ws.updateAvailableVersion.value || "—" }}</code>
+                </div>
+                <div class="settings-about-update-divider" aria-hidden="true"></div>
+                <div class="settings-about-update-actions">
                   <button class="button secondary" type="button" :disabled="ws.updateChecking.value || ws.updateInstalling.value" @click="ws.checkAppUpdate">
                     {{ ws.updateChecking.value ? "检查中" : "检查更新" }}
                   </button>
                   <button class="button primary" type="button" :disabled="!ws.updateAvailableVersion.value || ws.updateInstalling.value" @click="ws.installAppUpdate">
-                    {{ ws.updateInstalling.value ? "安装中" : "下载并重启安装" }}
+                    {{ ws.updateInstalling.value ? "安装中" : "下载并安装" }}
                   </button>
                 </div>
+                <p v-if="ws.updateResult.value" class="settings-about-update-result" :class="{ error: ws.updateResultError.value }">{{ ws.updateResult.value }}</p>
               </div>
-              <aside class="settings-note-panel" :class="{ error: ws.updateResultError.value }">
-                <strong>更新状态</strong>
-                <p>{{ ws.updateResult.value }}</p>
-                <dl>
-                  <div>
-                    <dt>Release</dt>
-                    <dd>latest.json</dd>
-                  </div>
-                  <div>
-                    <dt>触发</dt>
-                    <dd>推送 v* 标签</dd>
-                  </div>
-                </dl>
-              </aside>
             </div>
           </section>
 
@@ -468,57 +565,6 @@ async function restoreSession(sessionId: string) {
               </article>
             </div>
           </section>
-
-          <section v-else class="settings-section">
-            <div class="settings-section-heading">
-              <div>
-                <h2 class="settings-section-title">调试入口</h2>
-                <p class="settings-section-description">用于排查 Provider 检测、本地 PTY 承载状态和认证链路。</p>
-              </div>
-              <button class="button secondary mini" type="button" @click="ws.detectProviders">重新检测</button>
-            </div>
-            <div class="settings-card">
-              <label class="settings-row settings-toggle-row">
-                <span class="settings-row-copy">
-                  <strong>底层终端</strong>
-                  <small>保留本地 PTY 调试信息</small>
-                </span>
-                <input v-model="terminalDebug" class="settings-switch" type="checkbox" />
-              </label>
-              <div class="settings-provider-block">
-                <div class="settings-provider-heading">
-                  <span class="settings-row-copy">
-                    <strong>Provider 检测</strong>
-                    <small>检测 Codex、Claude、OpenCode、DeepSeek 的安装、认证和版本状态</small>
-                  </span>
-                  <span class="settings-provider-summary">{{ installedProviderCount }} 个可用</span>
-                </div>
-                <div class="settings-provider-list">
-                  <div v-if="!providerRows.length" class="empty-state">暂无 Provider。</div>
-                  <article v-for="row in providerRows" :key="row.provider.id" class="settings-provider-row">
-                    <div class="settings-provider-main">
-                      <span class="provider-dot" :class="installedTone(row.status)" aria-hidden="true"></span>
-                      <div>
-                        <strong>{{ row.provider.name }}</strong>
-                        <p>{{ providerDetail(row) }}</p>
-                      </div>
-                    </div>
-                    <code>{{ row.provider.command }}</code>
-                    <div class="settings-provider-badges">
-                      <span class="badge" :class="installedTone(row.status)">{{ installedLabel(row.status) }}</span>
-                      <span class="badge" :class="authTone(row.status)">{{ authLabel(row.status) }}</span>
-                    </div>
-                    <span class="settings-provider-time">{{ checkedAt(row.status) }}</span>
-                  </article>
-                </div>
-              </div>
-            </div>
-          </section>
-
-          <div class="settings-result" role="status">
-            <span>保存反馈</span>
-            <p>{{ ws.settingsResult.value }}</p>
-          </div>
         </div>
       </div>
     </section>

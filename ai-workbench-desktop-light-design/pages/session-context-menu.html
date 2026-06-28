@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AI 工作台</title>
+    <title>AI 工作台 — 对话右键菜单</title>
     <style id="theme-vars">
 /* AI Workbench Desktop — Light Theme */
 /* Matching actual project style.css exactly */
@@ -109,20 +109,9 @@
   /* Transitions */
   --transition-fast: 120ms ease;
   --transition-normal: 200ms ease;
-  /* Aliases for backwards compatibility with dark-theme var names */
-  --color-bg-body: var(--color-bg-main);
-  --font-weight-normal: var(--fw-normal);
-  --font-weight-medium: var(--fw-medium);
-  --font-weight-semibold: var(--fw-semibold);
-  --font-weight-bold: var(--fw-bold);
-  --font-weight-extrabold: var(--fw-extrabold);
-  --shadow-card: var(--shadow-sm);
-  --shadow-elevated: var(--shadow-md);
-  --shadow-modal: var(--shadow-lg);
-  --composer-height: auto;
-
 }
-    
+
+    </style>
     <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4.3.1/dist/index.global.js"></script>
     <script src="https://unpkg.com/lucide@1.8.0/dist/umd/lucide.min.js"></script>
     <style type="text/tailwindcss">
@@ -185,8 +174,8 @@
             <!-- Session list under my-saas-app -->
             <div style="padding-left: 32px; display: flex; flex-direction: column; gap: 3px;">
 
-              <!-- 修复认证 bug (active) -->
-              <div style="padding: 5px 8px 5px 10px; border-radius: 6px; background: var(--color-bg-hover); cursor: pointer;">
+              <!-- 修复认证 bug (active / selected — context menu targets this) -->
+              <div style="padding: 5px 8px 5px 10px; border-radius: 6px; background: var(--color-bg-hover); cursor: pointer; position: relative;">
                 <span style="font-size: 13px; color: var(--color-text-body); display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">修复认证 bug</span>
               </div>
 
@@ -241,8 +230,6 @@
       <!-- ============================================================ -->
       <div style="background: var(--color-bg-content); display: flex; flex-direction: column; height: 100vh; overflow: hidden;">
 
-        <!-- No topbar — this is the empty start state -->
-
         <!-- Center area -->
         <div style="display: grid; place-items: center; min-height: 100vh; padding: 48px 32px;">
           <div style="width: min(730px, 100%); display: grid; gap: 28px; justify-items: center; transform: translateY(-28px);">
@@ -282,7 +269,68 @@
 
     </main>
 
+    <!-- ============================================================ -->
+    <!-- SESSION CONTEXT MENU (right-click overlay)                    -->
+    <!-- ============================================================ -->
+    <div id="session-context-menu" style="position: fixed; z-index: 1000; left: 220px; top: 280px; width: 168px; border: 1px solid rgba(255, 255, 255, 0.12); border-radius: 8px; background: var(--color-bg-elevated); padding: 4px 0; box-shadow: var(--shadow-lg);">
+
+      <!-- Section 1 -->
+      <button class="ctx-item" style="display: flex; align-items: center; gap: 10px; width: 100%; min-height: 28px; padding: 0 18px; font-size: 14px; font-weight: 400; border: 0; background: transparent; color: var(--color-text-body); cursor: pointer; font-family: var(--font-sans);">
+        <i data-lucide="pin" style="width: 18px; height: 18px; opacity: 0.85; flex-shrink: 0;"></i>
+        <span>置顶对话</span>
+      </button>
+      <button class="ctx-item" style="display: flex; align-items: center; gap: 10px; width: 100%; min-height: 28px; padding: 0 18px; font-size: 14px; font-weight: 400; border: 0; background: transparent; color: var(--color-text-body); cursor: pointer; font-family: var(--font-sans);">
+        <i data-lucide="pencil" style="width: 18px; height: 18px; opacity: 0.85; flex-shrink: 0;"></i>
+        <span>重命名对话</span>
+      </button>
+      <button class="ctx-item" style="display: flex; align-items: center; gap: 10px; width: 100%; min-height: 28px; padding: 0 18px; font-size: 14px; font-weight: 400; border: 0; background: transparent; color: var(--color-text-body); cursor: pointer; font-family: var(--font-sans);">
+        <i data-lucide="archive" style="width: 18px; height: 18px; opacity: 0.85; flex-shrink: 0;"></i>
+        <span>归档对话</span>
+      </button>
+      <button class="ctx-item" style="display: flex; align-items: center; gap: 10px; width: 100%; min-height: 28px; padding: 0 18px; font-size: 14px; font-weight: 400; border: 0; background: transparent; color: var(--color-text-body); cursor: pointer; font-family: var(--font-sans);">
+        <i data-lucide="mail" style="width: 18px; height: 18px; opacity: 0.85; flex-shrink: 0;"></i>
+        <span>标记为未读</span>
+      </button>
+
+      <!-- Section 2 divider -->
+      <div style="border-top: 1px solid var(--color-border-subtle); margin: 2px 0;"></div>
+
+      <button class="ctx-item" style="display: flex; align-items: center; gap: 10px; width: 100%; min-height: 28px; padding: 0 18px; font-size: 14px; font-weight: 400; border: 0; background: transparent; color: var(--color-text-body); cursor: pointer; font-family: var(--font-sans);">
+        <i data-lucide="key" style="width: 18px; height: 18px; opacity: 0.85; flex-shrink: 0;"></i>
+        <span>复制会话 ID</span>
+      </button>
+      <button class="ctx-item" style="display: flex; align-items: center; gap: 10px; width: 100%; min-height: 28px; padding: 0 18px; font-size: 14px; font-weight: 400; border: 0; background: transparent; color: var(--color-text-body); cursor: pointer; font-family: var(--font-sans);">
+        <i data-lucide="link" style="width: 18px; height: 18px; opacity: 0.85; flex-shrink: 0;"></i>
+        <span>复制深度链接</span>
+      </button>
+
+      <!-- Section 3 divider -->
+      <div style="border-top: 1px solid var(--color-border-subtle); margin: 2px 0;"></div>
+
+      <button class="ctx-item" style="display: flex; align-items: center; gap: 10px; width: 100%; min-height: 28px; padding: 0 18px; font-size: 14px; font-weight: 400; border: 0; background: transparent; color: var(--color-text-body); cursor: pointer; font-family: var(--font-sans);">
+        <i data-lucide="git-branch" style="width: 18px; height: 18px; opacity: 0.85; flex-shrink: 0;"></i>
+        <span>派生到本地</span>
+      </button>
+      <button class="ctx-item ctx-disabled" style="display: flex; align-items: center; gap: 10px; width: 100%; min-height: 28px; padding: 0 18px; font-size: 14px; font-weight: 400; border: 0; background: transparent; color: var(--color-text-muted); opacity: 0.55; cursor: not-allowed; font-family: var(--font-sans);">
+        <i data-lucide="git-fork" style="width: 18px; height: 18px; opacity: 0.55; flex-shrink: 0;"></i>
+        <span>派生到新工作树</span>
+      </button>
+
+      <!-- Section 4 divider -->
+      <div style="border-top: 1px solid var(--color-border-subtle); margin: 2px 0;"></div>
+
+      <button class="ctx-item" style="display: flex; align-items: center; gap: 10px; width: 100%; min-height: 28px; padding: 0 18px; font-size: 14px; font-weight: 400; border: 0; background: transparent; color: var(--color-text-body); cursor: pointer; font-family: var(--font-sans);">
+        <i data-lucide="app-window" style="width: 18px; height: 18px; opacity: 0.85; flex-shrink: 0;"></i>
+        <span>在新窗口中打开</span>
+      </button>
+
+    </div>
+
     <style>
+      /* Context menu item hover */
+      .ctx-item:hover { background: var(--color-bg-hover); }
+      .ctx-disabled:hover { background: transparent; }
+      /* Placeholder and scrollbar styles */
       textarea::placeholder { color: var(--color-text-placeholder); }
       ::-webkit-scrollbar { width: 6px; }
       ::-webkit-scrollbar-track { background: transparent; }

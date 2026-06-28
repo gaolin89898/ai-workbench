@@ -12,5 +12,9 @@ node_modules/
 # Electron 构建产物
 apps/desktop/out/
 apps/desktop/release/
+apps/desktop/dist-electron/
+releases/
 # pnpm 本地缓存
 .pnpm-store/
+# 本地 SDK 安装（Flutter/Android SDK）
+.sdk/

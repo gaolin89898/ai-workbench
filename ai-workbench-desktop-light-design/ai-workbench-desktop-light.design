@@ -33,13 +33,45 @@
       }
     },
     {
+      "id": "page-terminal",
+      "title": "终端",
+      "type": "page",
+      "version": 1,
+      "createdAt": 1782513600000,
+      "canvasData": {
+        "x": 1240,
+        "y": 0,
+        "group": 0
+      },
+      "devMetadata": {
+        "htmlSrc": "pages/terminal.html",
+        "interactions": []
+      }
+    },
+    {
+      "id": "page-logs",
+      "title": "日志",
+      "type": "page",
+      "version": 1,
+      "createdAt": 1782513600000,
+      "canvasData": {
+        "x": 1860,
+        "y": 0,
+        "group": 0
+      },
+      "devMetadata": {
+        "htmlSrc": "pages/logs.html",
+        "interactions": []
+      }
+    },
+    {
       "id": "page-providers",
       "title": "AI 工具",
       "type": "page",
       "version": 1,
       "createdAt": 1782513600000,
       "canvasData": {
-        "x": 1240,
+        "x": 2480,
         "y": 0,
         "group": 0
       },
@@ -50,17 +82,113 @@
     },
     {
       "id": "page-settings",
-      "title": "设置",
+      "title": "设置 - 连接",
       "type": "page",
       "version": 1,
       "createdAt": 1782513600000,
       "canvasData": {
-        "x": 1860,
+        "x": 3100,
         "y": 0,
         "group": 0
       },
       "devMetadata": {
         "htmlSrc": "pages/settings.html",
+        "interactions": []
+      }
+    },
+    {
+      "id": "page-settings-pairing",
+      "title": "设置 - 配对",
+      "type": "page",
+      "version": 1,
+      "createdAt": 1782513600000,
+      "canvasData": {
+        "x": 3720,
+        "y": 0,
+        "group": 0
+      },
+      "devMetadata": {
+        "htmlSrc": "pages/settings-pairing.html",
+        "interactions": []
+      }
+    },
+    {
+      "id": "page-settings-database",
+      "title": "设置 - 数据库",
+      "type": "page",
+      "version": 1,
+      "createdAt": 1782513600000,
+      "canvasData": {
+        "x": 4340,
+        "y": 0,
+        "group": 0
+      },
+      "devMetadata": {
+        "htmlSrc": "pages/settings-database.html",
+        "interactions": []
+      }
+    },
+    {
+      "id": "page-session-context-menu",
+      "title": "会话右键菜单",
+      "type": "page",
+      "version": 1,
+      "createdAt": 1782513600000,
+      "canvasData": {
+        "x": 4960,
+        "y": 0,
+        "group": 0
+      },
+      "devMetadata": {
+        "htmlSrc": "pages/session-context-menu.html",
+        "interactions": []
+      }
+    },
+    {
+      "id": "page-project-menu-and-files",
+      "title": "项目菜单与文件列表",
+      "type": "page",
+      "version": 1,
+      "createdAt": 1782513600000,
+      "canvasData": {
+        "x": 5580,
+        "y": 0,
+        "group": 0
+      },
+      "devMetadata": {
+        "htmlSrc": "pages/project-menu-and-files.html",
+        "interactions": []
+      }
+    },
+    {
+      "id": "page-dialog-states",
+      "title": "重命名对话框",
+      "type": "page",
+      "version": 1,
+      "createdAt": 1782513600000,
+      "canvasData": {
+        "x": 6200,
+        "y": 0,
+        "group": 0
+      },
+      "devMetadata": {
+        "htmlSrc": "pages/dialog-states.html",
+        "interactions": []
+      }
+    },
+    {
+      "id": "page-session-expanded",
+      "title": "会话展开/收起",
+      "type": "page",
+      "version": 1,
+      "createdAt": 1782513600000,
+      "canvasData": {
+        "x": 6820,
+        "y": 0,
+        "group": 0
+      },
+      "devMetadata": {
+        "htmlSrc": "pages/session-expanded.html",
         "interactions": []
       }
     }
