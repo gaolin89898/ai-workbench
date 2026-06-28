@@ -21,8 +21,8 @@ class _DeviceListPageState extends State<DeviceListPage> {
   Widget build(BuildContext context) {
     final pages = [
       const _DeviceListTab(),
-      const SettingsPage(),
       const ProvidersPage(),
+      const SettingsPage(),
     ];
     return Scaffold(
       body: IndexedStack(index: _index, children: pages),
@@ -35,13 +35,13 @@ class _DeviceListPageState extends State<DeviceListPage> {
               selectedIcon: Icon(Icons.desktop_windows),
               label: '设备'),
           NavigationDestination(
-              icon: Icon(Icons.settings_outlined),
-              selectedIcon: Icon(Icons.settings),
-              label: '设置'),
-          NavigationDestination(
               icon: Icon(Icons.auto_awesome_outlined),
               selectedIcon: Icon(Icons.auto_awesome),
               label: 'AI 工具'),
+          NavigationDestination(
+              icon: Icon(Icons.settings_outlined),
+              selectedIcon: Icon(Icons.settings),
+              label: '设置'),
         ],
       ),
     );

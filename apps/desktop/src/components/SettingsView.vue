@@ -6,13 +6,12 @@ import { desktopApi, type AiProvider, type ProviderStatus } from "../services/de
 
 const settingsIcon = new URL("../assets/icons/settings.svg", import.meta.url).href;
 const riskGuardIcon = new URL("../assets/icons/risk-guard.svg", import.meta.url).href;
-const linkIcon = new URL("../assets/icons/link.svg", import.meta.url).href;
 const aiProvidersIcon = new URL("../assets/icons/ai-providers.svg", import.meta.url).href;
 const archiveBoxIcon = new URL("../assets/icons/archive-box.svg", import.meta.url).href;
 const fingerprintIcon = new URL("../assets/icons/fingerprint.svg", import.meta.url).href;
 const clipboardIcon = new URL("../assets/icons/clipboard.svg", import.meta.url).href;
 
-type SettingsPanel = "connection" | "security" | "pairing" | "about" | "archive";
+type SettingsPanel = "connection" | "security" | "about" | "archive";
 type ProviderRow = {
   provider: AiProvider;
   status?: ProviderStatus;
@@ -30,9 +29,6 @@ const router = useRouter();
 
 const localServer = ref(ws.settingsServer.value);
 const settingsPanel = ref<SettingsPanel>("connection");
-const desktopEmail = ref("");
-const desktopPassword = ref("");
-const desktopLoginLoading = ref(false);
 const riskGuard = ref(true);
 const commandLog = ref(true);
 const localHistory = ref(true);
@@ -54,13 +50,6 @@ const settingsPanels: SettingsPanelItem[] = [
     eyebrow: "保护",
     description: "高危确认、命令摘要和重连策略",
     icon: riskGuardIcon,
-  },
-  {
-    id: "pairing",
-    label: "桌面登录",
-    eyebrow: "账号",
-    description: "登录后自动绑定同账号移动端",
-    icon: linkIcon,
   },
   {
     id: "about",
@@ -202,21 +191,8 @@ async function refreshCloudConfig() {
   }
 }
 
-async function submitDesktopLogin() {
-  desktopLoginLoading.value = true;
-  try {
-    const ok = await ws.loginDesktop(localServer.value, desktopEmail.value, desktopPassword.value);
-    if (ok) {
-      desktopPassword.value = "";
-      await refreshCloudConfig();
-    }
-  } finally {
-    desktopLoginLoading.value = false;
-  }
-}
-
 const deviceIdDisplay = computed(() => {
-  if (!cloudDeviceId.value) return "未配对";
+  if (!cloudDeviceId.value) return "未登录";
   const id = cloudDeviceId.value;
   if (id.length <= 16) return id;
   return `${id.slice(0, 8)}...${id.slice(-4)}`;
@@ -301,7 +277,7 @@ async function restoreSession(sessionId: string) {
                 <span class="settings-overview-dot" :class="{ on: cloudPaired }" aria-hidden="true"></span>
                 <span>状态</span>
               </div>
-              <strong :class="{ 'stat-success': cloudPaired, 'stat-muted': !cloudPaired }">{{ cloudPaired ? "已配对" : "未配对" }}</strong>
+              <strong :class="{ 'stat-success': cloudPaired, 'stat-muted': !cloudPaired }">{{ cloudPaired ? "已登录" : "未登录" }}</strong>
             </article>
             <article class="settings-overview-card">
               <div class="settings-overview-card-head">
@@ -332,7 +308,7 @@ async function restoreSession(sessionId: string) {
             <div class="settings-section-heading">
               <div>
                 <h2 class="settings-section-title">连接设置</h2>
-                <p class="settings-section-description">配置桌面工作台的服务器连接，保存后用于配对和移动端转发。</p>
+                <p class="settings-section-description">配置桌面工作台的服务器连接，保存后用于移动端转发。</p>
               </div>
               <span class="settings-section-chip">本机优先</span>
             </div>
@@ -340,7 +316,7 @@ async function restoreSession(sessionId: string) {
               <label class="settings-field">
                 <span>服务器地址</span>
                 <input v-model="localServer" class="settings-field-input" placeholder="http://118.196.78.91" />
-                <small>桌面端配对和移动端转发使用的云端地址。</small>
+                <small>桌面端和移动端转发使用的云端地址。</small>
               </label>
               <label class="settings-row settings-toggle-row settings-toggle-divider">
                 <span class="settings-row-copy">
@@ -382,67 +358,6 @@ async function restoreSession(sessionId: string) {
                 </span>
                 <input v-model="localHistory" class="settings-switch" type="checkbox" />
               </label>
-            </div>
-          </section>
-
-          <section v-else-if="settingsPanel === 'pairing'" class="settings-section settings-pairing-page">
-            <div class="settings-pairing-overview">
-              <article class="settings-pairing-stat">
-                <div class="settings-pairing-stat-head">
-                  <span class="settings-pairing-dot" :class="{ on: cloudPaired }" aria-hidden="true"></span>
-                  <span>登录状态</span>
-                </div>
-                <strong>{{ cloudPaired ? "已登录" : "未登录" }}</strong>
-              </article>
-              <article class="settings-pairing-stat">
-                <div class="settings-pairing-stat-head">
-                  <span>设备 ID</span>
-                </div>
-                <div class="settings-pairing-device-row">
-                  <code>{{ deviceIdDisplay }}</code>
-                  <button
-                    v-if="cloudDeviceId"
-                    class="settings-pairing-copy"
-                    type="button"
-                    aria-label="复制设备 ID"
-                    @click="copyDeviceId"
-                  >
-                    <img :src="clipboardIcon" alt="" />
-                  </button>
-                </div>
-              </article>
-              <article class="settings-pairing-stat">
-                <div class="settings-pairing-stat-head">
-                  <span>服务器</span>
-                </div>
-                <strong>{{ localServer || "未设置" }}</strong>
-              </article>
-            </div>
-
-            <div class="settings-pairing-block">
-              <h2 class="settings-pairing-block-title">桌面端账号登录</h2>
-              <form class="settings-card settings-form-card settings-pairing-manual" @submit.prevent="submitDesktopLogin">
-                <p class="settings-pairing-manual-hint">使用和移动端相同的账号登录，桌面端会自动绑定到该账号的设备列表。</p>
-                <label class="settings-field">
-                  <span>服务器地址</span>
-                  <input v-model="localServer" class="settings-field-input" placeholder="http://8.162.12.148:3000" />
-                  <small>需要和移动端登录时使用的服务器保持一致。</small>
-                </label>
-                <label class="settings-field">
-                  <span>账号邮箱</span>
-                  <input v-model="desktopEmail" class="settings-field-input" type="email" autocomplete="username" placeholder="you@example.com" />
-                  <small>填写移动端正在使用的账号。</small>
-                </label>
-                <label class="settings-field">
-                  <span>密码</span>
-                  <input v-model="desktopPassword" class="settings-field-input" type="password" autocomplete="current-password" />
-                  <small>登录成功后只保存服务端签发的桌面端令牌。</small>
-                </label>
-                <button class="button primary" type="submit" :disabled="desktopLoginLoading">
-                  {{ desktopLoginLoading ? "登录中..." : "登录并自动绑定" }}
-                </button>
-                <p class="settings-pairing-result" :class="{ error: ws.pairResultError.value }">{{ ws.pairResult.value }}</p>
-              </form>
             </div>
           </section>
 
