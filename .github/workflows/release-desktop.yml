@@ -40,21 +40,27 @@ jobs:
           cache: pnpm
           cache-dependency-path: apps/desktop/pnpm-lock.yaml
 
+      - name: Setup Python for native modules
+        if: runner.os == 'Windows'
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Setup MSBuild for native modules
+        if: runner.os == 'Windows'
+        uses: microsoft/setup-msbuild@v2
+
       - name: Install dependencies
         working-directory: apps/desktop
         run: pnpm install --frozen-lockfile
 
       - name: Build package
-        shell: pwsh
         working-directory: apps/desktop
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: false
           DEBUG: electron-builder
-        run: |
-          pnpm ${{ matrix.package-script }} 2>&1 | Tee-Object -FilePath ci-build.log
-          if ($LASTEXITCODE -ne 0) {
-            exit $LASTEXITCODE
-          }
+          npm_config_msvs_version: 2022
+        run: pnpm ${{ matrix.package-script }}
 
       - name: Upload build diagnostics
         if: failure()
@@ -62,7 +68,6 @@ jobs:
         with:
           name: diagnostics-${{ matrix.artifact-name }}
           path: |
-            apps/desktop/ci-build.log
             apps/desktop/dist-electron/builder-debug.yml
             apps/desktop/dist-electron/*.yml
             apps/desktop/out/**/*
