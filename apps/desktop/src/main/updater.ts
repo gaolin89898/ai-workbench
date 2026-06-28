@@ -107,6 +107,7 @@ async function checkGitHubReleases(note?: string): Promise<AppUpdateInfo> {
     currentVersion,
     date: latestDesktop.published_at ?? null,
     body: note ?? latestDesktop.body ?? null,
+    installable: false,
   };
 }
 
@@ -123,12 +124,14 @@ export async function checkAppUpdate(): Promise<AppUpdateInfo> {
       return checkGitHubReleases("自动更新通道没有返回版本信息，已改用 GitHub Releases 兜底检查。");
     }
     const updateInfo = result.updateInfo;
+    const available = isNewerVersion(updateInfo.version, currentVersion);
     return {
-      available: isNewerVersion(updateInfo.version, currentVersion),
+      available,
       version: updateInfo.version,
       currentVersion,
       date: updateInfo.releaseDate ?? null,
       body: normalizeBody(updateInfo.releaseNotes),
+      installable: available,
     };
   } catch (e) {
     const message = e instanceof Error ? e.message : String(e);
@@ -142,6 +145,11 @@ export async function installAppUpdate(): Promise<boolean> {
     throw new Error("当前是开发模式，不能安装更新；请打开已安装的正式版客户端。");
   }
   try {
+    const result = await autoUpdater.checkForUpdates();
+    const updateVersion = result?.updateInfo?.version;
+    if (!updateVersion || !isNewerVersion(updateVersion, app.getVersion())) {
+      throw new Error("自动更新通道没有返回可安装的新版本，请重新检查更新或手动下载最新版安装包。");
+    }
     await autoUpdater.downloadUpdate();
     await autoUpdater.quitAndInstall();
     return true;

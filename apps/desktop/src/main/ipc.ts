@@ -18,6 +18,7 @@ import * as pty from "./pty";
 import * as providers from "./providers";
 import * as projects from "./projects";
 import {
+  loginDesktop,
   pairDesktop,
   createDesktopPairingRequest,
   getDesktopPairingStatus,
@@ -99,6 +100,10 @@ export function registerIpcHandlers(win?: BrowserWindow): void {
   ipcMain.handle("list_sessions", async () => []);
 
   // ---------- cloud pairing ----------
+
+  ipcMain.handle("login_desktop", async (_event, args: [string, string, string]) =>
+    loginDesktop(args[0], args[1], args[2])
+  );
 
   ipcMain.handle("pair_desktop", async (_event, args: [string, string]) =>
     pairDesktop(args[0], args[1])

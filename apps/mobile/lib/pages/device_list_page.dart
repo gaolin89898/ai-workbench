@@ -4,10 +4,52 @@ import '../models/workbench_models.dart';
 import '../state/workspace_scope.dart';
 import '../widgets/app_theme.dart';
 import 'mobile_shell_page.dart';
-import 'pairing_page.dart';
+import 'providers_page.dart';
+import 'settings_page.dart';
 
-class DeviceListPage extends StatelessWidget {
+class DeviceListPage extends StatefulWidget {
   const DeviceListPage({super.key});
+
+  @override
+  State<DeviceListPage> createState() => _DeviceListPageState();
+}
+
+class _DeviceListPageState extends State<DeviceListPage> {
+  int _index = 0;
+
+  @override
+  Widget build(BuildContext context) {
+    final pages = [
+      const _DeviceListTab(),
+      const SettingsPage(),
+      const ProvidersPage(),
+    ];
+    return Scaffold(
+      body: IndexedStack(index: _index, children: pages),
+      bottomNavigationBar: NavigationBar(
+        selectedIndex: _index,
+        onDestinationSelected: (value) => setState(() => _index = value),
+        destinations: const [
+          NavigationDestination(
+              icon: Icon(Icons.desktop_windows_outlined),
+              selectedIcon: Icon(Icons.desktop_windows),
+              label: '设备'),
+          NavigationDestination(
+              icon: Icon(Icons.settings_outlined),
+              selectedIcon: Icon(Icons.settings),
+              label: '设置'),
+          NavigationDestination(
+              icon: Icon(Icons.auto_awesome_outlined),
+              selectedIcon: Icon(Icons.auto_awesome),
+              label: 'AI 工具'),
+        ],
+      ),
+    );
+  }
+}
+
+class _DeviceListTab extends StatelessWidget {
+  const _DeviceListTab();
 
   @override
   Widget build(BuildContext context) {
@@ -17,21 +59,6 @@ class DeviceListPage extends StatelessWidget {
       builder: (context, _) => Scaffold(
         appBar: AppBar(
           title: const Text('桌面设备'),
-          actions: [
-            IconButton(
-                onPressed: ws.loadDevices, icon: const Icon(Icons.refresh)),
-            IconButton(
-              onPressed: () => Navigator.of(context).push(
-                MaterialPageRoute(
-                  builder: (_) => WorkspaceScope(
-                    controller: ws,
-                    child: const PairingPage(),
-                  ),
-                ),
-              ),
-              icon: const Icon(Icons.link),
-            ),
-          ],
         ),
         body: RefreshIndicator(
           onRefresh: ws.loadDevices,
@@ -44,7 +71,7 @@ class DeviceListPage extends StatelessWidget {
               if (ws.devices.isEmpty)
                 const SizedBox(
                     height: 360,
-                    child: EmptyState('还没有配对桌面。先在桌面端生成二维码，再点右上角扫一扫配对。'))
+                    child: EmptyState('还没有桌面设备。请在桌面端使用同一账号登录，系统会自动绑定。'))
               else
                 ...ws.devices.map((device) => Padding(
                       padding: const EdgeInsets.only(bottom: 12),

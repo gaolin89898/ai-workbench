@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from "vue";
 import { useRouter } from "vue-router";
-import QRCode from "qrcode";
 import { useWorkspace } from "../composables/useWorkspace";
 import { desktopApi, type AiProvider, type ProviderStatus } from "../services/desktop";
 
@@ -31,8 +30,9 @@ const router = useRouter();
 
 const localServer = ref(ws.settingsServer.value);
 const settingsPanel = ref<SettingsPanel>("connection");
-const pairingCode = ref("");
-const qrImageUrl = ref("");
+const desktopEmail = ref("");
+const desktopPassword = ref("");
+const desktopLoginLoading = ref(false);
 const riskGuard = ref(true);
 const commandLog = ref(true);
 const localHistory = ref(true);
@@ -57,9 +57,9 @@ const settingsPanels: SettingsPanelItem[] = [
   },
   {
     id: "pairing",
-    label: "设备配对",
-    eyebrow: "移动端",
-    description: "把这台桌面绑定到移动端账号",
+    label: "桌面登录",
+    eyebrow: "账号",
+    description: "登录后自动绑定同账号移动端",
     icon: linkIcon,
   },
   {
@@ -84,12 +84,6 @@ watch(() => ws.settingsServer.value, (next) => {
 
 watch(localServer, (next) => {
   ws.settingsServer.value = next;
-});
-
-watch(() => ws.qrPairingPayload.value, async (payload) => {
-  qrImageUrl.value = payload
-    ? await QRCode.toDataURL(payload, { margin: 1, width: 220, errorCorrectionLevel: "M" })
-    : "";
 });
 
 const builtInProviders: AiProvider[] = [
@@ -144,15 +138,6 @@ const signedInProviderCount = computed(() => {
 
 const enabledGuardCount = computed(() => {
   return [riskGuard.value, commandLog.value, localHistory.value].filter(Boolean).length;
-});
-
-const qrStatusLabel = computed(() => {
-  if (ws.qrPairingStatus.value === "creating") return "生成中";
-  if (ws.qrPairingStatus.value === "pending") return "等待扫码";
-  if (ws.qrPairingStatus.value === "approved") return "已配对";
-  if (ws.qrPairingStatus.value === "expired") return "已过期";
-  if (ws.qrPairingStatus.value === "error") return "异常";
-  return "未生成";
 });
 
 function installedLabel(status?: ProviderStatus) {
@@ -214,6 +199,19 @@ async function refreshCloudConfig() {
     cloudPaired.value = Boolean(config?.paired);
   } catch {
     /* ignore */
+  }
+}
+
+async function submitDesktopLogin() {
+  desktopLoginLoading.value = true;
+  try {
+    const ok = await ws.loginDesktop(localServer.value, desktopEmail.value, desktopPassword.value);
+    if (ok) {
+      desktopPassword.value = "";
+      await refreshCloudConfig();
+    }
+  } finally {
+    desktopLoginLoading.value = false;
   }
 }
 
@@ -392,9 +390,9 @@ async function restoreSession(sessionId: string) {
               <article class="settings-pairing-stat">
                 <div class="settings-pairing-stat-head">
                   <span class="settings-pairing-dot" :class="{ on: cloudPaired }" aria-hidden="true"></span>
-                  <span>配对状态</span>
+                  <span>登录状态</span>
                 </div>
-                <strong>{{ cloudPaired ? "已配对" : "未配对" }}</strong>
+                <strong>{{ cloudPaired ? "已登录" : "未登录" }}</strong>
               </article>
               <article class="settings-pairing-stat">
                 <div class="settings-pairing-stat-head">
@@ -422,39 +420,29 @@ async function restoreSession(sessionId: string) {
             </div>
 
             <div class="settings-pairing-block">
-              <h2 class="settings-pairing-block-title">扫码配对</h2>
-              <div class="settings-pairing-qr-card">
-                <button
-                  class="button primary settings-pairing-generate"
-                  type="button"
-                  :disabled="ws.qrPairingStatus.value === 'creating' || ws.qrPairingStatus.value === 'pending'"
-                  @click="ws.createQrPairingRequest(localServer)"
-                >
-                  {{ ws.qrPairingStatus.value === 'pending' ? '等待手机扫码' : '生成配对码' }}
-                </button>
-                <div class="settings-qr-frame" :class="{ empty: !qrImageUrl }">
-                  <img v-if="qrImageUrl" :src="qrImageUrl" alt="桌面配对二维码" />
-                  <strong v-else>等待生成</strong>
-                </div>
-                <div v-if="ws.qrPairingCode.value" class="settings-qr-meta">
-                  <code>{{ ws.qrPairingCode.value }}</code>
-                  <small>过期时间：{{ ws.qrPairingExpiresAt.value }}</small>
-                </div>
-                <p class="settings-pairing-result" :class="{ error: ws.pairResultError.value }">{{ ws.pairResult.value }}</p>
-              </div>
-            </div>
-
-            <div class="settings-pairing-block">
-              <h2 class="settings-pairing-block-title">备用短码配对</h2>
-              <div class="settings-card settings-form-card settings-pairing-manual">
-                <p class="settings-pairing-manual-hint">如果手机摄像头不可用，也可以在手机端生成短码后手动输入。</p>
+              <h2 class="settings-pairing-block-title">桌面端账号登录</h2>
+              <form class="settings-card settings-form-card settings-pairing-manual" @submit.prevent="submitDesktopLogin">
+                <p class="settings-pairing-manual-hint">使用和移动端相同的账号登录，桌面端会自动绑定到该账号的设备列表。</p>
                 <label class="settings-field">
-                  <span>配对码</span>
-                  <input v-model="pairingCode" class="settings-field-input pairing-code-input" placeholder="A7K9Q2LM" maxlength="16" />
-                  <small>输入移动端生成的短码，最长 16 位。</small>
+                  <span>服务器地址</span>
+                  <input v-model="localServer" class="settings-field-input" placeholder="http://8.162.12.148:3000" />
+                  <small>需要和移动端登录时使用的服务器保持一致。</small>
                 </label>
-                <button class="button primary" type="button" @click="ws.pairDesktop(localServer, pairingCode)">配对这台桌面</button>
-              </div>
+                <label class="settings-field">
+                  <span>账号邮箱</span>
+                  <input v-model="desktopEmail" class="settings-field-input" type="email" autocomplete="username" placeholder="you@example.com" />
+                  <small>填写移动端正在使用的账号。</small>
+                </label>
+                <label class="settings-field">
+                  <span>密码</span>
+                  <input v-model="desktopPassword" class="settings-field-input" type="password" autocomplete="current-password" />
+                  <small>登录成功后只保存服务端签发的桌面端令牌。</small>
+                </label>
+                <button class="button primary" type="submit" :disabled="desktopLoginLoading">
+                  {{ desktopLoginLoading ? "登录中..." : "登录并自动绑定" }}
+                </button>
+                <p class="settings-pairing-result" :class="{ error: ws.pairResultError.value }">{{ ws.pairResult.value }}</p>
+              </form>
             </div>
           </section>
 
@@ -531,7 +519,7 @@ async function restoreSession(sessionId: string) {
                   <button class="button secondary" type="button" :disabled="ws.updateChecking.value || ws.updateInstalling.value" @click="ws.checkAppUpdate">
                     {{ ws.updateChecking.value ? "检查中" : "检查更新" }}
                   </button>
-                  <button class="button primary" type="button" :disabled="!ws.updateAvailableVersion.value || ws.updateInstalling.value" @click="ws.installAppUpdate">
+                  <button class="button primary" type="button" :disabled="!ws.updateAvailableVersion.value || !ws.updateInstallable.value || ws.updateInstalling.value" @click="ws.installAppUpdate">
                     {{ ws.updateInstalling.value ? "安装中" : "下载并安装" }}
                   </button>
                 </div>

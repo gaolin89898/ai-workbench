@@ -19,7 +19,7 @@ const createAiResult = ref("选择项目和 AI 工具后，新建一个 AI 会�
 const createAiError = ref(false);
 const projectResult = ref("请选择一个本机项目目录。");
 const projectResultError = ref(false);
-const pairResult = ref("配对成功后显示 device_id 与 token 摘要。");
+const pairResult = ref("登录桌面端后会自动绑定到同账号移动端。");
 const pairResultError = ref(false);
 const qrPairingCode = ref("");
 const qrPairingPayload = ref("");
@@ -32,6 +32,7 @@ const updateResultError = ref(false);
 const updateChecking = ref(false);
 const updateInstalling = ref(false);
 const updateAvailableVersion = ref("");
+const updateInstallable = ref(false);
 const chatMessages = ref<ChatMessage[]>([
   { role: "system", text: "创建 AI 会话后，这里会变成聊天界面。" },
 ]);
@@ -262,7 +263,6 @@ const routePaths: Record<ViewName, string> = {
   projects: "/projects",
   aiSessions: "/chat",
   providers: "/providers",
-  pairing: "/pairing",
   settings: "/settings",
 };
 
@@ -290,11 +290,11 @@ async function loadCloudConfig() {
   try {
     const config = await desktopApi.getCloudConfig();
     if (!config) {
-      settingsResult.value = "尚未配对桌面。";
+      settingsResult.value = "桌面端尚未登录。";
       return;
     }
     settingsServer.value = config.serverUrl;
-    pairResult.value = `已读取保存的配对：${config.deviceId.slice(0, 8)}...`;
+    pairResult.value = `已读取保存的登录设备：${config.deviceId.slice(0, 8)}...`;
     pairResultError.value = false;
     settingsResult.value = `已连接到保存的服务器：${config.serverUrl}`;
   } catch (error) {
@@ -1280,25 +1280,28 @@ function deriveSessionToLocal(session: AiSession) {
   });
 }
 
-async function pairDesktop(server: string, code: string) {
+async function loginDesktop(server: string, email: string, password: string) {
   const trimmedServer = server.trim();
-  const trimmedCode = code.trim();
-  pairResult.value = "正在配对...";
+  const trimmedEmail = email.trim();
+  pairResult.value = "正在登录桌面端...";
   pairResultError.value = false;
-  if (!trimmedServer || !trimmedCode) {
-    pairResult.value = "请先填写服务器地址和移动端配对码。";
+  if (!trimmedServer || !trimmedEmail || !password) {
+    pairResult.value = "请填写服务器地址、账号和密码。";
     pairResultError.value = true;
-    return;
+    return false;
   }
   try {
-    const value = await desktopApi.pairDesktop(trimmedServer, trimmedCode);
-    pairResult.value = JSON.stringify(value, null, 2);
+    const value = await desktopApi.loginDesktop(trimmedServer, trimmedEmail, password);
+    pairResult.value = value.deviceId ? `已登录并自动绑定：${value.deviceId.slice(0, 8)}...` : "已登录并自动绑定。";
     pairResultError.value = false;
     settingsServer.value = trimmedServer;
-    settingsResult.value = `配对配置已保存：${trimmedServer}`;
+    settingsResult.value = `桌面端已登录：${trimmedServer}`;
+    await loadCloudConfig();
+    return true;
   } catch (error) {
-    pairResult.value = `配对失败：${String(error)}`;
+    pairResult.value = `登录失败：${String(error)}`;
     pairResultError.value = true;
+    return false;
   }
 }
 
@@ -1384,12 +1387,15 @@ async function checkAppUpdate() {
     const update = await desktopApi.checkAppUpdate();
     if (!update.available) {
       updateAvailableVersion.value = "";
+      updateInstallable.value = false;
       updateResult.value = `当前已经是最新版本${update.currentVersion ? `（当前 ${update.currentVersion}` : ""}${update.version ? `，最新 ${update.version}` : ""}${update.currentVersion ? "）" : ""}${update.body ? `。${update.body}` : "。"}`;
       return;
     }
     updateAvailableVersion.value = update.version ?? "";
+    updateInstallable.value = update.installable === true;
     updateResult.value = `发现新版本 ${update.version ?? ""}${update.currentVersion ? `（当前 ${update.currentVersion}）` : ""}${update.body ? `。${update.body}` : "。"}`;
   } catch (error) {
+    updateInstallable.value = false;
     updateResultError.value = true;
     updateResult.value = `检查更新失败：${String(error)}`;
   } finally {
@@ -1400,11 +1406,18 @@ async function checkAppUpdate() {
 async function installAppUpdate() {
   updateInstalling.value = true;
   updateResultError.value = false;
+  if (!updateInstallable.value) {
+    updateResultError.value = true;
+    updateResult.value = "当前只检测到版本信息，自动更新通道没有返回可安装文件。请重新检查更新，或手动下载安装最新版。";
+    updateInstalling.value = false;
+    return;
+  }
   updateResult.value = "正在下载并安装更新...";
   try {
     const installed = await desktopApi.installAppUpdate();
     if (!installed) {
       updateAvailableVersion.value = "";
+      updateInstallable.value = false;
       updateResult.value = "没有可安装的更新。";
     } else {
       updateResult.value = "更新已下载，应用将退出并安装。";
@@ -1453,6 +1466,7 @@ export function useWorkspace() {
     updateChecking,
     updateInstalling,
     updateAvailableVersion,
+    updateInstallable,
     chatMessages,
     chatDebugEvents,
     activeChatRunState,
@@ -1498,7 +1512,7 @@ export function useWorkspace() {
     markSessionRead,
     openAiSessionInNewWindow,
     deriveSessionToLocal,
-    pairDesktop,
+    loginDesktop,
     createQrPairingRequest,
     saveSettings,
     checkAppUpdate,

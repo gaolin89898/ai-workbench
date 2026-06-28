@@ -7,6 +7,8 @@ import '../models/workbench_models.dart';
 class ApiClient {
   ApiClient({required String baseUrl}) : baseUrl = normalizeBaseUrl(baseUrl);
 
+  static const defaultBaseUrl = 'http://8.162.12.148:3000';
+
   final String baseUrl;
   String? token;
 

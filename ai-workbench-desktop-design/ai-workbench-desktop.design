@@ -191,10 +191,26 @@
         "htmlSrc": "pages/session-expanded.html",
         "interactions": []
       }
+    },
+    {
+      "id": "page-login",
+      "title": "登录",
+      "type": "page",
+      "version": 1,
+      "createdAt": 1782665197000,
+      "canvasData": {
+        "x": 7512,
+        "y": 72,
+        "group": 0
+      },
+      "devMetadata": {
+        "htmlSrc": "pages/login.html",
+        "interactions": []
+      }
     }
   ],
   "config": {
-    "autoLayout": true,
+    "autoLayout": false,
     "deviceType": "desktop",
     "projectName": "AI 工作台 桌面端"
   }

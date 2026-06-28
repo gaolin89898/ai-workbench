@@ -279,20 +279,43 @@ class _DesktopPairingScanner extends StatefulWidget {
 class _DesktopPairingScannerState extends State<_DesktopPairingScanner> {
   late final MobileScannerController _controller;
   bool _handled = false;
+  bool _starting = true;
+  String? _startError;
 
   @override
   void initState() {
     super.initState();
     _controller = MobileScannerController(
+      autoStart: false,
       formats: const [BarcodeFormat.qrCode],
       detectionSpeed: DetectionSpeed.noDuplicates,
     );
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _startCamera();
+    });
   }
 
   @override
   void dispose() {
     _controller.dispose();
     super.dispose();
+  }
+
+  Future<void> _startCamera() async {
+    if (!mounted) return;
+    setState(() {
+      _starting = true;
+      _startError = null;
+    });
+    try {
+      await Future<void>.delayed(const Duration(milliseconds: 250));
+      await _controller.start();
+    } catch (error) {
+      if (!mounted) return;
+      setState(() => _startError = '相机启动失败：$error。可以先返回使用备用短码配对。');
+    } finally {
+      if (mounted) setState(() => _starting = false);
+    }
   }
 
   @override
@@ -305,6 +328,7 @@ class _DesktopPairingScannerState extends State<_DesktopPairingScanner> {
             controller: _controller,
             errorBuilder: (context, error, child) => _ScannerErrorPanel(
               message: _scannerErrorMessage(error),
+              onRetry: _startCamera,
             ),
             placeholderBuilder: (context, child) => const ColoredBox(
               color: Colors.black,
@@ -322,6 +346,15 @@ class _DesktopPairingScannerState extends State<_DesktopPairingScanner> {
               widget.onDetected(value);
             },
           ),
+          if (_starting)
+            const ColoredBox(
+              color: Colors.black,
+              child: Center(
+                child: CircularProgressIndicator(color: Colors.white),
+              ),
+            ),
+          if (_startError != null)
+            _ScannerErrorPanel(message: _startError!, onRetry: _startCamera),
           Align(
             alignment: Alignment.bottomCenter,
             child: Container(
@@ -360,9 +393,10 @@ class _DesktopPairingScannerState extends State<_DesktopPairingScanner> {
 }
 
 class _ScannerErrorPanel extends StatelessWidget {
-  const _ScannerErrorPanel({required this.message});
+  const _ScannerErrorPanel({required this.message, required this.onRetry});
 
   final String message;
+  final VoidCallback onRetry;
 
   @override
   Widget build(BuildContext context) {
@@ -382,9 +416,20 @@ class _ScannerErrorPanel extends StatelessWidget {
                 style: const TextStyle(color: Colors.white, height: 1.5),
               ),
               const SizedBox(height: 18),
-              FilledButton(
-                onPressed: () => Navigator.of(context).pop(),
-                child: const Text('返回使用短码'),
+              Wrap(
+                alignment: WrapAlignment.center,
+                spacing: 10,
+                runSpacing: 10,
+                children: [
+                  FilledButton(
+                    onPressed: onRetry,
+                    child: const Text('重试相机'),
+                  ),
+                  OutlinedButton(
+                    onPressed: () => Navigator.of(context).pop(),
+                    child: const Text('返回使用短码'),
+                  ),
+                ],
               ),
             ],
           ),

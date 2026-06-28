@@ -32,6 +32,13 @@ type loginRequest struct {
 	Password string `json:"password"`
 }
 
+type desktopLoginRequest struct {
+	Email    string `json:"email"`
+	Password string `json:"password"`
+	Name     string `json:"name"`
+	Os       string `json:"os"`
+}
+
 // authResponse mirrors Rust AuthResponse { accessToken, refreshToken, userId }.
 type authResponse struct {
 	AccessToken  string `json:"accessToken"`
@@ -68,10 +75,10 @@ type desktopPairingRequestResponse struct {
 }
 
 type desktopPairingStatusResponse struct {
-	Status      string     `json:"status"`
-	ExpiresAt   time.Time  `json:"expiresAt"`
-	DeviceId    *string    `json:"deviceId"`
-	AccessToken *string    `json:"accessToken"`
+	Status      string    `json:"status"`
+	ExpiresAt   time.Time `json:"expiresAt"`
+	DeviceId    *string   `json:"deviceId"`
+	AccessToken *string   `json:"accessToken"`
 }
 
 // validateCredentials mirrors auth::validate_credentials: email must contain
@@ -163,21 +170,8 @@ func (h *Handler) login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var userID, passwordHash string
-	err := h.DB.Pool.QueryRow(r.Context(),
-		"SELECT id, password_hash FROM users WHERE email = $1",
-		strings.ToLower(req.Email),
-	).Scan(&userID, &passwordHash)
-	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			writeError(w, http.StatusUnauthorized, "unauthorized")
-			return
-		}
-		writeInternal(w)
-		return
-	}
-	if err := auth.VerifyPassword(passwordHash, req.Password); err != nil {
-		writeError(w, http.StatusUnauthorized, "unauthorized")
+	userID, ok := h.verifyUserPassword(w, r, req.Email, req.Password)
+	if !ok {
 		return
 	}
 
@@ -196,6 +190,68 @@ func (h *Handler) login(w http.ResponseWriter, r *http.Request) {
 		RefreshToken: refreshToken,
 		UserId:       userID,
 	})
+}
+
+func (h *Handler) loginDesktop(w http.ResponseWriter, r *http.Request) {
+	var req desktopLoginRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeBadRequest(w, "invalid request body")
+		return
+	}
+
+	name := strings.TrimSpace(req.Name)
+	osName := strings.TrimSpace(req.Os)
+	if name == "" || osName == "" {
+		writeBadRequest(w, "desktop name and os are required")
+		return
+	}
+
+	userID, ok := h.verifyUserPassword(w, r, req.Email, req.Password)
+	if !ok {
+		return
+	}
+
+	var deviceID string
+	err := h.DB.Pool.QueryRow(r.Context(),
+		`INSERT INTO desktop_devices (user_id, name, os, online, last_seen_at)
+		 VALUES ($1, $2, $3, FALSE, NOW()) RETURNING id`,
+		userID, name, osName,
+	).Scan(&deviceID)
+	if err != nil {
+		writeInternal(w)
+		return
+	}
+
+	token, err := auth.GenerateDesktopPairingToken(userID, deviceID, h.Secret)
+	if err != nil {
+		writeInternal(w)
+		return
+	}
+	writeJSON(w, http.StatusOK, pairDesktopResponse{
+		DeviceId:    deviceID,
+		AccessToken: token,
+	})
+}
+
+func (h *Handler) verifyUserPassword(w http.ResponseWriter, r *http.Request, email, password string) (string, bool) {
+	var userID, passwordHash string
+	err := h.DB.Pool.QueryRow(r.Context(),
+		"SELECT id, password_hash FROM users WHERE email = $1",
+		strings.ToLower(email),
+	).Scan(&userID, &passwordHash)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			writeError(w, http.StatusUnauthorized, "unauthorized")
+			return "", false
+		}
+		writeInternal(w)
+		return "", false
+	}
+	if err := auth.VerifyPassword(passwordHash, password); err != nil {
+		writeError(w, http.StatusUnauthorized, "unauthorized")
+		return "", false
+	}
+	return userID, true
 }
 
 // createPairingCode mirrors auth::create_pairing_code. Generates an 8-char
@@ -255,9 +311,9 @@ func (h *Handler) getDesktopPairingRequestStatus(w http.ResponseWriter, r *http.
 	code := strings.TrimSpace(r.PathValue("code"))
 
 	var (
-		expiresAt       time.Time
-		approvedUserID  *string
-		deviceID        *string
+		expiresAt      time.Time
+		approvedUserID *string
+		deviceID       *string
 	)
 	err := h.DB.Pool.QueryRow(r.Context(),
 		`SELECT expires_at, approved_user_id, device_id

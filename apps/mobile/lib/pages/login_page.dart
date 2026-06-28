@@ -14,7 +14,6 @@ class LoginPage extends StatefulWidget {
 }
 
 class _LoginPageState extends State<LoginPage> {
-  final _server = TextEditingController(text: 'http://8.162.12.148:3000');
   final _email = TextEditingController(text: 'demo@example.com');
   final _password = TextEditingController(text: 'password123');
   bool _loading = false;
@@ -22,7 +21,6 @@ class _LoginPageState extends State<LoginPage> {
 
   @override
   void dispose() {
-    _server.dispose();
     _email.dispose();
     _password.dispose();
     super.dispose();
@@ -53,11 +51,6 @@ class _LoginPageState extends State<LoginPage> {
                       style: TextStyle(color: AppColors.muted),
                     ),
                     const SizedBox(height: 22),
-                    TextField(
-                      controller: _server,
-                      decoration: const InputDecoration(labelText: '服务器地址'),
-                    ),
-                    const SizedBox(height: 12),
                     TextField(
                       controller: _email,
                       decoration: const InputDecoration(labelText: '邮箱'),
@@ -94,9 +87,7 @@ class _LoginPageState extends State<LoginPage> {
       _error = null;
     });
     try {
-      final normalizedServer = ApiClient.normalizeBaseUrl(_server.text);
-      _server.text = normalizedServer;
-      final api = ApiClient(baseUrl: normalizedServer);
+      final api = ApiClient(baseUrl: ApiClient.defaultBaseUrl);
       await api.login(_email.text.trim(), _password.text);
       final controller = WorkspaceController(api: api);
       await controller.loadDevices();

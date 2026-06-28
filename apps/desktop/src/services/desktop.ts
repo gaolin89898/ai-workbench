@@ -1,4 +1,4 @@
-export type ViewName = "workspace" | "projects" | "aiSessions" | "providers" | "pairing" | "settings";
+export type ViewName = "workspace" | "projects" | "aiSessions" | "providers" | "settings";
 
 export type TerminalSession = {
   sessionId: string;
@@ -216,6 +216,7 @@ export type AppUpdateInfo = {
   currentVersion?: string;
   date?: string | null;
   body?: string | null;
+  installable?: boolean;
 };
 
 function requireDesktopApi() {
@@ -236,6 +237,8 @@ function on(channel: string, handler: (...args: unknown[]) => void): () => void 
 export const desktopApi = {
   listSessions: (): Promise<TerminalSession[]> =>
     ipc<TerminalSession[]>("list_sessions"),
+  loginDesktop: (server: string, email: string, password: string): Promise<PairResponse> =>
+    ipc<PairResponse>("login_desktop", server, email, password),
   pairDesktop: (server: string, code: string): Promise<PairResponse> =>
     ipc<PairResponse>("pair_desktop", server, code),
   createDesktopPairingRequest: (server: string): Promise<DesktopPairingRequest> =>

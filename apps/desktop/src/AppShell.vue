@@ -10,7 +10,7 @@ const route = useRoute();
 
 const activeView = computed<ViewName>(() => {
   const name = route.name;
-  if (name === "workspace" || name === "projects" || name === "providers" || name === "pairing" || name === "aiSessions") {
+  if (name === "workspace" || name === "projects" || name === "providers" || name === "aiSessions") {
     return name;
   }
   return "aiSessions";

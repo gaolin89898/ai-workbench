@@ -191,6 +191,22 @@
         "htmlSrc": "pages/session-expanded.html",
         "interactions": []
       }
+    },
+    {
+      "id": "page-login",
+      "title": "登录",
+      "type": "page",
+      "version": 1,
+      "createdAt": 1782665197000,
+      "canvasData": {
+        "x": 7440,
+        "y": 0,
+        "group": 0
+      },
+      "devMetadata": {
+        "htmlSrc": "pages/login.html",
+        "interactions": []
+      }
     }
   ],
   "config": {

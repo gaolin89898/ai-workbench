@@ -38,6 +38,7 @@ func (h *Handler) Router() http.Handler {
 	mux.HandleFunc("GET /health", h.health)
 	mux.HandleFunc("POST /auth/register", h.register)
 	mux.HandleFunc("POST /auth/login", h.login)
+	mux.HandleFunc("POST /desktop/login", h.loginDesktop)
 	mux.HandleFunc("POST /desktop/pairing-requests", h.createDesktopPairingRequest)
 	mux.HandleFunc("GET /desktop/pairing-requests/{code}", h.getDesktopPairingRequestStatus)
 	mux.HandleFunc("POST /desktop/pairing-requests/{code}/approve", h.approveDesktopPairingRequest)

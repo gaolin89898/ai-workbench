@@ -5,8 +5,6 @@ import '../state/workspace_controller.dart';
 import '../state/workspace_scope.dart';
 import '../widgets/app_theme.dart';
 import 'chat_page.dart';
-import 'providers_page.dart';
-import 'settings_page.dart';
 
 class MobileShellPage extends StatefulWidget {
   const MobileShellPage({super.key});
@@ -58,13 +56,6 @@ class _DashboardTab extends StatelessWidget {
           title: Text(ws.selectedDevice?.name ?? '工作台'),
           actions: [
             IconButton(
-                onPressed: () => Navigator.of(context).push(
-                  MaterialPageRoute(
-                    builder: (_) => WorkspaceScope(controller: ws, child: const SettingsPage()),
-                  ),
-                ),
-                icon: const Icon(Icons.settings_outlined)),
-            IconButton(
                 onPressed: ws.refreshWorkspace, icon: const Icon(Icons.refresh)),
           ],
         ),
@@ -73,13 +64,6 @@ class _DashboardTab extends StatelessWidget {
           children: [
             _MetricGrid(
               values: [
-                (
-                  'Provider',
-                  '${ws.providerStatuses.where((item) => item.installed).length}/${ws.providerStatuses.length} 可用',
-                  () => Navigator.of(context).push(MaterialPageRoute(
-                    builder: (_) => WorkspaceScope(controller: ws, child: const ProvidersPage()),
-                  )),
-                ),
                 ('项目', '${ws.projects.length} 个', null),
                 (
                   '会话',

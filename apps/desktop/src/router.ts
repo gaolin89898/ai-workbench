@@ -10,7 +10,6 @@ const routes: RouteRecordRaw[] = [
       { path: "workspace", name: "workspace", component: () => import("./components/WorkspaceView.vue") },
       { path: "projects", name: "projects", component: () => import("./components/ProjectsView.vue") },
       { path: "providers", name: "providers", component: () => import("./components/ProvidersView.vue") },
-      { path: "pairing", name: "pairing", component: () => import("./components/PairingView.vue") },
       { path: "settings", name: "settings", component: () => import("./components/SettingsView.vue") },
     ],
   },
