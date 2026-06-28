@@ -5,10 +5,21 @@ import 'package:http/http.dart' as http;
 import '../models/workbench_models.dart';
 
 class ApiClient {
-  ApiClient({required this.baseUrl});
+  ApiClient({required String baseUrl}) : baseUrl = normalizeBaseUrl(baseUrl);
 
   final String baseUrl;
   String? token;
+
+  static String normalizeBaseUrl(String input) {
+    var value = input.trim().replaceFirst(RegExp(r'/+$'), '');
+    if (value.isEmpty) return value;
+    if (!value.contains('://')) value = 'http://$value';
+    final uri = Uri.parse(value);
+    if (!uri.hasPort && (uri.scheme == 'http' || uri.scheme == 'https')) {
+      return uri.replace(port: 3000).toString().replaceFirst(RegExp(r'/+$'), '');
+    }
+    return value;
+  }
 
   Map<String, String> get headers => {
         'Content-Type': 'application/json',
@@ -26,11 +37,17 @@ class ApiClient {
   }
 
   Future<void> login(String email, String password) async {
-    final response = await http.post(
-      uri('/auth/login'),
-      headers: headers,
-      body: jsonEncode({'email': email, 'password': password}),
-    );
+    final loginUri = uri('/auth/login');
+    late final http.Response response;
+    try {
+      response = await http.post(
+        loginUri,
+        headers: headers,
+        body: jsonEncode({'email': email, 'password': password}),
+      );
+    } catch (error) {
+      throw Exception('无法连接服务器：$loginUri\n$error');
+    }
     if (response.statusCode == 404 || response.statusCode == 401) {
       await register(email, password);
       return;

@@ -46,10 +46,19 @@ android {
     buildTypes {
         release {
             val releaseSigning = signingConfigs.getByName("release")
-            check(releaseSigning.storeFile != null && releaseSigning.storeFile!!.exists()) {
-                "Missing Android release keystore. Create apps/mobile/android/key.properties or configure CI secrets."
-            }
             signingConfig = releaseSigning
+        }
+    }
+}
+
+gradle.taskGraph.whenReady {
+    val isReleaseBuild = allTasks.any {
+        it.path.endsWith(":app:assembleRelease") || it.path.endsWith(":app:bundleRelease")
+    }
+    if (isReleaseBuild) {
+        val releaseSigning = android.signingConfigs.getByName("release")
+        check(releaseSigning.storeFile != null && releaseSigning.storeFile!!.exists()) {
+            "Missing Android release keystore. Create apps/mobile/android/key.properties or configure CI secrets."
         }
     }
 }
