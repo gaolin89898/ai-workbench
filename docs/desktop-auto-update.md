@@ -62,4 +62,19 @@ CI 中的 `GH_TOKEN` 直接使用 GitHub Actions 自动提供的 `GITHUB_TOKEN`�
 
 4. GitHub Actions 会构建 Electron 应用、创建 Release，并上传 deb、AppImage 和 `latest.yml`。
 
+## One-command desktop + mobile release
+
+Run this from the repository root to publish desktop Windows/Linux and mobile Android in one step:
+
+```powershell
+.\scripts\release-all.ps1 -Version 0.1.x
+```
+
+The script updates `apps/desktop/package.json` and `apps/mobile/pubspec.yaml`, commits the release version, pushes `main`, then pushes both tags:
+
+- `v0.1.x` for desktop Windows/Linux
+- `mobile-v0.1.x` for Android APK
+
+Mobile release still requires valid Android signing secrets in GitHub Actions.
+
 5. 旧版本桌面端在“设置 -> 应用更新”点击检查更新后，electron-updater 拉取 `latest.yml`，下载安装包并提示重启安装。
