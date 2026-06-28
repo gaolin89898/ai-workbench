@@ -1384,11 +1384,11 @@ async function checkAppUpdate() {
     const update = await desktopApi.checkAppUpdate();
     if (!update.available) {
       updateAvailableVersion.value = "";
-      updateResult.value = "当前已经是最新版本。";
+      updateResult.value = `当前已经是最新版本${update.currentVersion ? `（当前 ${update.currentVersion}` : ""}${update.version ? `，最新 ${update.version}` : ""}${update.currentVersion ? "）" : ""}${update.body ? `。${update.body}` : "。"}`;
       return;
     }
     updateAvailableVersion.value = update.version ?? "";
-    updateResult.value = `发现新版本 ${update.version ?? ""}${update.currentVersion ? `（当前 ${update.currentVersion}）` : ""}。`;
+    updateResult.value = `发现新版本 ${update.version ?? ""}${update.currentVersion ? `（当前 ${update.currentVersion}）` : ""}${update.body ? `。${update.body}` : "。"}`;
   } catch (error) {
     updateResultError.value = true;
     updateResult.value = `检查更新失败：${String(error)}`;
@@ -1406,6 +1406,8 @@ async function installAppUpdate() {
     if (!installed) {
       updateAvailableVersion.value = "";
       updateResult.value = "没有可安装的更新。";
+    } else {
+      updateResult.value = "更新已下载，应用将退出并安装。";
     }
   } catch (error) {
     updateResultError.value = true;
