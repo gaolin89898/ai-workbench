@@ -1,4 +1,4 @@
-﻿name: remote_term_mobile
+name: remote_term_mobile
 description: Mobile app for AI Workbench desktop devices, projects, providers, and AI sessions.
 publish_to: "none"
 version: 0.1.7+7

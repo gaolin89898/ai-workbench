@@ -23,7 +23,7 @@ function Set-JsonVersion {
   )
   $content = Get-Content -Raw -Path $Path
   $content = $content -replace '("version"\s*:\s*")[^"]+(")', "`${1}$Version`${2}"
-  Set-Content -Path $Path -Value $content -Encoding utf8
+  [System.IO.File]::WriteAllText((Resolve-Path $Path), $content, [System.Text.UTF8Encoding]::new($false))
 }
 
 function Set-FlutterVersion {
@@ -35,7 +35,7 @@ function Set-FlutterVersion {
   $buildNumber = ($Version -split '\.')[2]
   $replacement = "version: $Version+$buildNumber"
   $content = $content -replace '(?m)^version:\s*.+$', $replacement
-  Set-Content -Path $Path -Value $content -Encoding utf8
+  [System.IO.File]::WriteAllText((Resolve-Path $Path), $content, [System.Text.UTF8Encoding]::new($false))
 }
 
 $root = Resolve-Path (Join-Path $PSScriptRoot '..')
