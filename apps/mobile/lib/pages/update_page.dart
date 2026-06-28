@@ -34,7 +34,7 @@ class _UpdatePageState extends State<UpdatePage> {
                         TextStyle(fontSize: 18, fontWeight: FontWeight.w900)),
                 const SizedBox(height: 6),
                 const Text(
-                  '优先从 OpenList 检查移动端 APK，失败时自动回退到 GitHub Releases。下载后会交给系统浏览器和安装器处理。',
+                  '从 GitHub Releases 检查移动端 APK，下载后会交给系统浏览器和安装器处理。',
                   style: TextStyle(color: AppColors.muted, height: 1.45),
                 ),
                 const SizedBox(height: 16),
@@ -80,7 +80,7 @@ class _UpdatePageState extends State<UpdatePage> {
   Future<void> _checkUpdate() async {
     setState(() {
       _checking = true;
-      _status = '正在检查 OpenList 更新源...';
+      _status = '正在检查 GitHub Releases...';
     });
     try {
       final update = await _updates.check();

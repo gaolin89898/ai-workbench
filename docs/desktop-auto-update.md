@@ -70,10 +70,9 @@ Run this from the repository root to publish desktop Windows/Linux and mobile An
 .\scripts\release-all.ps1 -Version 0.1.x
 ```
 
-The script updates `apps/desktop/package.json` and `apps/mobile/pubspec.yaml`, commits the release version, pushes `main`, then pushes both tags:
+The script updates `apps/desktop/package.json` and `apps/mobile/pubspec.yaml`, commits the release version, pushes `main`, then pushes one shared tag:
 
-- `v0.1.x` for desktop Windows/Linux
-- `mobile-v0.1.x` for Android APK
+- `v0.1.x` for desktop Windows/Linux and Android APK
 
 Mobile release still requires valid Android signing secrets in GitHub Actions.
 

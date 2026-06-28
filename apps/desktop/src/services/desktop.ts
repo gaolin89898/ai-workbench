@@ -77,6 +77,7 @@ export type SavedCloudConfig = {
   serverUrl: string;
   deviceId: string;
   paired: boolean;
+  authMode?: "desktop-login" | "pairing";
 };
 
 export type ChatSegment =

@@ -14,7 +14,7 @@ const error = ref("");
 onMounted(async () => {
   try {
     const config = await desktopApi.getCloudConfig();
-    authenticated.value = Boolean(config?.paired);
+    authenticated.value = Boolean(config?.paired && config.authMode === "desktop-login");
   } catch {
     authenticated.value = false;
   } finally {

@@ -37,6 +37,7 @@ interface StoredCloudConfig {
   deviceId: string;
   accessToken: string;
   paired: boolean;
+  authMode?: "desktop-login" | "pairing";
 }
 
 function decodeHistoryContent(content: string): string {
@@ -74,6 +75,7 @@ export function getCloudConfig(): SavedCloudConfig | null {
     serverUrl: config.serverUrl,
     deviceId: config.deviceId,
     paired: config.paired,
+    authMode: config.authMode,
   };
 }
 
@@ -110,13 +112,19 @@ function normalizeServerUrl(server: string): string {
   return url.toString().replace(/\/+$/, "");
 }
 
-function savePairingConfig(serverUrl: string, deviceId?: string, accessToken?: string): void {
+function saveCloudConfig(
+  serverUrl: string,
+  deviceId: string | undefined,
+  accessToken: string | undefined,
+  authMode: StoredCloudConfig["authMode"]
+): void {
   if (!deviceId || !accessToken) return;
   saveStoredConfig({
     serverUrl,
     deviceId,
     accessToken,
     paired: true,
+    authMode,
   });
   syncInstance?.restart(serverUrl, accessToken, deviceId);
 }
@@ -148,7 +156,7 @@ export async function loginDesktop(
     access_token: accessToken,
   };
 
-  savePairingConfig(normalizedServer, deviceId, accessToken);
+  saveCloudConfig(normalizedServer, deviceId, accessToken, "desktop-login");
 
   return result;
 }
@@ -178,7 +186,7 @@ export async function pairDesktop(
     access_token: accessToken,
   };
 
-  savePairingConfig(normalizedServer, deviceId, accessToken);
+  saveCloudConfig(normalizedServer, deviceId, accessToken, "pairing");
 
   return result;
 }
@@ -209,7 +217,7 @@ export async function getDesktopPairingStatus(
   const deviceId: string | undefined = resp.deviceId ?? resp.device_id;
   const accessToken: string | undefined = resp.accessToken ?? resp.access_token;
   if (resp.status === "approved") {
-    savePairingConfig(normalizedServer, deviceId, accessToken);
+    saveCloudConfig(normalizedServer, deviceId, accessToken, "pairing");
   }
   return {
     status: resp.status,

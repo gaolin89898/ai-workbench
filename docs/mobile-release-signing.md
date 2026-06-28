@@ -16,7 +16,7 @@ The local `key.properties` file is intentionally ignored by Git.
 
 ## GitHub Actions secrets
 
-Add these repository secrets before pushing a new `mobile-v*` tag:
+Add these repository secrets before pushing a new `v*` release tag:
 
 - `ANDROID_KEYSTORE_BASE64`
 - `ANDROID_KEYSTORE_PASSWORD`
@@ -36,5 +36,5 @@ If that happens, uninstall the old mobile app once, then install the new signed 
 The next signed mobile release should use:
 
 - App version: `0.1.3+4`
-- Git tag: `mobile-v0.1.3`
+- Git tag: `v0.1.3`
 
