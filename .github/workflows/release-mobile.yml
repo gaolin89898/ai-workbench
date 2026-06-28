@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
   push:
     tags:
-      - "mobile-v*"
+      - "v*"
 
 permissions:
   contents: write
@@ -58,6 +58,7 @@ jobs:
       - name: Publish GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          name: "AI Workbench Mobile ${{ github.ref_name }}"
-          body: "Android APK release for AI Workbench mobile."
+          name: "AI Workbench ${{ github.ref_name }}"
+          body: "Desktop and mobile release for AI Workbench."
+          make_latest: false
           files: release-assets/*.apk

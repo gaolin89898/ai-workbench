@@ -41,25 +41,16 @@ function Set-FlutterVersion {
 $root = Resolve-Path (Join-Path $PSScriptRoot '..')
 Set-Location $root
 
-$desktopTag = "v$Version"
-$mobileTag = "mobile-v$Version"
+$tag = "v$Version"
 
 Write-Host "Checking release tags..."
-git rev-parse -q --verify "refs/tags/$desktopTag" | Out-Null
+git rev-parse -q --verify "refs/tags/$tag" | Out-Null
 if ($LASTEXITCODE -eq 0) {
-  throw "Local tag already exists: $desktopTag"
+  throw "Local tag already exists: $tag"
 }
-git ls-remote --exit-code --tags origin $desktopTag | Out-Null
+git ls-remote --exit-code --tags origin $tag | Out-Null
 if ($LASTEXITCODE -eq 0) {
-  throw "Remote tag already exists: $desktopTag"
-}
-git rev-parse -q --verify "refs/tags/$mobileTag" | Out-Null
-if ($LASTEXITCODE -eq 0) {
-  throw "Local tag already exists: $mobileTag"
-}
-git ls-remote --exit-code --tags origin $mobileTag | Out-Null
-if ($LASTEXITCODE -eq 0) {
-  throw "Remote tag already exists: $mobileTag"
+  throw "Remote tag already exists: $tag"
 }
 
 Assert-CleanReleaseFiles
@@ -77,11 +68,8 @@ if (-not $NoCommit) {
 }
 
 Write-Host "Creating and pushing tags..."
-git tag $desktopTag
-git tag $mobileTag
-git push origin $desktopTag
-git push origin $mobileTag
+git tag $tag
+git push origin $tag
 
-Write-Host "Triggered desktop release: $desktopTag"
-Write-Host "Triggered mobile release:  $mobileTag"
+Write-Host "Triggered release: $tag"
 Write-Host "GitHub Actions: https://github.com/gaolin89898/ai-workbench/actions"
