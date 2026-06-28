@@ -1,6 +1,7 @@
 name: Release mobile APK
 
 on:
+  workflow_dispatch:
   push:
     tags:
       - "mobile-v*"

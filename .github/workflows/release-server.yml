@@ -1,9 +1,13 @@
 name: Release Server
 
 on:
+  workflow_dispatch:
   push:
     tags:
       - 'server-v*'
+
+permissions:
+  contents: write
 
 jobs:
   build:

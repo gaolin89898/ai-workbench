@@ -12,6 +12,10 @@ files:
   - "!**/.{idea,git,cache,vscode,DS_Store}"
 asarUnpack:
   - "**/*.{node,dll}"
+win:
+  target:
+    - nsis
+  signAndEditExecutable: false
 linux:
   target:
     - AppImage
