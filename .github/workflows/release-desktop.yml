@@ -44,7 +44,7 @@ jobs:
         if: runner.os == 'Windows'
         uses: actions/setup-python@v5
         with:
-          python-version: '3.12'
+          python-version: '3.11'
 
       - name: Setup MSBuild for native modules
         if: runner.os == 'Windows'
