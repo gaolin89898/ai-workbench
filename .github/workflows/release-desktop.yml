@@ -10,17 +10,19 @@ permissions:
   contents: write
 
 jobs:
-  release-desktop:
-    name: Release desktop (${{ matrix.os }})
+  build-desktop:
+    name: Build desktop (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
         include:
           - os: windows-2022
-            publish-script: publish:win
+            package-script: package:win
+            artifact-name: desktop-windows
           - os: ubuntu-22.04
-            publish-script: publish:linux
+            package-script: package:linux
+            artifact-name: desktop-linux
 
     steps:
       - name: Checkout
@@ -42,8 +44,41 @@ jobs:
         working-directory: apps/desktop
         run: pnpm install --frozen-lockfile
 
-      - name: Build and publish
+      - name: Build package
         working-directory: apps/desktop
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: pnpm ${{ matrix.publish-script }}
+        run: pnpm ${{ matrix.package-script }}
+
+      - name: Prepare release assets
+        shell: pwsh
+        working-directory: apps/desktop
+        run: |
+          New-Item -ItemType Directory -Force -Path release-assets | Out-Null
+          Get-ChildItem dist-electron -File |
+            Where-Object { $_.Extension -in '.exe', '.blockmap', '.AppImage', '.deb', '.yml' -and $_.Name -ne 'builder-debug.yml' } |
+            Copy-Item -Destination release-assets
+          Get-ChildItem release-assets | Format-Table Name,Length
+
+      - name: Upload release assets
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact-name }}
+          path: apps/desktop/release-assets/*
+          if-no-files-found: error
+
+  publish-release:
+    name: Publish desktop release
+    runs-on: ubuntu-22.04
+    needs: build-desktop
+
+    steps:
+      - name: Download release assets
+        uses: actions/download-artifact@v4
+        with:
+          path: release-assets
+
+      - name: Publish GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: "AI Workbench Desktop ${{ github.ref_name }}"
+          body: "Desktop release for AI Workbench."
+          files: release-assets/**/*
