@@ -67,7 +67,7 @@ class ApiClient {
     } catch (error) {
       throw Exception('无法连接服务器：$loginUri\n$error');
     }
-    if (response.statusCode == 404 || response.statusCode == 401) {
+    if (response.statusCode == 404) {
       await register(email, password);
       return;
     }
@@ -229,25 +229,35 @@ class ApiClient {
   }
 
   String _errorMessage(http.Response response) {
+    var message = response.body;
     try {
-      final data = jsonDecode(response.body) as Map<String, dynamic>;
-      final message = data['error']?.toString() ?? response.body;
-      if (message.contains('password must be at least 6 characters')) {
-        return '密码至少需要 6 位。';
+      final data = jsonDecode(response.body);
+      if (data is Map<String, dynamic>) {
+        message = (data['error'] ?? data['message'] ?? response.body).toString();
       }
-      if (message.contains('email is invalid')) {
-        return '邮箱格式不正确。';
-      }
-      if (message.contains('email already registered')) {
-        return '账号已存在，请检查密码是否正确。';
-      }
-      if (message.contains('unauthorized')) {
-        return '账号或密码不正确。';
-      }
-      return message;
     } catch (_) {
-      return response.body;
+      // Keep the raw body. Some proxies return plain text instead of JSON.
     }
+    return _localizedErrorMessage(message);
+  }
+
+  String _localizedErrorMessage(String message) {
+    if (message.contains('password must be at least 6 characters')) {
+      return '密码至少需要 6 位。';
+    }
+    if (message.contains('email is invalid')) {
+      return '邮箱格式不正确。';
+    }
+    if (message.contains('email already registered')) {
+      return '账号已存在，请检查密码是否正确。';
+    }
+    if (message.contains('user not found')) {
+      return '账号不存在。';
+    }
+    if (message.contains('unauthorized')) {
+      return '账号或密码不正确。';
+    }
+    return message;
   }
 }
 

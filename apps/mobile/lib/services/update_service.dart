@@ -1,11 +1,12 @@
 import 'dart:convert';
 
 import 'package:http/http.dart' as http;
-import 'package:package_info_plus/package_info_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 const _releasesUrl =
     'https://api.github.com/repos/gaolin89898/ai-workbench/releases';
+const _currentMobileVersion =
+    String.fromEnvironment('MOBILE_VERSION', defaultValue: '0.1.22');
 
 class MobileUpdateInfo {
   const MobileUpdateInfo({
@@ -33,9 +34,7 @@ class MobileUpdateService {
   const MobileUpdateService();
 
   Future<MobileUpdateInfo> check() async {
-    final packageInfo = await PackageInfo.fromPlatform();
-    final currentVersion = packageInfo.version;
-    return _checkGitHub(currentVersion);
+    return _checkGitHub(_currentMobileVersion);
   }
 
   Future<MobileUpdateInfo> _checkGitHub(String currentVersion) async {

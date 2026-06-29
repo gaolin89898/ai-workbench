@@ -300,7 +300,7 @@ func (h *Handler) verifyUserPassword(w http.ResponseWriter, r *http.Request, ema
 	).Scan(&userID, &passwordHash)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			writeError(w, http.StatusUnauthorized, "unauthorized")
+			writeError(w, http.StatusNotFound, "user not found")
 			return "", false
 		}
 		writeInternal(w)

@@ -47,7 +47,9 @@ jobs:
 
       - name: Build release APK
         working-directory: apps/mobile
-        run: flutter build apk --release
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          flutter build apk --release --dart-define=MOBILE_VERSION="$VERSION"
 
       - name: Prepare artifact
         run: |
