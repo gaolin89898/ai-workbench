@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { onMounted, onUnmounted, ref } from "vue";
 import { useWorkspace } from "./composables/useWorkspace";
-import { desktopApi } from "./services/desktop";
+import { desktopApi, oauthApi } from "./services/desktop";
 import router from "./router";
 
 const ws = useWorkspace();
@@ -10,6 +10,8 @@ const authenticated = ref(false);
 const email = ref("");
 const password = ref("");
 const loading = ref(false);
+const oauthLoading = ref(false);
+const oauthStatus = ref("");
 const error = ref("");
 
 onMounted(async () => {
@@ -46,6 +48,52 @@ async function login() {
   }
 }
 
+// 钉钉 OAuth 登录流程：
+// 1. 调 /oauth/dingtalk/start 拿授权 URL + state
+// 2. 调用 shell.openExternal 在系统浏览器打开
+// 3. 启动轮询任务，每 2s 调 /oauth/dingtalk/poll，直到拿到结果或超时
+async function loginWithDingTalk() {
+  if (oauthLoading.value) return;
+  oauthLoading.value = true;
+  oauthStatus.value = "正在获取授权链接...";
+  error.value = "";
+  const serverUrl = ws.settingsServer.value;
+  try {
+    const startResp = await oauthApi.dingTalkStart(serverUrl);
+    oauthStatus.value = "请在浏览器中扫码完成授权...";
+    await desktopApi.openExternalUrl(startResp.authUrl);
+    const deadline = Date.now() + 10 * 60 * 1000;
+    while (Date.now() < deadline) {
+      await new Promise((resolve) => setTimeout(resolve, 2000));
+      const poll = await oauthApi.dingTalkPoll(serverUrl, startResp.state);
+      if (poll.status === "success" && poll.accessToken) {
+        await desktopApi.saveOAuthLogin(
+          serverUrl,
+          poll.accessToken,
+          poll.userId ?? "",
+          poll.displayName ?? ""
+        );
+        oauthStatus.value = `已通过钉钉登录：${poll.displayName ?? "用户"}`;
+        authenticated.value = true;
+        return;
+      }
+      if (poll.status === "error") {
+        throw new Error(poll.error || "钉钉登录失败");
+      }
+      if (poll.status === "expired") {
+        throw new Error("授权超时，请重试");
+      }
+      // pending → 继续轮询
+    }
+    throw new Error("授权超时");
+  } catch (err) {
+    error.value = String(err);
+    oauthStatus.value = "";
+  } finally {
+    oauthLoading.value = false;
+  }
+}
+
 // handleLogout responds to the "desktop-logout" window event dispatched by
 // SettingsView after the IPC logout call returns. It resets the local auth
 // state so the login page is shown again.
@@ -54,6 +102,7 @@ function handleLogout() {
   email.value = "";
   password.value = "";
   error.value = "";
+  oauthStatus.value = "";
   // Reset to the default route so the next login starts at the workspace.
   if (router.currentRoute.value.path !== "/chat") {
     void router.replace("/chat");
@@ -83,6 +132,17 @@ function handleLogout() {
         <button class="desktop-login-button" type="submit" :disabled="loading">
           {{ loading ? "登录中..." : "登录" }}
         </button>
+        <div class="desktop-login-divider"><span>或</span></div>
+        <button
+          class="desktop-login-oauth-button"
+          type="button"
+          :disabled="oauthLoading"
+          @click="loginWithDingTalk"
+        >
+          <span class="desktop-login-oauth-icon" aria-hidden="true">钉</span>
+          {{ oauthLoading ? "等待扫码..." : "钉钉扫码登录" }}
+        </button>
+        <p v-if="oauthStatus" class="desktop-login-oauth-status">{{ oauthStatus }}</p>
         <p class="desktop-login-hint">还没有账号？<span>立即注册</span></p>
       </form>
       <p class="desktop-login-version">v0.3.2</p>

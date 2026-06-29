@@ -250,6 +250,15 @@ type AiSessionArchive struct {
 	Archived    bool   `json:"archived"`
 }
 
+// AiSessionRename: "ai.session.rename". 由 HTTP PATCH /ai-sessions/{id} 触发，
+// forward 到桌面端让本地 SQLite 同步更新 title。
+type AiSessionRename struct {
+	BaseMessage
+	DeviceId    string `json:"deviceId"`
+	AiSessionId string `json:"aiSessionId"`
+	Title       string `json:"title"`
+}
+
 // GitStatusSnapshotMessage: "git.status.snapshot".
 // The Rust variant wraps a `snapshot` field of type GitStatusSnapshot; the
 // message struct is named with a Message suffix to avoid clashing with the
@@ -321,6 +330,10 @@ func ParseMessage(data []byte) (Message, error) {
 		var m AiSessionArchive
 		err := json.Unmarshal(data, &m)
 		return m, err
+	case "ai.session.rename":
+		var m AiSessionRename
+		err := json.Unmarshal(data, &m)
+		return m, err
 	case "git.status.snapshot":
 		var m GitStatusSnapshotMessage
 		err := json.Unmarshal(data, &m)
@@ -349,5 +362,6 @@ var (
 	_ Message = AiHistoryResponse{}
 	_ Message = AiChatOutput{}
 	_ Message = AiSessionArchive{}
+	_ Message = AiSessionRename{}
 	_ Message = GitStatusSnapshotMessage{}
 )

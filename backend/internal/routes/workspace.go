@@ -379,9 +379,73 @@ func (h *Handler) getAiSession(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, session)
 }
 
+// renameAiSession 更新会话标题并 forward ai.session.rename 到桌面端。
+// 桌面端收到后同步更新本地 SQLite 的 title，移动端则通过 HTTP 响应拿到新 title。
+func (h *Handler) renameAiSession(w http.ResponseWriter, r *http.Request) {
+	userID := auth.UserIDFromContext(r.Context())
+	if userID == "" {
+		writeError(w, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+	sessionID := r.PathValue("sessionId")
+
+	var req struct {
+		Title string `json:"title"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeBadRequest(w, "invalid request body")
+		return
+	}
+	title := strings.TrimSpace(req.Title)
+	if title == "" {
+		writeBadRequest(w, "title is required")
+		return
+	}
+
+	// 先查出原 session 拿到 device_id，用于 forwardToDesktop
+	original, err := scanAiSession(h.DB.Pool.QueryRow(r.Context(),
+		`SELECT id, user_id, device_id, project_id, provider_id, terminal_session_id, provider_session_id, title, status, summary, archived_at, updated_at
+		 FROM ai_sessions WHERE id = $1 AND user_id = $2`,
+		sessionID, userID,
+	))
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			writeForbidden(w)
+			return
+		}
+		writeInternal(w)
+		return
+	}
+
+	session, err := scanAiSession(h.DB.Pool.QueryRow(r.Context(),
+		`UPDATE ai_sessions SET title = $1, updated_at = NOW()
+		 WHERE id = $2 AND user_id = $3
+		 RETURNING id, user_id, device_id, project_id, provider_id, terminal_session_id, provider_session_id, title, status, summary, archived_at, updated_at`,
+		title, sessionID, userID,
+	))
+	if err != nil {
+		writeInternal(w)
+		return
+	}
+
+	// forward 到桌面端，让本地 SQLite 同步更新 title
+	h.forwardToDesktop(r.Context(), userID, original.DeviceId, protocol.AiSessionRename{
+		BaseMessage: protocol.BaseMessage{Type: "ai.session.rename"},
+		DeviceId:    original.DeviceId,
+		AiSessionId: session.Id,
+		Title:       title,
+	})
+
+	writeJSON(w, http.StatusOK, session)
+}
+
 // forwardToDesktop mirrors ws::dispatch::forward_to_desktop. If the desktop
 // is connected and owned by userID, the message is sent over its WebSocket.
 // Otherwise an activity-log entry records that the desktop was offline.
+//
+// 查找策略：先按 deviceID 精确查找（桌面端 token 带 deviceId claim 时）；
+// 找不到则按 userID 查第一个在线桌面（兼容 token 没有 deviceId claim
+// 的登录方式，例如 OAuth 登录后 access token 直接连 WS 的场景）。
 func (h *Handler) forwardToDesktop(ctx context.Context, userID, deviceID string, msg protocol.Message) {
 	deviceUUID, err := uuid.Parse(deviceID)
 	if err != nil {
@@ -392,7 +456,16 @@ func (h *Handler) forwardToDesktop(ctx context.Context, userID, deviceID string,
 		return
 	}
 
+	// 优先按 deviceID 精确查找
 	if desktop := h.State.GetDesktop(deviceUUID); desktop != nil && desktop.UserID == userUUID {
+		if data, err := protocol.MarshalMessage(msg); err == nil {
+			_ = desktop.Send(data)
+		}
+		return
+	}
+
+	// 找不到则按 userID 找第一个在线桌面
+	if desktop := h.State.GetDesktopByUser(userUUID); desktop != nil {
 		if data, err := protocol.MarshalMessage(msg); err == nil {
 			_ = desktop.Send(data)
 		}

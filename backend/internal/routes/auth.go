@@ -82,13 +82,13 @@ type desktopPairingStatusResponse struct {
 }
 
 // validateCredentials mirrors auth::validate_credentials: email must contain
-// "@", password must be at least 8 characters.
+// "@", password must be at least 6 characters.
 func validateCredentials(email, password string) error {
 	if !strings.Contains(email, "@") {
 		return errors.New("email is invalid")
 	}
-	if len(password) < 8 {
-		return errors.New("password must be at least 8 characters")
+	if len(password) < 6 {
+		return errors.New("password must be at least 6 characters")
 	}
 	return nil
 }
@@ -311,6 +311,55 @@ func (h *Handler) verifyUserPassword(w http.ResponseWriter, r *http.Request, ema
 		return "", false
 	}
 	return userID, true
+}
+
+// registerDesktopDevice 是 OAuth 登录后桌面端调用的端点：
+// 用 access token 鉴权（用户已经通过钉钉拿到 token），不需要再输密码。
+// 创建 desktop_devices 行并返回 deviceId，让桌面端能正常发 WebSocket 快照。
+func (h *Handler) registerDesktopDevice(w http.ResponseWriter, r *http.Request) {
+	userID := auth.UserIDFromContext(r.Context())
+	if userID == "" {
+		writeError(w, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+
+	var req struct {
+		Name string `json:"name"`
+		Os   string `json:"os"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeBadRequest(w, "invalid request body")
+		return
+	}
+	name := strings.TrimSpace(req.Name)
+	osName := strings.TrimSpace(req.Os)
+	if name == "" || osName == "" {
+		writeBadRequest(w, "desktop name and os are required")
+		return
+	}
+
+	var deviceID string
+	err := h.DB.Pool.QueryRow(r.Context(),
+		`INSERT INTO desktop_devices (user_id, name, os, online, last_seen_at)
+		 VALUES ($1, $2, $3, FALSE, NOW()) RETURNING id`,
+		userID, name, osName,
+	).Scan(&deviceID)
+	if err != nil {
+		writeInternal(w)
+		return
+	}
+
+	// 签发一个带 deviceId 的桌面专用 token，让桌面端 WS 连接能直接用
+	token, err := auth.GenerateDesktopPairingToken(userID, deviceID, h.Secret)
+	if err != nil {
+		writeInternal(w)
+		return
+	}
+
+	writeJSON(w, http.StatusOK, pairDesktopResponse{
+		DeviceId:    deviceID,
+		AccessToken: token,
+	})
 }
 
 // createPairingCode mirrors auth::create_pairing_code. Generates an 8-char

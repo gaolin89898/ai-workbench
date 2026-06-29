@@ -46,7 +46,12 @@ func main() {
 	appState := state.NewAppState(database)
 
 	// 4. Build routes + WebSocket handlers.
-	routeHandler := routes.NewHandler(database, appState, cfg.JWTSecret)
+	routeHandler := routes.NewHandler(database, appState, cfg.JWTSecret).
+		WithOAuth(routes.OAuthConfig{
+			DingTalkClientID:     cfg.DingTalkClientID,
+			DingTalkClientSecret: cfg.DingTalkClientSecret,
+			DingTalkRedirectURL:  cfg.DingTalkRedirectURL,
+		})
 	wsHandler := ws.NewHandler(database, appState, cfg.JWTSecret)
 
 	mux := http.NewServeMux()

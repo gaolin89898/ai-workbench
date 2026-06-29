@@ -73,6 +73,23 @@ export type DesktopPairingStatus = {
   accessToken?: string | null;
 };
 
+export type OAuthStartResponse = {
+  authUrl: string;
+  state: string;
+};
+
+export type OAuthPollStatus = "pending" | "success" | "error" | "expired";
+
+export type OAuthPollResponse = {
+  status: OAuthPollStatus;
+  accessToken?: string;
+  refreshToken?: string;
+  userId?: string;
+  displayName?: string;
+  provider?: string;
+  error?: string;
+};
+
 export type SavedCloudConfig = {
   serverUrl: string;
   deviceId: string;
@@ -232,8 +249,33 @@ function ipc<T>(channel: string, ...args: unknown[]): Promise<T> {
 }
 
 function on(channel: string, handler: (...args: unknown[]) => void): () => void {
-  return requireDesktopApi().on(channel, handler);
+  return requireDesktopApi().on(channel, handler as (...args: unknown[]) => void);
 }
+
+// OAuth HTTP helpers — these call the relay server directly (no IPC) since
+// they're just plain HTTP. The desktop renderer can call them when the user
+// picks "钉钉登录".
+async function oauthHttp<T>(url: string, init?: RequestInit): Promise<T> {
+  const resp = await fetch(url, init);
+  if (!resp.ok) {
+    let detail = resp.statusText;
+    try {
+      const text = await resp.text();
+      if (text) detail = text;
+    } catch {
+      /* ignore body read error */
+    }
+    throw new Error(`HTTP ${resp.status}: ${detail}`);
+  }
+  return resp.json() as Promise<T>;
+}
+
+export const oauthApi = {
+  dingTalkStart: (serverUrl: string): Promise<OAuthStartResponse> =>
+    oauthHttp<OAuthStartResponse>(`${serverUrl}/oauth/dingtalk/start`, { method: "GET", credentials: "include" }),
+  dingTalkPoll: (serverUrl: string, state: string): Promise<OAuthPollResponse> =>
+    oauthHttp<OAuthPollResponse>(`${serverUrl}/oauth/dingtalk/poll?state=${encodeURIComponent(state)}`, { method: "GET" }),
+};
 
 export const desktopApi = {
   listSessions: (): Promise<TerminalSession[]> =>
@@ -242,6 +284,10 @@ export const desktopApi = {
     ipc<PairResponse>("login_desktop", server, email, password),
   logoutDesktop: (): Promise<void> =>
     ipc<void>("logout_desktop"),
+  saveOAuthLogin: (serverUrl: string, accessToken: string, userId: string, displayName: string): Promise<void> =>
+    ipc<void>("save_oauth_login", serverUrl, accessToken, userId, displayName),
+  openExternalUrl: (url: string): Promise<void> =>
+    ipc<void>("open_external_url", url),
   pairDesktop: (server: string, code: string): Promise<PairResponse> =>
     ipc<PairResponse>("pair_desktop", server, code),
   createDesktopPairingRequest: (server: string): Promise<DesktopPairingRequest> =>
@@ -308,6 +354,8 @@ export const desktopApi = {
     ipc<AiSession>("archive_local_ai_session", aiSessionId, archived),
   renameLocalAiSession: (aiSessionId: string, title: string): Promise<AiSession> =>
     ipc<AiSession>("rename_local_ai_session", aiSessionId, title),
+  renameAiSession: (aiSessionId: string, title: string): Promise<void> =>
+    ipc<void>("rename_ai_session", aiSessionId, title),
   openSessionInNewWindow: (aiSessionId: string): Promise<void> =>
     ipc<void>("open_session_in_new_window", aiSessionId),
   checkAppUpdate: (): Promise<AppUpdateInfo> =>

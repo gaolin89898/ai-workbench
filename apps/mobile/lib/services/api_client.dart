@@ -144,6 +144,22 @@ class ApiClient {
         jsonDecode(response.body) as Map<String, dynamic>);
   }
 
+  /// PATCH /ai-sessions/{id} — rename a session. The server also forwards
+  /// ai.session.rename to the desktop so its local SQLite title updates.
+  Future<AiSessionMeta> renameAiSession(
+    String sessionId, {
+    required String title,
+  }) async {
+    final response = await http.patch(
+      uri('/ai-sessions/${Uri.encodeComponent(sessionId)}'),
+      headers: headers,
+      body: jsonEncode({'title': title}),
+    );
+    _throwIfBad(response);
+    return AiSessionMeta.fromJson(
+        jsonDecode(response.body) as Map<String, dynamic>);
+  }
+
   Future<UserSettings> settings() async {
     final response = await http.get(uri('/settings'), headers: headers);
     _throwIfBad(response);
@@ -162,6 +178,40 @@ class ApiClient {
         jsonDecode(response.body) as Map<String, dynamic>);
   }
 
+  // ---- OAuth 钉钉登录 ----
+
+  /// 启动钉钉 OAuth 流程，返回授权 URL + state。
+  Future<OAuthStartResult> startDingTalkOAuth() async {
+    final response =
+        await http.get(uri('/oauth/dingtalk/start'), headers: headers);
+    _throwIfBad(response);
+    final data = jsonDecode(response.body) as Map<String, dynamic>;
+    return OAuthStartResult(
+      authUrl: data['authUrl'] as String,
+      state: data['state'] as String,
+    );
+  }
+
+  /// 轮询钉钉 OAuth 登录结果。
+  Future<OAuthPollResult> pollDingTalkOAuth(String state) async {
+    final response = await http.get(
+      uri('/oauth/dingtalk/poll?state=${Uri.encodeComponent(state)}'),
+      headers: headers,
+    );
+    _throwIfBad(response);
+    final data = jsonDecode(response.body) as Map<String, dynamic>;
+    final status = data['status'] as String;
+    return OAuthPollResult(
+      status: status,
+      accessToken: data['accessToken'] as String?,
+      refreshToken: data['refreshToken'] as String?,
+      userId: data['userId'] as String?,
+      displayName: data['displayName'] as String?,
+      provider: data['provider'] as String?,
+      error: data['error'] as String?,
+    );
+  }
+
   Future<List<T>> _getList<T>(
     String path,
     T Function(Map<String, dynamic>) fromJson,
@@ -174,7 +224,58 @@ class ApiClient {
 
   void _throwIfBad(http.Response response) {
     if (response.statusCode < 200 || response.statusCode >= 300) {
-      throw Exception(response.body);
+      throw Exception(_errorMessage(response));
     }
   }
+
+  String _errorMessage(http.Response response) {
+    try {
+      final data = jsonDecode(response.body) as Map<String, dynamic>;
+      final message = data['error']?.toString() ?? response.body;
+      if (message.contains('password must be at least 6 characters')) {
+        return '密码至少需要 6 位。';
+      }
+      if (message.contains('email is invalid')) {
+        return '邮箱格式不正确。';
+      }
+      if (message.contains('email already registered')) {
+        return '账号已存在，请检查密码是否正确。';
+      }
+      if (message.contains('unauthorized')) {
+        return '账号或密码不正确。';
+      }
+      return message;
+    } catch (_) {
+      return response.body;
+    }
+  }
+}
+
+/// OAuth 启动响应：客户端用 url_launcher 打开 authUrl。
+class OAuthStartResult {
+  const OAuthStartResult({required this.authUrl, required this.state});
+
+  final String authUrl;
+  final String state;
+}
+
+/// OAuth 轮询响应：status 可能是 pending/success/error/expired。
+class OAuthPollResult {
+  const OAuthPollResult({
+    required this.status,
+    this.accessToken,
+    this.refreshToken,
+    this.userId,
+    this.displayName,
+    this.provider,
+    this.error,
+  });
+
+  final String status;
+  final String? accessToken;
+  final String? refreshToken;
+  final String? userId;
+  final String? displayName;
+  final String? provider;
+  final String? error;
 }

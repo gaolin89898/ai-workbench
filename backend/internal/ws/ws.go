@@ -176,19 +176,30 @@ func (h *Handler) notifyMobilesHeartbeat(userID, deviceID uuid.UUID) {
 // desktop is offline, an activity log entry is recorded. If the desktop
 // exists but belongs to a different user, the message is silently dropped,
 // matching dispatch::forward_to_desktop exactly.
+//
+// 查找策略：先按 deviceID 精确查找；找不到则按 userID 找第一个在线桌面。
+// 后者兼容 token 没有 deviceId claim 的登录方式（如 OAuth access token
+// 直接连 WS），避免桌面端用随机 UUID 注册导致 forwardToDesktop 失败。
 func (h *Handler) forwardToDesktop(userID uuid.UUID, deviceID string, msg protocol.Message) {
 	devUUID, err := uuid.Parse(deviceID)
 	if err != nil {
 		return
 	}
-	desktop := h.State.GetDesktop(devUUID)
-	if desktop != nil {
+	// 优先按 deviceID 精确查找
+	if desktop := h.State.GetDesktop(devUUID); desktop != nil {
 		if desktop.UserID == userID {
 			if data, err := protocol.MarshalMessage(msg); err == nil {
 				_ = desktop.Send(data)
 			}
 		}
 		// Exists but user mismatch: silently drop (matches Rust).
+		return
+	}
+	// 按 deviceID 找不到则按 userID 找第一个在线桌面
+	if desktop := h.State.GetDesktopByUser(userID); desktop != nil {
+		if data, err := protocol.MarshalMessage(msg); err == nil {
+			_ = desktop.Send(data)
+		}
 		return
 	}
 	// Desktop not found: record the missed forwarding attempt.

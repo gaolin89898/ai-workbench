@@ -138,6 +138,29 @@ class WorkspaceController extends ChangeNotifier {
     runStatusBySession[session.id] = '正在发送给 ${session.providerId}';
     notifyListeners();
     realtime.sendPrompt(device.id, session.id, trimmed);
+    // Best-effort: rename untitled sessions based on the first prompt.
+    _maybeRenameUntitledSession(session, trimmed);
+  }
+
+  /// If the session still has the default title, derive a new title from the
+  /// first prompt line and persist it via the backend PATCH endpoint. The
+  /// server then forwards ai.session.rename to the desktop so its local
+  /// SQLite title stays in sync.
+  Future<void> _maybeRenameUntitledSession(AiSessionMeta session, String prompt) async {
+    const untitledNames = {'新的 AI CLI 会话', '接管已有 AI CLI 会话'};
+    if (!untitledNames.contains(session.title)) return;
+    final firstLine = prompt
+        .split(RegExp(r'\r?\n'))
+        .firstWhere((line) => line.trim().isNotEmpty, orElse: () => '新的 AI CLI 会话')
+        .trim();
+    final title = firstLine.length > 24 ? '${firstLine.substring(0, 24)}...' : firstLine;
+    if (title.isEmpty || title == session.title) return;
+    try {
+      final updated = await api.renameAiSession(session.id, title: title);
+      _upsertSession(updated);
+    } catch (error) {
+      debugPrint('renameAiSession failed: $error');
+    }
   }
 
   void archiveSession(AiSessionMeta session, bool archived) {

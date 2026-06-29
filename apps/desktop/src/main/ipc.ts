@@ -9,7 +9,7 @@
 // Example: window.desktop.ipc.pairDesktop("http://...", "ABC123") ->
 //   ipcMain.handle("pair_desktop", (_event, args) => { const [server, code] = args; ... })
 
-import { ipcMain, BrowserWindow, clipboard, type WebContents } from "electron";
+import { ipcMain, BrowserWindow, clipboard, shell, type WebContents } from "electron";
 import { randomUUID } from "node:crypto";
 import { readdir, stat } from "node:fs/promises";
 import path from "node:path";
@@ -20,6 +20,7 @@ import * as projects from "./projects";
 import {
   loginDesktop,
   logoutDesktop,
+  saveOAuthLogin,
   pairDesktop,
   createDesktopPairingRequest,
   getDesktopPairingStatus,
@@ -108,6 +109,20 @@ export function registerIpcHandlers(win?: BrowserWindow): void {
 
   ipcMain.handle("logout_desktop", async () => {
     logoutDesktop();
+  });
+
+  // OAuth 登录完成后，前端把 token/userId 传过来保存
+  ipcMain.handle("save_oauth_login", async (_event, args: [string, string, string, string]) => {
+    const [serverUrl, accessToken, userId, displayName] = args;
+    await saveOAuthLogin(serverUrl, accessToken, userId, displayName);
+  });
+
+  // 在系统默认浏览器中打开 URL（用于 OAuth 授权跳转，避免 BrowserWindow 限制）
+  ipcMain.handle("open_external_url", async (_event, args: [string]) => {
+    const url = args[0];
+    if (typeof url === "string" && /^https?:\/\//i.test(url)) {
+      await shell.openExternal(url);
+    }
   });
 
   ipcMain.handle("pair_desktop", async (_event, args: [string, string]) =>
@@ -311,6 +326,19 @@ export function registerIpcHandlers(win?: BrowserWindow): void {
   ipcMain.handle("rename_local_ai_session", async (_event, args: [string, string]) =>
     db.updateLocalAiSession(args[0], { title: args[1] })
   );
+
+  // Rename a session everywhere: local SQLite + backend PATCH (which also
+  // forwards ai.session.rename to other clients over WS).
+  ipcMain.handle("rename_ai_session", async (_event, args: [string, string]) => {
+    const [aiSessionId, title] = args;
+    const sync = getDesktopCloudSync();
+    if (sync) {
+      await sync.renameAiSession(aiSessionId, title);
+    } else {
+      // Sync not initialized — at least persist locally.
+      db.updateLocalAiSession(aiSessionId, { title });
+    }
+  });
 
   // Multi-window sessions are not supported in the current Electron build;
   // no-op for now.

@@ -1170,18 +1170,26 @@ async function saveAssistantDraft(sessionId: string) {
   assistantDrafts.set(sessionId, { ...draft, savedText: text });
 }
 
-function renameUntitledSession(sessionId: string, prompt: string) {
+async function renameUntitledSession(sessionId: string, prompt: string) {
   const title = sessionTitleFromPrompt(prompt);
   const untitledNames = new Set(["新的 AI CLI 会话", "接管已有 AI CLI 会话"]);
+  const current = aiSessions.value.find((s) => s.id === sessionId);
+  const shouldRename = !!current && untitledNames.has(current.title);
+  if (!shouldRename) return;
   const updatedAt = new Date().toISOString();
-  aiSessions.value = aiSessions.value.map((session) => {
-    if (session.id !== sessionId) return session;
-    return { ...session, title: untitledNames.has(session.title) ? title : session.title, updatedAt };
-  }).sort(sortSessionsByUpdatedAt);
+  aiSessions.value = aiSessions.value.map((session) =>
+    session.id === sessionId ? { ...session, title, updatedAt } : session
+  ).sort(sortSessionsByUpdatedAt);
   if (activeAiSession.value?.id === sessionId) {
-    const nextTitle = untitledNames.has(activeAiSession.value.title) ? title : activeAiSession.value.title;
-    activeAiSession.value = { ...activeAiSession.value, title: nextTitle, updatedAt };
-    aiSessionTitle.value = nextTitle;
+    activeAiSession.value = { ...activeAiSession.value, title, updatedAt };
+    aiSessionTitle.value = title;
+  }
+  // Persist locally (SQLite) and to the backend (PostgreSQL). The backend will
+  // also forward ai.session.rename to other clients over WS.
+  try {
+    await desktopApi.renameAiSession(sessionId, title);
+  } catch (error) {
+    console.error("renameAiSession failed:", error);
   }
 }
 
@@ -1302,8 +1310,8 @@ async function loginDesktop(server: string, email: string, password: string) {
     const message = String(error);
     if (message.includes("HTTP 401")) {
       pairResult.value = "密码不正确。";
-    } else if (message.includes("password must be at least 8 characters")) {
-      pairResult.value = "密码至少需要 8 位。";
+    } else if (message.includes("password must be at least 6 characters")) {
+      pairResult.value = "密码至少需要 6 位。";
     } else if (message.includes("email is invalid")) {
       pairResult.value = "邮箱格式不正确。";
     } else {

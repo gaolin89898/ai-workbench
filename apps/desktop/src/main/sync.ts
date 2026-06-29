@@ -174,6 +174,37 @@ export function logoutDesktop(): void {
   }
 }
 
+// saveOAuthLogin OAuth 登录后桌面端调用 /desktop/register-device 拿真实
+// deviceId 并写入 cloud-config。不能直接用 userId 当 deviceId——后端
+// ws 的 EnsureDeviceOwner 会校验 deviceId 属于该 user，没有 desktop_devices
+// 行的话所有快照消息会被静默丢弃。
+export async function saveOAuthLogin(
+  serverUrl: string,
+  accessToken: string,
+  userId: string,
+  displayName: string
+): Promise<void> {
+  const normalizedServer = normalizeServerUrl(serverUrl);
+  const resp = await fetchJson(`${normalizedServer}/desktop/register-device`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${accessToken}`,
+    },
+    body: JSON.stringify({ name: os.hostname(), os: process.platform }),
+  });
+  const deviceId: string | undefined = resp.deviceId ?? resp.device_id;
+  const finalToken: string | undefined = resp.accessToken ?? resp.access_token ?? accessToken;
+  if (!deviceId) {
+    throw new Error("服务器未返回 deviceId，无法完成设备绑定");
+  }
+  saveCloudConfig(normalizedServer, deviceId, finalToken, "desktop-login");
+  // 重启 WS 连接，确保用新的带 deviceId 的 token 注册到 AppState。
+  // 不重启的话桌面端会用旧的随机 deviceId 注册，移动端 forwardToDesktop
+  // 找不到目标，会话创建消息发不过来。
+  syncInstance?.restart(normalizedServer, finalToken, deviceId);
+}
+
 export async function pairDesktop(
   server: string,
   code: string
@@ -373,6 +404,39 @@ class DesktopCloudSync {
     this.send({ type: "projects.snapshot", deviceId: config.deviceId, projects });
   }
 
+  /**
+   * Rename an AI session everywhere: update local SQLite, then call the
+   * backend PATCH /ai-sessions/{id} so PostgreSQL is updated and the server
+   * forwards ai.session.rename to other clients (e.g. mobile).
+   * Best-effort: backend failure is logged but does not revert the local
+   * change, since the local UI already shows the new title.
+   */
+  async renameAiSession(aiSessionId: string, title: string): Promise<void> {
+    try {
+      updateLocalAiSession(aiSessionId, { title });
+    } catch (e) {
+      console.error("renameAiSession: local update failed:", e);
+    }
+    this.notify("workspace-changed");
+    this.notify("ai-history-changed", { aiSessionId });
+
+    const config = loadStoredConfig();
+    if (!config || !config.accessToken) return;
+    try {
+      const url = `${normalizeServerUrl(config.serverUrl)}/ai-sessions/${encodeURIComponent(aiSessionId)}`;
+      await fetchJson(url, {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${config.accessToken}`,
+        },
+        body: JSON.stringify({ title }),
+      });
+    } catch (e) {
+      console.error("renameAiSession: backend PATCH failed:", e);
+    }
+  }
+
   // ----- message dispatch -----
   private handleMessage(msg: any, deviceId: string): void {
     if (!msg || typeof msg.type !== "string") return;
@@ -391,6 +455,9 @@ class DesktopCloudSync {
         break;
       case "ai.session.archive":
         this.handleAiSessionArchive(msg, deviceId);
+        break;
+      case "ai.session.rename":
+        this.handleAiSessionRename(msg, deviceId);
         break;
       default:
         // unknown message type — ignore
@@ -571,6 +638,21 @@ class DesktopCloudSync {
     const archived: boolean = !!msg.archived;
     try {
       archiveLocalAiSession(aiSessionId, archived);
+    } catch {
+      // session may not exist locally — ignore
+    }
+    this.notify("workspace-changed");
+    this.notify("ai-history-changed", { aiSessionId });
+  }
+
+  /** ai.session.rename: a mobile client renamed the session via HTTP PATCH.
+   *  Update the local SQLite title so the desktop UI matches. */
+  private handleAiSessionRename(msg: any, _deviceId: string): void {
+    const aiSessionId: string = msg.aiSessionId;
+    const title: string = msg.title;
+    if (!aiSessionId || !title) return;
+    try {
+      updateLocalAiSession(aiSessionId, { title });
     } catch {
       // session may not exist locally — ignore
     }

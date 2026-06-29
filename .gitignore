@@ -14,6 +14,7 @@ apps/desktop/out/
 apps/desktop/release/
 apps/desktop/dist-electron/
 releases/
+backend/.gocache/
 # pnpm 本地缓存
 .pnpm-store/
 # 本地 SDK 安装（Flutter/Android SDK）
