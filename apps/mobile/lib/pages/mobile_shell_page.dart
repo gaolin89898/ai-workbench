@@ -22,7 +22,6 @@ class _MobileShellPageState extends State<MobileShellPage> {
     final pages = [
       const _DashboardTab(),
       const _ProjectsTab(),
-      const ProvidersPage(),
       const _SessionsTab(),
       const _LogsTab(),
     ];
@@ -35,10 +34,6 @@ class _MobileShellPageState extends State<MobileShellPage> {
           NavigationDestination(
               icon: Icon(Icons.space_dashboard_outlined), label: '工作台'),
           NavigationDestination(icon: Icon(Icons.folder_outlined), label: '项目'),
-          NavigationDestination(
-              icon: Icon(Icons.auto_awesome_outlined),
-              selectedIcon: Icon(Icons.auto_awesome),
-              label: 'AI 工具'),
           NavigationDestination(
               icon: Icon(Icons.chat_bubble_outline), label: '会话'),
           NavigationDestination(
@@ -75,6 +70,18 @@ class _DashboardTab extends StatelessWidget {
                   '会话',
                   '${ws.sessions.where((item) => !item.archived).length} 个活跃',
                   null
+                ),
+                (
+                  'AI 工具',
+                  '${ws.providerStatuses.where((item) => item.installed).length}/${ws.providerStatuses.length} 可用',
+                  () => Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (_) => WorkspaceScope(
+                            controller: ws,
+                            child: const ProvidersPage(),
+                          ),
+                        ),
+                      )
                 ),
               ],
             ),
@@ -296,31 +303,37 @@ class _MetricGrid extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Row(
-      children: values
-          .map((item) => Expanded(
-                child: Padding(
-                  padding: const EdgeInsets.only(right: 8),
-                  child: AppCard(
-                    onTap: item.$3,
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(item.$1,
-                            style: const TextStyle(
-                                color: AppColors.muted,
-                                fontSize: 12,
-                                fontWeight: FontWeight.w800)),
-                        const SizedBox(height: 8),
-                        Text(item.$2,
-                            style:
-                                const TextStyle(fontWeight: FontWeight.w900)),
-                      ],
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        const spacing = 8.0;
+        final itemWidth = (constraints.maxWidth - spacing) / 2;
+        return Wrap(
+          spacing: spacing,
+          runSpacing: spacing,
+          children: values
+              .map((item) => SizedBox(
+                    width: itemWidth,
+                    child: AppCard(
+                      onTap: item.$3,
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(item.$1,
+                              style: const TextStyle(
+                                  color: AppColors.muted,
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w800)),
+                          const SizedBox(height: 8),
+                          Text(item.$2,
+                              style: const TextStyle(
+                                  fontWeight: FontWeight.w900)),
+                        ],
+                      ),
                     ),
-                  ),
-                ),
-              ))
-          .toList(),
+                  ))
+              .toList(),
+        );
+      },
     );
   }
 }
