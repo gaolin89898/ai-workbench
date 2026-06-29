@@ -18,6 +18,7 @@ class WorkspaceController extends ChangeNotifier {
   static const _devicesReloadInterval = Duration(seconds: 5);
   Future<void>? _loadDevicesInFlight;
   DateTime? _lastDevicesLoadedAt;
+  final Map<String, Future<AiSessionMeta?>> _createSessionInFlight = {};
 
   bool loading = false;
   String? error;
@@ -56,6 +57,16 @@ class WorkspaceController extends ChangeNotifier {
 
   List<AiSessionMeta> sessionsForProject(String path) =>
       sessions.where((session) => session.summary == path && (showArchived ? session.archived : !session.archived)).toList();
+
+  bool isCreatingSession(WorkspaceProject project, {String? providerId}) {
+    final device = selectedDevice;
+    if (device == null) return false;
+    final prefix = '${device.id}\x00${project.id}\x00';
+    if (providerId != null) {
+      return _createSessionInFlight.containsKey('$prefix$providerId');
+    }
+    return _createSessionInFlight.keys.any((key) => key.startsWith(prefix));
+  }
 
   Future<void> loadDevices() async {
     final inFlight = _loadDevicesInFlight;
@@ -112,9 +123,31 @@ class WorkspaceController extends ChangeNotifier {
   Future<AiSessionMeta?> createSession(WorkspaceProject project, {String providerId = 'codex'}) async {
     final device = selectedDevice;
     if (device == null) return null;
+    final key = '${device.id}\x00${project.id}\x00$providerId';
+    final inFlight = _createSessionInFlight[key];
+    if (inFlight != null) return inFlight;
+
+    final future = _createSession(device.id, project, providerId);
+    _createSessionInFlight[key] = future;
+    notifyListeners();
+    try {
+      return await future;
+    } finally {
+      if (identical(_createSessionInFlight[key], future)) {
+        _createSessionInFlight.remove(key);
+        notifyListeners();
+      }
+    }
+  }
+
+  Future<AiSessionMeta?> _createSession(
+    String deviceId,
+    WorkspaceProject project,
+    String providerId,
+  ) {
     return _runValue(() async {
       final session = await api.createAiSession(
-        device.id,
+        deviceId,
         providerId: providerId,
         title: '新的 AI CLI 会话',
         projectId: project.id,

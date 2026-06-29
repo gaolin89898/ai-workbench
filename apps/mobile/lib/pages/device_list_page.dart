@@ -85,50 +85,72 @@ class _DeviceListTab extends StatelessWidget {
   }
 }
 
-class _DeviceCard extends StatelessWidget {
+class _DeviceCard extends StatefulWidget {
   const _DeviceCard({required this.device});
 
   final DesktopDevice device;
 
   @override
+  State<_DeviceCard> createState() => _DeviceCardState();
+}
+
+class _DeviceCardState extends State<_DeviceCard> {
+  bool _opening = false;
+
+  @override
   Widget build(BuildContext context) {
     final ws = WorkspaceScope.of(context);
     return AppCard(
-      onTap: () async {
-        await ws.selectDevice(device);
-        if (!context.mounted) return;
-        Navigator.of(context).push(
-          MaterialPageRoute(
-            builder: (_) => WorkspaceScope(
-              controller: ws,
-              child: const MobileShellPage(),
-            ),
-          ),
-        );
-      },
+      onTap: _opening ? null : () => _openDevice(context, ws),
       child: Row(
         children: [
           Icon(Icons.desktop_windows,
-              color: device.online ? AppColors.success : AppColors.muted),
+              color: widget.device.online ? AppColors.success : AppColors.muted),
           const SizedBox(width: 12),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(device.name,
+                Text(widget.device.name,
                     style: const TextStyle(
                         fontWeight: FontWeight.w900, fontSize: 16)),
                 const SizedBox(height: 4),
                 Text(
-                  '${device.os} · ${device.online ? '在线' : '离线'}',
+                  '${widget.device.os} · ${widget.device.online ? '在线' : '离线'}',
                   style: const TextStyle(color: AppColors.muted, fontSize: 12),
                 ),
               ],
             ),
           ),
-          const Icon(Icons.chevron_right, color: AppColors.muted),
+          if (_opening)
+            const SizedBox(
+              width: 18,
+              height: 18,
+              child: CircularProgressIndicator(strokeWidth: 2),
+            )
+          else
+            const Icon(Icons.chevron_right, color: AppColors.muted),
         ],
       ),
     );
+  }
+
+  Future<void> _openDevice(BuildContext context, dynamic ws) async {
+    if (_opening) return;
+    setState(() => _opening = true);
+    try {
+      await ws.selectDevice(widget.device);
+      if (!context.mounted) return;
+      await Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (_) => WorkspaceScope(
+            controller: ws,
+            child: const MobileShellPage(),
+          ),
+        ),
+      );
+    } finally {
+      if (mounted) setState(() => _opening = false);
+    }
   }
 }
