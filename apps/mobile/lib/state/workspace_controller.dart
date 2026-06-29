@@ -15,6 +15,9 @@ class WorkspaceController extends ChangeNotifier {
   final ApiClient api;
   final RealtimeClient realtime;
   StreamSubscription<Map<String, dynamic>>? _events;
+  static const _devicesReloadInterval = Duration(seconds: 5);
+  Future<void>? _loadDevicesInFlight;
+  DateTime? _lastDevicesLoadedAt;
 
   bool loading = false;
   String? error;
@@ -55,12 +58,30 @@ class WorkspaceController extends ChangeNotifier {
       sessions.where((session) => session.summary == path && (showArchived ? session.archived : !session.archived)).toList();
 
   Future<void> loadDevices() async {
-    await _run(() async {
+    final inFlight = _loadDevicesInFlight;
+    if (inFlight != null) return inFlight;
+
+    final lastLoadedAt = _lastDevicesLoadedAt;
+    if (lastLoadedAt != null &&
+        DateTime.now().difference(lastLoadedAt) < _devicesReloadInterval) {
+      return;
+    }
+
+    final future = _run(() async {
       devices = await api.devices();
+      _lastDevicesLoadedAt = DateTime.now();
       if (selectedDevice != null) {
         selectedDevice = _findDevice(selectedDevice!.id);
       }
     });
+    _loadDevicesInFlight = future;
+    try {
+      await future;
+    } finally {
+      if (identical(_loadDevicesInFlight, future)) {
+        _loadDevicesInFlight = null;
+      }
+    }
   }
 
   Future<void> selectDevice(DesktopDevice device) async {
