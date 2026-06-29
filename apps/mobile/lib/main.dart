@@ -80,14 +80,17 @@ class _BootstrapPageState extends State<BootstrapPage> {
   @override
   Widget build(BuildContext context) {
     return const Scaffold(
+      backgroundColor: AppColors.background,
       body: Center(
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            CircularProgressIndicator(),
-            SizedBox(height: 16),
-            Text('正在启动 AI 工作台...',
-                style: TextStyle(color: AppColors.muted)),
+            CircularProgressIndicator(color: AppColors.primary),
+            SizedBox(height: AppSpacing.lg),
+            Text(
+              '正在启动...',
+              style: TextStyle(color: AppColors.muted, fontSize: 13),
+            ),
           ],
         ),
       ),

@@ -34,7 +34,7 @@
     },
     {
       "id": "page-dashboard",
-      "title": "仪表盘",
+      "title": "工作台",
       "type": "page",
       "version": 1,
       "createdAt": 1782513600000,

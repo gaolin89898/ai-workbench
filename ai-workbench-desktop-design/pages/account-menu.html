@@ -1,55 +1,55 @@
 <!DOCTYPE html>
-<html lang="zh-CN" class="light">
+<html lang="zh-CN" class="dark">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AI 工作台</title>
+    <title>AI 工作台 - 账户菜单</title>
     <style id="theme-vars">
-/* AI Workbench Desktop — Light Theme */
-/* Matching actual project style.css exactly */
+/* AI Workbench Desktop — Dark Theme */
+/* Based on actual project style.css, inverted to dark */
 :root {
   /* Brand */
   --color-primary: #2563eb;
   --color-primary-hover: #1d4ed8;
-  --color-primary-muted: rgba(37, 99, 235, 0.12);
-  --color-primary-soft: rgba(37, 99, 235, 0.06);
-  --color-primary-ring: rgba(37, 99, 235, 0.18);
+  --color-primary-muted: rgba(37, 99, 235, 0.15);
+  --color-primary-soft: rgba(37, 99, 235, 0.08);
+  --color-primary-ring: rgba(37, 99, 235, 0.25);
 
   /* Surface & Background */
-  --color-bg-app: #f6f8fb;
-  --color-bg-body: #fafafa;
-  --color-bg-sidebar: #f7f7f7;
-  --color-bg-main: #fafafa;
-  --color-bg-content: #ffffff;
-  --color-bg-surface: #f8fafc;
-  --color-bg-elevated: #f1f5f9;
-  --color-bg-input: #f8fafc;
-  --color-bg-hover: #e9ecef;
-  --color-bg-active: #eff6ff;
+  --color-bg-app: #0f1117;
+  --color-bg-body: #111318;
+  --color-bg-sidebar: #161822;
+  --color-bg-main: #1a1d2e;
+  --color-bg-content: #1e2235;
+  --color-bg-surface: #1e2235;
+  --color-bg-elevated: #252a3a;
+  --color-bg-input: #1e2235;
+  --color-bg-hover: rgba(255, 255, 255, 0.06);
+  --color-bg-active: rgba(37, 99, 235, 0.12);
 
   /* Text */
-  --color-text-primary: #0f172a;
-  --color-text-body: #111827;
-  --color-text-secondary: #64748b;
-  --color-text-muted: #94a3b8;
-  --color-text-placeholder: #b7bcc5;
+  --color-text-primary: #e8eaed;
+  --color-text-body: #d1d5db;
+  --color-text-secondary: #9aa0b4;
+  --color-text-muted: #6b7280;
+  --color-text-placeholder: #6b7280;
   --color-text-inverse: #ffffff;
 
   /* Border */
-  --color-border: #e5e7eb;
-  --color-border-subtle: #eceff3;
-  --color-border-active: #cbd5e1;
+  --color-border: rgba(255, 255, 255, 0.1);
+  --color-border-subtle: rgba(255, 255, 255, 0.06);
+  --color-border-active: rgba(37, 99, 235, 0.5);
 
   /* State Colors */
-  --state-success: #16a34a;
-  --state-success-bg: #ecfdf5;
-  --state-success-ring: #dcfce7;
+  --state-success: #22c55e;
+  --state-success-bg: rgba(34, 197, 94, 0.12);
+  --state-success-ring: rgba(34, 197, 94, 0.25);
   --state-warning: #f59e0b;
-  --state-warning-bg: #fff7ed;
-  --state-error: #dc2626;
-  --state-error-bg: #fef2f2;
-  --state-info: #2563eb;
-  --state-info-bg: #eff6ff;
+  --state-warning-bg: rgba(245, 158, 11, 0.12);
+  --state-error: #ef4444;
+  --state-error-bg: rgba(239, 68, 68, 0.12);
+  --state-info: #3b82f6;
+  --state-info-bg: rgba(59, 130, 246, 0.12);
 
   /* Radius */
   --radius-sm: 4px;
@@ -84,10 +84,10 @@
   --fw-black: 850;
 
   /* Shadows */
-  --shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.04);
-  --shadow-md: 0 10px 24px rgba(15, 23, 42, 0.12);
-  --shadow-lg: 0 24px 56px rgba(15, 23, 42, 0.18);
-  --shadow-composer: 0 16px 42px rgba(15, 23, 42, 0.07);
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.15);
+  --shadow-md: 0 10px 24px rgba(0, 0, 0, 0.25);
+  --shadow-lg: 0 24px 56px rgba(0, 0, 0, 0.35);
+  --shadow-composer: 0 16px 42px rgba(0, 0, 0, 0.3);
 
   /* Spacing */
   --space-1: 4px;
@@ -109,20 +109,9 @@
   /* Transitions */
   --transition-fast: 120ms ease;
   --transition-normal: 200ms ease;
-  /* Aliases for backwards compatibility with dark-theme var names */
-  --color-bg-body: var(--color-bg-main);
-  --font-weight-normal: var(--fw-normal);
-  --font-weight-medium: var(--fw-medium);
-  --font-weight-semibold: var(--fw-semibold);
-  --font-weight-bold: var(--fw-bold);
-  --font-weight-extrabold: var(--fw-extrabold);
-  --shadow-card: var(--shadow-sm);
-  --shadow-elevated: var(--shadow-md);
-  --shadow-modal: var(--shadow-lg);
-  --composer-height: auto;
-
 }
-    
+
+    </style>
     <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4.3.1/dist/index.global.js"></script>
     <script src="https://unpkg.com/lucide@1.8.0/dist/umd/lucide.min.js"></script>
     <style type="text/tailwindcss">
@@ -159,7 +148,7 @@
       <!-- ============================================================ -->
       <!-- LEFT SIDEBAR — SidebarProjectTree.vue                       -->
       <!-- ============================================================ -->
-      <aside style="background: var(--color-bg-sidebar); border-right: 1px solid var(--color-border); padding: 18px 10px 14px; display: flex; flex-direction: column; gap: 16px; overflow-y: auto;">
+      <aside style="background: var(--color-bg-sidebar); border-right: 1px solid var(--color-border); padding: 18px 10px 14px; display: flex; flex-direction: column; gap: 16px; overflow-y: auto; position: relative;">
 
         <!-- 项目 section header -->
         <div style="display: flex; align-items: center; justify-content: space-between;">
@@ -228,14 +217,47 @@
         <!-- Spacer pushing settings to bottom -->
         <div style="flex: 1; min-height: 0;"></div>
 
+        <!-- Account menu popover -->
+        <div style="width: 248px; margin: 0 0 -8px 0; border: 1px solid var(--color-border); border-radius: 12px; background: var(--color-bg-elevated); box-shadow: var(--shadow-md); padding: 8px; display: flex; flex-direction: column; gap: 6px; z-index: 5;">
+          <div style="display: flex; align-items: center; gap: 10px; padding: 6px 6px 8px;">
+            <span style="width: 32px; height: 32px; border-radius: 999px; background: linear-gradient(135deg, var(--color-primary), #8b5cf6); color: var(--color-text-inverse); display: inline-flex; align-items: center; justify-content: center; font-size: 14px; font-weight: 800; flex-shrink: 0;">李</span>
+            <span style="display: flex; flex-direction: column; gap: 2px; min-width: 0; flex: 1;">
+              <span style="font-size: 13px; font-weight: 720; color: var(--color-text-primary); line-height: 1.25; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">李明</span>
+              <span style="font-size: 11px; font-weight: 500; color: var(--color-text-muted); line-height: 1.25; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">li@workbench.ai</span>
+            </span>
+          </div>
+          <div style="height: 1px; background: var(--color-border-subtle); margin: 0 2px;"></div>
+          <button style="height: 35px; border: none; border-radius: 8px; background: transparent; color: var(--color-text-body); cursor: pointer; display: flex; align-items: center; gap: 10px; padding: 0 8px; font-family: var(--font-sans); text-align: left;" onmouseenter="this.style.background='var(--color-bg-hover)'" onmouseleave="this.style.background='transparent'">
+            <i data-lucide="user-cog" style="width: 16px; height: 16px; color: var(--color-text-secondary); flex-shrink: 0;"></i>
+            <span style="font-size: 13px; font-weight: 560;">账号设置</span>
+          </button>
+          <button style="height: 35px; border: none; border-radius: 8px; background: transparent; color: var(--color-text-body); cursor: pointer; display: flex; align-items: center; gap: 10px; padding: 0 8px; font-family: var(--font-sans); text-align: left;" onmouseenter="this.style.background='var(--color-bg-hover)'" onmouseleave="this.style.background='transparent'">
+            <i data-lucide="palette" style="width: 16px; height: 16px; color: var(--color-text-secondary); flex-shrink: 0;"></i>
+            <span style="font-size: 13px; font-weight: 560;">外观主题</span>
+          </button>
+          <button style="height: 35px; border: none; border-radius: 8px; background: transparent; color: var(--color-text-body); cursor: pointer; display: flex; align-items: center; gap: 10px; padding: 0 8px; font-family: var(--font-sans); text-align: left;" onmouseenter="this.style.background='var(--color-bg-hover)'" onmouseleave="this.style.background='transparent'">
+            <i data-lucide="cloud-check" style="width: 16px; height: 16px; color: var(--color-text-secondary); flex-shrink: 0;"></i>
+            <span style="font-size: 13px; font-weight: 560;">同步状态</span>
+          </button>
+          <button style="height: 35px; border: none; border-radius: 8px; background: transparent; color: var(--color-text-body); cursor: pointer; display: flex; align-items: center; gap: 10px; padding: 0 8px; font-family: var(--font-sans); text-align: left;" onmouseenter="this.style.background='var(--color-bg-hover)'" onmouseleave="this.style.background='transparent'">
+            <i data-lucide="keyboard" style="width: 16px; height: 16px; color: var(--color-text-secondary); flex-shrink: 0;"></i>
+            <span style="font-size: 13px; font-weight: 560;">快捷键</span>
+          </button>
+          <div style="height: 1px; background: var(--color-border-subtle); margin: 0 2px;"></div>
+          <button style="height: 35px; border: none; border-radius: 8px; background: transparent; color: #f87171; cursor: pointer; display: flex; align-items: center; gap: 10px; padding: 0 8px; font-family: var(--font-sans); text-align: left;" onmouseenter="this.style.background='var(--state-error-bg)'" onmouseleave="this.style.background='transparent'">
+            <i data-lucide="log-out" style="width: 16px; height: 16px; color: #f87171; opacity: .9; flex-shrink: 0;"></i>
+            <span style="font-size: 13px; font-weight: 560;">退出登录</span>
+          </button>
+        </div>
+
         <!-- Account profile entry at bottom -->
-        <button style="min-height: 48px; width: 100%; border: 1px solid var(--color-border-subtle); border-radius: 12px; background: transparent; color: var(--color-text-primary); cursor: pointer; display: flex; align-items: center; gap: 10px; padding: 7px 8px; font-family: var(--font-sans); text-align: left; transition: background var(--transition-fast), border-color var(--transition-fast);" aria-label="打开个人账户菜单" onmouseenter="this.style.background='var(--color-bg-hover)'" onmouseleave="this.style.background='transparent'" onmousedown="this.style.background='var(--color-bg-active)'" onmouseup="this.style.background='var(--color-bg-hover)'">
+        <button style="min-height: 48px; width: 100%; border: 1px solid var(--color-border-subtle); border-radius: 12px; background: var(--color-bg-active); color: var(--color-text-primary); cursor: pointer; display: flex; align-items: center; gap: 10px; padding: 7px 8px; font-family: var(--font-sans); text-align: left; transition: background var(--transition-fast), border-color var(--transition-fast);" aria-label="打开个人账户菜单" aria-expanded="true">
           <span style="width: 32px; height: 32px; border-radius: 999px; background: linear-gradient(135deg, var(--color-primary), #8b5cf6); color: var(--color-text-inverse); display: inline-flex; align-items: center; justify-content: center; font-size: 14px; font-weight: 800; flex-shrink: 0;">李</span>
           <span style="display: flex; flex-direction: column; gap: 1px; min-width: 0; flex: 1;">
             <span style="font-size: 13px; font-weight: 720; color: var(--color-text-primary); line-height: 1.25; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">李明</span>
             <span style="font-size: 11px; font-weight: 500; color: var(--color-text-muted); line-height: 1.25; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">li@workbench.ai</span>
           </span>
-          <i data-lucide="chevron-down" style="width: 16px; height: 16px; color: var(--color-text-muted); flex-shrink: 0;"></i>
+          <i data-lucide="chevron-up" style="width: 16px; height: 16px; color: var(--color-text-muted); flex-shrink: 0;"></i>
         </button>
 
       </aside>

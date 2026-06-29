@@ -1,11 +1,10 @@
 <script setup lang="ts">
-import { nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
-import { desktopApi, type AiProvider, type AiSession, type TerminalSession, type ViewName, type WorkspaceFileEntry, type WorkspaceProject } from "../services/desktop";
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
+import { desktopApi, type AiProvider, type AiSession, type SavedCloudConfig, type TerminalSession, type ViewName, type WorkspaceFileEntry, type WorkspaceProject } from "../services/desktop";
 
 const archiveBoxIcon = new URL("../assets/icons/archive-box.svg", import.meta.url).href;
 const projectFolderIcon = new URL("../assets/icons/project-folder.svg", import.meta.url).href;
 const sessionPlusIcon = new URL("../assets/icons/session-plus.svg", import.meta.url).href;
-const settingsIcon = new URL("../assets/icons/settings.svg", import.meta.url).href;
 const pinIcon = new URL("../assets/icons/pin.svg", import.meta.url).href;
 const folderOpenIcon = new URL("../assets/icons/folder-open.svg", import.meta.url).href;
 const fileListIcon = new URL("../assets/icons/file-list.svg", import.meta.url).href;
@@ -63,6 +62,16 @@ const directoryFiles = ref<Record<string, WorkspaceFileEntry[]>>({});
 const directoryLoading = ref<Record<string, boolean>>({});
 const directoryErrors = ref<Record<string, string>>({});
 const expandedDirectories = ref<Record<string, boolean>>({});
+const accountMenuOpen = ref(false);
+const cloudConfig = ref<SavedCloudConfig | null>(null);
+const themeMode = ref<"light" | "dark">("light");
+const menuNotice = ref("");
+
+const accountDisplayName = computed(() => cloudConfig.value?.displayName || (cloudConfig.value?.authMode === "desktop-login" ? "桌面账号" : "配对设备"));
+const accountDetail = computed(() => cloudConfig.value?.serverUrl ?? "未连接云端");
+const accountInitial = computed(() => accountDisplayName.value.slice(0, 1).toUpperCase());
+const syncStatusText = computed(() => cloudConfig.value?.paired ? "同步已连接" : "未连接同步");
+const themeActionText = computed(() => themeMode.value === "dark" ? "切换浅色主题" : "切换深色主题");
 
 function isProjectCollapsedLocal(path: string) {
   return Boolean(collapsedProjects.value[path]);
@@ -224,15 +233,17 @@ function openProjectMenu(event: MouseEvent, path: string) {
 
 function closeMenusOnOutsideClick(event: PointerEvent) {
   const target = event.target;
-  if (target instanceof Element && target.closest(".tree-project-row, .session-context-menu")) return;
+  if (target instanceof Element && target.closest(".tree-project-row, .session-context-menu, .account-menu-wrap")) return;
   openProjectMenuPath.value = null;
   openContextMenu.value = null;
+  accountMenuOpen.value = false;
 }
 
 function closeMenusOnEscape(event: KeyboardEvent) {
   if (event.key !== "Escape") return;
   openProjectMenuPath.value = null;
   openContextMenu.value = null;
+  accountMenuOpen.value = false;
 }
 
 function attachSession(path: string, terminalSession: TerminalSession) {
@@ -439,7 +450,56 @@ function copySessionDeepLink(session: AiSession) {
   void copyText(`ai-workbench://sessions/${session.id}`);
 }
 
-onMounted(() => {
+function applyTheme(nextTheme: "light" | "dark") {
+  themeMode.value = nextTheme;
+  document.documentElement.classList.toggle("theme-dark", nextTheme === "dark");
+  document.body.classList.toggle("theme-dark", nextTheme === "dark");
+  window.localStorage.setItem("ai-workbench-theme", nextTheme);
+}
+
+function toggleAccountMenu() {
+  openProjectMenuPath.value = null;
+  openContextMenu.value = null;
+  accountMenuOpen.value = !accountMenuOpen.value;
+}
+
+function openAccountSettings() {
+  accountMenuOpen.value = false;
+  emit("switchView", "settings");
+}
+
+function toggleTheme() {
+  applyTheme(themeMode.value === "dark" ? "light" : "dark");
+}
+
+function showSyncStatus() {
+  menuNotice.value = cloudConfig.value?.paired ? `已连接 ${cloudConfig.value.serverUrl}` : "当前未连接同步服务";
+  window.setTimeout(() => {
+    menuNotice.value = "";
+  }, 2400);
+}
+
+function showShortcutHelp() {
+  menuNotice.value = "快捷键：Enter 发送，Esc 停止/关闭菜单，右键打开会话菜单";
+  window.setTimeout(() => {
+    menuNotice.value = "";
+  }, 3200);
+}
+
+async function logoutAccount() {
+  accountMenuOpen.value = false;
+  await desktopApi.logoutDesktop();
+  window.dispatchEvent(new CustomEvent("desktop-logout"));
+}
+
+onMounted(async () => {
+  const savedTheme = window.localStorage.getItem("ai-workbench-theme") === "dark" ? "dark" : "light";
+  applyTheme(savedTheme);
+  try {
+    cloudConfig.value = await desktopApi.getCloudConfig();
+  } catch {
+    cloudConfig.value = null;
+  }
   document.addEventListener("pointerdown", closeMenusOnOutsideClick);
   document.addEventListener("keydown", closeMenusOnEscape);
 });
@@ -661,15 +721,55 @@ onBeforeUnmount(() => {
         </section>
       </div>
     </section>
-    <button
-      class="sidebar-settings-button"
-      :class="{ active: activeView === 'settings' }"
-      type="button"
-      @click="emit('switchView', 'settings')"
-    >
-      <img :src="settingsIcon" alt="" aria-hidden="true" />
-      <span>设置</span>
-    </button>
+    <div class="account-menu-wrap">
+      <div v-if="accountMenuOpen" class="account-menu-popover" role="menu" aria-label="个人账户菜单">
+        <div class="account-menu-profile">
+          <span class="account-avatar">{{ accountInitial }}</span>
+          <span class="account-profile-copy">
+            <strong>{{ accountDisplayName }}</strong>
+            <small>{{ accountDetail }}</small>
+          </span>
+        </div>
+        <div class="account-menu-divider" aria-hidden="true"></div>
+        <button type="button" role="menuitem" @click="openAccountSettings">
+          <span class="account-menu-icon">⚙</span>
+          <span>账号设置</span>
+        </button>
+        <button type="button" role="menuitem" @click="toggleTheme">
+          <span class="account-menu-icon">◐</span>
+          <span>{{ themeActionText }}</span>
+        </button>
+        <button type="button" role="menuitem" @click="showSyncStatus">
+          <span class="account-menu-icon success">✓</span>
+          <span>{{ syncStatusText }}</span>
+        </button>
+        <button type="button" role="menuitem" @click="showShortcutHelp">
+          <span class="account-menu-icon">⌘</span>
+          <span>快捷键</span>
+        </button>
+        <p v-if="menuNotice" class="account-menu-notice">{{ menuNotice }}</p>
+        <div class="account-menu-divider" aria-hidden="true"></div>
+        <button class="danger" type="button" role="menuitem" @click="logoutAccount">
+          <span class="account-menu-icon">↪</span>
+          <span>退出登录</span>
+        </button>
+      </div>
+      <button
+        class="account-profile-button"
+        :class="{ active: accountMenuOpen || activeView === 'settings' }"
+        type="button"
+        :aria-expanded="accountMenuOpen"
+        aria-label="打开个人账户菜单"
+        @click="toggleAccountMenu"
+      >
+        <span class="account-avatar">{{ accountInitial }}</span>
+        <span class="account-profile-copy">
+          <strong>{{ accountDisplayName }}</strong>
+          <small>{{ accountDetail }}</small>
+        </span>
+        <span class="account-chevron" aria-hidden="true">{{ accountMenuOpen ? "⌃" : "⌄" }}</span>
+      </button>
+    </div>
     <div
       v-if="openContextMenu"
       class="session-context-menu"

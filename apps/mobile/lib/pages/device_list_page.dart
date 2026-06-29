@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../models/workbench_models.dart';
+import '../state/workspace_controller.dart';
 import '../state/workspace_scope.dart';
 import '../widgets/app_theme.dart';
 import 'mobile_shell_page.dart';
@@ -18,9 +19,10 @@ class _DeviceListPageState extends State<DeviceListPage> {
 
   @override
   Widget build(BuildContext context) {
-    final pages = [
-      const _DeviceListTab(),
-      const SettingsPage(),
+    // 2 个 tab：设备 / 设置
+    final pages = const [
+      _DeviceListTab(),
+      SettingsPage(),
     ];
     return Scaffold(
       body: IndexedStack(index: _index, children: pages),
@@ -42,6 +44,7 @@ class _DeviceListPageState extends State<DeviceListPage> {
   }
 }
 
+// 设备 tab
 class _DeviceListTab extends StatelessWidget {
   const _DeviceListTab();
 
@@ -79,6 +82,7 @@ class _DeviceListTab extends StatelessWidget {
   }
 }
 
+// 设备卡
 class _DeviceCard extends StatefulWidget {
   const _DeviceCard({required this.device});
 
@@ -94,34 +98,47 @@ class _DeviceCardState extends State<_DeviceCard> {
   @override
   Widget build(BuildContext context) {
     final ws = WorkspaceScope.of(context);
+    final device = widget.device;
     return AppCard(
       onTap: _opening ? null : () => _openDevice(context, ws),
       child: Row(
         children: [
-          Icon(Icons.desktop_windows,
-              color: widget.device.online ? AppColors.success : AppColors.muted),
+          // 设备图标（success soft 配色）
+          AppIconBox(
+            icon: Icons.desktop_windows,
+            size: 40,
+            iconSize: 20,
+            borderRadius: 10,
+            background: AppColors.successSoft,
+            foreground: AppColors.successDeep,
+          ),
           const SizedBox(width: 12),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(widget.device.name,
+                Text(device.name,
                     style: const TextStyle(
-                        fontWeight: FontWeight.w900, fontSize: 16)),
+                        fontSize: 16,
+                        fontWeight: FontWeight.w700,
+                        color: AppColors.ink)),
                 const SizedBox(height: 4),
                 Text(
-                  '${widget.device.os} · ${widget.device.online ? '在线' : '离线'}',
+                  '${device.os} · ${device.online ? '在线' : '离线'}',
                   style: const TextStyle(color: AppColors.muted, fontSize: 12),
                 ),
               ],
             ),
           ),
+          // trailing：连接中 -> spinner；在线 -> check_circle；离线 -> chevron_right
           if (_opening)
             const SizedBox(
               width: 18,
               height: 18,
               child: CircularProgressIndicator(strokeWidth: 2),
             )
+          else if (device.online)
+            const Icon(Icons.check_circle, color: AppColors.success)
           else
             const Icon(Icons.chevron_right, color: AppColors.muted),
         ],
@@ -129,7 +146,7 @@ class _DeviceCardState extends State<_DeviceCard> {
     );
   }
 
-  Future<void> _openDevice(BuildContext context, dynamic ws) async {
+  Future<void> _openDevice(BuildContext context, WorkspaceController ws) async {
     if (_opening) return;
     setState(() => _opening = true);
     try {

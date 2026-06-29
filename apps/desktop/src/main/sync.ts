@@ -38,6 +38,7 @@ interface StoredCloudConfig {
   accessToken: string;
   paired: boolean;
   authMode?: "desktop-login" | "pairing";
+  displayName?: string;
 }
 
 function decodeHistoryContent(content: string): string {
@@ -76,6 +77,7 @@ export function getCloudConfig(): SavedCloudConfig | null {
     deviceId: config.deviceId,
     paired: config.paired,
     authMode: config.authMode,
+    displayName: config.displayName,
   };
 }
 
@@ -116,7 +118,8 @@ function saveCloudConfig(
   serverUrl: string,
   deviceId: string | undefined,
   accessToken: string | undefined,
-  authMode: StoredCloudConfig["authMode"]
+  authMode: StoredCloudConfig["authMode"],
+  displayName?: string
 ): void {
   if (!deviceId || !accessToken) return;
   saveStoredConfig({
@@ -125,6 +128,7 @@ function saveCloudConfig(
     accessToken,
     paired: true,
     authMode,
+    displayName,
   });
   syncInstance?.restart(serverUrl, accessToken, deviceId);
 }
@@ -156,7 +160,7 @@ export async function loginDesktop(
     access_token: accessToken,
   };
 
-  saveCloudConfig(normalizedServer, deviceId, accessToken, "desktop-login");
+  saveCloudConfig(normalizedServer, deviceId, accessToken, "desktop-login", email);
 
   return result;
 }
@@ -198,7 +202,7 @@ export async function saveOAuthLogin(
   if (!deviceId) {
     throw new Error("服务器未返回 deviceId，无法完成设备绑定");
   }
-  saveCloudConfig(normalizedServer, deviceId, finalToken, "desktop-login");
+  saveCloudConfig(normalizedServer, deviceId, finalToken, "desktop-login", displayName || userId);
   // 重启 WS 连接，确保用新的带 deviceId 的 token 注册到 AppState。
   // 不重启的话桌面端会用旧的随机 deviceId 注册，移动端 forwardToDesktop
   // 找不到目标，会话创建消息发不过来。

@@ -177,18 +177,18 @@
       }
     },
     {
-      "id": "page-session-expanded",
-      "title": "会话展开/收起",
+      "id": "page-account-menu",
+      "title": "账户菜单",
       "type": "page",
       "version": 1,
-      "createdAt": 1782513600000,
+      "createdAt": 1782667000000,
       "canvasData": {
-        "x": 6820,
+        "x": 7440,
         "y": 0,
         "group": 0
       },
       "devMetadata": {
-        "htmlSrc": "pages/session-expanded.html",
+        "htmlSrc": "pages/account-menu.html",
         "interactions": []
       }
     },
@@ -199,7 +199,7 @@
       "version": 1,
       "createdAt": 1782665197000,
       "canvasData": {
-        "x": 7512,
+        "x": 8060,
         "y": 72,
         "group": 0
       },
