@@ -120,6 +120,6 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           name: "AI Workbench ${{ github.ref_name }}"
-          body: "Desktop and mobile release for AI Workbench."
+          body: "Desktop release for AI Workbench."
           make_latest: true
           files: release-assets/**/*
