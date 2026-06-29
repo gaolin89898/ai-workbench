@@ -4,7 +4,6 @@ import '../models/workbench_models.dart';
 import '../state/workspace_scope.dart';
 import '../widgets/app_theme.dart';
 import 'mobile_shell_page.dart';
-import 'providers_page.dart';
 import 'settings_page.dart';
 
 class DeviceListPage extends StatefulWidget {
@@ -21,7 +20,6 @@ class _DeviceListPageState extends State<DeviceListPage> {
   Widget build(BuildContext context) {
     final pages = [
       const _DeviceListTab(),
-      const ProvidersPage(),
       const SettingsPage(),
     ];
     return Scaffold(
@@ -34,10 +32,6 @@ class _DeviceListPageState extends State<DeviceListPage> {
               icon: Icon(Icons.desktop_windows_outlined),
               selectedIcon: Icon(Icons.desktop_windows),
               label: '设备'),
-          NavigationDestination(
-              icon: Icon(Icons.auto_awesome_outlined),
-              selectedIcon: Icon(Icons.auto_awesome),
-              label: 'AI 工具'),
           NavigationDestination(
               icon: Icon(Icons.settings_outlined),
               selectedIcon: Icon(Icons.settings),

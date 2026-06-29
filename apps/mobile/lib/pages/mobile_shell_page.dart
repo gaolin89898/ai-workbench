@@ -5,6 +5,7 @@ import '../state/workspace_controller.dart';
 import '../state/workspace_scope.dart';
 import '../widgets/app_theme.dart';
 import 'chat_page.dart';
+import 'providers_page.dart';
 
 class MobileShellPage extends StatefulWidget {
   const MobileShellPage({super.key});
@@ -21,6 +22,7 @@ class _MobileShellPageState extends State<MobileShellPage> {
     final pages = [
       const _DashboardTab(),
       const _ProjectsTab(),
+      const ProvidersPage(),
       const _SessionsTab(),
       const _LogsTab(),
     ];
@@ -33,6 +35,10 @@ class _MobileShellPageState extends State<MobileShellPage> {
           NavigationDestination(
               icon: Icon(Icons.space_dashboard_outlined), label: '工作台'),
           NavigationDestination(icon: Icon(Icons.folder_outlined), label: '项目'),
+          NavigationDestination(
+              icon: Icon(Icons.auto_awesome_outlined),
+              selectedIcon: Icon(Icons.auto_awesome),
+              label: 'AI 工具'),
           NavigationDestination(
               icon: Icon(Icons.chat_bubble_outline), label: '会话'),
           NavigationDestination(
