@@ -16,6 +16,7 @@ class _UpdatePageState extends State<UpdatePage> {
   String _status = '尚未检查更新。';
   bool _checking = false;
   bool _opening = false;
+  double? _progress;
 
   @override
   Widget build(BuildContext context) {
@@ -35,7 +36,7 @@ class _UpdatePageState extends State<UpdatePage> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                AppSectionTitle('移动端安装包', subtitle: '从 OpenList 下载最新 APK'),
+                AppSectionTitle('移动端安装包', subtitle: '从 OpenList 直接下载最新 APK'),
                 const SizedBox(height: AppSpacing.lg),
                 FilledButton.icon(
                   onPressed: _checking ? null : _checkUpdate,
@@ -68,14 +69,18 @@ class _UpdatePageState extends State<UpdatePage> {
                     height: 1.55,
                   ),
                 ),
+                if (_progress != null) ...[
+                  const SizedBox(height: AppSpacing.md),
+                  LinearProgressIndicator(value: _progress),
+                ],
                 if (update != null) ...[
                   const SizedBox(height: 14),
                   _UpdateStatus(update: update),
                   const SizedBox(height: AppSpacing.md),
                   FilledButton.icon(
-                    onPressed: _opening ? null : _openUpdate,
-                    icon: const Icon(Icons.open_in_new),
-                    label: Text(_opening ? '打开中' : '打开下载目录'),
+                    onPressed: _opening ? null : _installUpdate,
+                    icon: const Icon(Icons.download),
+                    label: Text(_opening ? '下载中' : '下载安装包'),
                   ),
                 ],
               ],
@@ -94,14 +99,15 @@ class _UpdatePageState extends State<UpdatePage> {
   Future<void> _checkUpdate() async {
     setState(() {
       _checking = true;
-      _status = '正在检查 OpenList 下载目录...';
+      _progress = null;
+      _status = '正在检查 OpenList 安装包...';
     });
     try {
       final update = await _updates.check();
       if (!mounted) return;
       setState(() {
         _update = update;
-        _status = '移动端安装包已迁移到 OpenList，请打开下载目录获取最新 APK。';
+        _status = '发现移动端安装包 v${update.version ?? update.currentVersion}，可直接下载并安装。';
       });
     } catch (error) {
       if (mounted) setState(() => _status = '检查更新失败：$error');
@@ -110,18 +116,38 @@ class _UpdatePageState extends State<UpdatePage> {
     }
   }
 
-  Future<void> _openUpdate() async {
+  Future<void> _installUpdate() async {
     final update = _update;
     if (update == null) return;
     setState(() {
       _opening = true;
-      _status = '正在打开 OpenList 下载目录...';
+      _progress = null;
+      _status = '正在下载 APK...';
     });
     try {
-      await _updates.openDownload(update);
-      if (mounted) setState(() => _status = '已打开下载目录，请选择最新 APK 安装。');
+      await _updates.downloadAndInstall(
+        update,
+        onProgress: (received, total) {
+          if (!mounted || total == null || total <= 0) return;
+          setState(() {
+            _progress = received / total;
+            _status = '正在下载 APK：${(_progress! * 100).toStringAsFixed(0)}%';
+          });
+        },
+      );
+      if (mounted) {
+        setState(() {
+          _progress = null;
+          _status = '已打开系统安装器，请按提示安装。';
+        });
+      }
     } catch (error) {
-      if (mounted) setState(() => _status = '打开下载目录失败：$error');
+      if (mounted) {
+        setState(() {
+          _progress = null;
+          _status = '下载安装失败：$error';
+        });
+      }
     } finally {
       if (mounted) setState(() => _opening = false);
     }
@@ -144,7 +170,7 @@ class _UpdateStatus extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           AppIconBox(
-            icon: Icons.folder_open,
+            icon: Icons.download,
             size: 26,
             iconSize: 16,
             borderRadius: AppRadius.lg,
@@ -156,16 +182,16 @@ class _UpdateStatus extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text(
-                  'OpenList 下载目录',
-                  style: TextStyle(
+                Text(
+                  '移动端 v${update.version ?? update.currentVersion}',
+                  style: const TextStyle(
                     fontWeight: FontWeight.w600,
                     color: AppColors.ink,
                   ),
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  '当前版本 v${update.currentVersion}，来源：${update.source}',
+                  '来源：${update.source}，将直接下载 APK 并调用系统安装器。',
                   style: const TextStyle(
                     color: AppColors.muted,
                     fontSize: 12,
