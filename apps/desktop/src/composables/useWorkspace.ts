@@ -167,7 +167,7 @@ function elapsedStatusLabel(startedAt: number) {
 function providerDisplayName(providerId?: string | null) {
   if (!providerId) return "AI";
   return providers.value.find((provider) => provider.id === providerId)?.name
-    ?? ({ codex: "Codex", claude: "Claude Code", opencode: "OpenCode", deepseek: "DeepSeek" } as Record<string, string>)[providerId]
+    ?? ({ codex: "Codex", claude: "Claude Code", opencode: "OpenCode" } as Record<string, string>)[providerId]
     ?? "AI";
 }
 
@@ -625,7 +625,7 @@ async function sendPrompt(prompt: string, images: ChatImageAttachment[] = []) {
       segments: [{
         type: "error",
         title: `${providerName} 暂不支持聊天`,
-        message: "Codex / Claude Code 支持结构化聊天。OpenCode、DeepSeek 可以先在终端页直接运行对应 CLI。",
+        message: "Codex / Claude Code 支持结构化聊天。OpenCode 可以先在终端页直接运行对应 CLI。",
       }],
       text: `${providerName} 暂不支持结构化聊天。可以在终端页直接运行对应 CLI。`,
     });
@@ -767,6 +767,43 @@ async function sendPrompt(prompt: string, images: ChatImageAttachment[] = []) {
   }
 }
 
+function ensureIncomingPendingAssistant(sessionId: string) {
+  const existing = pendingAssistants.get(sessionId);
+  if (existing) return existing;
+  if (activeAiSession.value?.id !== sessionId) return null;
+  const providerName = providerNameForSession(sessionId);
+  const assistantClientId = chatClientId("assistant");
+  const assistantMessage: ChatMessage = {
+    clientId: assistantClientId,
+    role: "assistant",
+    pending: true,
+    segments: [{
+      type: "status",
+      stepId: "initial-thinking",
+      label: `等待 ${providerName} 返回...`,
+      icon: "think",
+    }],
+  };
+  chatMessages.value.push(assistantMessage);
+  const pending: PendingAssistant = {
+    clientId: assistantClientId,
+    message: assistantMessage,
+    prompt: "",
+    steps: new Map([["initial-thinking", assistantMessage.segments![0]]]),
+    currentTextStepId: null,
+    textSegmentCounter: 0,
+    finalText: "",
+    startedAt: performance.now(),
+    hasBackendStatus: false,
+    lastStatusText: "",
+  };
+  pendingAssistants.set(sessionId, pending);
+  assistantDrafts.set(sessionId, { message: assistantMessage, savedText: "" });
+  ensureRunningElapsedTimer();
+  thinkingSessionIds.value = { ...thinkingSessionIds.value, [sessionId]: true };
+  return pending;
+}
+
 function updatePendingAssistantStatus(sessionId: string, text: string) {
   const pending = pendingAssistants.get(sessionId);
   if (!pending) return;
@@ -842,7 +879,7 @@ function completePendingAssistantFromExec(sessionId: string) {
   const finalText = extractAssistantText(pending.finalText.trim());
   const finalSegments = pending.message.segments;
   const draft = assistantDrafts.get(sessionId);
-  if (draft && finalText && finalText !== draft.savedText) {
+  if (draft && pending.prompt.trim() && finalText && finalText !== draft.savedText) {
     assistantDrafts.set(sessionId, { ...draft, savedText: finalText });
     void desktopApi.appendLocalAiMessage(sessionId, "assistant", encodeAssistantMessageForStorage({
       text: finalText,
@@ -1022,7 +1059,10 @@ async function initAiEventListeners() {
     };
     }),
     desktopApi.onAiChatOutput((event) => {
-      const pending = pendingAssistants.get(event.aiSessionId);
+      let pending = pendingAssistants.get(event.aiSessionId);
+      if (!pending && event.kind !== "done" && event.kind !== "error") {
+        pending = ensureIncomingPendingAssistant(event.aiSessionId) ?? undefined;
+      }
       const providerName = providerNameForSession(event.aiSessionId);
       const runtimeName = providerRuntimeName(activeAiSession.value?.id === event.aiSessionId ? activeAiSession.value.providerId : aiSessions.value.find((session) => session.id === event.aiSessionId)?.providerId);
       const elapsedMs = pending ? Math.round(performance.now() - pending.startedAt) : undefined;

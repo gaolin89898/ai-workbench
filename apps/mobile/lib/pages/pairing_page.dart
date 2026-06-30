@@ -45,32 +45,63 @@ class _PairingPageState extends State<PairingPage> {
     return Scaffold(
       appBar: AppBar(title: const Text('配对桌面')),
       body: ListView(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(AppSpacing.lg),
         children: [
+          // ---- 提示卡 ----
           const AppCard(
-            child: Text(
-              '在桌面端打开“设置 / 设备配对”，生成二维码后用这里扫一扫。配对后手机就能看到桌面端 Codex 会话。',
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  '扫码配对',
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w600,
+                    color: AppColors.ink,
+                  ),
+                ),
+                SizedBox(height: AppSpacing.sm),
+                Text(
+                  '使用手机扫描桌面端显示的二维码',
+                  style: TextStyle(
+                    fontSize: 13,
+                    color: AppColors.secondary,
+                    height: 1.55,
+                  ),
+                ),
+              ],
             ),
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: AppSpacing.md),
+          // ---- 扫码卡 ----
           AppCard(
+            borderRadius: AppRadius.xl,
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 const Text(
-                  '扫码配对',
-                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.w900),
+                  '扫描二维码',
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.ink,
+                  ),
                 ),
-                const SizedBox(height: 8),
+                const SizedBox(height: AppSpacing.sm),
                 const Text(
-                  '扫描桌面端显示的二维码，手机确认后桌面会自动保存配对。',
-                  style: TextStyle(color: AppColors.muted, height: 1.45),
+                  '识别后自动返回确认配对',
+                  style: TextStyle(
+                    fontSize: 13,
+                    color: AppColors.secondary,
+                    height: 1.55,
+                  ),
                 ),
                 if (_scanResult != null) ...[
                   const SizedBox(height: 10),
                   Text(
                     _scanResult!,
                     style: TextStyle(
+                      fontSize: 13,
                       color: _scanResult!.contains('失败') ||
                               _scanResult!.contains('无效')
                           ? AppColors.danger
@@ -82,15 +113,19 @@ class _PairingPageState extends State<PairingPage> {
                 const SizedBox(height: 14),
                 FilledButton.icon(
                   onPressed: _approving ? null : _openScanner,
-                  icon: const Icon(Icons.qr_code_scanner),
-                  label: Text(_approving ? '确认中...' : '扫一扫'),
+                  icon: const Icon(Icons.camera_alt),
+                  label: Text(_approving ? '确认中...' : '扫码'),
                 ),
                 const SizedBox(height: 14),
                 const Divider(height: 1),
                 const SizedBox(height: 14),
                 const Text(
-                  '相机不可用时，输入桌面二维码下面的 8 位码也能完成同一套配对。',
-                  style: TextStyle(color: AppColors.muted, height: 1.45),
+                  '或手动输入',
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.ink,
+                  ),
                 ),
                 const SizedBox(height: 12),
                 TextField(
@@ -106,19 +141,19 @@ class _PairingPageState extends State<PairingPage> {
                   textCapitalization: TextCapitalization.characters,
                   decoration: const InputDecoration(
                     labelText: '桌面配对码',
-                    hintText: '二维码下方 8 位码',
                   ),
                 ),
                 const SizedBox(height: 12),
                 OutlinedButton.icon(
                   onPressed: _approving ? null : _approveTypedDesktopCode,
-                  icon: const Icon(Icons.key),
-                  label: const Text('用桌面码确认配对'),
+                  icon: const Icon(Icons.check),
+                  label: const Text('确认配对'),
                 ),
               ],
             ),
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: AppSpacing.md),
+          // ---- 短码卡 ----
           AppCard(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -127,35 +162,38 @@ class _PairingPageState extends State<PairingPage> {
                   _code ?? '未生成',
                   textAlign: TextAlign.center,
                   style: const TextStyle(
-                      fontSize: 34, fontWeight: FontWeight.w900),
+                    fontSize: 34,
+                    fontWeight: FontWeight.w900,
+                    color: AppColors.ink,
+                    letterSpacing: 8,
+                  ),
                 ),
                 if (_expiresAt != null) ...[
-                  const SizedBox(height: 8),
+                  const SizedBox(height: AppSpacing.sm),
                   Text(
                     '过期时间：$_expiresAt',
                     textAlign: TextAlign.center,
-                    style: const TextStyle(color: AppColors.muted),
+                    style: const TextStyle(
+                      fontSize: 12,
+                      color: AppColors.muted,
+                    ),
                   ),
                 ],
                 if (_error != null) ...[
-                  const SizedBox(height: 12),
-                  Text(_error!,
-                      style: const TextStyle(color: AppColors.danger)),
+                  const SizedBox(height: AppSpacing.md),
+                  Text(
+                    _error!,
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(
+                      fontSize: 13,
+                      color: AppColors.danger,
+                    ),
+                  ),
                 ],
-                const SizedBox(height: 16),
-                const Text(
-                  '备用短码',
-                  style: TextStyle(fontSize: 14, fontWeight: FontWeight.w900),
-                ),
-                const SizedBox(height: 6),
-                const Text(
-                  '如果扫码不可用，可以生成短码后回到桌面端手动输入。',
-                  style: TextStyle(color: AppColors.muted, height: 1.45),
-                ),
-                const SizedBox(height: 14),
+                const SizedBox(height: AppSpacing.lg),
                 FilledButton(
                   onPressed: _loading ? null : _create,
-                  child: Text(_loading ? '生成中...' : '生成配对码'),
+                  child: Text(_loading ? '生成中...' : '重新生成'),
                 ),
               ],
             ),
@@ -267,6 +305,7 @@ class _PairingPageState extends State<PairingPage> {
   }
 }
 
+/// 扫码页：保留 mobile_scanner 相机取景逻辑。
 class _DesktopPairingScanner extends StatefulWidget {
   const _DesktopPairingScanner({required this.onDetected});
 
@@ -355,20 +394,25 @@ class _DesktopPairingScannerState extends State<_DesktopPairingScanner> {
             ),
           if (_startError != null)
             _ScannerErrorPanel(message: _startError!, onRetry: _startCamera),
+          // 顶部提示气泡
           Align(
-            alignment: Alignment.bottomCenter,
+            alignment: Alignment.topCenter,
             child: Container(
               width: double.infinity,
-              margin: const EdgeInsets.all(16),
+              margin: const EdgeInsets.all(AppSpacing.lg),
               padding: const EdgeInsets.all(14),
               decoration: BoxDecoration(
                 color: AppColors.ink.withValues(alpha: 0.86),
-                borderRadius: BorderRadius.circular(8),
+                borderRadius: BorderRadius.circular(AppRadius.md),
               ),
               child: const Text(
                 '把桌面端二维码放入取景框，识别后会自动返回确认。',
                 textAlign: TextAlign.center,
-                style: TextStyle(color: Colors.white, height: 1.45),
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 13,
+                  height: 1.45,
+                ),
               ),
             ),
           ),
@@ -392,6 +436,7 @@ class _DesktopPairingScannerState extends State<_DesktopPairingScanner> {
   }
 }
 
+/// 扫码错误面板：黑底 + 重试/返回按钮。
 class _ScannerErrorPanel extends StatelessWidget {
   const _ScannerErrorPanel({required this.message, required this.onRetry});
 
@@ -404,7 +449,7 @@ class _ScannerErrorPanel extends StatelessWidget {
       color: Colors.black,
       child: Center(
         child: Padding(
-          padding: const EdgeInsets.all(24),
+          padding: const EdgeInsets.all(AppSpacing.x2l),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
@@ -413,7 +458,11 @@ class _ScannerErrorPanel extends StatelessWidget {
               Text(
                 message,
                 textAlign: TextAlign.center,
-                style: const TextStyle(color: Colors.white, height: 1.5),
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 16,
+                  height: 1.5,
+                ),
               ),
               const SizedBox(height: 18),
               Wrap(

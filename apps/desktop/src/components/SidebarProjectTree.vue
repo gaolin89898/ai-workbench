@@ -18,6 +18,9 @@ const gitForkIcon = new URL("../assets/icons/git-fork.svg", import.meta.url).hre
 const branchForkIcon = new URL("../assets/icons/branch-fork.svg", import.meta.url).href;
 const windowIcon = new URL("../assets/icons/window.svg", import.meta.url).href;
 
+const chevronDownSvg = '<svg viewBox="0 0 20 20" aria-hidden="true"><path d="M5 7.5 10 12.5 15 7.5"/></svg>';
+const chevronRightSvg = '<svg viewBox="0 0 20 20" aria-hidden="true"><path d="M7.5 5 12.5 10 7.5 15"/></svg>';
+
 const props = defineProps<{
   projects: WorkspaceProject[];
   providers: AiProvider[];
@@ -65,12 +68,14 @@ const expandedDirectories = ref<Record<string, boolean>>({});
 const accountMenuOpen = ref(false);
 const cloudConfig = ref<SavedCloudConfig | null>(null);
 const themeMode = ref<"light" | "dark">("light");
-const menuNotice = ref("");
-
-const accountDisplayName = computed(() => cloudConfig.value?.displayName || (cloudConfig.value?.authMode === "desktop-login" ? "桌面账号" : "配对设备"));
+const loginAccountName = computed(() => {
+  const raw = cloudConfig.value?.displayName?.trim() ?? "";
+  if (!raw) return "";
+  return raw.includes("@") ? raw.split("@")[0] : raw;
+});
+const accountDisplayName = computed(() => loginAccountName.value || (cloudConfig.value?.authMode === "desktop-login" ? "桌面账号" : "配对设备"));
 const accountDetail = computed(() => cloudConfig.value?.serverUrl ?? "未连接云端");
-const accountInitial = computed(() => accountDisplayName.value.slice(0, 1).toUpperCase());
-const syncStatusText = computed(() => cloudConfig.value?.paired ? "同步已连接" : "未连接同步");
+const accountInitial = computed(() => accountDisplayName.value.slice(0, 2).toUpperCase());
 const themeActionText = computed(() => themeMode.value === "dark" ? "切换浅色主题" : "切换深色主题");
 
 function isProjectCollapsedLocal(path: string) {
@@ -130,6 +135,9 @@ async function loadDirectoryFiles(project: WorkspaceProject, directoryPath = pro
   try {
     const files = await desktopApi.listProjectFiles(project.path, directoryPath);
     directoryFiles.value = { ...directoryFiles.value, [key]: files };
+    if (!files.length && directoryPath !== project.path) {
+      expandedDirectories.value = { ...expandedDirectories.value, [key]: false };
+    }
   } catch (error) {
     directoryErrors.value = { ...directoryErrors.value, [key]: String(error) };
   } finally {
@@ -162,6 +170,7 @@ async function toggleDirectoryNode(project: WorkspaceProject, directoryPath: str
 
 async function openProjectFileEntry(project: WorkspaceProject, file: WorkspaceFileEntry) {
   if (file.kind === "directory") {
+    if (isKnownEmptyDirectory(file.path)) return;
     await toggleDirectoryNode(project, file.path);
     return;
   }
@@ -194,6 +203,62 @@ function visibleFileTree(project: WorkspaceProject) {
 
 function isDirectoryExpanded(path: string) {
   return Boolean(expandedDirectories.value[directoryKey(path)]);
+}
+
+function isKnownEmptyDirectory(path: string) {
+  const files = directoryFiles.value[directoryKey(path)];
+  return Array.isArray(files) && files.length === 0;
+}
+
+function fileTreeIcon(file: WorkspaceFileEntry) {
+  if (file.kind !== "directory") return "";
+  if (isKnownEmptyDirectory(file.path)) return "";
+  return isDirectoryExpanded(file.path) ? chevronDownSvg : chevronRightSvg;
+}
+
+function fileEntryIconMeta(file: WorkspaceFileEntry) {
+  if (file.kind === "directory") return { icon: isDirectoryExpanded(file.path) ? "folder-open" : "folder", tone: "amber" };
+  const name = file.name.toLowerCase();
+  const extension = name.includes(".") ? name.split(".").pop() ?? "" : "";
+  if (name === "package.json" || name === "pnpm-workspace.yaml") return { icon: "package", tone: "redbrown" };
+  if (name.includes("lock")) return { icon: "lock-keyhole", tone: "redbrown" };
+  if (name.startsWith("readme") || extension === "md" || extension === "mdx") return { icon: "book-open", tone: "cyan" };
+  if (name.includes("config") || name.startsWith(".") || ["toml", "ini", "env", "yml", "yaml"].includes(extension)) return { icon: "settings", tone: "slate" };
+  if (extension === "vue") return { icon: "component", tone: "green" };
+  if (["ts", "tsx", "mts", "cts"].includes(extension)) return { icon: "file-code-2", tone: "blue" };
+  if (["js", "jsx", "mjs", "cjs"].includes(extension)) return { icon: "braces", tone: "yellow" };
+  if (extension === "json") return { icon: "file-json", tone: "orange" };
+  if (["css", "scss", "sass", "less", "postcss"].includes(extension)) return { icon: "palette", tone: "purple" };
+  if (["png", "jpg", "jpeg", "gif", "webp", "svg", "ico", "avif"].includes(extension)) return { icon: "image", tone: "pink" };
+  if (["txt", "log"].includes(extension)) return { icon: "file-text", tone: "cyan" };
+  if (["py", "rs", "go", "java", "kt", "swift", "c", "h", "cpp", "hpp", "cs", "php", "rb", "sh", "ps1", "sql", "dart"].includes(extension)) return { icon: "file-code", tone: "blue" };
+  return { icon: "file", tone: "slate" };
+}
+
+const fileEntryIconPaths: Record<string, string> = {
+  folder: '<path d="M4 3.5h4l1.5 1.5H16a1.5 1.5 0 0 1 1.5 1.5v8.5a1.5 1.5 0 0 1-1.5 1.5H4a1.5 1.5 0 0 1-1.5-1.5v-10A1.5 1.5 0 0 1 4 3.5Z"/>',
+  'folder-open': '<path d="M3.5 4.5h4l1.5 1.5h7.1a1.5 1.5 0 0 1 1.45 1.9l-1 6.5a1.5 1.5 0 0 1-1.45 1.1H4.85a1.5 1.5 0 0 1-1.45-1.1l-1-6.5a1.5 1.5 0 0 1 1.45-1.9H17"/>',
+  package: '<path d="M10 2.8 16 6v8l-6 3.2L4 14V6l6-3.2Z"/><path d="M4.25 6.25 10 9.35l5.75-3.1M10 9.35v7.55"/>',
+  'lock-keyhole': '<rect x="4.5" y="8.5" width="11" height="8" rx="1.5"/><path d="M7 8.5V6.6a3 3 0 0 1 6 0v1.9M10 12.1v1.6"/>',
+  'book-open': '<path d="M3 4.6h4.2A2.8 2.8 0 0 1 10 7.4v9a2.8 2.8 0 0 0-2.8-2.8H3V4.6ZM17 4.6h-4.2A2.8 2.8 0 0 0 10 7.4v9a2.8 2.8 0 0 1 2.8-2.8H17V4.6Z"/>',
+  settings: '<path d="M10 12.5a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5Z"/><path d="M15.2 11.2c.04-.4.04-.8 0-1.2l1.3-1-1.3-2.2-1.55.6c-.32-.24-.65-.43-1.02-.58L12.4 5.2H7.6l-.23 1.62c-.37.15-.7.34-1.02.58l-1.55-.6L3.5 9l1.3 1c-.04.4-.04.8 0 1.2l-1.3 1 1.3 2.2 1.55-.6c.32.24.65.43 1.02.58L7.6 16h4.8l.23-1.62c.37-.15.7-.34 1.02-.58l1.55.6 1.3-2.2-1.3-1Z"/>',
+  component: '<path d="M7.5 2.8h5L15 7.2 10 17.2 5 7.2l2.5-4.4Z"/><path d="M5 7.2h10M7.5 2.8 10 7.2l2.5-4.4"/>',
+  'file-code-2': '<path d="M5.5 3.2h5.4l3.6 3.6v10H5.5V3.2Z"/><path d="M10.7 3.3v3.7h3.6M8.6 10l-1.2 1.2 1.2 1.2M11.4 10l1.2 1.2-1.2 1.2"/>',
+  braces: '<path d="M7.4 5.2c-1.2.5-1.8 1.3-1.8 2.4v1c0 .7-.35 1.15-1.1 1.4.75.25 1.1.7 1.1 1.4v1c0 1.1.6 1.9 1.8 2.4M12.6 5.2c1.2.5 1.8 1.3 1.8 2.4v1c0 .7.35 1.15 1.1 1.4-.75.25-1.1.7-1.1 1.4v1c0 1.1-.6 1.9-1.8 2.4"/>',
+  'file-json': '<path d="M5.5 3.2h5.4l3.6 3.6v10H5.5V3.2Z"/><path d="M10.7 3.3v3.7h3.6M8.4 10c-.7.35-1 .9-.7 1.5.18.35.18.65 0 1-.3.6 0 1.15.7 1.5M11.6 10c.7.35 1 .9.7 1.5-.18.35-.18.65 0 1 .3.6 0 1.15-.7 1.5"/>',
+  palette: '<path d="M10 3.2a6.8 6.8 0 0 0 0 13.6h1.05a1.35 1.35 0 0 0 .95-2.3 1.35 1.35 0 0 1 .95-2.3H14a3.8 3.8 0 0 0 3.8-3.8c0-2.87-3.22-5.2-7.8-5.2Z"/><path d="M7.2 9.6h.01M9 6.9h.01M12 6.9h.01M13.8 9.6h.01"/>',
+  image: '<rect x="3.5" y="4.2" width="13" height="11.6" rx="1.6"/><path d="M6 13.6 8.7 11l1.9 1.9 1.5-1.5 2.9 2.9M13 7.5h.01"/>',
+  'file-text': '<path d="M5.5 3.2h5.4l3.6 3.6v10H5.5V3.2Z"/><path d="M10.7 3.3v3.7h3.6M7.8 9.6h4.4M7.8 11.8h4.4M7.8 14h3"/>',
+  'file-code': '<path d="M5.5 3.2h5.4l3.6 3.6v10H5.5V3.2Z"/><path d="M10.7 3.3v3.7h3.6M8.5 10l-1.2 1.2 1.2 1.2M11.5 10l1.2 1.2-1.2 1.2"/>',
+  file: '<path d="M5.5 3.2h5.4l3.6 3.6v10H5.5V3.2Z"/><path d="M10.7 3.3v3.7h3.6"/>',
+};
+
+function fileEntryIconMarkup(file: WorkspaceFileEntry) {
+  return `<svg viewBox="0 0 20 20" aria-hidden="true">${fileEntryIconPaths[fileEntryIconMeta(file).icon] ?? fileEntryIconPaths.file}</svg>`;
+}
+
+function fileEntryIconTone(file: WorkspaceFileEntry) {
+  return fileEntryIconMeta(file).tone;
 }
 
 function directoryStatus(path: string) {
@@ -472,20 +537,6 @@ function toggleTheme() {
   applyTheme(themeMode.value === "dark" ? "light" : "dark");
 }
 
-function showSyncStatus() {
-  menuNotice.value = cloudConfig.value?.paired ? `已连接 ${cloudConfig.value.serverUrl}` : "当前未连接同步服务";
-  window.setTimeout(() => {
-    menuNotice.value = "";
-  }, 2400);
-}
-
-function showShortcutHelp() {
-  menuNotice.value = "快捷键：Enter 发送，Esc 停止/关闭菜单，右键打开会话菜单";
-  window.setTimeout(() => {
-    menuNotice.value = "";
-  }, 3200);
-}
-
 async function logoutAccount() {
   accountMenuOpen.value = false;
   await desktopApi.logoutDesktop();
@@ -570,7 +621,7 @@ onBeforeUnmount(() => {
           <span>选择项目</span>
         </button>
         <section v-for="project in projects" :key="project.path" class="tree-project">
-          <div class="tree-project-row" :class="{ active: selectedProjectPath === project.path, collapsed: isProjectCollapsedLocal(project.path) }">
+          <div v-if="!isProjectFileListOpen(project.path)" class="tree-project-row" :class="{ active: selectedProjectPath === project.path, collapsed: isProjectCollapsedLocal(project.path) }">
             <button
               class="tree-project-title"
               :class="{ active: selectedProjectPath === project.path }"
@@ -578,7 +629,7 @@ onBeforeUnmount(() => {
               @click="toggleProjectCollapsed(project.path)"
               @contextmenu="openProjectMenu($event, project.path)"
             >
-              <span class="tree-project-chevron">{{ isProjectCollapsedLocal(project.path) ? "▸" : "▾" }}</span>
+              <span class="tree-project-chevron" v-html="isProjectCollapsedLocal(project.path) ? chevronRightSvg : chevronDownSvg"></span>
               <img class="tree-icon" :src="projectFolderIcon" alt="" aria-hidden="true" />
               <strong>{{ project.name }}</strong>
             </button>
@@ -631,8 +682,14 @@ onBeforeUnmount(() => {
               </button>
             </div>
           </div>
-          <div v-if="!isProjectCollapsedLocal(project.path)" class="tree-chat-list">
+          <div v-if="!isProjectCollapsedLocal(project.path)" class="tree-chat-list" :class="{ 'tree-chat-list-files': isProjectFileListOpen(project.path) }">
             <template v-if="isProjectFileListOpen(project.path)">
+              <div class="tree-file-header">
+                <button class="tree-file-back" type="button" title="返回项目列表" @click.stop="toggleProjectFileList(project)">
+                  <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M12.5 5 7.5 10 12.5 15"/></svg>
+                  <span>返回项目列表</span>
+                </button>
+              </div>
               <div v-if="directoryStatus(project.path)" class="tree-chat muted tree-chat-empty">{{ directoryStatus(project.path) }}</div>
               <template v-else>
                 <div
@@ -643,16 +700,17 @@ onBeforeUnmount(() => {
                   <button
                     class="tree-file-row"
                     type="button"
-                    :class="{ directory: node.file.kind === 'directory', expanded: isDirectoryExpanded(node.file.path) }"
-                    :style="{ paddingLeft: `${node.depth * 16}px` }"
+                    :class="{ directory: node.file.kind === 'directory', expanded: isDirectoryExpanded(node.file.path), empty: node.file.kind === 'directory' && isKnownEmptyDirectory(node.file.path) }"
                     :title="node.file.path"
                     @click.stop="openProjectFileEntry(project, node.file)"
                   >
-                    <span class="tree-file-icon">{{ node.file.kind === "directory" ? (isDirectoryExpanded(node.file.path) ? "▾" : "▸") : "•" }}</span>
+                    <span class="tree-file-indent" :style="{ width: `${node.depth * 16}px` }"></span>
+                    <span class="tree-file-icon" :class="{ empty: node.file.kind === 'directory' && isKnownEmptyDirectory(node.file.path) }" v-html="fileTreeIcon(node.file)"></span>
+                    <span class="tree-file-type-icon" :class="fileEntryIconTone(node.file)" v-html="fileEntryIconMarkup(node.file)"></span>
                     <span class="tree-file-name">{{ node.file.name }}</span>
                     <small>{{ fileSizeLabel(node.file) }}</small>
                   </button>
-                  <div v-if="node.status" class="tree-file-status" :style="{ paddingLeft: `${(node.depth + 1) * 16}px` }">{{ node.status }}</div>
+                  <div v-if="node.status" class="tree-file-status" :style="{ paddingLeft: `${node.depth * 16 + 16}px` }">{{ node.status }}</div>
                 </div>
               </template>
             </template>
@@ -732,25 +790,32 @@ onBeforeUnmount(() => {
         </div>
         <div class="account-menu-divider" aria-hidden="true"></div>
         <button type="button" role="menuitem" @click="openAccountSettings">
-          <span class="account-menu-icon">⚙</span>
-          <span>账号设置</span>
+          <span class="account-menu-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24">
+              <path d="M12 15.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7Z" />
+              <path d="M19.4 15a1.7 1.7 0 0 0 .34 1.88l.05.05a2 2 0 0 1-2.83 2.83l-.05-.05a1.7 1.7 0 0 0-1.88-.34 1.7 1.7 0 0 0-1.03 1.56V21a2 2 0 0 1-4 0v-.07a1.7 1.7 0 0 0-1.03-1.56 1.7 1.7 0 0 0-1.88.34l-.05.05a2 2 0 0 1-2.83-2.83l.05-.05A1.7 1.7 0 0 0 4.6 15a1.7 1.7 0 0 0-1.56-1.03H3a2 2 0 0 1 0-4h.07A1.7 1.7 0 0 0 4.6 8.94a1.7 1.7 0 0 0-.34-1.88l-.05-.05a2 2 0 0 1 2.83-2.83l.05.05a1.7 1.7 0 0 0 1.88.34A1.7 1.7 0 0 0 10 3.07V3a2 2 0 0 1 4 0v.07a1.7 1.7 0 0 0 1.03 1.56 1.7 1.7 0 0 0 1.88-.34l.05-.05a2 2 0 0 1 2.83 2.83l-.05.05a1.7 1.7 0 0 0-.34 1.88 1.7 1.7 0 0 0 1.56 1.03H21a2 2 0 0 1 0 4h-.07A1.7 1.7 0 0 0 19.4 15Z" />
+            </svg>
+          </span>
+          <span>设置</span>
         </button>
         <button type="button" role="menuitem" @click="toggleTheme">
-          <span class="account-menu-icon">◐</span>
+          <span class="account-menu-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24">
+              <path d="M20 14.7A8 8 0 0 1 9.3 4a7 7 0 1 0 10.7 10.7Z" />
+              <path d="M17.5 3.5v3M19 5h-3" />
+            </svg>
+          </span>
           <span>{{ themeActionText }}</span>
         </button>
-        <button type="button" role="menuitem" @click="showSyncStatus">
-          <span class="account-menu-icon success">✓</span>
-          <span>{{ syncStatusText }}</span>
-        </button>
-        <button type="button" role="menuitem" @click="showShortcutHelp">
-          <span class="account-menu-icon">⌘</span>
-          <span>快捷键</span>
-        </button>
-        <p v-if="menuNotice" class="account-menu-notice">{{ menuNotice }}</p>
         <div class="account-menu-divider" aria-hidden="true"></div>
         <button class="danger" type="button" role="menuitem" @click="logoutAccount">
-          <span class="account-menu-icon">↪</span>
+          <span class="account-menu-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24">
+              <path d="M10 17l5-5-5-5" />
+              <path d="M15 12H3" />
+              <path d="M13 3h5a3 3 0 0 1 3 3v12a3 3 0 0 1-3 3h-5" />
+            </svg>
+          </span>
           <span>退出登录</span>
         </button>
       </div>
@@ -767,7 +832,6 @@ onBeforeUnmount(() => {
           <strong>{{ accountDisplayName }}</strong>
           <small>{{ accountDetail }}</small>
         </span>
-        <span class="account-chevron" aria-hidden="true">{{ accountMenuOpen ? "⌃" : "⌄" }}</span>
       </button>
     </div>
     <div

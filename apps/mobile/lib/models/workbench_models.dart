@@ -189,17 +189,33 @@ class AiHistoryMessage {
     required this.role,
     required this.content,
     required this.createdAt,
+    this.segments = const [],
   });
 
   final ChatRole role;
   final String content;
   final String createdAt;
+  final List<ChatSegment> segments;
 
-  factory AiHistoryMessage.fromJson(Map<String, dynamic> json) => AiHistoryMessage(
+  factory AiHistoryMessage.fromJson(Map<String, dynamic> json) {
+    final rawContent = json['content'];
+    if (rawContent is Map<String, dynamic>) {
+      return AiHistoryMessage(
         role: chatRoleFromString(json['role'] as String),
-        content: json['content'] as String,
+        content: rawContent['text'] as String? ?? '',
         createdAt: json['createdAt'] as String,
+        segments: ((rawContent['segments'] as List<dynamic>?) ?? const [])
+            .whereType<Map<String, dynamic>>()
+            .map(ChatSegment.fromJson)
+            .toList(),
       );
+    }
+    return AiHistoryMessage(
+      role: chatRoleFromString(json['role'] as String),
+      content: rawContent as String? ?? '',
+      createdAt: json['createdAt'] as String,
+    );
+  }
 }
 
 class ChatSegment {

@@ -69,7 +69,7 @@ async function listProjectFiles(projectPath: string, directoryPath?: string | nu
   const targetStat = await stat(target);
   if (!targetStat.isDirectory()) throw new Error("target is not a directory");
   const entries = await readdir(target, { withFileTypes: true });
-  const visibleEntries = entries.filter((entry) => entry.name !== ".git" && !entry.name.startsWith("."));
+  const visibleEntries = entries.filter((entry) => entry.name !== ".git");
   const files = await Promise.all(
     visibleEntries.map(async (entry) => {
       const fullPath = path.join(target, entry.name);

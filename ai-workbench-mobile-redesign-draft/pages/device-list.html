@@ -1,0 +1,282 @@
+<!DOCTYPE html>
+<html class="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI 工作台 - 选择设备</title>
+    <style id="theme-vars">
+/* AI Workbench Mobile — Light Task-Oriented Theme */
+/* Inspired by Trae Work clean aesthetic */
+:root {
+  /* Brand */
+  --color-primary: #2563eb;
+  --color-primary-hover: #1d4ed8;
+  --color-primary-muted: rgba(37, 99, 235, 0.12);
+  --color-primary-soft: rgba(37, 99, 235, 0.06);
+
+  /* Surface & Background */
+  --color-bg-app: #f8fafc;
+  --color-bg-sidebar: #ffffff;
+  --color-bg-main: #f8fafc;
+  --color-bg-surface: #ffffff;
+  --color-bg-elevated: #ffffff;
+  --color-bg-input: #f1f5f9;
+  --color-bg-hover: rgba(0, 0, 0, 0.02);
+  --color-bg-active: rgba(37, 99, 235, 0.08);
+
+  /* Text */
+  --color-text-primary: #0f172a;
+  --color-text-secondary: #475569;
+  --color-text-muted: #94a3b8;
+  --color-text-inverse: #ffffff;
+
+  /* Border */
+  --color-border: #e2e8f0;
+  --color-border-active: rgba(37, 99, 235, 0.4);
+
+  /* State Colors */
+  --state-success: #22c55e;
+  --state-warning: #f59e0b;
+  --state-error: #ef4444;
+  --state-info: #3b82f6;
+
+  /* Radius */
+  --radius-sm: 4px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --radius-full: 9999px;
+
+  /* Typography */
+  --font-sans: "Inter", ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --font-mono: "JetBrains Mono", "Fira Code", ui-monospace, "Cascadia Code", monospace;
+
+  --text-xs: 11px;
+  --text-sm: 12px;
+  --text-base: 13px;
+  --text-md: 14px;
+  --text-lg: 16px;
+  --text-xl: 20px;
+  --text-2xl: 28px;
+
+  --leading-tight: 1.25;
+  --leading-normal: 1.5;
+  --leading-relaxed: 1.625;
+
+  --font-weight-normal: 400;
+  --font-weight-medium: 500;
+  --font-weight-semibold: 600;
+  --font-weight-bold: 700;
+  --font-weight-extrabold: 800;
+
+  /* Shadow */
+  --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.05);
+  --shadow-elevated: 0 4px 12px rgba(0, 0, 0, 0.08);
+  --shadow-modal: 0 8px 32px rgba(0, 0, 0, 0.12);
+
+  /* Spacing */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-10: 40px;
+}
+
+    </style>
+    <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4.3.1/dist/index.global.js"></script>
+    <script src="https://unpkg.com/lucide@1.8.0/dist/umd/lucide.min.js"></script>
+    <style type="text/tailwindcss">
+  @theme inline {
+    --color-primary: var(--color-primary);
+    --color-border: var(--color-border);
+  }
+  @layer base {
+    body { background: var(--color-bg-app); color: var(--color-text-primary); }
+    td, th { @apply break-words; word-break: break-all; word-break: auto-phrase; }
+    th { @apply whitespace-nowrap; }
+  }
+    </style>
+    <style>
+      .no-scrollbar::-webkit-scrollbar { display: none; }
+      .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+      [data-icon] {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        -webkit-mask-size: contain;
+        mask-size: contain;
+        -webkit-mask-repeat: no-repeat;
+        mask-repeat: no-repeat;
+        -webkit-mask-position: center;
+        mask-position: center;
+        background-color: currentColor;
+      }
+    </style>
+</head>
+<body class="font-sans antialiased" style="font-family: var(--font-sans); background: var(--color-bg-app); color: var(--color-text-primary); min-height: 100vh;">
+  <main class="min-h-screen px-4 pb-8 pt-3 sm:px-6 lg:mx-auto lg:max-w-[520px]" style="padding-bottom: calc(var(--space-8) + env(safe-area-inset-bottom));">
+    <header class="sticky top-0 z-20 -mx-4 px-4 pb-3 pt-2 sm:-mx-6 sm:px-6 lg:mx-0 lg:px-0" style="background: color-mix(in srgb, var(--color-bg-app) 94%, transparent); backdrop-filter: blur(14px);">
+      <div class="flex h-11 items-center justify-between gap-3">
+        <button data-dom-id="device-back" class="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border transition-[background-color,transform,border-color] duration-150 active:translate-y-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-border-active)]" aria-label="返回" style="border-color: var(--color-border); background: var(--color-bg-surface); color: var(--color-text-secondary);">
+          <i data-lucide="chevron-left" class="h-4 w-4"></i>
+        </button>
+        <div class="min-w-0 flex-1 text-center">
+          <h1 class="truncate text-[18px] font-[700] leading-tight tracking-[-0.02em]" style="color: var(--color-text-primary); text-wrap: balance; word-break: keep-all; overflow-wrap: break-word;">选择设备</h1>
+        </div>
+        <button data-dom-id="device-refresh" class="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border transition-[background-color,transform,border-color] duration-150 active:translate-y-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-border-active)]" aria-label="刷新设备" style="border-color: var(--color-border); background: var(--color-bg-surface); color: var(--color-text-secondary);">
+          <i data-lucide="refresh-cw" class="h-4 w-4"></i>
+        </button>
+      </div>
+    </header>
+
+    <section class="pt-2">
+      <div class="flex items-start gap-3">
+        <div class="mt-0.5 flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border" style="border-color: var(--color-border-active); background: var(--color-primary-soft); color: var(--color-primary);">
+          <i data-lucide="monitor-up" class="h-5 w-5"></i>
+        </div>
+        <div class="min-w-0 flex-1">
+          <p class="line-clamp-2 text-[13px] leading-relaxed" style="color: var(--color-text-secondary);">选择要连接的桌面端。连接后将在手机上继续使用 AI Workbench。</p>
+          <div class="mt-3 flex flex-nowrap gap-2 overflow-x-auto no-scrollbar" aria-label="设备概览">
+            <span class="inline-flex h-7 shrink-0 items-center gap-1.5 rounded-lg border px-2.5 text-[12px] font-[650] whitespace-nowrap" style="border-color: color-mix(in srgb, var(--state-success) 28%, var(--color-border)); background: color-mix(in srgb, var(--state-success) 10%, var(--color-bg-surface)); color: var(--color-text-primary);">
+              <span class="h-1.5 w-1.5 rounded-full" style="background: var(--state-success);"></span>2 台在线
+            </span>
+            <span class="inline-flex h-7 shrink-0 items-center gap-1.5 rounded-lg border px-2.5 text-[12px] font-[650] whitespace-nowrap" style="border-color: var(--color-border-active); background: var(--color-primary-soft); color: var(--color-primary);">
+              <span class="h-1.5 w-1.5 rounded-full animate-pulse" style="background: var(--color-primary);"></span>1 台连接中
+            </span>
+            <span class="inline-flex h-7 shrink-0 items-center gap-1.5 rounded-lg border px-2.5 text-[12px] font-[650] whitespace-nowrap" style="border-color: var(--color-border); background: var(--color-bg-surface); color: var(--color-text-secondary);">
+              <span class="h-1.5 w-1.5 rounded-full" style="background: var(--color-text-muted);"></span>1 台离线
+            </span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="mt-5" aria-labelledby="online-devices-title">
+      <div class="mb-2 flex items-center justify-between gap-3">
+        <h2 id="online-devices-title" class="truncate text-[13px] font-[700]" style="color: var(--color-text-primary); text-wrap: balance; word-break: keep-all; overflow-wrap: break-word;">可连接</h2>
+        <span class="shrink-0 text-[11px] font-[600] whitespace-nowrap" style="color: var(--color-text-muted);">最近扫描 12:48</span>
+      </div>
+
+      <div class="space-y-3">
+        <button data-dom-id="device-connect-home" class="group w-full rounded-xl border p-3 text-left transition-[background-color,border-color,transform] duration-150 active:translate-y-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-border-active)]" style="border-color: var(--color-border-active); background: var(--color-bg-surface); box-shadow: var(--shadow-card);">
+          <div class="flex items-center gap-3">
+            <div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border" style="border-color: var(--color-border-active); background: var(--color-primary-soft); color: var(--color-primary);">
+              <i data-lucide="monitor" class="h-5 w-5"></i>
+            </div>
+            <div class="min-w-0 flex-1">
+              <div class="flex min-w-0 items-center gap-2">
+                <h3 class="truncate text-[15px] font-[700] leading-tight" style="color: var(--color-text-primary);">Home-Mac Studio</h3>
+                <span class="inline-flex h-6 shrink-0 items-center rounded-lg border px-2 text-[11px] font-[700] whitespace-nowrap" style="border-color: color-mix(in srgb, var(--state-success) 30%, var(--color-border)); background: color-mix(in srgb, var(--state-success) 10%, var(--color-bg-surface)); color: var(--color-text-primary);">在线</span>
+              </div>
+              <p class="mt-1 truncate text-[12px]" style="color: var(--color-text-secondary);">macOS · Cursor 活跃 · 同一网络</p>
+            </div>
+            <div class="flex shrink-0 items-center gap-1" style="color: var(--color-primary);">
+              <span class="text-[12px] font-[700] whitespace-nowrap">连接</span>
+              <i data-lucide="chevron-right" class="h-4 w-4 transition-transform duration-150 group-active:translate-x-0 sm:group-hover:translate-x-0.5"></i>
+            </div>
+          </div>
+        </button>
+
+        <button data-dom-id="device-connecting-office" class="w-full rounded-xl border p-3 text-left transition-[background-color,border-color,transform] duration-150 active:translate-y-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-border-active)]" style="border-color: var(--color-border-active); background: var(--color-primary-soft); box-shadow: var(--shadow-card);">
+          <div class="flex items-center gap-3">
+            <div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border" style="border-color: var(--color-border-active); background: var(--color-bg-surface); color: var(--color-primary);">
+              <i data-lucide="loader-circle" class="h-5 w-5 animate-spin"></i>
+            </div>
+            <div class="min-w-0 flex-1">
+              <div class="flex min-w-0 items-center gap-2">
+                <h3 class="truncate text-[15px] font-[700] leading-tight" style="color: var(--color-text-primary);">Office-ThinkPad</h3>
+                <span class="inline-flex h-6 shrink-0 items-center rounded-lg border px-2 text-[11px] font-[700] whitespace-nowrap" style="border-color: var(--color-border-active); background: var(--color-bg-surface); color: var(--color-primary);">连接中</span>
+              </div>
+              <p class="mt-1 truncate text-[12px]" style="color: var(--color-text-secondary);">正在建立安全通道</p>
+            </div>
+            <div class="h-5 w-5 shrink-0 rounded-full border-2 border-t-transparent animate-spin" aria-label="连接中" style="border-color: var(--color-border-active); border-top-color: transparent;"></div>
+          </div>
+        </button>
+
+        <button data-dom-id="device-connect-workstation" class="group w-full rounded-xl border p-3 text-left transition-[background-color,border-color,transform] duration-150 active:translate-y-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-border-active)]" style="border-color: var(--color-border); background: var(--color-bg-surface); box-shadow: var(--shadow-card);">
+          <div class="flex items-center gap-3">
+            <div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border" style="border-color: var(--color-border); background: var(--color-bg-input); color: var(--color-text-secondary);">
+              <i data-lucide="monitor-dot" class="h-5 w-5"></i>
+            </div>
+            <div class="min-w-0 flex-1">
+              <div class="flex min-w-0 items-center gap-2">
+                <h3 class="truncate text-[15px] font-[700] leading-tight" style="color: var(--color-text-primary);">Dev-Workstation</h3>
+                <span class="inline-flex h-6 shrink-0 items-center rounded-lg border px-2 text-[11px] font-[700] whitespace-nowrap" style="border-color: color-mix(in srgb, var(--state-success) 30%, var(--color-border)); background: color-mix(in srgb, var(--state-success) 10%, var(--color-bg-surface)); color: var(--color-text-primary);">在线</span>
+              </div>
+              <p class="mt-1 truncate text-[12px]" style="color: var(--color-text-secondary);">Windows · 3 个工作区可用</p>
+            </div>
+            <div class="flex shrink-0 items-center gap-1" style="color: var(--color-primary);">
+              <span class="text-[12px] font-[700] whitespace-nowrap">连接</span>
+              <i data-lucide="chevron-right" class="h-4 w-4 transition-transform duration-150 group-active:translate-x-0 sm:group-hover:translate-x-0.5"></i>
+            </div>
+          </div>
+        </button>
+      </div>
+    </section>
+
+    <section class="mt-5" aria-labelledby="offline-devices-title">
+      <div class="mb-2 flex items-center justify-between gap-3">
+        <h2 id="offline-devices-title" class="truncate text-[13px] font-[700]" style="color: var(--color-text-primary); text-wrap: balance; word-break: keep-all; overflow-wrap: break-word;">不可用</h2>
+        <button data-dom-id="device-settings-inline" class="shrink-0 text-[12px] font-[700] whitespace-nowrap transition-[color] duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-border-active)]" style="color: var(--color-primary);">进入设置</button>
+      </div>
+
+      <button data-dom-id="device-offline-laptop" disabled class="w-full rounded-xl border p-3 text-left" style="border-color: var(--color-border); background: var(--color-bg-surface); opacity: .72;">
+        <div class="flex items-center gap-3">
+          <div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border" style="border-color: var(--color-border); background: var(--color-bg-input); color: var(--color-text-muted);">
+            <i data-lucide="monitor-off" class="h-5 w-5"></i>
+          </div>
+          <div class="min-w-0 flex-1">
+            <div class="flex min-w-0 items-center gap-2">
+              <h3 class="truncate text-[15px] font-[700] leading-tight" style="color: var(--color-text-primary);">Laptop-Air</h3>
+              <span class="inline-flex h-6 shrink-0 items-center rounded-lg border px-2 text-[11px] font-[700] whitespace-nowrap" style="border-color: var(--color-border); background: var(--color-bg-input); color: var(--color-text-secondary);">离线</span>
+            </div>
+            <p class="mt-1 truncate text-[12px]" style="color: var(--color-text-secondary);">上次在线 18 分钟前</p>
+          </div>
+          <span class="shrink-0 text-[12px] font-[650] whitespace-nowrap" style="color: var(--color-text-muted);">不可连接</span>
+        </div>
+      </button>
+    </section>
+
+    <section class="mt-4 rounded-xl border p-4" aria-labelledby="empty-state-title" style="border-color: var(--color-border); background: var(--color-bg-surface);">
+      <div class="flex items-start gap-3">
+        <div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl" style="background: var(--color-bg-input); color: var(--color-text-secondary);">
+          <i data-lucide="radar" class="h-5 w-5"></i>
+        </div>
+        <div class="min-w-0 flex-1">
+          <h2 id="empty-state-title" class="truncate text-[14px] font-[700]" style="color: var(--color-text-primary); text-wrap: balance; word-break: keep-all; overflow-wrap: break-word;">未发现设备</h2>
+          <p class="mt-1 line-clamp-2 text-[12px] leading-relaxed" style="color: var(--color-text-secondary);">若列表为空，请确认桌面端已登录同一账号，并保持网络可访问。</p>
+          <div class="mt-3 flex items-center gap-2">
+            <button data-dom-id="device-empty-refresh" class="inline-flex h-9 items-center justify-center rounded-lg border px-3 text-[12px] font-[700] whitespace-nowrap transition-[background-color,border-color,transform] duration-150 active:translate-y-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-border-active)]" style="border-color: var(--color-border-active); background: var(--color-primary); color: var(--color-text-inverse);">重新扫描</button>
+            <button data-dom-id="device-help" class="inline-flex h-9 items-center justify-center rounded-lg border px-3 text-[12px] font-[700] whitespace-nowrap transition-[background-color,border-color,transform] duration-150 active:translate-y-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-border-active)]" style="border-color: var(--color-border); background: var(--color-bg-surface); color: var(--color-text-secondary);">查看帮助</button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <footer class="mt-5 flex items-center justify-between gap-3 rounded-xl border px-3 py-3" style="border-color: var(--color-border); background: var(--color-bg-surface);">
+      <div class="min-w-0">
+        <p class="truncate text-[12px] font-[700]" style="color: var(--color-text-primary);">无法连接？</p>
+        <p class="mt-0.5 truncate text-[11px]" style="color: var(--color-text-secondary);">检查桌面端与网络设置</p>
+      </div>
+      <button data-dom-id="device-open-settings" class="inline-flex h-9 shrink-0 items-center justify-center rounded-lg border px-3 text-[12px] font-[700] whitespace-nowrap transition-[background-color,border-color,transform] duration-150 active:translate-y-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-border-active)]" style="border-color: var(--color-border); background: var(--color-bg-input); color: var(--color-text-primary);">去设置</button>
+    </footer>
+  </main>
+
+  <style>
+    button:not(:disabled):hover,
+    a:hover { background-color: var(--color-bg-hover); }
+    button:not(:disabled):active { transform: translateY(1px); }
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+        scroll-behavior: auto !important;
+      }
+    }
+  </style>
+  <script>lucide.createIcons();</script>
+</body>
+</html>

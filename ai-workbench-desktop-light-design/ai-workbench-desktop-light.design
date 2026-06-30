@@ -193,13 +193,29 @@
       }
     },
     {
+      "id": "page-file-icons",
+      "title": "文件图标规范",
+      "type": "page",
+      "version": 1,
+      "createdAt": 1782667600000,
+      "canvasData": {
+        "x": 7440,
+        "y": 0,
+        "group": 0
+      },
+      "devMetadata": {
+        "htmlSrc": "pages/file-icons.html",
+        "interactions": []
+      }
+    },
+    {
       "id": "page-login",
       "title": "登录",
       "type": "page",
       "version": 1,
       "createdAt": 1782665197000,
       "canvasData": {
-        "x": 7440,
+        "x": 8060,
         "y": 0,
         "group": 0
       },

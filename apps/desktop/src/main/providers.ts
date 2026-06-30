@@ -11,12 +11,14 @@ import type { AiProvider, ProviderStatus } from "../services/desktop";
 const BUILTIN_PROVIDERS: AiProvider[] = [
   { id: "codex", name: "Codex CLI", command: "codex", builtIn: true, enabled: true },
   { id: "claude", name: "Claude Code", command: "claude", builtIn: true, enabled: true },
+  { id: "opencode", name: "OpenCode", command: "opencode", builtIn: true, enabled: true },
 ];
 
 function commandExists(command: string): boolean {
-  const which = process.platform === "win32" ? "where" : "which";
   try {
-    const result = spawnSync(which, [command], { encoding: "utf-8" });
+    const result = process.platform === "win32"
+      ? spawnSync("cmd.exe", ["/d", "/s", "/c", "where", command], { encoding: "utf-8" })
+      : spawnSync("which", [command], { encoding: "utf-8" });
     return result.status === 0;
   } catch {
     return false;
@@ -25,12 +27,11 @@ function commandExists(command: string): boolean {
 
 function getCommandVersion(command: string): string | null {
   try {
-    const result = spawnSync(command, ["--version"], {
-      encoding: "utf-8",
-      timeout: 5000,
-    });
+    const result = process.platform === "win32"
+      ? spawnSync("cmd.exe", ["/d", "/s", "/c", command, "--version"], { encoding: "utf-8", timeout: 5000 })
+      : spawnSync(command, ["--version"], { encoding: "utf-8", timeout: 5000 });
     if (result.status === 0) {
-      const out = (result.stdout || "").trim();
+      const out = (result.stdout || result.stderr || "").trim();
       return out.length > 0 ? out : null;
     }
     return null;

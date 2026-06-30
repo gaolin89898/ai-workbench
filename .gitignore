@@ -19,3 +19,7 @@ backend/.gocache/
 .pnpm-store/
 # 本地 SDK 安装（Flutter/Android SDK）
 .sdk/
+
+# 本地验证截图/临时文件
+mobile-*.png
+--title

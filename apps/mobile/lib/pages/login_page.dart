@@ -1,11 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../models/workbench_models.dart';
 import '../services/api_client.dart';
 import '../state/workspace_controller.dart';
 import '../state/workspace_scope.dart';
 import '../widgets/app_theme.dart';
-import 'device_list_page.dart';
+import 'mobile_shell_page.dart';
 
 class LoginPage extends StatefulWidget {
   const LoginPage({super.key});
@@ -31,227 +32,270 @@ class _LoginPageState extends State<LoginPage> {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
+    final theme = Theme.of(context).textTheme;
     return Scaffold(
       backgroundColor: AppColors.background,
       body: Stack(
         children: [
-          // 顶部光晕：圆心位于屏幕顶部居中，模拟设计稿 radial-gradient
+          // 全屏背景：linear-gradient(180deg, primarySoft 0% → transparent 34%)
           Positioned.fill(
             child: DecoratedBox(
               decoration: BoxDecoration(
-                gradient: RadialGradient(
-                  center: Alignment.topCenter,
-                  radius: 0.75,
+                gradient: LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
                   colors: const [
-                    Color(0x1f2563eb), // rgba(37,99,235,0.12)
-                    Color(0x0a2563eb), // rgba(37,99,235,0.04)
+                    AppColors.primarySoft,
                     Colors.transparent,
                   ],
-                  stops: const [0.0, 0.42, 0.72],
+                  stops: const [0.0, 0.34],
                 ),
               ),
             ),
           ),
           SafeArea(
             child: SingleChildScrollView(
-              padding: const EdgeInsets.only(
-                top: 54,
-                left: 22,
-                right: 22,
-                bottom: AppSpacing.x3l,
+              padding: const EdgeInsets.fromLTRB(
+                AppSpacing.lg,
+                AppSpacing.x2l,
+                AppSpacing.lg,
+                AppSpacing.x3l,
               ),
               child: Center(
                 child: ConstrainedBox(
-                  constraints: const BoxConstraints(maxWidth: 420),
+                  constraints: const BoxConstraints(maxWidth: 430),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                      // Logo 容器：66×66，圆角 20，heroGradient + 主色阴影
-                      Center(
-                        child: Container(
-                          width: 66,
-                          height: 66,
-                          decoration: BoxDecoration(
-                            gradient: AppColors.heroGradient,
-                            borderRadius: BorderRadius.circular(20),
-                            boxShadow: AppShadows.primary,
-                          ),
-                          child: const Icon(
-                            Icons.layers,
-                            color: AppColors.inverse,
-                            size: 32,
-                          ),
-                        ),
-                      ),
-                      const SizedBox(height: AppSpacing.xl),
-                      // 标题
-                      Text(
-                        'AI 工作台',
-                        textAlign: TextAlign.center,
-                        style: theme.textTheme.displaySmall,
-                      ),
-                      const SizedBox(height: AppSpacing.sm),
-                      // 副标题：最大宽 286，居中
-                      Center(
-                        child: ConstrainedBox(
-                          constraints: const BoxConstraints(maxWidth: 286),
-                          child: Text(
-                            '连接桌面端 Codex 工作台，随时随地管理你的 AI 会话',
-                            textAlign: TextAlign.center,
-                            style: const TextStyle(
-                              fontSize: 14,
-                              color: AppColors.secondary,
-                              height: 1.65,
+                      // ---- brand-lockup：横向 Row，logo + 标题/副标题 ----
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.center,
+                        children: [
+                          // 56×56 圆角 16 + primaryGradient + terminal 图标
+                          Container(
+                            width: 56,
+                            height: 56,
+                            decoration: BoxDecoration(
+                              gradient: AppColors.primaryGradient,
+                              borderRadius:
+                                  BorderRadius.circular(AppRadius.xl),
                             ),
+                            child: const Icon(
+                              Icons.terminal,
+                              color: AppColors.inverse,
+                              size: 28,
+                            ),
+                          ),
+                          const SizedBox(width: 14),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  'AI 工作台',
+                                  style: theme.displaySmall
+                                      ?.copyWith(fontWeight: FontWeight.w800),
+                                ),
+                                const SizedBox(height: 2),
+                                Text(
+                                  '桌面端认证同步',
+                                  style: theme.bodyMedium,
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: AppSpacing.lg),
+                      // ---- trust-row：状态圆点 + 文案 pill ----
+                      Align(
+                        alignment: Alignment.centerLeft,
+                        child: Container(
+                          height: 30,
+                          padding: const EdgeInsets.symmetric(horizontal: 10),
+                          decoration: BoxDecoration(
+                            color: AppColors.surface,
+                            borderRadius:
+                                BorderRadius.circular(AppRadius.full),
+                            border: Border.all(color: AppColors.border),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              const AppStatusDot(
+                                  size: 7, color: AppColors.success),
+                              const SizedBox(width: 6),
+                              Text(
+                                '桌面端认证同步',
+                                style: theme.bodyMedium,
+                              ),
+                            ],
                           ),
                         ),
                       ),
                       const SizedBox(height: AppSpacing.x2l),
-                      // 表单卡：圆角 24 + 边框 + elevated 阴影 + 半透明背景
+                      // ---- auth-card：表单卡 ----
                       AppCard(
-                        padding: const EdgeInsets.all(22),
-                        borderRadius: AppRadius.x3l,
-                        shadow: AppShadows.elevated,
-                        background: AppColors.surface.withValues(alpha: 0.92),
+                        padding: const EdgeInsets.all(AppSpacing.xl),
+                        borderRadius: AppRadius.xl,
+                        shadow: AppShadows.card,
+                        background: AppColors.surface,
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.stretch,
                           children: [
-                            // 邮箱输入框（label 样式由 inputDecorationTheme 提供）
-                            TextField(
+                            // 邮箱输入框（前缀图标 + TextField）
+                            _IconPrefixTextField(
                               controller: _email,
+                              icon: Icons.mail_outline,
+                              hint: '邮箱',
                               keyboardType: TextInputType.emailAddress,
-                              decoration: const InputDecoration(labelText: '邮箱'),
                             ),
                             const SizedBox(height: AppSpacing.md),
-                            // 密码输入框
-                            TextField(
+                            // 密码输入框（前缀图标 + TextField）
+                            _IconPrefixTextField(
                               controller: _password,
+                              icon: Icons.lock_outline,
+                              hint: '密码',
                               obscureText: true,
-                              decoration: const InputDecoration(labelText: '密码'),
                             ),
-                            if (_error != null) ...[
-                              const SizedBox(height: AppSpacing.md),
-                              Text(
-                                _error!,
-                                style: const TextStyle(
-                                  color: AppColors.danger,
-                                  fontSize: 13,
-                                  height: 1.4,
+                            const SizedBox(height: AppSpacing.sm),
+                            // 忘记密码链接
+                            Align(
+                              alignment: Alignment.centerRight,
+                              child: TextButton(
+                                onPressed: () {},
+                                style: TextButton.styleFrom(
+                                  foregroundColor: AppColors.primary,
+                                  padding: EdgeInsets.zero,
+                                  minimumSize: const Size(0, 24),
+                                  tapTargetSize:
+                                      MaterialTapTargetSize.shrinkWrap,
+                                ),
+                                child: const Text(
+                                  '忘记密码',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    color: AppColors.primary,
+                                  ),
                                 ),
                               ),
-                            ],
-                            const SizedBox(height: 22),
-                            // 主按钮：渐变背景 + 主色阴影
+                            ),
+                            const SizedBox(height: AppSpacing.md),
+                            // 主按钮"继续"：纯色 AppColors.primary + arrow_right 图标
                             _PrimaryButton(
                               loading: _loading,
                               disabled: _oauthLoading,
                               onPressed: _login,
                             ),
-                            const SizedBox(height: AppSpacing.md),
-                            // 自动注册提示
-                            const Center(
-                              child: Text(
-                                '首次使用将自动创建账号',
-                                style: TextStyle(
-                                  color: AppColors.muted,
-                                  fontSize: 12,
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(height: AppSpacing.lg),
-                      // 分隔符：Divider + "或" + Divider
-                      const Row(
-                        children: [
-                          Expanded(child: Divider()),
-                          Padding(
-                            padding: EdgeInsets.symmetric(horizontal: AppSpacing.md),
-                            child: Text(
-                              '或',
-                              style: TextStyle(
-                                color: AppColors.muted,
-                                fontSize: 12,
-                              ),
-                            ),
-                          ),
-                          Expanded(child: Divider()),
-                        ],
-                      ),
-                      const SizedBox(height: AppSpacing.lg),
-                      // 钉钉登录按钮：OutlinedButton 变体，左侧带钉钉图标方块
-                      OutlinedButton(
-                        onPressed: _loading || _oauthLoading
-                            ? null
-                            : _loginWithDingTalk,
-                        style: OutlinedButton.styleFrom(
-                          minimumSize: const Size.fromHeight(48),
-                          backgroundColor: AppColors.surface,
-                          side: const BorderSide(color: AppColors.border),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(AppRadius.lg),
-                          ),
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: AppSpacing.lg,
-                          ),
-                        ),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            // 钉钉图标方块：28×28，圆角 10，钉钉蓝底，白色"D"字母
-                            Container(
-                              width: 28,
-                              height: 28,
-                              decoration: BoxDecoration(
-                                color: AppColors.dingtalk,
-                                borderRadius: BorderRadius.circular(AppRadius.md),
-                              ),
-                              child: const Center(
-                                child: Text(
-                                  'D',
-                                  style: TextStyle(
-                                    color: AppColors.inverse,
-                                    fontSize: 12,
-                                    fontWeight: FontWeight.w700,
+                            const SizedBox(height: AppSpacing.lg),
+                            // 分隔符：Divider + "或" + Divider
+                            const Row(
+                              children: [
+                                Expanded(child: Divider()),
+                                Padding(
+                                  padding: EdgeInsets.symmetric(
+                                      horizontal: AppSpacing.md),
+                                  child: Text(
+                                    '或',
+                                    style: TextStyle(
+                                      color: AppColors.muted,
+                                      fontSize: 12,
+                                    ),
                                   ),
                                 ),
-                              ),
+                                Expanded(child: Divider()),
+                              ],
                             ),
-                            const SizedBox(width: 10),
-                            Text(
-                              _oauthLoading ? '等待扫码...' : '钉钉扫码登录',
-                              style: const TextStyle(
-                                color: AppColors.secondary,
-                                fontSize: 14,
-                                fontWeight: FontWeight.w600,
+                            const SizedBox(height: AppSpacing.lg),
+                            // 钉钉登录按钮：OutlinedButton + 28×28 方块 + "钉"
+                            OutlinedButton(
+                              onPressed: _loading || _oauthLoading
+                                  ? null
+                                  : _loginWithDingTalk,
+                              style: OutlinedButton.styleFrom(
+                                minimumSize: const Size.fromHeight(48),
+                                backgroundColor: AppColors.surface,
+                                side:
+                                    const BorderSide(color: AppColors.border),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius:
+                                      BorderRadius.circular(AppRadius.lg),
+                                ),
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: AppSpacing.lg),
+                              ),
+                              child: Row(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  Container(
+                                    width: 28,
+                                    height: 28,
+                                    decoration: BoxDecoration(
+                                      color: AppColors.dingtalk,
+                                      borderRadius: BorderRadius.circular(
+                                          AppRadius.md),
+                                    ),
+                                    child: const Center(
+                                      child: Text(
+                                        '钉',
+                                        style: TextStyle(
+                                          color: AppColors.inverse,
+                                          fontSize: 13,
+                                          fontWeight: FontWeight.w700,
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 10),
+                                  Text(
+                                    _oauthLoading ? '等待扫码...' : '钉钉登录',
+                                    style: const TextStyle(
+                                      color: AppColors.secondary,
+                                      fontSize: 14,
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
+                                ],
                               ),
                             ),
                           ],
                         ),
                       ),
-                      if (_oauthStatus != null) ...[
-                        const SizedBox(height: AppSpacing.sm),
-                        Text(
-                          _oauthStatus!,
-                          textAlign: TextAlign.center,
-                          style: const TextStyle(
-                            color: AppColors.muted,
-                            fontSize: 12,
+                      const SizedBox(height: AppSpacing.lg),
+                      // ---- status-area：状态提示或错误 ----
+                      _StatusArea(
+                        error: _error,
+                        hint: _oauthStatus ??
+                            '使用桌面端账号登录，将自动同步已配对设备。',
+                      ),
+                      const SizedBox(height: AppSpacing.lg),
+                      // ---- device-note：底部说明 ----
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.center,
+                        children: [
+                          AppIconBox(
+                            icon: Icons.info_outline,
+                            size: 34,
+                            iconSize: 18,
+                            borderRadius: 10,
+                            background: AppColors.primarySoftSolid,
+                            foreground: AppColors.primary,
                           ),
-                        ),
-                      ],
-                      const SizedBox(height: AppSpacing.x3l),
-                      // 底部版本号
-                      const Center(
-                        child: Text(
-                          'v0.1.22',
-                          style: TextStyle(
-                            color: AppColors.muted,
-                            fontSize: 11,
+                          const SizedBox(width: AppSpacing.md),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text('移动端登录', style: theme.titleMedium),
+                                const SizedBox(height: 2),
+                                Text(
+                                  '登录后将自动连接桌面设备',
+                                  style: theme.bodyMedium,
+                                ),
+                              ],
+                            ),
                           ),
-                        ),
+                        ],
                       ),
                     ],
                   ),
@@ -275,12 +319,7 @@ class _LoginPageState extends State<LoginPage> {
       final controller = WorkspaceController(api: api);
       await controller.loadDevices();
       if (!mounted) return;
-      Navigator.of(context).pushReplacement(MaterialPageRoute(
-        builder: (_) => WorkspaceScope(
-          controller: controller,
-          child: const DeviceListPage(),
-        ),
-      ));
+      await _openWorkspace(controller);
     } catch (error) {
       setState(() => _error = error.toString().replaceFirst('Exception: ', ''));
     } finally {
@@ -326,12 +365,7 @@ class _LoginPageState extends State<LoginPage> {
       final controller = WorkspaceController(api: api);
       await controller.loadDevices();
       if (!mounted) return;
-      Navigator.of(context).pushReplacement(MaterialPageRoute(
-        builder: (_) => WorkspaceScope(
-          controller: controller,
-          child: const DeviceListPage(),
-        ),
-      ));
+      await _openWorkspace(controller);
     } catch (error) {
       setState(() {
         _error = error.toString().replaceFirst('Exception: ', '');
@@ -341,9 +375,136 @@ class _LoginPageState extends State<LoginPage> {
       if (mounted) setState(() => _oauthLoading = false);
     }
   }
+
+  Future<void> _openWorkspace(WorkspaceController controller) async {
+    final device = _pickInitialDevice(controller.devices);
+    if (device != null) {
+      await controller.selectDevice(device);
+    }
+    if (!mounted) return;
+    Navigator.of(context).pushReplacement(MaterialPageRoute(
+      builder: (_) => WorkspaceScope(
+        controller: controller,
+        child: const MobileShellPage(),
+      ),
+    ));
+  }
+
+  DesktopDevice? _pickInitialDevice(List<DesktopDevice> devices) {
+    for (final device in devices) {
+      if (device.online) return device;
+    }
+    return devices.isEmpty ? null : devices.first;
+  }
 }
 
-/// 渐变主按钮。背景使用 primaryGradient，叠加主色阴影。
+/// 带前缀图标的输入框：Container(surfaceMuted + border) + Row[Icon + TextField]
+class _IconPrefixTextField extends StatelessWidget {
+  const _IconPrefixTextField({
+    required this.controller,
+    required this.icon,
+    required this.hint,
+    this.obscureText = false,
+    this.keyboardType,
+  });
+
+  final TextEditingController controller;
+  final IconData icon;
+  final String hint;
+  final bool obscureText;
+  final TextInputType? keyboardType;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: BoxDecoration(
+        color: AppColors.surfaceMuted,
+        borderRadius: BorderRadius.circular(AppRadius.lg),
+        border: Border.all(color: AppColors.border),
+      ),
+      child: Row(
+        children: [
+          Padding(
+            padding: const EdgeInsets.all(14),
+            child: Icon(icon, size: 18, color: AppColors.muted),
+          ),
+          Expanded(
+            child: TextField(
+              controller: controller,
+              obscureText: obscureText,
+              keyboardType: keyboardType,
+              style: const TextStyle(
+                fontSize: 14,
+                color: AppColors.ink,
+              ),
+              decoration: InputDecoration(
+                hintText: hint,
+                hintStyle: const TextStyle(
+                  color: AppColors.muted,
+                  fontSize: 14,
+                ),
+                border: InputBorder.none,
+                enabledBorder: InputBorder.none,
+                focusedBorder: InputBorder.none,
+                isDense: true,
+                contentPadding:
+                    const EdgeInsets.symmetric(vertical: 14),
+                filled: false,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// 状态提示区：默认 primarySoft 背景 + primary 文案；错误时 danger 风格。
+class _StatusArea extends StatelessWidget {
+  const _StatusArea({required this.error, required this.hint});
+
+  final String? error;
+  final String hint;
+
+  @override
+  Widget build(BuildContext context) {
+    final hasError = error != null;
+    return Container(
+      constraints: const BoxConstraints(minHeight: 36),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      decoration: BoxDecoration(
+        color: hasError ? AppColors.dangerSoft : AppColors.primarySoft,
+        borderRadius: BorderRadius.circular(AppRadius.md),
+        border: hasError
+            ? Border.all(color: AppColors.danger)
+            : Border.all(color: Colors.transparent),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          Icon(
+            hasError ? Icons.error_outline : Icons.info_outline,
+            size: 18,
+            color: hasError ? AppColors.danger : AppColors.primary,
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              hasError ? error! : hint,
+              style: TextStyle(
+                fontSize: 13,
+                color: hasError ? AppColors.danger : AppColors.secondary,
+                height: 1.4,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// 主按钮：高 48 圆角 12，纯色 AppColors.primary 背景 + arrow_right 图标（不使用渐变）
 class _PrimaryButton extends StatelessWidget {
   const _PrimaryButton({
     required this.loading,
@@ -361,25 +522,32 @@ class _PrimaryButton extends StatelessWidget {
     return Opacity(
       opacity: isDisabled ? 0.6 : 1.0,
       child: Container(
-        height: 50,
+        height: 48,
         decoration: BoxDecoration(
-          gradient: AppColors.primaryGradient,
-          borderRadius: BorderRadius.circular(AppRadius.xl),
-          boxShadow: AppShadows.primary,
+          color: AppColors.primary,
+          borderRadius: BorderRadius.circular(AppRadius.lg),
         ),
         child: Material(
           color: Colors.transparent,
           child: InkWell(
             onTap: isDisabled ? null : () => onPressed(),
-            borderRadius: BorderRadius.circular(AppRadius.xl),
+            borderRadius: BorderRadius.circular(AppRadius.lg),
             child: Center(
-              child: Text(
-                loading ? '连接中...' : '继续使用',
-                style: const TextStyle(
-                  color: AppColors.inverse,
-                  fontSize: 15,
-                  fontWeight: FontWeight.w600,
-                ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    loading ? '连接中...' : '继续',
+                    style: const TextStyle(
+                      color: AppColors.inverse,
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  const SizedBox(width: 6),
+                  const Icon(Icons.arrow_forward,
+                      size: 18, color: AppColors.inverse),
+                ],
               ),
             ),
           ),

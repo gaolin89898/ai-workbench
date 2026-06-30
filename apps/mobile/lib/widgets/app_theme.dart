@@ -106,7 +106,6 @@ class AppShadows {
 
 /// 状态徽章的配对配色。用于 status pill、status dot、_Badge 等场景。
 class AppStatusStyle {
-  AppStatusStyle._();
   final Color bg;
   final Color fg;
   final Color? border;
@@ -124,11 +123,24 @@ class AppStatusStyle {
 // ThemeData
 // ===========================================================================
 
+/// 中文字体回退列表。新设计在 --font-sans 中追加了 Noto Sans SC / PingFang SC /
+/// Microsoft YaHei，这里在 Flutter 侧对齐。
+const _kFallbackFonts = <String>[
+  'Inter',
+  'Noto Sans SC',
+  'PingFang SC',
+  'Microsoft YaHei',
+  'Roboto',
+];
+
 ThemeData buildAppTheme() {
   final base = ThemeData(
     useMaterial3: true,
     brightness: Brightness.light,
     scaffoldBackgroundColor: AppColors.background,
+    // 新设计：--font-sans 追加中文字体回退
+    fontFamily: 'Inter',
+    fontFamilyFallback: _kFallbackFonts,
     colorScheme: const ColorScheme.light(
       primary: AppColors.primary,
       onPrimary: AppColors.inverse,
@@ -216,7 +228,6 @@ ThemeData buildAppTheme() {
       backgroundColor: AppColors.surface,
       foregroundColor: AppColors.ink,
       elevation: 0,
-      scrolledUnderlineColor: Colors.transparent,
       centerTitle: false,
       titleTextStyle: TextStyle(
         color: AppColors.ink,
@@ -444,12 +455,16 @@ class AppSectionTitle extends StatelessWidget {
     this.subtitle,
     this.trailing,
     this.padding = EdgeInsets.zero,
+    this.titleStyle,
   });
 
   final String text;
   final String? subtitle;
   final Widget? trailing;
   final EdgeInsetsGeometry padding;
+
+  /// 自定义标题文字样式。不传时默认使用 textTheme.titleLarge。
+  final TextStyle? titleStyle;
 
   @override
   Widget build(BuildContext context) {
@@ -462,7 +477,10 @@ class AppSectionTitle extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(text, style: Theme.of(context).textTheme.titleLarge),
+                Text(
+                  text,
+                  style: titleStyle ?? Theme.of(context).textTheme.titleLarge,
+                ),
                 if (subtitle != null)
                   Padding(
                     padding: const EdgeInsets.only(top: 2),

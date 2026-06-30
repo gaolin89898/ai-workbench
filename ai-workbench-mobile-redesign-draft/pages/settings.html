@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<html class="light" lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AI Workbench - 设置</title>
+  <style id="theme-vars">
+    :root {
+      --color-primary: #2563eb;
+      --color-primary-hover: #1d4ed8;
+      --color-primary-muted: rgba(37, 99, 235, 0.12);
+      --color-primary-soft: rgba(37, 99, 235, 0.06);
+      --color-bg-app: #f8fafc;
+      --color-bg-surface: #ffffff;
+      --color-bg-input: #f1f5f9;
+      --color-bg-hover: rgba(15, 23, 42, 0.03);
+      --color-text-primary: #0f172a;
+      --color-text-secondary: #475569;
+      --color-text-muted: #94a3b8;
+      --color-text-inverse: #ffffff;
+      --color-border: #e2e8f0;
+      --state-success: #22c55e;
+      --state-warning: #f59e0b;
+      --state-error: #ef4444;
+      --state-info: #3b82f6;
+      --radius-sm: 4px;
+      --radius-md: 8px;
+      --radius-lg: 16px;
+      --radius-full: 9999px;
+      --font-sans: Inter, "Noto Sans SC", "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+      --font-mono: "JetBrains Mono", "Fira Code", ui-monospace, monospace;
+      --text-xs: 11px;
+      --text-sm: 12px;
+      --text-base: 13px;
+      --text-md: 14px;
+      --text-lg: 16px;
+      --text-xl: 20px;
+      --leading-tight: 1.25;
+      --leading-normal: 1.5;
+      --font-weight-normal: 400;
+      --font-weight-medium: 500;
+      --font-weight-semibold: 600;
+      --font-weight-bold: 700;
+      --shadow-card: 0 1px 2px rgba(15, 23, 42, 0.05);
+    }
+  </style>
+  <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4.3.1/dist/index.global.js"></script>
+  <script src="https://unpkg.com/lucide@1.8.0/dist/umd/lucide.min.js"></script>
+  <style type="text/tailwindcss">
+    @theme inline {
+      --color-primary: var(--color-primary);
+      --color-border: var(--color-border);
+    }
+    @layer base {
+      body { background: var(--color-bg-app); color: var(--color-text-primary); }
+      button, a, input { font: inherit; }
+    }
+  </style>
+  <style>
+    * { box-sizing: border-box; }
+    body { margin: 0; font-family: var(--font-sans); background: var(--color-bg-app); color: var(--color-text-primary); -webkit-font-smoothing: antialiased; }
+    button { -webkit-tap-highlight-color: transparent; cursor: pointer; }
+    button:focus-visible, input:focus-visible, a:focus-visible { outline: 2px solid var(--color-primary); outline-offset: 2px; }
+    .app-main { min-height: 100vh; padding: 14px 16px 112px; }
+    .app-header { position: sticky; top: 0; z-index: 20; margin: -14px -16px 0; padding: 14px 16px 12px; background: rgba(248, 250, 252, 0.94); border-bottom: 1px solid rgba(226, 232, 240, 0.72); backdrop-filter: blur(14px); }
+    .header-title { margin: 0; font-size: 22px; line-height: 1.24; font-weight: var(--font-weight-bold); letter-spacing: -0.02em; text-wrap: balance; word-break: keep-all; }
+    .header-subtitle { margin: 3px 0 0; color: var(--color-text-secondary); font-size: var(--text-base); line-height: var(--leading-normal); }
+    .section { margin-top: 18px; }
+    .section-title { margin: 0 0 9px 2px; color: var(--color-text-muted); font-size: var(--text-sm); line-height: 1.4; font-weight: var(--font-weight-semibold); }
+    .settings-card { overflow: hidden; border: 1px solid var(--color-border); border-radius: var(--radius-lg); background: var(--color-bg-surface); box-shadow: var(--shadow-card); }
+    .row { min-height: 58px; width: 100%; display: flex; align-items: center; gap: 12px; padding: 0 14px; border: 0; border-bottom: 1px solid var(--color-border); background: transparent; color: inherit; text-align: left; }
+    .row:last-child { border-bottom: 0; }
+    .row:hover { background: var(--color-bg-hover); }
+    .row:active { background: var(--color-primary-soft); }
+    .icon-box { width: 34px; height: 34px; border-radius: 14px; display: inline-flex; align-items: center; justify-content: center; flex: 0 0 auto; color: var(--color-primary); background: var(--color-primary-soft); }
+    .icon-box.neutral { color: var(--color-text-secondary); background: var(--color-bg-input); }
+    .icon-box.success { color: var(--state-success); background: color-mix(in srgb, var(--state-success) 10%, white); }
+    .icon-box.warning { color: var(--state-warning); background: color-mix(in srgb, var(--state-warning) 12%, white); }
+    .icon-box.info { color: var(--state-info); background: color-mix(in srgb, var(--state-info) 10%, white); }
+    .row-text { min-width: 0; flex: 1; }
+    .row-title { display: block; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; color: var(--color-text-primary); font-size: var(--text-md); line-height: 1.35; font-weight: var(--font-weight-semibold); }
+    .row-desc { display: block; margin-top: 3px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; color: var(--color-text-secondary); font-size: var(--text-sm); line-height: 1.35; }
+    .right-text { flex: 0 0 auto; max-width: 96px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; color: var(--color-text-muted); font-size: var(--text-sm); }
+    .chevron { flex: 0 0 auto; color: var(--color-text-muted); }
+    .switch { width: 46px; height: 26px; border: 0; border-radius: var(--radius-full); position: relative; flex: 0 0 auto; transition: background-color 150ms cubic-bezier(.2,.8,.2,1); }
+    .switch::after { content: ""; position: absolute; top: 3px; width: 20px; height: 20px; border-radius: var(--radius-full); background: var(--color-bg-surface); box-shadow: 0 1px 2px rgba(15, 23, 42, 0.05); transition: transform 150ms cubic-bezier(.2,.8,.2,1); }
+    .switch.on { background: var(--color-primary); }
+    .switch.on::after { transform: translateX(20px); left: 3px; }
+    .switch.off { background: var(--color-border); }
+    .switch.off::after { transform: translateX(0); left: 3px; }
+    .slider-wrap { padding: 14px; }
+    .slider-top { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 12px; }
+    .slider-label { min-width: 0; color: var(--color-text-primary); font-size: var(--text-md); font-weight: var(--font-weight-semibold); }
+    .slider-value { color: var(--color-primary); font-size: var(--text-sm); font-weight: var(--font-weight-semibold); white-space: nowrap; }
+    .range { width: 100%; accent-color: var(--color-primary); }
+    .slider-note { margin: 9px 0 0; color: var(--color-text-secondary); font-size: var(--text-sm); line-height: 1.45; }
+    .logout { height: 50px; width: 100%; border: 1px solid color-mix(in srgb, var(--state-error) 24%, white); border-radius: var(--radius-lg); background: var(--color-bg-surface); color: var(--state-error); font-size: var(--text-md); font-weight: var(--font-weight-semibold); box-shadow: var(--shadow-card); }
+    .logout:hover { background: color-mix(in srgb, var(--state-error) 6%, white); }
+    .bottom-nav { position: fixed; left: 0; right: 0; bottom: 0; z-index: 30; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 4px; padding: 8px 16px calc(8px + env(safe-area-inset-bottom)); border-top: 1px solid var(--color-border); background: rgba(255, 255, 255, 0.94); backdrop-filter: blur(16px); }
+    .nav-item { min-width: 0; min-height: 54px; border: 0; border-radius: var(--radius-md); background: transparent; color: var(--color-text-muted); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; transition: background-color 150ms cubic-bezier(.2,.8,.2,1), color 150ms cubic-bezier(.2,.8,.2,1), transform 150ms cubic-bezier(.2,.8,.2,1); }
+    .nav-item:hover { background: var(--color-bg-hover); }
+    .nav-item:active { transform: translateY(1px); }
+    .nav-item.active { color: var(--color-primary); background: var(--color-primary-soft); }
+    .nav-label { font-size: var(--text-xs); line-height: 1.2; font-weight: var(--font-weight-semibold); white-space: nowrap; }
+    @media (min-width: 640px) { .app-main { max-width: 520px; margin: 0 auto; } .app-header { border-left: 1px solid rgba(226, 232, 240, 0.72); border-right: 1px solid rgba(226, 232, 240, 0.72); } .bottom-nav { left: 50%; right: auto; width: 520px; transform: translateX(-50%); border-left: 1px solid var(--color-border); border-right: 1px solid var(--color-border); } }
+    @media (prefers-reduced-motion: reduce) { *, *::before, *::after { transition-duration: 0.01ms !important; animation-duration: 0.01ms !important; } }
+  </style>
+</head>
+<body>
+  <main class="app-main">
+    <header class="app-header">
+      <h1 class="header-title">设置</h1>
+      <p class="header-subtitle">连接、偏好与应用管理</p>
+    </header>
+
+    <section class="section" aria-labelledby="account-title">
+      <h2 id="account-title" class="section-title">账户</h2>
+      <div class="settings-card">
+        <button class="row" type="button" data-dom-id="settings-account">
+          <span class="icon-box" aria-hidden="true"><i data-lucide="user" style="width:18px;height:18px"></i></span>
+          <span class="row-text">
+            <span class="row-title">李明</span>
+            <span class="row-desc">li@workbench.ai</span>
+          </span>
+          <span class="right-text">开发者</span>
+          <i class="chevron" data-lucide="chevron-right" style="width:18px;height:18px" aria-hidden="true"></i>
+        </button>
+      </div>
+    </section>
+
+    <section class="section" aria-labelledby="connect-title">
+      <h2 id="connect-title" class="section-title">连接</h2>
+      <div class="settings-card">
+        <button class="row" type="button" data-dom-id="settings-connection">
+          <span class="icon-box" aria-hidden="true"><i data-lucide="link" style="width:18px;height:18px"></i></span>
+          <span class="row-text"><span class="row-title">连接</span><span class="row-desc">远程节点与本地代理</span></span>
+          <span class="right-text">已连接</span>
+          <i class="chevron" data-lucide="chevron-right" style="width:18px;height:18px" aria-hidden="true"></i>
+        </button>
+        <button class="row" type="button" data-dom-id="settings-device-pairing">
+          <span class="icon-box info" aria-hidden="true"><i data-lucide="smartphone" style="width:18px;height:18px"></i></span>
+          <span class="row-text"><span class="row-title">设备配对</span><span class="row-desc">扫码绑定移动设备</span></span>
+          <span class="right-text">2 台</span>
+          <i class="chevron" data-lucide="chevron-right" style="width:18px;height:18px" aria-hidden="true"></i>
+        </button>
+        <div class="row" data-dom-id="settings-auto-reconnect">
+          <span class="icon-box neutral" aria-hidden="true"><i data-lucide="refresh-cw" style="width:18px;height:18px"></i></span>
+          <span class="row-text"><span class="row-title">自动重连</span><span class="row-desc">网络恢复后重新连接</span></span>
+          <button class="switch on" type="button" aria-label="自动重连已开启"></button>
+        </div>
+      </div>
+    </section>
+
+    <section class="section" aria-labelledby="security-title">
+      <h2 id="security-title" class="section-title">安全</h2>
+      <div class="settings-card">
+        <button class="row" type="button" data-dom-id="settings-security-history">
+          <span class="icon-box success" aria-hidden="true"><i data-lucide="shield-check" style="width:18px;height:18px"></i></span>
+          <span class="row-text"><span class="row-title">安全与历史</span><span class="row-desc">登录记录与访问控制</span></span>
+          <i class="chevron" data-lucide="chevron-right" style="width:18px;height:18px" aria-hidden="true"></i>
+        </button>
+        <div class="row" data-dom-id="settings-risk-confirm">
+          <span class="icon-box warning" aria-hidden="true"><i data-lucide="triangle-alert" style="width:18px;height:18px"></i></span>
+          <span class="row-text"><span class="row-title">高危内容确认</span><span class="row-desc">执行敏感操作前提醒</span></span>
+          <button class="switch on" type="button" aria-label="高危内容确认已开启"></button>
+        </div>
+        <div class="row" data-dom-id="settings-audit-log">
+          <span class="icon-box neutral" aria-hidden="true"><i data-lucide="file-clock" style="width:18px;height:18px"></i></span>
+          <span class="row-text"><span class="row-title">记录命令审计</span><span class="row-desc">保留关键命令轨迹</span></span>
+          <button class="switch on" type="button" aria-label="记录命令审计已开启"></button>
+        </div>
+        <button class="row" type="button" data-dom-id="settings-archive">
+          <span class="icon-box neutral" aria-hidden="true"><i data-lucide="archive" style="width:18px;height:18px"></i></span>
+          <span class="row-text"><span class="row-title">已归档对话</span><span class="row-desc">查看收起的历史会话</span></span>
+          <span class="right-text">18 条</span>
+          <i class="chevron" data-lucide="chevron-right" style="width:18px;height:18px" aria-hidden="true"></i>
+        </button>
+      </div>
+    </section>
+
+    <section class="section" aria-labelledby="output-title">
+      <h2 id="output-title" class="section-title">输出</h2>
+      <div class="settings-card">
+        <div class="slider-wrap" data-dom-id="settings-output-buffer">
+          <div class="slider-top">
+            <span class="slider-label">输出缓冲行数</span>
+            <span class="slider-value">1200 行</span>
+          </div>
+          <input class="range" type="range" min="200" max="2000" value="1200" aria-label="输出缓冲行数">
+          <p class="slider-note">控制终端与代理输出在移动端保留的最大行数。</p>
+        </div>
+      </div>
+    </section>
+
+    <section class="section" aria-labelledby="more-title">
+      <h2 id="more-title" class="section-title">更多</h2>
+      <div class="settings-card">
+        <button class="row" type="button" data-dom-id="settings-ai-tools">
+          <span class="icon-box" aria-hidden="true"><i data-lucide="bot" style="width:18px;height:18px"></i></span>
+          <span class="row-text"><span class="row-title">AI 工具管理</span><span class="row-desc">管理模型、工具与权限</span></span>
+          <i class="chevron" data-lucide="chevron-right" style="width:18px;height:18px" aria-hidden="true"></i>
+        </button>
+        <button class="row" type="button" data-dom-id="settings-update">
+          <span class="icon-box success" aria-hidden="true"><i data-lucide="download" style="width:18px;height:18px"></i></span>
+          <span class="row-text"><span class="row-title">应用更新</span><span class="row-desc">当前版本 2.8.4</span></span>
+          <span class="right-text">已是最新</span>
+          <i class="chevron" data-lucide="chevron-right" style="width:18px;height:18px" aria-hidden="true"></i>
+        </button>
+      </div>
+    </section>
+
+    <section class="section">
+      <button class="logout" type="button" data-dom-id="settings-logout">退出登录</button>
+    </section>
+  </main>
+
+  <nav class="bottom-nav" aria-label="底部导航">
+    <button class="nav-item" type="button" data-dom-id="nav-workbench">
+      <i data-lucide="layout-dashboard" style="width:20px;height:20px" aria-hidden="true"></i>
+      <span class="nav-label">工作台</span>
+    </button>
+    <button class="nav-item" type="button" data-dom-id="nav-projects">
+      <i data-lucide="folder-kanban" style="width:20px;height:20px" aria-hidden="true"></i>
+      <span class="nav-label">项目</span>
+    </button>
+    <button class="nav-item active" type="button" data-dom-id="nav-settings" aria-current="page">
+      <i data-lucide="settings" style="width:20px;height:20px" aria-hidden="true"></i>
+      <span class="nav-label">设置</span>
+    </button>
+  </nav>
+
+  <script>lucide.createIcons();</script>
+</body>
+</html>

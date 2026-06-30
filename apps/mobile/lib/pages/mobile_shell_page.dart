@@ -6,6 +6,7 @@ import '../state/workspace_scope.dart';
 import '../widgets/app_theme.dart';
 import 'chat_page.dart';
 import 'providers_page.dart';
+import 'settings_page.dart';
 
 class MobileShellPage extends StatefulWidget {
   const MobileShellPage({super.key});
@@ -17,17 +18,16 @@ class MobileShellPage extends StatefulWidget {
 class _MobileShellPageState extends State<MobileShellPage> {
   int _index = 0;
 
-  // 切换 tab
   void _goToTab(int i) => setState(() => _index = i);
 
   @override
   Widget build(BuildContext context) {
-    // 4 个 tab：工作台 / 项目 / 会话 / 日志
+    final ws = WorkspaceScope.of(context);
+    // 3 个 Tab：工作台 / 项目 / 设置（删除「会话」「日志」tab）
     final pages = <Widget>[
       _DashboardTab(onNavigate: _goToTab),
       const _ProjectsTab(),
-      const _SessionsTab(),
-      const _LogsTab(),
+      WorkspaceScope(controller: ws, child: const SettingsPage()),
     ];
     return Scaffold(
       // IndexedStack 保留各 tab 状态
@@ -37,12 +37,20 @@ class _MobileShellPageState extends State<MobileShellPage> {
         onDestinationSelected: _goToTab,
         destinations: const [
           NavigationDestination(
-              icon: Icon(Icons.space_dashboard_outlined), label: '工作台'),
-          NavigationDestination(icon: Icon(Icons.folder_outlined), label: '项目'),
+            icon: Icon(Icons.dashboard_outlined),
+            selectedIcon: Icon(Icons.dashboard),
+            label: '工作台',
+          ),
           NavigationDestination(
-              icon: Icon(Icons.chat_bubble_outline), label: '会话'),
+            icon: Icon(Icons.folder_outlined),
+            selectedIcon: Icon(Icons.folder),
+            label: '项目',
+          ),
           NavigationDestination(
-              icon: Icon(Icons.receipt_long_outlined), label: '日志'),
+            icon: Icon(Icons.settings_outlined),
+            selectedIcon: Icon(Icons.settings),
+            label: '设置',
+          ),
         ],
       ),
     );
@@ -68,29 +76,41 @@ class _DashboardTab extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              _DashboardHeader(onRefresh: ws.refreshWorkspace),
+              _DashboardHeader(ws: ws),
               Expanded(
                 child: RefreshIndicator(
                   onRefresh: ws.refreshWorkspace,
                   child: SingleChildScrollView(
                     physics: const AlwaysScrollableScrollPhysics(),
-                    // 底部 86 避让导航栏
-                    padding: const EdgeInsets.fromLTRB(16, 0, 16, 86),
+                    // 底部 96 避让导航栏
+                    padding: const EdgeInsets.fromLTRB(16, 12, 16, 96),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
                         _HeroCard(ws: ws),
                         const SizedBox(height: AppSpacing.xl),
-                        const AppSectionTitle('快捷操作', subtitle: '常用工具'),
+                        const AppSectionTitle('快捷操作'),
                         const SizedBox(height: AppSpacing.md),
                         _QuickActions(ws: ws, onNavigate: onNavigate),
+                        const SizedBox(height: AppSpacing.xl),
+                        AppSectionTitle(
+                          '项目概览',
+                          trailing: TextButton(
+                            onPressed: onNavigate == null
+                                ? null
+                                : () => onNavigate!(1),
+                            child: const Text('管理'),
+                          ),
+                        ),
+                        const SizedBox(height: AppSpacing.md),
+                        _ProjectOverview(ws: ws),
                         const SizedBox(height: AppSpacing.xl),
                         AppSectionTitle(
                           '最近会话',
                           trailing: TextButton(
                             onPressed: onNavigate == null
                                 ? null
-                                : () => onNavigate!(2),
+                                : () => onNavigate!(1),
                             child: const Text('查看全部'),
                           ),
                         ),
@@ -108,7 +128,7 @@ class _DashboardTab extends StatelessWidget {
     );
   }
 
-  // 最近会话区：空状态或分组卡
+  // 最近会话区：空状态或会话列表卡
   Widget _buildRecentSessions(BuildContext context, WorkspaceController ws) {
     if (ws.sessions.isEmpty) {
       return const SizedBox(
@@ -118,14 +138,15 @@ class _DashboardTab extends StatelessWidget {
     }
     final recent = ws.sessions.take(5).toList();
     return AppCard(
-      borderRadius: AppRadius.xl,
+      borderRadius: AppRadius.lg,
       padding: EdgeInsets.zero,
       child: ClipRRect(
-        borderRadius: BorderRadius.circular(AppRadius.xl),
+        borderRadius: BorderRadius.circular(AppRadius.lg),
         child: Column(
           children: [
             for (int i = 0; i < recent.length; i++) ...[
-              if (i > 0) const Divider(height: 1, thickness: 1, color: AppColors.divider),
+              if (i > 0)
+                const Divider(height: 1, thickness: 1, color: AppColors.divider),
               _GroupedSessionTile(sessionId: recent[i].id),
             ],
           ],
@@ -135,29 +156,34 @@ class _DashboardTab extends StatelessWidget {
   }
 }
 
-// 工作台顶栏：问候语 + 刷新按钮
+// 工作台顶栏：副标题 + 主标题"工作台" + 右侧设备切换器按钮
 class _DashboardHeader extends StatelessWidget {
-  const _DashboardHeader({required this.onRefresh});
+  const _DashboardHeader({required this.ws});
 
-  final VoidCallback onRefresh;
+  final WorkspaceController ws;
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context).textTheme;
+    final activeSessions = ws.sessions.where((s) => !s.archived).length;
     return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 14, 16, 18),
+      padding: const EdgeInsets.fromLTRB(16, 14, 16, 12),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
+          // 左：副标题 + 主标题
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text('欢迎回到 AI 工作台',
-                    style: Theme.of(context).textTheme.bodySmall),
-                const SizedBox(height: 2),
                 Text(
-                  _greeting(),
-                  style: const TextStyle(
+                  'AI Workbench · 今日 $activeSessions 个活动会话',
+                  style: theme.bodySmall?.copyWith(fontSize: 12),
+                ),
+                const SizedBox(height: 2),
+                const Text(
+                  '工作台',
+                  style: TextStyle(
                     fontSize: 24,
                     fontWeight: FontWeight.w700,
                     color: AppColors.ink,
@@ -168,41 +194,208 @@ class _DashboardHeader extends StatelessWidget {
               ],
             ),
           ),
-          // 38×38 圆形刷新按钮
-          Container(
-            width: 38,
-            height: 38,
-            decoration: const BoxDecoration(
-              color: AppColors.surface,
-              shape: BoxShape.circle,
-              border: Border.fromBorderSide(BorderSide(color: AppColors.border)),
-              boxShadow: AppShadows.card,
-            ),
-            child: InkWell(
-              customBorder: const CircleBorder(),
-              onTap: onRefresh,
-              child: const Center(
-                child: Icon(Icons.refresh, size: 18, color: AppColors.secondary),
-              ),
-            ),
-          ),
+          // 右：设备切换器按钮
+          _DeviceSwitcherButton(ws: ws),
         ],
       ),
     );
   }
+}
 
-  // 按当前时段返回问候语
-  String _greeting() {
-    final hour = DateTime.now().hour;
-    if (hour < 6) return '深夜好';
-    if (hour < 12) return '早上好';
-    if (hour < 14) return '中午好';
-    if (hour < 18) return '下午好';
-    return '晚上好';
+// 设备切换器按钮：AppCard 内嵌 monitor 图标 + 设备名 + 下拉箭头
+class _DeviceSwitcherButton extends StatelessWidget {
+  const _DeviceSwitcherButton({required this.ws});
+
+  final WorkspaceController ws;
+
+  @override
+  Widget build(BuildContext context) {
+    final device = ws.selectedDevice;
+    final label = device == null ? '选择设备' : device.name;
+    return AppCard(
+      onTap: () => _showDeviceSwitcher(context, ws),
+      borderRadius: AppRadius.lg,
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Icon(Icons.monitor, size: 18, color: AppColors.primary),
+          const SizedBox(width: 6),
+          ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 90),
+            child: Text(
+              label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                fontSize: 13,
+                color: AppColors.secondary,
+              ),
+            ),
+          ),
+          const Icon(Icons.arrow_drop_down, color: AppColors.muted),
+        ],
+      ),
+    );
   }
 }
 
-// Hero 卡片：渐变背景 + 装饰圆 + 项目信息 + 统计
+class _DashboardDeviceRow extends StatefulWidget {
+  const _DashboardDeviceRow({required this.device, required this.compact});
+
+  final DesktopDevice device;
+  final bool compact;
+
+  @override
+  State<_DashboardDeviceRow> createState() => _DashboardDeviceRowState();
+}
+
+class _DashboardDeviceRowState extends State<_DashboardDeviceRow> {
+  bool _switching = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final ws = WorkspaceScope.of(context);
+    final device = widget.device;
+    final selected = ws.selectedDevice?.id == device.id;
+    return InkWell(
+      onTap: _switching ? null : () => _selectDevice(context, ws),
+      child: Padding(
+        padding: EdgeInsets.symmetric(
+          horizontal: 16,
+          vertical: widget.compact ? 12 : 14,
+        ),
+        child: Row(
+          children: [
+            AppIconBox(
+              icon: Icons.desktop_windows_outlined,
+              size: widget.compact ? 34 : 40,
+              iconSize: widget.compact ? 17 : 20,
+              borderRadius: 10,
+              background:
+                  device.online ? AppColors.successSoft : AppColors.surfaceMuted,
+              foreground:
+                  device.online ? AppColors.successDeep : AppColors.secondary,
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    device.name,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w700,
+                      color: AppColors.ink,
+                    ),
+                  ),
+                  const SizedBox(height: 3),
+                  Text(
+                    '${device.os} · ${device.online ? '在线' : '离线'}',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(fontSize: 12, color: AppColors.muted),
+                  ),
+                ],
+              ),
+            ),
+            if (_switching)
+              const SizedBox(
+                width: 18,
+                height: 18,
+                child: CircularProgressIndicator(strokeWidth: 2),
+              )
+            else if (selected)
+              const Icon(Icons.check_circle, size: 20, color: AppColors.primary)
+            else
+              const Icon(Icons.chevron_right, size: 18, color: AppColors.muted),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _selectDevice(BuildContext context, WorkspaceController ws) async {
+    if (ws.selectedDevice?.id == widget.device.id) {
+      Navigator.of(context).maybePop();
+      return;
+    }
+    setState(() => _switching = true);
+    try {
+      await ws.selectDevice(widget.device);
+      if (context.mounted) Navigator.of(context).maybePop();
+    } finally {
+      if (mounted) setState(() => _switching = false);
+    }
+  }
+}
+
+Future<void> _showDeviceSwitcher(
+    BuildContext context, WorkspaceController ws) async {
+  await ws.loadDevices();
+  if (!context.mounted) return;
+  await showModalBottomSheet<void>(
+    context: context,
+    showDragHandle: true,
+    builder: (ctx) => WorkspaceScope(
+      controller: ws,
+      child: SafeArea(
+        child: AnimatedBuilder(
+          animation: ws,
+          builder: (context, _) => ListView(
+            shrinkWrap: true,
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 20),
+            children: [
+              const Text(
+                '切换桌面设备',
+                style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.w700,
+                  color: AppColors.ink,
+                ),
+              ),
+              const SizedBox(height: AppSpacing.md),
+              if (ws.devices.isEmpty)
+                const SizedBox(
+                  height: 180,
+                  child: EmptyState('还没有桌面设备。请在桌面端使用同一账号登录。'),
+                )
+              else
+                AppCard(
+                  borderRadius: AppRadius.xl,
+                  padding: EdgeInsets.zero,
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(AppRadius.xl),
+                    child: Column(
+                      children: [
+                        for (int i = 0; i < ws.devices.length; i++) ...[
+                          if (i > 0)
+                            const Divider(
+                              height: 1,
+                              thickness: 1,
+                              color: AppColors.divider,
+                            ),
+                          _DashboardDeviceRow(
+                            device: ws.devices[i],
+                            compact: true,
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+                ),
+            ],
+          ),
+        ),
+      ),
+    ),
+  );
+}
+
+// Hero 卡片：纯色 AppColors.primary 背景 + 装饰圆 + 项目信息 + 状态徽章 + 竖线分隔统计
 class _HeroCard extends StatelessWidget {
   const _HeroCard({required this.ws});
 
@@ -214,57 +407,49 @@ class _HeroCard extends StatelessWidget {
     final activeSessions = ws.sessions.where((s) => !s.archived).length;
     final installedProviders =
         ws.providerStatuses.where((p) => p.installed).length;
-    return Container(
-      decoration: const BoxDecoration(
-        gradient: AppColors.heroGradient,
-        borderRadius: BorderRadius.all(Radius.circular(AppRadius.x2l)),
-        boxShadow: AppShadows.primary,
-      ),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(AppRadius.x2l),
-        child: Stack(
-          children: [
-            // 装饰圆（半透明白）
-            Positioned(
-              top: -32,
-              right: -24,
-              child: Container(
-                width: 140,
-                height: 140,
-                decoration: BoxDecoration(
-                  color: Colors.white.withOpacity(0.10),
-                  shape: BoxShape.circle,
-                ),
+    // 注意：背景用纯色 AppColors.primary，不要用 heroGradient
+    return AppCard(
+      borderRadius: AppRadius.x2l,
+      padding: const EdgeInsets.all(18),
+      background: AppColors.primary,
+      borderColor: Colors.transparent,
+      shadow: const [],
+      child: Stack(
+        clipBehavior: Clip.none,
+        children: [
+          // 装饰圆（半透明主色）
+          Positioned(
+            top: -40,
+            right: -40,
+            child: Container(
+              width: 136,
+              height: 136,
+              decoration: const BoxDecoration(
+                color: AppColors.primaryMuted,
+                shape: BoxShape.circle,
               ),
             ),
-            Positioned(
-              top: 24,
-              right: 70,
-              child: Container(
-                width: 100,
-                height: 100,
-                decoration: BoxDecoration(
-                  color: Colors.white.withOpacity(0.16),
-                  shape: BoxShape.circle,
-                ),
-              ),
-            ),
-            // 内容
-            Padding(
-              padding: const EdgeInsets.all(18),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+          ),
+          // 内容
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
-                  Text('当前活动项目',
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: Colors.white.withOpacity(0.78),
-                      )),
-                  const SizedBox(height: 6),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: Text(
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          '当前活动项目',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: Colors.white.withOpacity(0.78),
+                          ),
+                        ),
+                        const SizedBox(height: 6),
+                        Text(
                           project?.name ?? '暂无活动项目',
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
@@ -275,76 +460,96 @@ class _HeroCard extends StatelessWidget {
                             height: 1.2,
                           ),
                         ),
-                      ),
-                      const SizedBox(width: 8),
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 10, vertical: 4),
-                        decoration: BoxDecoration(
-                          color: Colors.white.withOpacity(0.18),
-                          borderRadius: BorderRadius.circular(AppRadius.full),
-                          border:
-                              Border.all(color: Colors.white.withOpacity(0.22)),
-                        ),
-                        child: Text(
-                          project == null ? '待同步' : '运行中',
-                          style: const TextStyle(
-                            fontSize: 11,
-                            fontWeight: FontWeight.w600,
-                            color: Colors.white,
-                          ),
-                        ),
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
-                  const SizedBox(height: 16),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: _HeroStat(
-                          value: '${ws.projects.length}',
-                          label: '项目',
-                        ),
-                      ),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: _HeroStat(
-                          value: '$activeSessions',
-                          label: '活跃会话',
-                        ),
-                      ),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: _HeroStat(
-                          value:
-                              '$installedProviders/${ws.providerStatuses.length}',
-                          label: 'AI 工具',
-                          // 跳转 Provider 管理
-                          onTap: () => Navigator.of(context).push(
-                            MaterialPageRoute(
-                              builder: (_) => WorkspaceScope(
-                                controller: ws,
-                                child: const ProvidersPage(),
-                              ),
-                            ),
-                          ),
-                        ),
-                      ),
-                    ],
+                  const SizedBox(width: 8),
+                  // 40×40 圆形操作按钮
+                  Container(
+                    width: 40,
+                    height: 40,
+                    decoration: const BoxDecoration(
+                      color: AppColors.primaryMuted,
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Icon(
+                      Icons.smart_toy_outlined,
+                      color: Colors.white,
+                      size: 20,
+                    ),
                   ),
                 ],
               ),
-            ),
-          ],
-        ),
+              const SizedBox(height: 14),
+              // 状态徽章：自定义白色样式（bg white 0.16 + border white 0.22 + fg white）
+              AppStatusBadge(
+                project == null ? '待同步' : '运行中',
+                style: AppStatusStyle(
+                  Colors.white.withOpacity(0.16),
+                  Colors.white,
+                  Colors.white.withOpacity(0.22),
+                ),
+              ),
+              const SizedBox(height: 14),
+              // 统计区：竖线分隔，无卡片背景
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: [
+                  Expanded(
+                    child: _HeroStatColumn(
+                      value: '${ws.projects.length}',
+                      label: '项目',
+                    ),
+                  ),
+                  Container(
+                    width: 1,
+                    height: 28,
+                    color: Colors.white.withOpacity(0.18),
+                  ),
+                  Expanded(
+                    child: _HeroStatColumn(
+                      value: '$activeSessions',
+                      label: '活跃会话',
+                    ),
+                  ),
+                  Container(
+                    width: 1,
+                    height: 28,
+                    color: Colors.white.withOpacity(0.18),
+                  ),
+                  Expanded(
+                    child: _HeroStatColumn(
+                      value:
+                          '$installedProviders/${ws.providerStatuses.length}',
+                      label: 'AI 工具',
+                      // 跳转 Provider 管理
+                      onTap: () => Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (_) => WorkspaceScope(
+                            controller: ws,
+                            child: const ProvidersPage(),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ],
       ),
     );
   }
 }
 
-// Hero 统计子卡
-class _HeroStat extends StatelessWidget {
-  const _HeroStat({required this.value, required this.label, this.onTap});
+// Hero 统计列：仅文本，无背景卡片（取代旧版 _HeroStat）
+class _HeroStatColumn extends StatelessWidget {
+  const _HeroStatColumn({
+    required this.value,
+    required this.label,
+    this.onTap,
+  });
 
   final String value;
   final String label;
@@ -352,22 +557,17 @@ class _HeroStat extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final content = Container(
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.16),
-        borderRadius: BorderRadius.circular(AppRadius.xl),
-      ),
+    final content = Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 8),
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(value,
               style: const TextStyle(
-                fontSize: 24,
-                fontWeight: FontWeight.w700,
+                fontSize: 18,
+                fontWeight: FontWeight.w800,
                 color: Colors.white,
               )),
-          const SizedBox(height: 4),
+          const SizedBox(height: 2),
           Text(label,
               style: TextStyle(
                 fontSize: 11,
@@ -381,14 +581,13 @@ class _HeroStat extends StatelessWidget {
       color: Colors.transparent,
       child: InkWell(
         onTap: onTap,
-        borderRadius: BorderRadius.circular(AppRadius.xl),
         child: content,
       ),
     );
   }
 }
 
-// 快捷操作 4 列
+// 快捷操作：2 列 grid，gap 10，每个 AppCard 横向 Row 布局
 class _QuickActions extends StatelessWidget {
   const _QuickActions({required this.ws, this.onNavigate});
 
@@ -397,49 +596,34 @@ class _QuickActions extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final actions = <_QuickActionData>[
-      _QuickActionData(
-        icon: Icons.add_comment_outlined,
-        label: '新建会话',
-        background: AppColors.primarySoftSolid,
-        foreground: AppColors.primary,
-        onTap: onNavigate == null ? null : () => onNavigate!(2),
-      ),
-      _QuickActionData(
-        icon: Icons.terminal_outlined,
-        label: '打开终端',
-        background: AppColors.successSoft,
-        foreground: AppColors.successDeep,
-        onTap: () {},
-      ),
-      _QuickActionData(
-        icon: Icons.receipt_long_outlined,
-        label: '查看日志',
-        background: AppColors.warningSoft,
-        foreground: AppColors.warningDeep,
-        onTap: onNavigate == null ? null : () => onNavigate!(3),
-      ),
-      _QuickActionData(
-        icon: Icons.sync,
-        label: '同步项目',
-        background: AppColors.infoSoft,
-        foreground: AppColors.info,
-        onTap: ws.refreshWorkspace,
-      ),
-    ];
     return Row(
       children: [
-        for (int i = 0; i < actions.length; i++) ...[
-          if (i > 0) const SizedBox(width: 10),
-          Expanded(child: _QuickActionButton(data: actions[i])),
-        ],
+        Expanded(
+          child: _QuickActionButton(
+            icon: Icons.add,
+            label: '新建会话',
+            background: AppColors.primarySoftSolid,
+            foreground: AppColors.primary,
+            onTap: onNavigate == null ? null : () => onNavigate!(1),
+          ),
+        ),
+        const SizedBox(width: 10),
+        Expanded(
+          child: _QuickActionButton(
+            icon: Icons.sync,
+            label: '同步项目',
+            background: AppColors.infoSoft,
+            foreground: AppColors.info,
+            onTap: ws.refreshWorkspace,
+          ),
+        ),
       ],
     );
   }
 }
 
-class _QuickActionData {
-  const _QuickActionData({
+class _QuickActionButton extends StatelessWidget {
+  const _QuickActionButton({
     required this.icon,
     required this.label,
     required this.background,
@@ -452,38 +636,167 @@ class _QuickActionData {
   final Color background;
   final Color foreground;
   final VoidCallback? onTap;
-}
-
-class _QuickActionButton extends StatelessWidget {
-  const _QuickActionButton({required this.data});
-
-  final _QuickActionData data;
 
   @override
   Widget build(BuildContext context) {
     return AppCard(
-      onTap: data.onTap,
-      borderRadius: 18,
-      padding: const EdgeInsets.all(13),
-      child: Column(
+      onTap: onTap,
+      borderRadius: AppRadius.lg,
+      padding: const EdgeInsets.all(12),
+      child: Row(
         children: [
+          // 40×40 圆形图标方框
           AppIconBox(
-            icon: data.icon,
-            size: 38,
+            icon: icon,
+            size: 40,
             iconSize: 18,
-            borderRadius: 14,
-            background: data.background,
-            foreground: data.foreground,
+            borderRadius: AppRadius.full,
+            background: background,
+            foreground: foreground,
           ),
-          const SizedBox(height: 8),
-          Text(data.label,
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
               style: const TextStyle(
-                fontSize: 11,
-                fontWeight: FontWeight.w500,
-                color: AppColors.secondary,
-              )),
+                fontSize: 14,
+                fontWeight: FontWeight.w600,
+                color: AppColors.ink,
+              ),
+            ),
+          ),
         ],
       ),
+    );
+  }
+}
+
+// 项目概览卡：项目图标 + 名称 + 3 列统计（文件变更 / 分支 / 同步率）
+class _ProjectOverview extends StatelessWidget {
+  const _ProjectOverview({required this.ws});
+
+  final WorkspaceController ws;
+
+  @override
+  Widget build(BuildContext context) {
+    if (ws.projects.isEmpty) {
+      return AppCard(
+        borderRadius: AppRadius.lg,
+        child: Row(
+          children: [
+            AppIconBox(
+              icon: Icons.folder_outlined,
+              size: 28,
+              iconSize: 16,
+              borderRadius: AppRadius.sm,
+              background: AppColors.primarySoftSolid,
+              foreground: AppColors.primary,
+            ),
+            const SizedBox(width: 10),
+            const Expanded(
+              child: Text(
+                '还没有同步项目',
+                style: TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w600,
+                  color: AppColors.secondary,
+                ),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+    final project = ws.projects.first;
+    return AppCard(
+      borderRadius: AppRadius.lg,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              AppIconBox(
+                icon: Icons.folder_outlined,
+                size: 28,
+                iconSize: 16,
+                borderRadius: AppRadius.sm,
+                background: AppColors.primarySoftSolid,
+                foreground: AppColors.primary,
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  project.name,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                    color: AppColors.ink,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Row(
+            children: [
+              Expanded(
+                child: _OverviewStat(
+                  label: '文件变更',
+                  value: project.gitDirty ? '有' : '无',
+                ),
+              ),
+              Expanded(
+                child: _OverviewStat(
+                  label: '分支',
+                  value: project.gitBranch ?? 'main',
+                ),
+              ),
+              Expanded(
+                child: _OverviewStat(
+                  label: '同步率',
+                  value: project.gitDirty ? '90%' : '100%',
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// 项目概览的统计列
+class _OverviewStat extends StatelessWidget {
+  const _OverviewStat({required this.label, required this.value});
+
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          value,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: const TextStyle(
+            fontSize: 13,
+            fontWeight: FontWeight.w700,
+            color: AppColors.ink,
+          ),
+        ),
+        const SizedBox(height: 2),
+        Text(
+          label,
+          style: const TextStyle(fontSize: 11, color: AppColors.muted),
+        ),
+      ],
     );
   }
 }
@@ -491,8 +804,24 @@ class _QuickActionButton extends StatelessWidget {
 // ===========================================================================
 // 项目 tab
 // ===========================================================================
-class _ProjectsTab extends StatelessWidget {
+class _ProjectsTab extends StatefulWidget {
   const _ProjectsTab();
+
+  @override
+  State<_ProjectsTab> createState() => _ProjectsTabState();
+}
+
+class _ProjectsTabState extends State<_ProjectsTab> {
+  String? _expandedProjectId;
+
+  void _toggleProject(String projectId) {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      setState(() {
+        _expandedProjectId = _expandedProjectId == projectId ? null : projectId;
+      });
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -509,12 +838,20 @@ class _ProjectsTab extends StatelessWidget {
               if (ws.projects.isEmpty)
                 const SizedBox(
                   height: 360,
-                  child: EmptyState('桌面端还没有同步项目。请先在桌面端添加本机项目目录。'),
+                  child: EmptyState(
+                    '还没有项目',
+                    icon: Icons.folder_outlined,
+                  ),
                 )
               else
                 ...ws.projects.map((project) => Padding(
                       padding: const EdgeInsets.only(bottom: 12),
-                      child: _ProjectCard(project: project, ws: ws),
+                      child: _ProjectCard(
+                        project: project,
+                        ws: ws,
+                        expanded: _expandedProjectId == project.id,
+                        onToggle: () => _toggleProject(project.id),
+                      ),
                     )),
             ],
           ),
@@ -524,12 +861,19 @@ class _ProjectsTab extends StatelessWidget {
   }
 }
 
-// 项目卡：卡头 + 会话列表
+// 项目卡（保持原有结构，使用 AppCard + AppIconBox + AppStatusBadge）
 class _ProjectCard extends StatelessWidget {
-  const _ProjectCard({required this.project, required this.ws});
+  const _ProjectCard({
+    required this.project,
+    required this.ws,
+    required this.expanded,
+    required this.onToggle,
+  });
 
   final WorkspaceProject project;
   final WorkspaceController ws;
+  final bool expanded;
+  final VoidCallback onToggle;
 
   @override
   Widget build(BuildContext context) {
@@ -541,94 +885,121 @@ class _ProjectCard extends StatelessWidget {
         borderRadius: BorderRadius.circular(AppRadius.xl),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // 卡头：白→浅蓝渐变 + 底边 divider
-          Container(
-            decoration: const BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.topCenter,
-                end: Alignment.bottomCenter,
-                colors: [Colors.white, Color(0xfff8fbff)],
-              ),
-              border: Border(bottom: BorderSide(color: AppColors.divider)),
-            ),
-            padding: const EdgeInsets.all(16),
-            child: Row(
-              children: [
-                AppIconBox(
-                  icon: Icons.folder_outlined,
-                  size: 42,
-                  iconSize: 20,
-                  borderRadius: AppRadius.md,
-                  background: AppColors.primarySoftSolid,
-                  foreground: AppColors.primary,
+          children: [
+            // 卡头：白→浅蓝渐变 + 底边 divider
+            Container(
+              decoration: const BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  colors: [Colors.white, Color(0xfff8fbff)],
                 ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        children: [
-                          Expanded(
-                            child: Text(project.name,
+                border: Border(bottom: BorderSide(color: AppColors.divider)),
+              ),
+              padding: const EdgeInsets.all(16),
+              child: Row(
+                children: [
+                  AppIconBox(
+                    icon: Icons.folder_outlined,
+                    size: 42,
+                    iconSize: 20,
+                    borderRadius: AppRadius.md,
+                    background: AppColors.primarySoftSolid,
+                    foreground: AppColors.primary,
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Expanded(
+                              child: Text(project.name,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: const TextStyle(
+                                      fontSize: 16,
+                                      fontWeight: FontWeight.w700,
+                                      color: AppColors.ink)),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 4),
+                        Row(
+                          children: [
+                            const Icon(Icons.call_split,
+                                size: 14, color: AppColors.muted),
+                            const SizedBox(width: 4),
+                            Flexible(
+                              child: Text(
+                                '${project.gitBranch ?? 'main'} · ${sessions.length} 个会话',
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
                                 style: const TextStyle(
-                                    fontSize: 16,
-                                    fontWeight: FontWeight.w700,
-                                    color: AppColors.ink)),
-                          ),
-                          const SizedBox(width: 8),
-                          AppStatusBadge(
-                            project.gitDirty ? '有变更' : '已同步',
-                            style: project.gitDirty
-                                ? AppStatusStyle.warning
-                                : AppStatusStyle.success,
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 4),
-                      Row(
-                        children: [
-                          const Icon(Icons.call_split,
-                              size: 14, color: AppColors.muted),
-                          const SizedBox(width: 4),
-                          Flexible(
-                            child: Text(
-                              '${project.gitBranch ?? 'main'} · ${sessions.length} 个会话',
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: const TextStyle(
-                                  fontSize: 12, color: AppColors.muted),
+                                    fontSize: 12, color: AppColors.muted),
+                              ),
                             ),
-                          ),
-                        ],
-                      ),
-                    ],
+                          ],
+                        ),
+                      ],
+                    ),
                   ),
-                ),
-                // 新建 AI 会话
-                IconButton(
-                  onPressed: () => _showProviderSelector(context, ws, project),
-                  icon: const Icon(Icons.add, color: AppColors.primary),
-                  visualDensity: VisualDensity.compact,
-                  tooltip: '新建 AI 会话',
-                ),
-              ],
+                  IconButton(
+                    onPressed: () => Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (_) => WorkspaceScope(
+                          controller: ws,
+                          child: const ProvidersPage(),
+                        ),
+                      ),
+                    ),
+                    icon: const Icon(
+                      Icons.smart_toy_outlined,
+                      color: AppColors.primary,
+                    ),
+                    visualDensity: VisualDensity.compact,
+                    tooltip: 'AI 工具',
+                  ),
+                  // 新建 AI 会话
+                  IconButton(
+                    onPressed: () => _showProviderSelector(context, ws, project),
+                    icon: const Icon(Icons.add, color: AppColors.primary),
+                    visualDensity: VisualDensity.compact,
+                    tooltip: '新建 AI 会话',
+                  ),
+                  IconButton(
+                    onPressed: onToggle,
+                    icon: Icon(
+                      expanded ? Icons.expand_less : Icons.expand_more,
+                      color: AppColors.muted,
+                    ),
+                    visualDensity: VisualDensity.compact,
+                    tooltip: expanded ? '收起会话' : '展开会话',
+                  ),
+                ],
+              ),
             ),
-          ),
-          // 会话列表
-          if (sessions.isEmpty)
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 20),
-              child: Text('暂无会话',
-                  style: const TextStyle(fontSize: 12, color: AppColors.muted)),
-            )
-          else
-            for (int i = 0; i < sessions.length; i++) ...[
-              if (i > 0) const Divider(height: 1, thickness: 1, color: AppColors.divider),
-              _ProjectSessionRow(sessionId: sessions[i].id),
+            if (expanded) ...[
+              const Divider(height: 1, thickness: 1, color: AppColors.divider),
+              if (sessions.isEmpty)
+                const Padding(
+                  padding: EdgeInsets.symmetric(horizontal: 16, vertical: 20),
+                  child: Text(
+                    '这个项目还没有会话。',
+                    style: TextStyle(fontSize: 12, color: AppColors.muted),
+                  ),
+                )
+              else
+                for (int i = 0; i < sessions.length; i++) ...[
+                  if (i > 0)
+                    const Divider(
+                      height: 1,
+                      thickness: 1,
+                      color: AppColors.divider,
+                    ),
+                  _ProjectSessionRow(sessionId: sessions[i].id),
+                ],
             ],
           ],
         ),
@@ -637,7 +1008,6 @@ class _ProjectCard extends StatelessWidget {
   }
 }
 
-// 项目卡内的会话行
 class _ProjectSessionRow extends StatelessWidget {
   const _ProjectSessionRow({required this.sessionId});
 
@@ -649,6 +1019,7 @@ class _ProjectSessionRow extends StatelessWidget {
     final session = ws.sessions.firstWhere((item) => item.id == sessionId);
     return InkWell(
       onTap: () => _openSessionById(context, ws, sessionId),
+      onLongPress: () => _showSessionMenuById(context, ws, sessionId),
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
         child: Row(
@@ -671,24 +1042,26 @@ class _ProjectSessionRow extends StatelessWidget {
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: const TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w500,
-                        color: AppColors.ink),
+                      fontSize: 14,
+                      fontWeight: FontWeight.w500,
+                      color: AppColors.ink,
+                    ),
                   ),
                   const SizedBox(height: 2),
                   Text(
                     '${session.providerId} · ${session.status}',
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                        fontSize: 12, color: AppColors.muted),
+                    style: const TextStyle(fontSize: 12, color: AppColors.muted),
                   ),
                 ],
               ),
             ),
             const SizedBox(width: 8),
-            Text(_shortTime(session.updatedAt),
-                style: const TextStyle(fontSize: 11, color: AppColors.muted)),
+            Text(
+              _shortTime(session.updatedAt),
+              style: const TextStyle(fontSize: 11, color: AppColors.muted),
+            ),
             const SizedBox(width: 4),
             const Icon(Icons.chevron_right, size: 15, color: Color(0xffcbd5e1)),
           ],
@@ -744,111 +1117,6 @@ Future<void> _showProviderSelector(
 }
 
 // ===========================================================================
-// 会话 tab
-// ===========================================================================
-class _SessionsTab extends StatelessWidget {
-  const _SessionsTab();
-
-  @override
-  Widget build(BuildContext context) {
-    final ws = WorkspaceScope.of(context);
-    return AnimatedBuilder(
-      animation: ws,
-      builder: (context, _) => Scaffold(
-        appBar: AppBar(
-          title: const Text('会话'),
-          actions: [
-            TextButton(
-              onPressed: ws.toggleArchived,
-              child: Text(ws.showArchived ? '看活跃' : '已归档'),
-            ),
-          ],
-        ),
-        body: ListView(
-          padding: const EdgeInsets.fromLTRB(16, 8, 16, 86),
-          children: [
-            if (ws.visibleSessions.isEmpty)
-              SizedBox(
-                  height: 360,
-                  child: EmptyState(
-                      ws.showArchived ? '没有已归档会话。' : '还没有活跃会话。'))
-            else
-              ...ws.visibleSessions.map((session) => Padding(
-                    padding: const EdgeInsets.only(bottom: 10),
-                    child: _SessionTile(sessionId: session.id),
-                  )),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-// ===========================================================================
-// 日志 tab
-// ===========================================================================
-class _LogsTab extends StatelessWidget {
-  const _LogsTab();
-
-  @override
-  Widget build(BuildContext context) {
-    final ws = WorkspaceScope.of(context);
-    return AnimatedBuilder(
-      animation: ws,
-      builder: (context, _) => Scaffold(
-        appBar: AppBar(title: const Text('日志')),
-        body: ListView(
-          padding: const EdgeInsets.fromLTRB(16, 8, 16, 86),
-          children: [
-            if (ws.logs.isEmpty)
-              const SizedBox(height: 360, child: EmptyState('暂无日志。'))
-            else
-              ...ws.logs.map((log) => Padding(
-                    padding: const EdgeInsets.only(bottom: 10),
-                    child: AppCard(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(
-                            children: [
-                              if (log.risky) ...[
-                                const Icon(Icons.warning_amber_rounded,
-                                    color: AppColors.warning, size: 18),
-                                const SizedBox(width: 6),
-                              ],
-                              Expanded(
-                                child: Text(log.title,
-                                    style: TextStyle(
-                                      fontSize: 14,
-                                      fontWeight: FontWeight.w600,
-                                      color: log.risky
-                                          ? AppColors.warningDeep
-                                          : AppColors.ink,
-                                    )),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 6),
-                          Text(log.body,
-                              style: const TextStyle(
-                                  color: AppColors.muted,
-                                  fontSize: 12,
-                                  height: 1.5)),
-                          const SizedBox(height: 6),
-                          Text(log.createdAt,
-                              style: Theme.of(context).textTheme.bodySmall),
-                        ],
-                      ),
-                    ),
-                  )),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-// ===========================================================================
 // 会话相关组件与工具
 // ===========================================================================
 
@@ -865,26 +1133,10 @@ class _GroupedSessionTile extends StatelessWidget {
       onTap: () => _openSessionById(context, ws, sessionId),
       onLongPress: () => _showSessionMenuById(context, ws, sessionId),
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 12),
+        // 高 62 padding 14（横向 14，纵向 11 以贴近设计目标高度）
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
         child: _SessionTileBody(sessionId: sessionId),
       ),
-    );
-  }
-}
-
-// 会话瓦片（独立卡片，用于会话 tab）
-class _SessionTile extends StatelessWidget {
-  const _SessionTile({required this.sessionId});
-
-  final String sessionId;
-
-  @override
-  Widget build(BuildContext context) {
-    final ws = WorkspaceScope.of(context);
-    return AppCard(
-      onTap: () => _openSessionById(context, ws, sessionId),
-      onLongPress: () => _showSessionMenuById(context, ws, sessionId),
-      child: _SessionTileBody(sessionId: sessionId),
     );
   }
 }
@@ -909,15 +1161,14 @@ class _SessionTileBody extends StatelessWidget {
 
     return Row(
       children: [
+        // 40×40 圆形 surfaceMuted 图标方框
         AppIconBox(
           icon: _providerIcon(session.providerId),
-          size: 42,
+          size: 40,
           iconSize: 20,
-          borderRadius: 15,
-          background: session.archived
-              ? AppColors.surfaceMuted
-              : AppColors.primarySoftSolid,
-          foreground: session.archived ? AppColors.muted : AppColors.primary,
+          borderRadius: AppRadius.full,
+          background: AppColors.surfaceMuted,
+          foreground: AppColors.primary,
         ),
         const SizedBox(width: 12),
         Expanded(

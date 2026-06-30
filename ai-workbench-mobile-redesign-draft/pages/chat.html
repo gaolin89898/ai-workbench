@@ -1,0 +1,317 @@
+<!DOCTYPE html>
+<html class="light" lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>项目 - AI Workbench</title>
+    <style id="theme-vars">
+/* AI Workbench Mobile — Light Task-Oriented Theme */
+/* Inspired by Trae Work clean aesthetic */
+:root {
+  /* Brand */
+  --color-primary: #2563eb;
+  --color-primary-hover: #1d4ed8;
+  --color-primary-muted: rgba(37, 99, 235, 0.12);
+  --color-primary-soft: rgba(37, 99, 235, 0.06);
+
+  /* Surface & Background */
+  --color-bg-app: #f8fafc;
+  --color-bg-sidebar: #ffffff;
+  --color-bg-main: #f8fafc;
+  --color-bg-surface: #ffffff;
+  --color-bg-elevated: #ffffff;
+  --color-bg-input: #f1f5f9;
+  --color-bg-hover: rgba(0, 0, 0, 0.02);
+  --color-bg-active: rgba(37, 99, 235, 0.08);
+
+  /* Text */
+  --color-text-primary: #0f172a;
+  --color-text-secondary: #475569;
+  --color-text-muted: #94a3b8;
+  --color-text-inverse: #ffffff;
+
+  /* Border */
+  --color-border: #e2e8f0;
+  --color-border-active: rgba(37, 99, 235, 0.4);
+
+  /* State Colors */
+  --state-success: #22c55e;
+  --state-warning: #f59e0b;
+  --state-error: #ef4444;
+  --state-info: #3b82f6;
+
+  /* Radius */
+  --radius-sm: 4px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --radius-full: 9999px;
+
+  /* Typography */
+  --font-sans: "Inter", "Noto Sans SC", "PingFang SC", "Microsoft YaHei", ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --font-mono: "JetBrains Mono", "Fira Code", ui-monospace, "Cascadia Code", monospace;
+
+  --text-xs: 11px;
+  --text-sm: 12px;
+  --text-base: 13px;
+  --text-md: 14px;
+  --text-lg: 16px;
+  --text-xl: 20px;
+  --text-2xl: 28px;
+
+  --leading-tight: 1.25;
+  --leading-normal: 1.5;
+  --leading-relaxed: 1.625;
+
+  --font-weight-normal: 400;
+  --font-weight-medium: 500;
+  --font-weight-semibold: 600;
+  --font-weight-bold: 700;
+  --font-weight-extrabold: 800;
+
+  /* Shadow */
+  --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.05);
+  --shadow-elevated: 0 4px 12px rgba(0, 0, 0, 0.08);
+  --shadow-modal: 0 8px 32px rgba(0, 0, 0, 0.12);
+
+  /* Spacing */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-10: 40px;
+}
+
+    </style>
+    <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4.3.1/dist/index.global.js"></script>
+    <script src="https://unpkg.com/lucide@1.8.0/dist/umd/lucide.min.js"></script>
+    <style type="text/tailwindcss">
+  @theme inline {
+    --color-primary: var(--color-primary);
+    --color-border: var(--color-border);
+  }
+  @layer base {
+    body { background: var(--color-bg-app); color: var(--color-text-primary); }
+    td, th { @apply break-words; word-break: break-all; word-break: auto-phrase; }
+    th { @apply whitespace-nowrap; }
+  }
+    </style>
+    <style>
+      .no-scrollbar::-webkit-scrollbar { display: none; }
+      .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+      [data-icon] {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        -webkit-mask-size: contain;
+        mask-size: contain;
+        -webkit-mask-repeat: no-repeat;
+        mask-repeat: no-repeat;
+        -webkit-mask-position: center;
+        mask-position: center;
+        background-color: currentColor;
+      }
+    </style>
+</head>
+<body class="font-sans antialiased" style="font-family: var(--font-sans); background: var(--color-bg-app); color: var(--color-text-primary); min-height: 100vh;">
+  <div class="min-h-screen pb-[92px]" style="background: var(--color-bg-app);">
+    <header class="sticky top-0 z-30" style="background: var(--color-bg-surface); border-bottom: 1px solid var(--color-border);">
+      <div class="flex items-center justify-between px-4" style="height: 56px;">
+        <div class="min-w-0">
+          <h1 class="truncate" style="font-size: 20px; line-height: 1.2; font-weight: 800; letter-spacing: -0.02em; text-wrap: balance; word-break: keep-all; overflow-wrap: break-word;">项目</h1>
+          <p class="truncate" style="font-size: 12px; line-height: 1.4; color: var(--color-text-secondary); margin-top: 2px;">同步桌面项目与 AI 会话</p>
+        </div>
+        <div class="flex shrink-0 items-center gap-2">
+          <button data-dom-id="projects-refresh" class="inline-flex items-center justify-center transition-transform duration-150 active:scale-[0.98] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2" aria-label="刷新项目" style="width: 34px; height: 34px; border-radius: var(--radius-lg); border: 1px solid var(--color-border); background: var(--color-bg-surface); color: var(--color-text-secondary); outline-color: var(--color-primary);">
+            <i data-lucide="refresh-cw" style="width: 16px; height: 16px;"></i>
+          </button>
+          <button data-dom-id="projects-search" class="inline-flex items-center justify-center transition-transform duration-150 active:scale-[0.98] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2" aria-label="搜索项目" style="width: 34px; height: 34px; border-radius: var(--radius-lg); border: 1px solid var(--color-border); background: var(--color-bg-surface); color: var(--color-text-secondary); outline-color: var(--color-primary);">
+            <i data-lucide="search" style="width: 16px; height: 16px;"></i>
+          </button>
+          <button data-dom-id="projects-filter" class="inline-flex items-center justify-center transition-transform duration-150 active:scale-[0.98] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2" aria-label="筛选项目" style="width: 34px; height: 34px; border-radius: var(--radius-lg); border: 1px solid var(--color-border); background: var(--color-bg-surface); color: var(--color-text-secondary); outline-color: var(--color-primary);">
+            <i data-lucide="sliders-horizontal" style="width: 16px; height: 16px;"></i>
+          </button>
+        </div>
+      </div>
+    </header>
+
+    <main class="px-4 py-4 space-y-3 no-scrollbar" style="background: var(--color-bg-app);">
+      <section class="grid grid-cols-3 gap-2" aria-label="项目概览">
+        <div class="min-w-0" style="padding: 10px 8px; border-radius: var(--radius-lg); border: 1px solid var(--color-border); background: var(--color-bg-surface);">
+          <div class="truncate" style="font-size: 18px; line-height: 1; font-weight: 800; font-variant-numeric: tabular-nums;">12</div>
+          <div class="truncate" style="font-size: 11px; color: var(--color-text-secondary); margin-top: 5px;">项目</div>
+        </div>
+        <div class="min-w-0" style="padding: 10px 8px; border-radius: var(--radius-lg); border: 1px solid var(--color-border); background: var(--color-bg-surface);">
+          <div class="truncate" style="font-size: 18px; line-height: 1; font-weight: 800; color: var(--color-primary); font-variant-numeric: tabular-nums;">28</div>
+          <div class="truncate" style="font-size: 11px; color: var(--color-text-secondary); margin-top: 5px;">会话</div>
+        </div>
+        <div class="min-w-0" style="padding: 10px 8px; border-radius: var(--radius-lg); border: 1px solid var(--color-border); background: var(--color-bg-surface);">
+          <div class="truncate" style="font-size: 18px; line-height: 1; font-weight: 800; color: var(--state-warning); font-variant-numeric: tabular-nums;">3</div>
+          <div class="truncate" style="font-size: 11px; color: var(--color-text-secondary); margin-top: 5px;">有变更</div>
+        </div>
+      </section>
+
+      <section class="flex flex-nowrap gap-2 overflow-x-auto no-scrollbar" aria-label="项目筛选">
+        <button class="shrink-0 whitespace-nowrap transition-colors duration-150 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2" style="height: 32px; padding: 0 12px; border-radius: var(--radius-md); border: 1px solid var(--color-border-active); background: var(--color-primary-soft); color: var(--color-primary); font-size: 12px; font-weight: 700; outline-color: var(--color-primary);">全部</button>
+        <button class="shrink-0 whitespace-nowrap transition-colors duration-150 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2" style="height: 32px; padding: 0 12px; border-radius: var(--radius-md); border: 1px solid var(--color-border); background: var(--color-bg-surface); color: var(--color-text-secondary); font-size: 12px; font-weight: 700; outline-color: var(--color-primary);">有变更</button>
+        <button class="shrink-0 whitespace-nowrap transition-colors duration-150 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2" style="height: 32px; padding: 0 12px; border-radius: var(--radius-md); border: 1px solid var(--color-border); background: var(--color-bg-surface); color: var(--color-text-secondary); font-size: 12px; font-weight: 700; outline-color: var(--color-primary);">已同步</button>
+        <button class="shrink-0 whitespace-nowrap transition-colors duration-150 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2" style="height: 32px; padding: 0 12px; border-radius: var(--radius-md); border: 1px solid var(--color-border); background: var(--color-bg-surface); color: var(--color-text-secondary); font-size: 12px; font-weight: 700; outline-color: var(--color-primary);">已归档</button>
+      </section>
+
+      <section class="space-y-3" aria-label="项目列表">
+        <article data-dom-id="project-card-ai-workbench" class="transition-transform duration-150 active:scale-[0.995]" style="padding: 14px; border-radius: var(--radius-lg); border: 1px solid var(--color-border-active); background: var(--color-bg-surface);">
+          <div class="flex items-start justify-between gap-3">
+            <div class="min-w-0 flex-1">
+              <div class="flex items-center gap-2 min-w-0">
+                <span class="inline-flex shrink-0 items-center justify-center" style="width: 28px; height: 28px; border-radius: var(--radius-md); background: var(--color-primary-soft); color: var(--color-primary);">
+                  <i data-lucide="folder-kanban" style="width: 16px; height: 16px;"></i>
+                </span>
+                <div class="min-w-0 flex-1">
+                  <h2 class="truncate" style="font-size: 15px; line-height: 1.25; font-weight: 800; margin: 0;">ai-workbench</h2>
+                  <p class="truncate" style="font-size: 12px; color: var(--color-text-secondary); margin-top: 2px;">main · 8 个会话</p>
+                </div>
+              </div>
+            </div>
+            <span class="inline-flex shrink-0 items-center gap-1 whitespace-nowrap" style="height: 24px; padding: 0 8px; border-radius: var(--radius-md); background: var(--color-primary-soft); color: var(--color-primary); font-size: 12px; font-weight: 700;">
+              <span style="width: 6px; height: 6px; border-radius: var(--radius-full); background: currentColor;"></span>有变更
+            </span>
+          </div>
+
+          <div class="mt-3 flex items-center justify-between gap-3" style="padding-top: 12px; border-top: 1px solid var(--color-border);">
+            <div class="flex min-w-0 items-center gap-2">
+              <span class="truncate" style="font-size: 12px; color: var(--color-text-secondary);">同步于 2 分钟前</span>
+              <span class="shrink-0" style="width: 3px; height: 3px; border-radius: var(--radius-full); background: var(--color-text-muted);"></span>
+              <span class="truncate" style="font-size: 12px; color: var(--color-text-secondary);">3 个未读</span>
+            </div>
+            <button data-dom-id="new-session-ai-workbench" class="inline-flex shrink-0 items-center gap-1 transition-transform duration-150 active:scale-[0.98] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2" style="height: 32px; padding: 0 10px; border-radius: var(--radius-md); border: 0; background: var(--color-primary); color: var(--color-text-inverse); font-size: 12px; font-weight: 800; outline-color: var(--color-primary);">
+              <i data-lucide="plus" style="width: 14px; height: 14px;"></i>新建
+            </button>
+          </div>
+
+          <div class="mt-3 flex flex-nowrap gap-2 overflow-x-auto no-scrollbar" aria-label="选择 Provider">
+            <button class="inline-flex shrink-0 items-center gap-2 whitespace-nowrap" style="height: 30px; padding: 0 9px; border-radius: var(--radius-md); border: 1px solid var(--color-border-active); background: var(--color-primary-soft); color: var(--color-primary); font-size: 12px; font-weight: 700;">
+              <span class="inline-flex items-center justify-center" style="width: 18px; height: 18px; border-radius: var(--radius-sm); border: 1px solid var(--color-border-active);">O</span>OpenAI
+            </button>
+            <button class="inline-flex shrink-0 items-center gap-2 whitespace-nowrap" style="height: 30px; padding: 0 9px; border-radius: var(--radius-md); border: 1px solid var(--color-border); background: var(--color-bg-surface); color: var(--color-text-secondary); font-size: 12px; font-weight: 700;">
+              <span class="inline-flex items-center justify-center" style="width: 18px; height: 18px; border-radius: var(--radius-sm); border: 1px solid var(--color-border);">A</span>Anthropic
+            </button>
+            <button class="inline-flex shrink-0 items-center gap-2 whitespace-nowrap" style="height: 30px; padding: 0 9px; border-radius: var(--radius-md); border: 1px solid var(--color-border); background: var(--color-bg-surface); color: var(--color-text-secondary); font-size: 12px; font-weight: 700;">
+              <span class="inline-flex items-center justify-center" style="width: 18px; height: 18px; border-radius: var(--radius-sm); border: 1px solid var(--color-border);">D</span>DeepSeek
+            </button>
+          </div>
+
+          <div class="mt-3" style="border-top: 1px solid var(--color-border);">
+            <button data-dom-id="session-auth-fix" class="flex w-full items-center gap-3 py-3 text-left transition-colors duration-150 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2" style="border: 0; background: transparent; outline-color: var(--color-primary);">
+              <span class="inline-flex shrink-0 items-center justify-center" style="width: 30px; height: 30px; border-radius: var(--radius-md); background: var(--color-primary-soft); color: var(--color-primary);">
+                <i data-lucide="pin" style="width: 15px; height: 15px;"></i>
+              </span>
+              <span class="min-w-0 flex-1">
+                <span class="flex items-center gap-2 min-w-0">
+                  <strong class="truncate" style="font-size: 13px; line-height: 1.25;">修复认证 bug</strong>
+                  <span class="shrink-0 whitespace-nowrap" style="font-size: 11px; color: var(--state-warning); font-weight: 700;">运行中</span>
+                </span>
+                <span class="mt-1 block truncate" style="font-size: 12px; color: var(--color-text-secondary);">OpenAI · 未读 2 · 14:20</span>
+              </span>
+              <i data-lucide="chevron-right" class="shrink-0" style="width: 16px; height: 16px; color: var(--color-text-muted);"></i>
+            </button>
+            <button data-dom-id="session-mobile-redesign" class="flex w-full items-center gap-3 py-3 text-left transition-colors duration-150 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2" style="border: 0; border-top: 1px solid var(--color-border); background: transparent; outline-color: var(--color-primary);">
+              <span class="inline-flex shrink-0 items-center justify-center" style="width: 30px; height: 30px; border-radius: var(--radius-md); background: var(--color-bg-input); color: var(--color-text-secondary);">
+                <i data-lucide="message-square" style="width: 15px; height: 15px;"></i>
+              </span>
+              <span class="min-w-0 flex-1">
+                <span class="flex items-center gap-2 min-w-0">
+                  <strong class="truncate" style="font-size: 13px; line-height: 1.25;">移动端改版</strong>
+                  <span class="shrink-0 whitespace-nowrap" style="font-size: 11px; color: var(--state-success); font-weight: 700;">已完成</span>
+                </span>
+                <span class="mt-1 block truncate" style="font-size: 12px; color: var(--color-text-secondary);">Anthropic · 已归档 · 昨天</span>
+              </span>
+              <i data-lucide="archive" class="shrink-0" style="width: 16px; height: 16px; color: var(--color-text-muted);"></i>
+            </button>
+          </div>
+        </article>
+
+        <article data-dom-id="project-card-admin" style="padding: 14px; border-radius: var(--radius-lg); border: 1px solid var(--color-border); background: var(--color-bg-surface);">
+          <div class="flex items-start justify-between gap-3">
+            <div class="min-w-0 flex-1">
+              <div class="flex items-center gap-2 min-w-0">
+                <span class="inline-flex shrink-0 items-center justify-center" style="width: 28px; height: 28px; border-radius: var(--radius-md); background: var(--color-bg-input); color: var(--color-text-secondary);">
+                  <i data-lucide="folder" style="width: 16px; height: 16px;"></i>
+                </span>
+                <div class="min-w-0 flex-1">
+                  <h2 class="truncate" style="font-size: 15px; line-height: 1.25; font-weight: 800; margin: 0;">admin-console</h2>
+                  <p class="truncate" style="font-size: 12px; color: var(--color-text-secondary); margin-top: 2px;">release/v2 · 5 个会话</p>
+                </div>
+              </div>
+            </div>
+            <span class="inline-flex shrink-0 items-center gap-1 whitespace-nowrap" style="height: 24px; padding: 0 8px; border-radius: var(--radius-md); background: var(--color-bg-input); color: var(--state-success); font-size: 12px; font-weight: 700;">
+              <span style="width: 6px; height: 6px; border-radius: var(--radius-full); background: currentColor;"></span>已同步
+            </span>
+          </div>
+          <div class="mt-3 flex items-center justify-between gap-3" style="padding-top: 12px; border-top: 1px solid var(--color-border);">
+            <div class="min-w-0">
+              <p class="truncate" style="font-size: 12px; color: var(--color-text-secondary);">最近会话：权限表重构</p>
+              <p class="truncate" style="font-size: 11px; color: var(--color-text-muted); margin-top: 2px;">DeepSeek · 10:05</p>
+            </div>
+            <button data-dom-id="new-session-admin" class="inline-flex shrink-0 items-center gap-1 transition-transform duration-150 active:scale-[0.98] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2" style="height: 32px; padding: 0 10px; border-radius: var(--radius-md); border: 1px solid var(--color-border); background: var(--color-bg-surface); color: var(--color-text-primary); font-size: 12px; font-weight: 800; outline-color: var(--color-primary);">
+              <i data-lucide="plus" style="width: 14px; height: 14px;"></i>新建
+            </button>
+          </div>
+        </article>
+
+        <article data-dom-id="project-card-empty" style="padding: 14px; border-radius: var(--radius-lg); border: 1px dashed var(--color-border); background: var(--color-bg-surface);">
+          <div class="flex items-start gap-3">
+            <span class="inline-flex shrink-0 items-center justify-center" style="width: 34px; height: 34px; border-radius: var(--radius-md); background: var(--color-bg-input); color: var(--color-text-secondary);">
+              <i data-lucide="folder-open" style="width: 18px; height: 18px;"></i>
+            </span>
+            <div class="min-w-0 flex-1">
+              <h2 class="truncate" style="font-size: 14px; line-height: 1.25; font-weight: 800; margin: 0;">暂无会话</h2>
+              <p class="line-clamp-2" style="font-size: 12px; line-height: 1.55; color: var(--color-text-secondary); margin-top: 4px;">desktop-sync-service 已同步，但还没有 AI 会话。选择 Provider 后即可创建。</p>
+              <div class="mt-3 flex items-center gap-2">
+                <button data-dom-id="new-session-empty" class="inline-flex items-center gap-1 whitespace-nowrap transition-transform duration-150 active:scale-[0.98] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2" style="height: 32px; padding: 0 10px; border-radius: var(--radius-md); border: 0; background: var(--color-primary); color: var(--color-text-inverse); font-size: 12px; font-weight: 800; outline-color: var(--color-primary);">
+                  <i data-lucide="plus" style="width: 14px; height: 14px;"></i>新建
+                </button>
+                <button data-dom-id="select-provider-empty" class="inline-flex items-center gap-1 whitespace-nowrap transition-colors duration-150 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2" style="height: 32px; padding: 0 10px; border-radius: var(--radius-md); border: 1px solid var(--color-border); background: var(--color-bg-surface); color: var(--color-text-secondary); font-size: 12px; font-weight: 800; outline-color: var(--color-primary);">
+                  Provider
+                </button>
+              </div>
+            </div>
+          </div>
+        </article>
+      </section>
+    </main>
+  </div>
+
+  <nav class="fixed inset-x-0 bottom-0 z-40" aria-label="主导航" style="background: var(--color-bg-surface); border-top: 1px solid var(--color-border); padding-bottom: env(safe-area-inset-bottom);">
+    <div class="grid grid-cols-3 px-4 pt-2" style="height: 64px;">
+      <a data-dom-id="nav-workbench" href="#" class="flex min-w-0 flex-col items-center justify-center gap-1 transition-colors duration-150 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2" style="color: var(--color-text-secondary); text-decoration: none; outline-color: var(--color-primary);">
+        <i data-lucide="layout-dashboard" style="width: 20px; height: 20px;"></i>
+        <span class="truncate" style="font-size: 11px; font-weight: 700;">工作台</span>
+      </a>
+      <a data-dom-id="nav-projects" href="#" aria-current="page" class="flex min-w-0 flex-col items-center justify-center gap-1 transition-colors duration-150 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2" style="color: var(--color-primary); text-decoration: none; outline-color: var(--color-primary);">
+        <span class="inline-flex items-center justify-center" style="width: 34px; height: 26px; border-radius: var(--radius-md); background: var(--color-primary-soft);">
+          <i data-lucide="folder-kanban" style="width: 19px; height: 19px;"></i>
+        </span>
+        <span class="truncate" style="font-size: 11px; font-weight: 800;">项目</span>
+      </a>
+      <a data-dom-id="nav-settings" href="#" class="flex min-w-0 flex-col items-center justify-center gap-1 transition-colors duration-150 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2" style="color: var(--color-text-secondary); text-decoration: none; outline-color: var(--color-primary);">
+        <i data-lucide="settings" style="width: 20px; height: 20px;"></i>
+        <span class="truncate" style="font-size: 11px; font-weight: 700;">设置</span>
+      </a>
+    </div>
+  </nav>
+
+  <style>
+    button, a { -webkit-tap-highlight-color: transparent; }
+    button:hover, a:hover { opacity: .92; }
+    button:active, a:active { transform: translateY(1px); }
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after { transition-duration: .01ms !important; animation-duration: .01ms !important; scroll-behavior: auto !important; }
+    }
+  </style>
+  <script>
+    lucide.createIcons();
+  </script>
+</body>
+</html>

@@ -163,6 +163,12 @@ class ChatBubble extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            // Show segments (status, tool, thought, etc.)
+            if (message.segments.isNotEmpty)
+              ...message.segments.map((segment) => Padding(
+                    padding: const EdgeInsets.only(bottom: 8),
+                    child: ChatSegmentView(segment: segment),
+                  )),
             // Show accumulated streaming text (from delta events)
             if ((message.text ?? '').isNotEmpty)
               SelectableText(
@@ -172,12 +178,6 @@ class ChatBubble extends StatelessWidget {
                   height: 1.5,
                 ),
               ),
-            // Show segments (status, tool, thought, etc.)
-            if (message.segments.isNotEmpty)
-              ...message.segments.map((segment) => Padding(
-                    padding: const EdgeInsets.only(bottom: 8),
-                    child: ChatSegmentView(segment: segment),
-                  )),
             // Typing indicator for pending messages
             if (message.pending && (message.text ?? '').isEmpty && message.segments.isEmpty)
               const Text('处理中...', style: TextStyle(color: AppColors.muted, fontSize: 12))

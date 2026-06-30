@@ -481,9 +481,11 @@ button {
 
 .sidebar-section {
   display: flex;
+  min-height: 0;
+  flex: 1 1 auto;
   flex-direction: column;
   gap: 8px;
-  min-height: 0;
+  overflow: hidden;
 }
 
 .sidebar-heading {
@@ -515,8 +517,13 @@ button {
 
 .project-tree {
   display: flex;
+  min-height: 0;
+  flex: 1 1 auto;
   flex-direction: column;
   gap: 2px;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding-right: 2px;
 }
 
 .account-menu-wrap {
@@ -592,13 +599,6 @@ button {
   line-height: 1.25;
 }
 
-.account-chevron {
-  flex: 0 0 auto;
-  color: var(--color-text-muted);
-  font-size: var(--text-md);
-  font-weight: var(--fw-bold);
-}
-
 .account-menu-popover {
   display: flex;
   width: 100%;
@@ -653,32 +653,27 @@ button {
 
 .account-menu-icon {
   display: inline-flex;
-  width: 16px;
-  height: 16px;
+  width: 18px;
+  height: 18px;
   flex: 0 0 auto;
   align-items: center;
   justify-content: center;
   color: var(--color-text-secondary);
-  font-size: var(--text-md);
-  font-weight: var(--fw-bold);
 }
 
-.account-menu-icon.success {
-  color: var(--state-success);
+.account-menu-icon svg {
+  display: block;
+  width: 18px;
+  height: 18px;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 2;
 }
 
 .account-menu-popover button.danger .account-menu-icon {
   color: var(--state-error);
-}
-
-.account-menu-notice {
-  margin: 0;
-  border-radius: var(--radius-lg);
-  background: var(--color-bg-elevated);
-  color: var(--color-text-secondary);
-  font-size: var(--text-xs);
-  line-height: var(--leading-normal);
-  padding: 8px;
 }
 
 .tree-project {
@@ -932,14 +927,24 @@ button {
 }
 
 .tree-project-chevron {
-  display: inline-grid;
+  display: inline-flex;
   width: 14px;
   height: 14px;
-  place-items: center;
+  align-items: center;
+  justify-content: center;
   color: var(--color-text-muted);
-  font-size: 12px;
-  line-height: 1;
   flex: 0 0 auto;
+}
+
+.tree-project-chevron svg {
+  display: block;
+  width: 14px;
+  height: 14px;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 2;
 }
 
 .tree-project-title strong {
@@ -960,13 +965,70 @@ button {
   padding-left: 32px;
 }
 
+.tree-chat-list.tree-chat-list-files {
+  padding-left: 0;
+}
+
+.tree-file-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-height: 32px;
+  padding: 0 4px;
+  margin-bottom: 4px;
+  border-radius: var(--radius-md);
+}
+
+.tree-file-back {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--color-text-secondary);
+  font-size: var(--text-sm);
+  font-weight: var(--fw-medium);
+  padding: 4px 6px;
+  transition: background var(--transition-fast), color var(--transition-fast);
+}
+
+.tree-file-back:hover {
+  background: var(--color-bg-hover);
+  color: var(--color-text-primary);
+}
+
+.tree-file-back svg {
+  width: 14px;
+  height: 14px;
+  flex: 0 0 auto;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 2;
+}
+
+.tree-file-back span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .tree-file-node {
   display: contents;
 }
 
+.tree-file-indent {
+  flex: 0 0 auto;
+  height: 1px;
+}
+
 .tree-file-row {
   display: grid;
-  grid-template-columns: 16px minmax(0, 1fr) auto;
+  grid-template-columns: auto 16px 16px minmax(0, 1fr) auto;
   align-items: center;
   gap: 6px;
   min-height: 28px;
@@ -991,11 +1053,64 @@ button {
   font-weight: var(--fw-medium);
 }
 
-.tree-file-icon {
-  color: var(--color-text-muted);
-  font-size: 12px;
-  line-height: 1;
+.tree-file-row.empty {
+  cursor: default;
 }
+
+.tree-file-icon {
+  display: inline-flex;
+  width: 16px;
+  height: 16px;
+  align-items: center;
+  justify-content: center;
+  color: var(--color-text-muted);
+}
+
+.tree-file-icon svg {
+  display: block;
+  width: 14px;
+  height: 14px;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 2;
+}
+
+.tree-file-icon.empty {
+  visibility: hidden;
+}
+
+.tree-file-type-icon {
+  display: inline-flex;
+  width: 16px;
+  height: 16px;
+  align-items: center;
+  justify-content: center;
+  color: var(--icon-color);
+}
+
+.tree-file-type-icon svg {
+  display: block;
+  width: 16px;
+  height: 16px;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 2;
+}
+
+.tree-file-type-icon.amber { --icon-color: #d97706; }
+.tree-file-type-icon.green { --icon-color: #16a34a; }
+.tree-file-type-icon.blue { --icon-color: #2563eb; }
+.tree-file-type-icon.yellow { --icon-color: #ca8a04; }
+.tree-file-type-icon.orange { --icon-color: #ea580c; }
+.tree-file-type-icon.purple { --icon-color: #7c3aed; }
+.tree-file-type-icon.cyan { --icon-color: #0891b2; }
+.tree-file-type-icon.pink { --icon-color: #db2777; }
+.tree-file-type-icon.slate { --icon-color: #64748b; }
+.tree-file-type-icon.redbrown { --icon-color: #b45309; }
 
 .tree-file-row.directory .tree-file-icon {
   color: var(--color-text-secondary);

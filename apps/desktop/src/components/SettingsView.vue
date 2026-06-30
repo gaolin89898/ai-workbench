@@ -79,7 +79,6 @@ const builtInProviders: AiProvider[] = [
   { id: "codex", name: "Codex", command: "codex", builtIn: true, enabled: true },
   { id: "claude", name: "Claude Code", command: "claude", builtIn: true, enabled: true },
   { id: "opencode", name: "OpenCode", command: "opencode", builtIn: true, enabled: true },
-  { id: "deepseek", name: "DeepSeek TUI", command: "deepseek", builtIn: true, enabled: true },
 ];
 const providerOrder = new Map(builtInProviders.map((provider, index) => [provider.id, index]));
 

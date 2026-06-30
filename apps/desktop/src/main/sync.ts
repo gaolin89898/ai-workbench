@@ -9,6 +9,7 @@ import type {
   DesktopPairingRequest,
   DesktopPairingStatus,
   SavedCloudConfig,
+  AiChatOutputEvent,
 } from "../services/desktop";
 import {
   listWorkspaceProjects,
@@ -41,14 +42,35 @@ interface StoredCloudConfig {
   displayName?: string;
 }
 
-function decodeHistoryContent(content: string): string {
+function decodeHistoryContent(content: string): unknown {
   if (!content.startsWith(STRUCTURED_MESSAGE_PREFIX)) return content;
   try {
     const parsed = JSON.parse(content.slice(STRUCTURED_MESSAGE_PREFIX.length));
-    return typeof parsed?.text === "string" ? parsed.text : content;
+    return parsed && typeof parsed === "object" ? parsed : content;
   } catch {
     return content;
   }
+}
+
+function encodeStructuredHistoryContent(content: string, segments: unknown[]): string {
+  return `${STRUCTURED_MESSAGE_PREFIX}${JSON.stringify({
+    text: content,
+    segments,
+  })}`;
+}
+
+function mergeChatSegment(segments: unknown[], segment: unknown): unknown[] {
+  if (!segment || typeof segment !== "object") return segments;
+  const record = segment as Record<string, unknown>;
+  const stepId = typeof record.stepId === "string" ? record.stepId : "";
+  if (!stepId) return [...segments, segment];
+  const index = segments.findIndex((item) => (
+    item && typeof item === "object" && (item as Record<string, unknown>).stepId === stepId
+  ));
+  if (index < 0) return [...segments, segment];
+  const next = [...segments];
+  next[index] = { ...(next[index] as Record<string, unknown>), ...record };
+  return next;
 }
 
 function loadStoredConfig(): StoredCloudConfig | null {
@@ -300,6 +322,7 @@ class DesktopCloudSync {
   // Tracks projectPath per session for mobile-originated sessions, since the
   // local DB schema does not store project_path on local_ai_sessions.
   private sessionProjectPaths = new Map<string, string>();
+  private mobileAssistantDrafts = new Map<string, { text: string; segments: unknown[]; savedText: string }>();
 
   constructor(mainWindow: BrowserWindow) {
     this.mainWindow = mainWindow;
@@ -523,6 +546,55 @@ class DesktopCloudSync {
     }
   }
 
+  private createAiChatSender(deviceId: string) {
+    return {
+      send: (channel: string, ...args: unknown[]) => {
+        this.notify(channel, ...args);
+        if (channel !== "ai-chat-output") return;
+        const event = args[0] as AiChatOutputEvent | undefined;
+        if (!event?.aiSessionId) return;
+        const draft = this.mobileAssistantDrafts.get(event.aiSessionId) ?? { text: "", segments: [], savedText: "" };
+        if (event.kind === "delta" && event.text) {
+          draft.text += event.text;
+          this.mobileAssistantDrafts.set(event.aiSessionId, draft);
+          this.send({
+            type: "ai.message.delta",
+            deviceId,
+            aiSessionId: event.aiSessionId,
+            content: event.text,
+            sequence: Date.now(),
+          });
+          return;
+        }
+        if (event.segment) {
+          draft.segments = mergeChatSegment(draft.segments, event.segment);
+          this.mobileAssistantDrafts.set(event.aiSessionId, draft);
+        }
+        if (event.kind === "done") {
+          const finalText = event.text?.trim() ? event.text : draft.text;
+          if (finalText.trim() && finalText !== draft.savedText) {
+            appendLocalAiMessage(event.aiSessionId, "assistant", encodeStructuredHistoryContent(finalText, draft.segments));
+            draft.savedText = finalText;
+            this.mobileAssistantDrafts.set(event.aiSessionId, draft);
+          }
+          this.send({
+            type: "ai.chat.output",
+            deviceId,
+            ...event,
+            text: finalText,
+            segments: draft.segments,
+          });
+          return;
+        }
+        this.send({
+          type: "ai.chat.output",
+          deviceId,
+          ...event,
+        });
+      },
+    };
+  }
+
   /** ai.message.send: risk-check, then run the AI chat turn locally. */
   private async handleAiMessageSend(msg: any, deviceId: string): Promise<void> {
     try {
@@ -562,7 +634,8 @@ class DesktopCloudSync {
       }
 
       const projectPath = this.sessionProjectPaths.get(aiSessionId) ?? session.summary ?? os.homedir();
-      this.notify("ai-chat-output", {
+      const aiChatSender = this.createAiChatSender(deviceId);
+      aiChatSender.send("ai-chat-output", {
         aiSessionId,
         kind: "status",
         text: "mobile sent message",
@@ -573,12 +646,12 @@ class DesktopCloudSync {
         if (session.providerId === "codex") {
           providerSessionId = await runCodexChat(
             { aiSessionId, projectPath, prompt: content },
-            this.mainWindow.webContents
+            aiChatSender
           );
         } else {
           providerSessionId = await runAiChat(
             { aiSessionId, projectPath, prompt: content },
-            this.mainWindow.webContents,
+            aiChatSender,
             session.providerSessionId ?? null
           );
         }

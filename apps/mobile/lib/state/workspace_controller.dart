@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/scheduler.dart';
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -32,6 +33,7 @@ class WorkspaceController extends ChangeNotifier {
   bool showArchived = false;
   final Map<String, List<ChatMessage>> messagesBySession = {};
   final Map<String, String> runStatusBySession = {};
+  bool _notifyQueued = false;
 
   // Client-side session state (matching desktop's localStorage pattern)
   final Set<String> _pinnedSessionIds = {};
@@ -68,6 +70,21 @@ class WorkspaceController extends ChangeNotifier {
     return _createSessionInFlight.keys.any((key) => key.startsWith(prefix));
   }
 
+  void _notifySafely() {
+    if (SchedulerBinding.instance.schedulerPhase ==
+        SchedulerPhase.persistentCallbacks) {
+      if (_notifyQueued) return;
+      _notifyQueued = true;
+      SchedulerBinding.instance.addPostFrameCallback((_) {
+        _notifyQueued = false;
+        if (!hasListeners) return;
+        notifyListeners();
+      });
+      return;
+    }
+    notifyListeners();
+  }
+
   Future<void> loadDevices() async {
     final inFlight = _loadDevicesInFlight;
     if (inFlight != null) return inFlight;
@@ -97,7 +114,7 @@ class WorkspaceController extends ChangeNotifier {
 
   Future<void> selectDevice(DesktopDevice device) async {
     selectedDevice = device;
-    notifyListeners();
+    _notifySafely();
     await refreshWorkspace();
     _events ??= realtime.events.listen(_handleRealtime);
     realtime.connect();
@@ -129,13 +146,13 @@ class WorkspaceController extends ChangeNotifier {
 
     final future = _createSession(device.id, project, providerId);
     _createSessionInFlight[key] = future;
-    notifyListeners();
+    _notifySafely();
     try {
       return await future;
     } finally {
       if (identical(_createSessionInFlight[key], future)) {
         _createSessionInFlight.remove(key);
-        notifyListeners();
+        _notifySafely();
       }
     }
   }
@@ -169,7 +186,7 @@ class WorkspaceController extends ChangeNotifier {
     final device = selectedDevice;
     if (device != null) realtime.requestHistory(device.id, session.id);
     markSessionRead(session.id);
-    notifyListeners();
+    _notifySafely();
   }
 
   void sendPrompt(AiSessionMeta session, String prompt) {
@@ -190,7 +207,7 @@ class WorkspaceController extends ChangeNotifier {
       ),
     ];
     runStatusBySession[session.id] = '正在发送给 ${session.providerId}';
-    notifyListeners();
+    _notifySafely();
     realtime.sendPrompt(device.id, session.id, trimmed);
     // Best-effort: rename untitled sessions based on the first prompt.
     _maybeRenameUntitledSession(session, trimmed);
@@ -222,12 +239,12 @@ class WorkspaceController extends ChangeNotifier {
     if (device == null) return;
     realtime.archiveSession(device.id, session.id, archived);
     runStatusBySession[session.id] = archived ? '正在归档...' : '正在恢复...';
-    notifyListeners();
+    _notifySafely();
   }
 
   void toggleArchived() {
     showArchived = !showArchived;
-    notifyListeners();
+    _notifySafely();
   }
 
   void toggleSessionPinned(String sessionId) {
@@ -237,25 +254,25 @@ class WorkspaceController extends ChangeNotifier {
       _pinnedSessionIds.add(sessionId);
     }
     _savePinned();
-    notifyListeners();
+    _notifySafely();
   }
 
   void markSessionRead(String sessionId) {
     _unreadSessionIds.remove(sessionId);
     _saveUnread();
-    notifyListeners();
+    _notifySafely();
   }
 
   void markSessionUnread(String sessionId) {
     _unreadSessionIds.add(sessionId);
     _saveUnread();
-    notifyListeners();
+    _notifySafely();
   }
 
   void renameSession(String sessionId, String newTitle) {
     _localTitleOverrides[sessionId] = newTitle;
     _saveTitleOverrides();
-    notifyListeners();
+    _notifySafely();
   }
 
   // --- Persistence ---
@@ -268,7 +285,7 @@ class WorkspaceController extends ChangeNotifier {
       final parts = entry.split('\x00');
       if (parts.length == 2) _localTitleOverrides[parts[0]] = parts[1];
     }
-    notifyListeners();
+    _notifySafely();
   }
 
   void _savePinned() {
@@ -293,21 +310,21 @@ class WorkspaceController extends ChangeNotifier {
   Future<void> _run(Future<void> Function() action) async {
     loading = true;
     error = null;
-    notifyListeners();
+    _notifySafely();
     try {
       await action();
     } catch (err) {
       error = err.toString();
     } finally {
       loading = false;
-      notifyListeners();
+      _notifySafely();
     }
   }
 
   Future<T?> _runValue<T>(Future<T> Function() action) async {
     loading = true;
     error = null;
-    notifyListeners();
+    _notifySafely();
     try {
       return await action();
     } catch (err) {
@@ -315,7 +332,7 @@ class WorkspaceController extends ChangeNotifier {
       return null;
     } finally {
       loading = false;
-      notifyListeners();
+      _notifySafely();
     }
   }
 
@@ -345,7 +362,7 @@ class WorkspaceController extends ChangeNotifier {
         final sessionId = json['aiSessionId'] as String;
         messagesBySession[sessionId] = ((json['messages'] as List<dynamic>?) ?? const [])
             .map((item) => AiHistoryMessage.fromJson(item as Map<String, dynamic>))
-            .map((item) => ChatMessage(role: item.role, text: item.content))
+            .map((item) => ChatMessage(role: item.role, text: item.content, segments: item.segments))
             .toList();
         break;
       case 'ai.chat.output':
@@ -365,7 +382,7 @@ class WorkspaceController extends ChangeNotifier {
         }
         break;
     }
-    notifyListeners();
+    _notifySafely();
   }
 
   void _handleChatOutput(Map<String, dynamic> json) {
@@ -374,18 +391,34 @@ class WorkspaceController extends ChangeNotifier {
     final text = json['text'] as String?;
     final segmentJson = json['segment'] as Map<String, dynamic>?;
     final segment = segmentJson == null ? null : ChatSegment.fromJson(segmentJson);
+    final segments = ((json['segments'] as List<dynamic>?) ?? const [])
+        .whereType<Map<String, dynamic>>()
+        .map(ChatSegment.fromJson)
+        .toList();
     final current = [...(messagesBySession[sessionId] ?? const <ChatMessage>[])];
     final pendingIndex = current.lastIndexWhere((message) => message.pending && message.role == ChatRole.assistant);
     if (kind == 'done') {
+      final pending = pendingIndex >= 0 ? current[pendingIndex] : null;
+      final doneText = (text != null && text.isNotEmpty) ? text : pending?.text;
+      final doneSegments = segments.isNotEmpty
+          ? segments
+          : segment != null
+              ? [segment]
+              : (pending?.segments ?? const <ChatSegment>[]);
       final done = ChatMessage(
         role: ChatRole.assistant,
-        text: text,
-        segments: [if (segment != null) segment],
+        text: doneText,
+        segments: doneSegments,
       );
       if (pendingIndex >= 0) {
         current[pendingIndex] = done;
-      } else {
-        current.add(done);
+      } else if ((doneText ?? '').isNotEmpty || doneSegments.isNotEmpty) {
+        final lastAssistantIndex = current.lastIndexWhere((message) => message.role == ChatRole.assistant);
+        if (lastAssistantIndex >= 0 && current[lastAssistantIndex].pending) {
+          current[lastAssistantIndex] = done;
+        } else {
+          current.add(done);
+        }
       }
       runStatusBySession[sessionId] = '已完成';
     } else if (kind == 'error') {
@@ -401,14 +434,14 @@ class WorkspaceController extends ChangeNotifier {
       }
       runStatusBySession[sessionId] = '执行失败';
     } else if (kind == 'delta') {
-      // Streaming text delta — append to pending message's text
-      if (text != null && text.isNotEmpty) {
+      final deltaText = (text != null && text.isNotEmpty) ? text : segment?.text;
+      if (deltaText != null && deltaText.isNotEmpty) {
         if (pendingIndex >= 0) {
           final pending = current[pendingIndex];
-          final accumulated = (pending.text ?? '') + text;
+          final accumulated = (pending.text ?? '') + deltaText;
           current[pendingIndex] = pending.copyWith(text: accumulated);
         } else {
-          current.add(ChatMessage(role: ChatRole.assistant, pending: true, text: text));
+          current.add(ChatMessage(role: ChatRole.assistant, pending: true, text: deltaText));
         }
       }
     } else {
@@ -442,12 +475,12 @@ class WorkspaceController extends ChangeNotifier {
 
   void _upsertSession(AiSessionMeta session) {
     sessions = [session, ...sessions.where((item) => item.id != session.id)];
-    notifyListeners();
+    _notifySafely();
   }
 
   void _appendMessage(String sessionId, ChatMessage message) {
     messagesBySession[sessionId] = [...(messagesBySession[sessionId] ?? const []), message];
-    notifyListeners();
+    _notifySafely();
   }
 
   DesktopDevice? _findDevice(String id) {

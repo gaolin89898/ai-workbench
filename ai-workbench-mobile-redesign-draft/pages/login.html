@@ -1,0 +1,582 @@
+<!DOCTYPE html>
+<html class="light" lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI 工作台 - 登录</title>
+    <style id="theme-vars">
+/* AI Workbench Mobile — Light Task-Oriented Theme */
+/* Inspired by Trae Work clean aesthetic */
+:root {
+  /* Brand */
+  --color-primary: #2563eb;
+  --color-primary-hover: #1d4ed8;
+  --color-primary-muted: rgba(37, 99, 235, 0.12);
+  --color-primary-soft: rgba(37, 99, 235, 0.06);
+
+  /* Surface & Background */
+  --color-bg-app: #f8fafc;
+  --color-bg-sidebar: #ffffff;
+  --color-bg-main: #f8fafc;
+  --color-bg-surface: #ffffff;
+  --color-bg-elevated: #ffffff;
+  --color-bg-input: #f1f5f9;
+  --color-bg-hover: rgba(0, 0, 0, 0.02);
+  --color-bg-active: rgba(37, 99, 235, 0.08);
+
+  /* Text */
+  --color-text-primary: #0f172a;
+  --color-text-secondary: #475569;
+  --color-text-muted: #94a3b8;
+  --color-text-inverse: #ffffff;
+
+  /* Border */
+  --color-border: #e2e8f0;
+  --color-border-active: rgba(37, 99, 235, 0.4);
+
+  /* State Colors */
+  --state-success: #22c55e;
+  --state-warning: #f59e0b;
+  --state-error: #ef4444;
+  --state-info: #3b82f6;
+
+  /* Radius */
+  --radius-sm: 4px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --radius-full: 9999px;
+
+  /* Typography */
+  --font-sans: "Inter", ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --font-mono: "JetBrains Mono", "Fira Code", ui-monospace, "Cascadia Code", monospace;
+
+  --text-xs: 11px;
+  --text-sm: 12px;
+  --text-base: 13px;
+  --text-md: 14px;
+  --text-lg: 16px;
+  --text-xl: 20px;
+  --text-2xl: 28px;
+
+  --leading-tight: 1.25;
+  --leading-normal: 1.5;
+  --leading-relaxed: 1.625;
+
+  --font-weight-normal: 400;
+  --font-weight-medium: 500;
+  --font-weight-semibold: 600;
+  --font-weight-bold: 700;
+  --font-weight-extrabold: 800;
+
+  /* Shadow */
+  --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.05);
+  --shadow-elevated: 0 4px 12px rgba(0, 0, 0, 0.08);
+  --shadow-modal: 0 8px 32px rgba(0, 0, 0, 0.12);
+
+  /* Spacing */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-10: 40px;
+}
+
+    </style>
+    <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4.3.1/dist/index.global.js"></script>
+    <script src="https://unpkg.com/lucide@1.8.0/dist/umd/lucide.min.js"></script>
+    <style type="text/tailwindcss">
+  @theme inline {
+    --color-primary: var(--color-primary);
+    --color-border: var(--color-border);
+  }
+  @layer base {
+    body { background: var(--color-bg-app); color: var(--color-text-primary); }
+    td, th { @apply break-words; word-break: break-all; word-break: auto-phrase; }
+    th { @apply whitespace-nowrap; }
+  }
+    </style>
+    <style>
+      .no-scrollbar::-webkit-scrollbar { display: none; }
+      .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+      [data-icon] {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        -webkit-mask-size: contain;
+        mask-size: contain;
+        -webkit-mask-repeat: no-repeat;
+        mask-repeat: no-repeat;
+        -webkit-mask-position: center;
+        mask-position: center;
+        background-color: currentColor;
+      }
+    </style>
+</head>
+<body style="margin: 0; min-height: 100vh; font-family: var(--font-sans); background: var(--color-bg-app); color: var(--color-text-primary);">
+  <main class="login-screen" aria-label="登录">
+    <section class="hero-panel" aria-labelledby="login-title">
+      <div class="brand-lockup">
+        <div class="brand-mark" aria-hidden="true">
+          <i data-lucide="terminal-square" class="brand-icon"></i>
+        </div>
+        <div class="brand-copy">
+          <h1 id="login-title">AI 工作台</h1>
+          <p>连接桌面端 AI 编程工作台，随时管理项目、会话与设备。</p>
+        </div>
+      </div>
+
+      <div class="trust-row" aria-label="连接状态">
+        <span class="trust-dot" aria-hidden="true"></span>
+        <span class="trust-text">桌面端认证同步</span>
+      </div>
+    </section>
+
+    <section class="auth-card" aria-label="账号登录">
+      <form action="#" method="post" novalidate>
+        <div class="field-stack">
+          <label for="email">邮箱</label>
+          <div class="input-wrap">
+            <i data-lucide="mail" aria-hidden="true"></i>
+            <input id="email" name="email" type="email" placeholder="输入邮箱" autocomplete="email" required>
+          </div>
+        </div>
+
+        <div class="field-stack">
+          <div class="label-row">
+            <label for="password">密码</label>
+            <a href="#" class="text-link" data-dom-id="forgot-password">忘记密码</a>
+          </div>
+          <div class="input-wrap">
+            <i data-lucide="lock-keyhole" aria-hidden="true"></i>
+            <input id="password" name="password" type="password" placeholder="输入密码" autocomplete="current-password" required>
+          </div>
+        </div>
+
+        <div class="status-area" role="status" aria-live="polite" data-dom-id="login-status">
+          <i data-lucide="info" aria-hidden="true"></i>
+          <span>首次使用将自动创建账号。</span>
+        </div>
+
+        <button class="primary-btn" type="submit" data-dom-id="login-submit">
+          <span>登录</span>
+          <i data-lucide="arrow-right" aria-hidden="true"></i>
+        </button>
+      </form>
+
+      <div class="divider" aria-hidden="true"><span></span><b>或</b><span></span></div>
+
+      <a class="oauth-btn" href="#" data-dom-id="dingtalk-oauth" aria-label="使用钉钉登录">
+        <span class="oauth-glyph" aria-hidden="true">钉</span>
+        <span>钉钉登录</span>
+      </a>
+    </section>
+
+    <section class="device-note" aria-label="工作台说明">
+      <div class="note-icon" aria-hidden="true"><i data-lucide="monitor-smartphone"></i></div>
+      <div class="note-copy">
+        <h2>连接桌面</h2>
+        <p>登录后进入移动端工作台，查看项目状态、Provider 配置与设备连接。</p>
+      </div>
+    </section>
+  </main>
+
+  <style>
+    .login-screen {
+      width: min(100%, 430px);
+      min-height: 100vh;
+      margin: 0 auto;
+      box-sizing: border-box;
+      padding: max(24px, env(safe-area-inset-top)) 16px max(24px, env(safe-area-inset-bottom));
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      gap: 16px;
+      background:
+        linear-gradient(180deg, var(--color-primary-soft) 0%, transparent 34%),
+        var(--color-bg-app);
+    }
+
+    .hero-panel {
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+      padding: 8px 4px 4px;
+    }
+
+    .brand-lockup {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      min-width: 0;
+    }
+
+    .brand-mark {
+      width: 56px;
+      height: 56px;
+      flex: 0 0 auto;
+      border-radius: 16px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--color-text-inverse);
+      background: linear-gradient(135deg, var(--color-primary), var(--color-primary-hover));
+      box-shadow: var(--shadow-card);
+    }
+
+    .brand-icon {
+      width: 28px;
+      height: 28px;
+      stroke-width: 1.8;
+    }
+
+    .brand-copy {
+      min-width: 0;
+      flex: 1;
+    }
+
+    .brand-copy h1 {
+      margin: 0;
+      color: var(--color-text-primary);
+      font-size: var(--text-2xl);
+      line-height: 1.2;
+      font-weight: var(--font-weight-extrabold);
+      letter-spacing: -0.03em;
+      text-wrap: balance;
+      word-break: keep-all;
+      overflow-wrap: break-word;
+    }
+
+    .brand-copy p {
+      margin: 8px 0 0;
+      color: var(--color-text-secondary);
+      font-size: var(--text-md);
+      line-height: var(--leading-relaxed);
+    }
+
+    .trust-row {
+      width: fit-content;
+      max-width: 100%;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      min-height: 30px;
+      padding: 0 10px;
+      border-radius: var(--radius-md);
+      border: 1px solid var(--color-border);
+      background: var(--color-bg-surface);
+      color: var(--color-text-secondary);
+      font-size: var(--text-sm);
+      font-weight: var(--font-weight-medium);
+      white-space: nowrap;
+    }
+
+    .trust-dot {
+      width: 7px;
+      height: 7px;
+      border-radius: var(--radius-full);
+      background: var(--state-success);
+      flex: 0 0 auto;
+    }
+
+    .auth-card {
+      border: 1px solid var(--color-border);
+      border-radius: 16px;
+      background: var(--color-bg-surface);
+      padding: 20px;
+      box-shadow: var(--shadow-card);
+    }
+
+    form {
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+      margin: 0;
+    }
+
+    .field-stack {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      min-width: 0;
+    }
+
+    .field-stack label,
+    .label-row label {
+      color: var(--color-text-primary);
+      font-size: var(--text-base);
+      line-height: var(--leading-normal);
+      font-weight: var(--font-weight-semibold);
+    }
+
+    .label-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      min-width: 0;
+    }
+
+    .text-link {
+      color: var(--color-primary);
+      font-size: var(--text-sm);
+      line-height: var(--leading-normal);
+      text-decoration: none;
+      white-space: nowrap;
+    }
+
+    .text-link:focus-visible,
+    .oauth-btn:focus-visible,
+    .primary-btn:focus-visible,
+    .input-wrap:focus-within {
+      outline: 2px solid var(--color-border-active);
+      outline-offset: 2px;
+    }
+
+    .input-wrap {
+      min-height: 48px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      border: 1px solid var(--color-border);
+      border-radius: var(--radius-lg);
+      background: var(--color-bg-input);
+      padding: 0 14px;
+      box-sizing: border-box;
+      transition: border-color 140ms cubic-bezier(.2,.8,.2,1), background-color 140ms cubic-bezier(.2,.8,.2,1);
+    }
+
+    .input-wrap:hover {
+      border-color: var(--color-border-active);
+      background: var(--color-bg-surface);
+    }
+
+    .input-wrap i {
+      width: 18px;
+      height: 18px;
+      flex: 0 0 auto;
+      color: var(--color-text-muted);
+      stroke-width: 1.8;
+    }
+
+    .input-wrap input {
+      width: 100%;
+      min-width: 0;
+      height: 46px;
+      border: 0;
+      outline: 0;
+      background: transparent;
+      color: var(--color-text-primary);
+      font: inherit;
+      font-size: var(--text-md);
+      line-height: var(--leading-normal);
+    }
+
+    .input-wrap input::placeholder {
+      color: var(--color-text-muted);
+    }
+
+    .input-wrap input:disabled {
+      cursor: not-allowed;
+      color: var(--color-text-muted);
+    }
+
+    .status-area {
+      min-height: 36px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 10px;
+      border-radius: var(--radius-md);
+      background: var(--color-primary-soft);
+      color: var(--color-text-secondary);
+      font-size: var(--text-sm);
+      line-height: var(--leading-normal);
+    }
+
+    .status-area i {
+      width: 16px;
+      height: 16px;
+      flex: 0 0 auto;
+      color: var(--color-primary);
+      stroke-width: 1.8;
+    }
+
+    .status-area[data-state="error"] {
+      background: var(--color-bg-surface);
+      border: 1px solid var(--state-error);
+      color: var(--state-error);
+    }
+
+    .primary-btn,
+    .oauth-btn {
+      width: 100%;
+      min-height: 48px;
+      box-sizing: border-box;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      border-radius: var(--radius-lg);
+      font-family: var(--font-sans);
+      font-size: var(--text-md);
+      font-weight: var(--font-weight-semibold);
+      line-height: var(--leading-normal);
+      text-decoration: none;
+      white-space: nowrap;
+      cursor: pointer;
+      transition: transform 140ms cubic-bezier(.2,.8,.2,1), background-color 140ms cubic-bezier(.2,.8,.2,1), border-color 140ms cubic-bezier(.2,.8,.2,1);
+    }
+
+    .primary-btn {
+      border: 0;
+      background: var(--color-primary);
+      color: var(--color-text-inverse);
+    }
+
+    .primary-btn i {
+      width: 17px;
+      height: 17px;
+      stroke-width: 1.9;
+      transition: transform 140ms cubic-bezier(.2,.8,.2,1);
+    }
+
+    .primary-btn:hover {
+      background: var(--color-primary-hover);
+      transform: translateY(-1px);
+    }
+
+    .primary-btn:hover i {
+      transform: translateX(2px);
+    }
+
+    .primary-btn:active,
+    .oauth-btn:active {
+      transform: translateY(0);
+    }
+
+    .primary-btn:disabled {
+      background: var(--color-text-muted);
+      cursor: not-allowed;
+      transform: none;
+    }
+
+    .divider {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin: 16px 0;
+      color: var(--color-text-muted);
+      font-size: var(--text-xs);
+      line-height: var(--leading-normal);
+      font-weight: var(--font-weight-medium);
+    }
+
+    .divider span {
+      height: 1px;
+      flex: 1;
+      background: var(--color-border);
+    }
+
+    .divider b {
+      font-weight: var(--font-weight-medium);
+    }
+
+    .oauth-btn {
+      border: 1px solid var(--color-border);
+      background: var(--color-bg-surface);
+      color: var(--color-text-primary);
+    }
+
+    .oauth-btn:hover {
+      border-color: var(--color-border-active);
+      background: var(--color-bg-active);
+      transform: translateY(-1px);
+    }
+
+    .oauth-glyph {
+      width: 22px;
+      height: 22px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: var(--radius-md);
+      background: var(--color-primary);
+      color: var(--color-text-inverse);
+      font-size: var(--text-sm);
+      font-weight: var(--font-weight-bold);
+      line-height: 1;
+    }
+
+    .device-note {
+      display: flex;
+      align-items: flex-start;
+      gap: 12px;
+      padding: 14px 4px 2px;
+      color: var(--color-text-secondary);
+    }
+
+    .note-icon {
+      width: 34px;
+      height: 34px;
+      flex: 0 0 auto;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: var(--radius-lg);
+      color: var(--color-primary);
+      background: var(--color-primary-soft);
+    }
+
+    .note-icon i {
+      width: 18px;
+      height: 18px;
+      stroke-width: 1.8;
+    }
+
+    .note-copy {
+      min-width: 0;
+      flex: 1;
+    }
+
+    .note-copy h2 {
+      margin: 0;
+      color: var(--color-text-primary);
+      font-size: var(--text-lg);
+      line-height: 1.3;
+      font-weight: var(--font-weight-bold);
+      text-wrap: balance;
+      word-break: keep-all;
+      overflow-wrap: break-word;
+    }
+
+    .note-copy p {
+      margin: 4px 0 0;
+      color: var(--color-text-secondary);
+      font-size: var(--text-sm);
+      line-height: var(--leading-relaxed);
+    }
+
+    @media (min-width: 640px) {
+      .login-screen {
+        min-height: 844px;
+        border-left: 1px solid var(--color-border);
+        border-right: 1px solid var(--color-border);
+      }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      .primary-btn,
+      .oauth-btn,
+      .primary-btn i,
+      .input-wrap {
+        transition-duration: 0.01ms;
+      }
+    }
+  </style>
+  <script>if (window.lucide) { lucide.createIcons(); }</script>
+</body>
+</html>

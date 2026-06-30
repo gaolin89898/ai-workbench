@@ -1,0 +1,785 @@
+<!DOCTYPE html>
+<html lang="zh-CN" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>项目图标总览</title>
+    <style id="theme-vars">
+/* AI Workbench Desktop — Dark Theme */
+/* Based on actual project style.css, inverted to dark */
+:root {
+  /* Brand */
+  --color-primary: #2563eb;
+  --color-primary-hover: #1d4ed8;
+  --color-primary-muted: rgba(37, 99, 235, 0.15);
+  --color-primary-soft: rgba(37, 99, 235, 0.08);
+  --color-primary-ring: rgba(37, 99, 235, 0.25);
+
+  /* Surface & Background */
+  --color-bg-app: #0f1117;
+  --color-bg-body: #111318;
+  --color-bg-sidebar: #161822;
+  --color-bg-main: #1a1d2e;
+  --color-bg-content: #1e2235;
+  --color-bg-surface: #1e2235;
+  --color-bg-elevated: #252a3a;
+  --color-bg-input: #1e2235;
+  --color-bg-hover: rgba(255, 255, 255, 0.06);
+  --color-bg-active: rgba(37, 99, 235, 0.12);
+
+  /* Text */
+  --color-text-primary: #e8eaed;
+  --color-text-body: #d1d5db;
+  --color-text-secondary: #9aa0b4;
+  --color-text-muted: #6b7280;
+  --color-text-placeholder: #6b7280;
+  --color-text-inverse: #ffffff;
+
+  /* Border */
+  --color-border: rgba(255, 255, 255, 0.1);
+  --color-border-subtle: rgba(255, 255, 255, 0.06);
+  --color-border-active: rgba(37, 99, 235, 0.5);
+
+  /* State Colors */
+  --state-success: #22c55e;
+  --state-success-bg: rgba(34, 197, 94, 0.12);
+  --state-success-ring: rgba(34, 197, 94, 0.25);
+  --state-warning: #f59e0b;
+  --state-warning-bg: rgba(245, 158, 11, 0.12);
+  --state-error: #ef4444;
+  --state-error-bg: rgba(239, 68, 68, 0.12);
+  --state-info: #3b82f6;
+  --state-info-bg: rgba(59, 130, 246, 0.12);
+
+  /* Radius */
+  --radius-sm: 4px;
+  --radius-md: 7px;
+  --radius-lg: 8px;
+  --radius-xl: 12px;
+  --radius-full: 999px;
+
+  /* Typography */
+  --font-sans: "Inter", ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+
+  --text-xs: 11px;
+  --text-sm: 12px;
+  --text-base: 13px;
+  --text-md: 14px;
+  --text-lg: 16px;
+  --text-xl: 20px;
+  --text-2xl: 28px;
+
+  --leading-tight: 1.25;
+  --leading-normal: 1.5;
+  --leading-relaxed: 1.625;
+  --leading-chat: 1.62;
+
+  /* Font Weights */
+  --fw-normal: 400;
+  --fw-medium: 500;
+  --fw-semibold: 620;
+  --fw-bold: 700;
+  --fw-extrabold: 800;
+  --fw-black: 850;
+
+  /* Shadows */
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.15);
+  --shadow-md: 0 10px 24px rgba(0, 0, 0, 0.25);
+  --shadow-lg: 0 24px 56px rgba(0, 0, 0, 0.35);
+  --shadow-composer: 0 16px 42px rgba(0, 0, 0, 0.3);
+
+  /* Spacing */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-10: 40px;
+  --space-14: 56px;
+  --space-18: 72px;
+
+  /* Layout */
+  --sidebar-width: 286px;
+  --topbar-height: 56px;
+  --composer-max-width: 760px;
+
+  /* Transitions */
+  --transition-fast: 120ms ease;
+  --transition-normal: 200ms ease;
+}
+
+    </style>
+    <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4.3.1/dist/index.global.js"></script>
+    <script src="https://unpkg.com/lucide@1.8.0/dist/umd/lucide.min.js"></script>
+    <style type="text/tailwindcss">
+  @theme inline {
+    --color-primary: var(--color-primary);
+    --color-border: var(--color-border);
+  }
+  @layer base {
+    body { background: var(--color-bg-body); color: var(--color-text-primary); }
+    td, th { @apply break-words; word-break: break-all; word-break: auto-phrase; }
+    th { @apply whitespace-nowrap; }
+  }
+    </style>
+
+    <style>
+      * { box-sizing: border-box; }
+      body { margin: 0; min-height: 100vh; background: var(--color-bg-body); color: var(--color-text-primary); font-family: var(--font-sans); }
+      .page-shell { min-height: 100vh; padding: 56px 28px 72px; background: radial-gradient(circle at 50% 0%, rgba(37, 99, 235, 0.12), transparent 34%), var(--color-bg-body); }
+      .spec-board { width: 1040px; max-width: calc(100vw - 56px); margin: 0 auto; display: flex; flex-direction: column; gap: 24px; }
+      .eyebrow { display: inline-flex; align-items: center; gap: 8px; color: var(--color-primary); background: var(--color-primary-soft); border: 1px solid var(--color-primary-muted); border-radius: var(--radius-full); padding: 6px 10px; font-size: var(--text-xs); font-weight: var(--fw-semibold); margin-bottom: 14px; }
+      .title { margin: 0; color: var(--color-text-primary); font-size: var(--text-2xl); font-weight: var(--fw-bold); line-height: var(--leading-tight); letter-spacing: -0.02em; }
+      .subtitle { margin: 10px 0 0; color: var(--color-text-secondary); font-size: var(--text-md); line-height: var(--leading-normal); }
+      .meta-pill { flex-shrink: 0; color: var(--color-text-muted); font-size: var(--text-xs); font-family: var(--font-mono); border: 1px solid var(--color-border); background: color-mix(in srgb, var(--color-bg-elevated) 55%, transparent); border-radius: var(--radius-full); padding: 7px 11px; }
+      .spec-card { border: 1px solid var(--color-border); background: linear-gradient(180deg, color-mix(in srgb, var(--color-bg-content) 86%, transparent), var(--color-bg-surface)); border-radius: 18px; box-shadow: var(--shadow-sm); }
+      .section-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 20px; padding: 20px 22px 16px; border-bottom: 1px solid var(--color-border); }
+      .section-title { margin: 0; color: var(--color-text-primary); font-size: var(--text-lg); font-weight: var(--fw-semibold); line-height: var(--leading-tight); }
+      .section-note { margin: 6px 0 0; color: var(--color-text-secondary); font-size: var(--text-sm); line-height: var(--leading-normal); }
+      .file-list { padding: 8px 10px 10px; }
+      .file-list-inner { border: 1px solid var(--color-border-subtle); border-radius: 14px; overflow: hidden; background: color-mix(in srgb, var(--color-bg-elevated) 32%, transparent); }
+      .file-row { display: grid; grid-template-columns: 28px minmax(0, 1fr) 108px 84px; align-items: center; gap: 12px; min-height: 44px; padding: 0 12px; border-top: 1px solid var(--color-border-subtle); }
+      .file-row:first-child { border-top: none; }
+      .row-icon { width: 28px; height: 28px; border-radius: 9px; display: inline-flex; align-items: center; justify-content: center; color: var(--icon-color); background: var(--icon-bg); }
+      .file-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--color-text-body); font-size: var(--text-base); font-weight: var(--fw-medium); }
+      .tag { justify-self: start; color: var(--color-text-secondary); background: var(--color-bg-elevated); border: 1px solid var(--color-border-subtle); border-radius: var(--radius-full); padding: 2px 8px; font-size: var(--text-xs); font-weight: var(--fw-medium); line-height: 1.35; }
+      .size { justify-self: end; color: var(--color-text-muted); font-size: var(--text-xs); font-family: var(--font-mono); }
+      .group-card { padding: 22px; }
+      .group-card + .group-card { margin-top: 18px; }
+      .group-top { display: flex; align-items: flex-start; justify-content: space-between; gap: 18px; margin-bottom: 16px; }
+      .count { color: var(--color-text-muted); font-size: var(--text-xs); font-family: var(--font-mono); white-space: nowrap; }
+      .icon-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
+      .icon-card { min-height: 128px; padding: 14px; border: 1px solid var(--color-border); border-radius: 16px; background: color-mix(in srgb, var(--color-bg-content) 90%, transparent); display: flex; flex-direction: column; justify-content: space-between; transition: border-color var(--transition-fast), background var(--transition-fast), transform var(--transition-fast); }
+      .icon-card:hover { border-color: var(--color-border-active); background: var(--color-bg-content); transform: translateY(-1px); }
+      .icon-box { width: 44px; height: 44px; border-radius: 13px; display: inline-flex; align-items: center; justify-content: center; color: var(--icon-color); background: var(--icon-bg); border: 1px solid color-mix(in srgb, var(--icon-color) 28%, transparent); }
+      .icon-box i { width: 22px; height: 22px; }
+      .icon-name { margin: 12px 0 5px; color: var(--color-text-primary); font-size: var(--text-base); font-weight: var(--fw-semibold); line-height: var(--leading-tight); }
+      .icon-code { margin: 0 0 8px; color: var(--color-text-muted); font-size: var(--text-xs); font-family: var(--font-mono); line-height: var(--leading-normal); }
+      .icon-scene { margin: 0; color: var(--color-text-secondary); font-size: var(--text-xs); line-height: var(--leading-normal); }
+      .amber { --icon-color: #d97706; --icon-bg: rgba(245, 158, 11, 0.14); }
+      .green { --icon-color: #16a34a; --icon-bg: rgba(34, 197, 94, 0.13); }
+      .blue { --icon-color: #2563eb; --icon-bg: rgba(37, 99, 235, 0.12); }
+      .yellow { --icon-color: #ca8a04; --icon-bg: rgba(250, 204, 21, 0.14); }
+      .orange { --icon-color: #ea580c; --icon-bg: rgba(251, 146, 60, 0.14); }
+      .purple { --icon-color: #7c3aed; --icon-bg: rgba(167, 139, 250, 0.14); }
+      .cyan { --icon-color: #0891b2; --icon-bg: rgba(34, 211, 238, 0.13); }
+      .pink { --icon-color: #db2777; --icon-bg: rgba(244, 114, 182, 0.13); }
+      .slate { --icon-color: #64748b; --icon-bg: rgba(148, 163, 184, 0.13); }
+      .redbrown { --icon-color: #b45309; --icon-bg: rgba(201, 121, 104, 0.14); }
+      .red { --icon-color: #dc2626; --icon-bg: rgba(239, 68, 68, 0.12); }
+      @media (min-width: 1180px) { .icon-grid { grid-template-columns: repeat(5, minmax(0, 1fr)); } }
+      @media (max-width: 860px) { .icon-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } .file-row { grid-template-columns: 28px minmax(0, 1fr) 84px; } .size { display: none; } }
+      ::-webkit-scrollbar { width: 6px; }
+      ::-webkit-scrollbar-track { background: transparent; }
+      ::-webkit-scrollbar-thumb { background: var(--color-bg-elevated); border-radius: 999px; }
+    </style>
+</head>
+<body>
+  <main class="page-shell">
+    <section class="spec-board">
+      <header style="display: flex; align-items: flex-end; justify-content: space-between; gap: 24px; padding-bottom: 8px;">
+        <div>
+          <div class="eyebrow"><i data-lucide="component" style="width: 14px; height: 14px;"></i>Design System / Iconography</div>
+          <h1 class="title">项目图标总览</h1>
+          <p class="subtitle">汇总 AI 工作台桌面端页面中使用的所有功能、文件、状态与操作图标</p>
+        </div>
+        <div class="meta-pill">56 icons · 40/44px tile</div>
+      </header>
+
+      <section class="spec-card" style="overflow: hidden;">
+        <div class="section-head">
+          <div>
+            <h2 class="section-title">文件图标保留区</h2>
+            <p class="section-note">延续原文件图标规范，用于文件树、选择器和上下文菜单的列表态预览。</p>
+          </div>
+          <span class="count">icon 20×20</span>
+        </div>
+        <div class="file-list">
+          <div class="file-list-inner">
+            <div class="file-row">
+              <span class="row-icon amber"><i data-lucide="folder" width="20" height="20"></i></span>
+              <span class="file-name">src</span>
+              <span class="tag">文件夹</span>
+              <span class="size">—</span>
+            </div>
+            <div class="file-row">
+              <span class="row-icon amber"><i data-lucide="folder-open" width="20" height="20"></i></span>
+              <span class="file-name">components</span>
+              <span class="tag">文件夹</span>
+              <span class="size">—</span>
+            </div>
+            <div class="file-row">
+              <span class="row-icon redbrown"><i data-lucide="package" width="20" height="20"></i></span>
+              <span class="file-name">package.json</span>
+              <span class="tag">Package</span>
+              <span class="size">2.8 KB</span>
+            </div>
+            <div class="file-row">
+              <span class="row-icon slate"><i data-lucide="settings" width="20" height="20"></i></span>
+              <span class="file-name">tsconfig.json</span>
+              <span class="tag">配置</span>
+              <span class="size">612 B</span>
+            </div>
+            <div class="file-row">
+              <span class="row-icon cyan"><i data-lucide="book-open" width="20" height="20"></i></span>
+              <span class="file-name">README.md</span>
+              <span class="tag">Markdown</span>
+              <span class="size">4.1 KB</span>
+            </div>
+            <div class="file-row">
+              <span class="row-icon green"><i data-lucide="component" width="20" height="20"></i></span>
+              <span class="file-name">App.vue</span>
+              <span class="tag">Vue</span>
+              <span class="size">8.6 KB</span>
+            </div>
+            <div class="file-row">
+              <span class="row-icon purple"><i data-lucide="palette" width="20" height="20"></i></span>
+              <span class="file-name">style.css</span>
+              <span class="tag">样式</span>
+              <span class="size">12 KB</span>
+            </div>
+            <div class="file-row">
+              <span class="row-icon pink"><i data-lucide="image" width="20" height="20"></i></span>
+              <span class="file-name">logo.svg</span>
+              <span class="tag">图片</span>
+              <span class="size">1.3 KB</span>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="spec-card group-card">
+        <div class="group-top">
+          <div>
+            <h2 class="section-title">导航与结构</h2>
+            <p class="section-note">页面骨架、侧边栏层级、视图切换与新增入口。</p>
+          </div>
+          <span class="count">8 icons</span>
+        </div>
+        <div class="icon-grid">
+          <article class="icon-card">
+            <span class="icon-box slate"><i data-lucide="chevron-down"></i></span>
+            <div>
+              <h3 class="icon-name">向下展开</h3>
+              <p class="icon-code">chevron-down</p>
+              <p class="icon-scene">侧边栏展开 / 下拉菜单</p>
+            </div>
+          </article>
+          <article class="icon-card">
+            <span class="icon-box slate"><i data-lucide="chevron-right"></i></span>
+            <div>
+              <h3 class="icon-name">向右收起</h3>
+              <p class="icon-code">chevron-right</p>
+              <p class="icon-scene">侧边栏收起 / 文件树节点</p>
+            </div>
+          </article>
+          <article class="icon-card">
+            <span class="icon-box slate"><i data-lucide="chevron-up"></i></span>
+            <div>
+              <h3 class="icon-name">向上收起</h3>
+              <p class="icon-code">chevron-up</p>
+              <p class="icon-scene">账户菜单收起</p>
+            </div>
+          </article>
+          <article class="icon-card">
+            <span class="icon-box blue"><i data-lucide="grid-3x3"></i></span>
+            <div>
+              <h3 class="icon-name">网格入口</h3>
+              <p class="icon-code">grid-3x3</p>
+              <p class="icon-scene">终端页工作区切换</p>
+            </div>
+          </article>
+          <article class="icon-card">
+            <span class="icon-box blue"><i data-lucide="layout-grid"></i></span>
+            <div>
+              <h3 class="icon-name">布局网格</h3>
+              <p class="icon-code">layout-grid</p>
+              <p class="icon-scene">亮色项目工作区入口</p>
+            </div>
+          </article>
+          <article class="icon-card">
+            <span class="icon-box blue"><i data-lucide="list"></i></span>
+            <div>
+              <h3 class="icon-name">列表视图</h3>
+              <p class="icon-code">list</p>
+              <p class="icon-scene">项目文件列表 / 面板切换</p>
+            </div>
+          </article>
+          <article class="icon-card">
+            <span class="icon-box blue"><i data-lucide="list-tree"></i></span>
+            <div>
+              <h3 class="icon-name">文件列表</h3>
+              <p class="icon-code">list-tree</p>
+              <p class="icon-scene">项目文件列表 / 文件树浏览</p>
+            </div>
+          </article>
+          <article class="icon-card">
+            <span class="icon-box green"><i data-lucide="plus"></i></span>
+            <div>
+              <h3 class="icon-name">新增</h3>
+              <p class="icon-code">plus</p>
+              <p class="icon-scene">新建项目 / 新建会话 / 新建终端</p>
+            </div>
+          </article>
+        </div>
+      </section>
+
+      <section class="spec-card group-card">
+        <div class="group-top">
+          <div>
+            <h2 class="section-title">项目与文件</h2>
+            <p class="section-note">保留原文件图标规范，并扩展项目目录、代码、文档、资源与配置类型。</p>
+          </div>
+          <span class="count">16 icons</span>
+        </div>
+        <div class="icon-grid">
+          <article class="icon-card">
+            <span class="icon-box amber"><i data-lucide="folder"></i></span>
+            <div>
+              <h3 class="icon-name">普通文件夹</h3>
+              <p class="icon-code">folder</p>
+              <p class="icon-scene">文件树目录 / 项目目录</p>
+            </div>
+          </article>
+          <article class="icon-card">
+            <span class="icon-box amber"><i data-lucide="folder-open"></i></span>
+            <div>
+              <h3 class="icon-name">展开文件夹</h3>
+              <p class="icon-code">folder-open</p>
+              <p class="icon-scene">当前打开项目 / 展开目录</p>
+            </div>
+          </article>
+          <article class="icon-card">
+            <span class="icon-box blue"><i data-lucide="file-code"></i></span>
+            <div>
+              <h3 class="icon-name">代码文件</h3>
+              <p class="icon-code">file-code</p>
+              <p class="icon-scene">会话引用代码文件</p>
+            </div>
+          </article>
+          <article class="icon-card">
+            <span class="icon-box blue"><i data-lucide="file-code-2"></i></span>
+            <div>
+              <h3 class="icon-name">TypeScript</h3>
+              <p class="icon-code">file-code-2</p>
+              <p class="icon-scene">TS / TSX 文件类型</p>
+            </div>
+          </article>
+          <article class="icon-card">
+            <span class="icon-box green"><i data-lucide="file-plus"></i></span>
+            <div>
+              <h3 class="icon-name">新增文件</h3>
+              <p class="icon-code">file-plus</p>
+              <p class="icon-scene">AI 生成或创建文件</p>
+            </div>
+          </article>
+          <article class="icon-card">
+            <span class="icon-box cyan"><i data-lucide="file-text"></i></span>
+            <div>
+              <h3 class="icon-name">文本文件</h3>
+              <p class="icon-code">file-text</p>
+              <p class="icon-scene">TXT / LOG 文件类型</p>
+            </div>
+          </article>
+          <article class="icon-card">
+            <span class="icon-box orange"><i data-lucide="file-json"></i></span>
+            <div>
+              <h3 class="icon-name">JSON 文件</h3>
+              <p class="icon-code">file-json</p>
+              <p class="icon-scene">JSON 配置文件类型</p>
+            </div>
+          </article>
+          <article class="icon-card">
+            <span class="icon-box yellow"><i data-lucide="braces"></i></span>
+            <div>
+              <h3 class="icon-name">JavaScript</h3>
+              <p class="icon-code">braces</p>
+              <p class="icon-scene">JS / JSX 文件类型</p>
+            </div>
+          </article>
+          <article class="icon-card">
+            <span class="icon-box cyan"><i data-lucide="book-open"></i></span>
+            <div>
+              <h3 class="icon-name">Markdown</h3>
+              <p class="icon-code">book-open</p>
+              <p class="icon-scene">README / 文档文件类型</p>
+            </div>
+          </article>
+          <article class="icon-card">
+            <span class="icon-box purple"><i data-lucide="hash"></i></span>
+            <div>
+              <h3 class="icon-name">Tailwind</h3>
+              <p class="icon-code">hash</p>
+              <p class="icon-scene">tailwind.config.* 文件类型</p>
+            </div>
+          </article>
+          <article class="icon-card">
+            <span class="icon-box pink"><i data-lucide="image"></i></span>
+            <div>
+              <h3 class="icon-name">图片资源</h3>
+              <p class="icon-code">image</p>
+              <p class="icon-scene">SVG / PNG / WEBP 文件类型</p>
+            </div>
+          </article>
+          <article class="icon-card">
+            <span class="icon-box redbrown"><i data-lucide="package"></i></span>
+            <div>
+              <h3 class="icon-name">Package</h3>
+              <p class="icon-code">package</p>
+              <p class="icon-scene">package.json / 依赖包文件</p>
+            </div>
+          </article>
+          <article class="icon-card">
+            <span class="icon-box redbrown"><i data-lucide="lock-keyhole"></i></span>
+            <div>
+              <h3 class="icon-name">Lock 文件</h3>
+              <p class="icon-code">lock-keyhole</p>
+              <p class="icon-scene">依赖锁定文件</p>
+            </div>
+          </article>
+          <article class="icon-card">
+            <span class="icon-box green"><i data-lucide="component"></i></span>
+            <div>
+              <h3 class="icon-name">组件</h3>
+              <p class="icon-code">component</p>
+              <p class="icon-scene">Vue 组件 / 设计系统标识</p>
+            </div>
+          </article>
+          <article class="icon-card">
+            <span class="icon-box slate"><i data-lucide="settings"></i></span>
+            <div>
+              <h3 class="icon-name">设置</h3>
+              <p class="icon-code">settings</p>
+              <p class="icon-scene">设置导航 / 配置文件</p>
+            </div>
+          </article>
+          <article class="icon-card">
+            <span class="icon-box purple"><i data-lucide="palette"></i></span>
+            <div>
+              <h3 class="icon-name">主题外观</h3>
+              <p class="icon-code">palette</p>
+              <p class="icon-scene">主题切换 / CSS 文件类型</p>
+            </div>
+          </article>
+        </div>
+      </section>
+
+      <section class="spec-card group-card">
+        <div class="group-top">
+          <div>
+            <h2 class="section-title">AI 与会话</h2>
+            <p class="section-note">会话输入、智能助手、版本上下文与刷新状态。</p>
+          </div>
+          <span class="count">5 icons</span>
+        </div>
+        <div class="icon-grid">
+          <article class="icon-card">
+            <span class="icon-box purple"><i data-lucide="sparkles"></i></span>
+            <div>
+              <h3 class="icon-name">AI 助手</h3>
+              <p class="icon-code">sparkles</p>
+              <p class="icon-scene">会话助手 / 智能生成</p>
+            </div>
+          </article>
+          <article class="icon-card">
+            <span class="icon-box blue"><i data-lucide="arrow-up"></i></span>
+            <div>
+              <h3 class="icon-name">发送</h3>
+              <p class="icon-code">arrow-up</p>
+              <p class="icon-scene">发送消息 / 提交输入</p>
+            </div>
+          </article>
+          <article class="icon-card">
+            <span class="icon-box green"><i data-lucide="git-branch"></i></span>
+            <div>
+              <h3 class="icon-name">分支</h3>
+              <p class="icon-code">git-branch</p>
+              <p class="icon-scene">会话上下文 / 版本分支</p>
+            </div>
+          </article>
+          <article class="icon-card">
+            <span class="icon-box green"><i data-lucide="git-fork"></i></span>
+            <div>
+              <h3 class="icon-name">分叉</h3>
+              <p class="icon-code">git-fork</p>
+              <p class="icon-scene">分支关系 / 版本操作</p>
+            </div>
+          </article>
+          <article class="icon-card">
+            <span class="icon-box blue"><i data-lucide="refresh-cw"></i></span>
+            <div>
+              <h3 class="icon-name">刷新</h3>
+              <p class="icon-code">refresh-cw</p>
+              <p class="icon-scene">重新加载 / 终端刷新</p>
+            </div>
+          </article>
+        </div>
+      </section>
+
+      <section class="spec-card group-card">
+        <div class="group-top">
+          <div>
+            <h2 class="section-title">账户与设置</h2>
+            <p class="section-note">账户菜单、主题偏好、同步、快捷键与退出操作。</p>
+          </div>
+          <span class="count">7 icons</span>
+        </div>
+        <div class="icon-grid">
+          <article class="icon-card">
+            <span class="icon-box slate"><i data-lucide="user-cog"></i></span>
+            <div>
+              <h3 class="icon-name">账户设置</h3>
+              <p class="icon-code">user-cog</p>
+              <p class="icon-scene">账户菜单入口</p>
+            </div>
+          </article>
+          <article class="icon-card">
+            <span class="icon-box green"><i data-lucide="cloud-check"></i></span>
+            <div>
+              <h3 class="icon-name">云端同步</h3>
+              <p class="icon-code">cloud-check</p>
+              <p class="icon-scene">同步状态 / 账户菜单</p>
+            </div>
+          </article>
+          <article class="icon-card">
+            <span class="icon-box slate"><i data-lucide="keyboard"></i></span>
+            <div>
+              <h3 class="icon-name">快捷键</h3>
+              <p class="icon-code">keyboard</p>
+              <p class="icon-scene">快捷键设置入口</p>
+            </div>
+          </article>
+          <article class="icon-card">
+            <span class="icon-box red"><i data-lucide="log-out"></i></span>
+            <div>
+              <h3 class="icon-name">退出登录</h3>
+              <p class="icon-code">log-out</p>
+              <p class="icon-scene">账户菜单退出操作</p>
+            </div>
+          </article>
+          <article class="icon-card">
+            <span class="icon-box yellow"><i data-lucide="key"></i></span>
+            <div>
+              <h3 class="icon-name">密钥</h3>
+              <p class="icon-code">key</p>
+              <p class="icon-scene">API Key / 访问凭证</p>
+            </div>
+          </article>
+          <article class="icon-card">
+            <span class="icon-box cyan"><i data-lucide="mail"></i></span>
+            <div>
+              <h3 class="icon-name">邮箱</h3>
+              <p class="icon-code">mail</p>
+              <p class="icon-scene">账户邮箱 / 通知</p>
+            </div>
+          </article>
+          <article class="icon-card">
+            <span class="icon-box purple"><i data-lucide="smartphone"></i></span>
+            <div>
+              <h3 class="icon-name">移动设备</h3>
+              <p class="icon-code">smartphone</p>
+              <p class="icon-scene">设备验证 / 响应式预览</p>
+            </div>
+          </article>
+        </div>
+      </section>
+
+      <section class="spec-card group-card">
+        <div class="group-top">
+          <div>
+            <h2 class="section-title">工具与状态</h2>
+            <p class="section-note">工具入口、系统状态、下载归档、安全与数据相关图标。</p>
+          </div>
+          <span class="count">14 icons</span>
+        </div>
+        <div class="icon-grid">
+          <article class="icon-card">
+            <span class="icon-box green"><i data-lucide="activity"></i></span>
+            <div>
+              <h3 class="icon-name">活动状态</h3>
+              <p class="icon-code">activity</p>
+              <p class="icon-scene">运行状态 / 活跃指标</p>
+            </div>
+          </article>
+          <article class="icon-card">
+            <span class="icon-box blue"><i data-lucide="app-window"></i></span>
+            <div>
+              <h3 class="icon-name">应用窗口</h3>
+              <p class="icon-code">app-window</p>
+              <p class="icon-scene">桌面窗口 / 应用框架</p>
+            </div>
+          </article>
+          <article class="icon-card">
+            <span class="icon-box purple"><i data-lucide="hexagon"></i></span>
+            <div>
+              <h3 class="icon-name">六边形标识</h3>
+              <p class="icon-code">hexagon</p>
+              <p class="icon-scene">工具或状态标识</p>
+            </div>
+          </article>
+          <article class="icon-card">
+            <span class="icon-box purple"><i data-lucide="diamond"></i></span>
+            <div>
+              <h3 class="icon-name">菱形标识</h3>
+              <p class="icon-code">diamond</p>
+              <p class="icon-scene">工具或状态标识</p>
+            </div>
+          </article>
+          <article class="icon-card">
+            <span class="icon-box blue"><i data-lucide="code-2"></i></span>
+            <div>
+              <h3 class="icon-name">代码工具</h3>
+              <p class="icon-code">code-2</p>
+              <p class="icon-scene">代码视图 / 开发工具</p>
+            </div>
+          </article>
+          <article class="icon-card">
+            <span class="icon-box yellow"><i data-lucide="cat"></i></span>
+            <div>
+              <h3 class="icon-name">助手形象</h3>
+              <p class="icon-code">cat</p>
+              <p class="icon-scene">AI 角色 / 趣味状态</p>
+            </div>
+          </article>
+          <article class="icon-card">
+            <span class="icon-box yellow"><i data-lucide="zap"></i></span>
+            <div>
+              <h3 class="icon-name">加速</h3>
+              <p class="icon-code">zap</p>
+              <p class="icon-scene">快捷操作 / 性能状态</p>
+            </div>
+          </article>
+          <article class="icon-card">
+            <span class="icon-box blue"><i data-lucide="info"></i></span>
+            <div>
+              <h3 class="icon-name">信息</h3>
+              <p class="icon-code">info</p>
+              <p class="icon-scene">提示说明 / 状态信息</p>
+            </div>
+          </article>
+          <article class="icon-card">
+            <span class="icon-box green"><i data-lucide="shield"></i></span>
+            <div>
+              <h3 class="icon-name">安全</h3>
+              <p class="icon-code">shield</p>
+              <p class="icon-scene">权限 / 安全状态</p>
+            </div>
+          </article>
+          <article class="icon-card">
+            <span class="icon-box cyan"><i data-lucide="database"></i></span>
+            <div>
+              <h3 class="icon-name">数据库</h3>
+              <p class="icon-code">database</p>
+              <p class="icon-scene">数据源 / 存储状态</p>
+            </div>
+          </article>
+          <article class="icon-card">
+            <span class="icon-box redbrown"><i data-lucide="archive"></i></span>
+            <div>
+              <h3 class="icon-name">归档</h3>
+              <p class="icon-code">archive</p>
+              <p class="icon-scene">归档资源 / 压缩包状态</p>
+            </div>
+          </article>
+          <article class="icon-card">
+            <span class="icon-box blue"><i data-lucide="download"></i></span>
+            <div>
+              <h3 class="icon-name">下载</h3>
+              <p class="icon-code">download</p>
+              <p class="icon-scene">下载操作 / 导出资源</p>
+            </div>
+          </article>
+          <article class="icon-card">
+            <span class="icon-box cyan"><i data-lucide="server"></i></span>
+            <div>
+              <h3 class="icon-name">服务</h3>
+              <p class="icon-code">server</p>
+              <p class="icon-scene">服务器 / 后端运行状态</p>
+            </div>
+          </article>
+          <article class="icon-card">
+            <span class="icon-box slate"><i data-lucide="terminal"></i></span>
+            <div>
+              <h3 class="icon-name">终端</h3>
+              <p class="icon-code">terminal</p>
+              <p class="icon-scene">终端页面 / 命令行工具</p>
+            </div>
+          </article>
+        </div>
+      </section>
+
+      <section class="spec-card group-card">
+        <div class="group-top">
+          <div>
+            <h2 class="section-title">其他图标</h2>
+            <p class="section-note">项目中扫描到但未归入推荐场景的补充图标。</p>
+          </div>
+          <span class="count">7 icons</span>
+        </div>
+        <div class="icon-grid">
+          <article class="icon-card">
+            <span class="icon-box slate"><i data-lucide="arrow-left"></i></span>
+            <div>
+              <h3 class="icon-name">返回</h3>
+              <p class="icon-code">arrow-left</p>
+              <p class="icon-scene">返回上一层 / 关闭详情</p>
+            </div>
+          </article>
+          <article class="icon-card">
+            <span class="icon-box blue"><i data-lucide="arrow-up-circle"></i></span>
+            <div>
+              <h3 class="icon-name">上传圆形</h3>
+              <p class="icon-code">arrow-up-circle</p>
+              <p class="icon-scene">上传 / 提交状态</p>
+            </div>
+          </article>
+          <article class="icon-card">
+            <span class="icon-box slate"><i data-lucide="copy"></i></span>
+            <div>
+              <h3 class="icon-name">复制</h3>
+              <p class="icon-code">copy</p>
+              <p class="icon-scene">复制内容 / 复制路径</p>
+            </div>
+          </article>
+          <article class="icon-card">
+            <span class="icon-box blue"><i data-lucide="link"></i></span>
+            <div>
+              <h3 class="icon-name">链接</h3>
+              <p class="icon-code">link</p>
+              <p class="icon-scene">外链 / 关联资源</p>
+            </div>
+          </article>
+          <article class="icon-card">
+            <span class="icon-box blue"><i data-lucide="pencil"></i></span>
+            <div>
+              <h3 class="icon-name">编辑</h3>
+              <p class="icon-code">pencil</p>
+              <p class="icon-scene">重命名 / 编辑操作</p>
+            </div>
+          </article>
+          <article class="icon-card">
+            <span class="icon-box red"><i data-lucide="pin"></i></span>
+            <div>
+              <h3 class="icon-name">固定</h3>
+              <p class="icon-code">pin</p>
+              <p class="icon-scene">置顶 / 固定会话</p>
+            </div>
+          </article>
+          <article class="icon-card">
+            <span class="icon-box slate"><i data-lucide="search"></i></span>
+            <div>
+              <h3 class="icon-name">搜索</h3>
+              <p class="icon-code">search</p>
+              <p class="icon-scene">搜索项目 / 查找文件</p>
+            </div>
+          </article>
+        </div>
+      </section>
+    </section>
+  </main>
+  <script>lucide.createIcons();</script>
+</body>
+</html>

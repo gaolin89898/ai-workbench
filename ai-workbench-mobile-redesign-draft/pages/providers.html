@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html class="light" lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI 工具</title>
+    <style id="theme-vars">
+/* AI Workbench Mobile — Light Task-Oriented Theme */
+:root {
+  --color-primary: #2563eb;
+  --color-primary-hover: #1d4ed8;
+  --color-primary-muted: rgba(37, 99, 235, 0.12);
+  --color-primary-soft: rgba(37, 99, 235, 0.06);
+
+  --color-bg-app: #f8fafc;
+  --color-bg-sidebar: #ffffff;
+  --color-bg-main: #f8fafc;
+  --color-bg-surface: #ffffff;
+  --color-bg-elevated: #ffffff;
+  --color-bg-input: #f1f5f9;
+  --color-bg-hover: rgba(0, 0, 0, 0.02);
+  --color-bg-active: rgba(37, 99, 235, 0.08);
+
+  --color-text-primary: #0f172a;
+  --color-text-secondary: #475569;
+  --color-text-muted: #94a3b8;
+  --color-text-inverse: #ffffff;
+
+  --color-border: #e2e8f0;
+  --color-border-active: rgba(37, 99, 235, 0.4);
+
+  --state-success: #22c55e;
+  --state-warning: #f59e0b;
+  --state-error: #ef4444;
+  --state-info: #3b82f6;
+
+  --radius-sm: 4px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --radius-full: 9999px;
+
+  --font-sans: "Inter", "Noto Sans SC", "PingFang SC", "Microsoft YaHei", ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --font-mono: "JetBrains Mono", "Fira Code", ui-monospace, "Cascadia Code", monospace;
+
+  --text-xs: 11px;
+  --text-sm: 12px;
+  --text-base: 13px;
+  --text-md: 14px;
+  --text-lg: 16px;
+  --text-xl: 20px;
+  --text-2xl: 28px;
+
+  --leading-tight: 1.25;
+  --leading-normal: 1.5;
+  --leading-relaxed: 1.625;
+
+  --font-weight-normal: 400;
+  --font-weight-medium: 500;
+  --font-weight-semibold: 600;
+  --font-weight-bold: 700;
+
+  --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.05);
+  --shadow-elevated: 0 4px 12px rgba(0, 0, 0, 0.05);
+
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+}
+    </style>
+    <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4.3.1/dist/index.global.js"></script>
+    <script src="https://unpkg.com/lucide@1.8.0/dist/umd/lucide.min.js"></script>
+    <style type="text/tailwindcss">
+  @theme inline {
+    --color-primary: var(--color-primary);
+    --color-border: var(--color-border);
+  }
+  @layer base {
+    body { background: var(--color-bg-app); color: var(--color-text-primary); }
+    h1, h2, h3 { text-wrap: balance; word-break: keep-all; overflow-wrap: break-word; }
+    button, a { transition-property: transform, background-color, border-color, color, opacity; transition-duration: 140ms; transition-timing-function: cubic-bezier(.2,.8,.2,1); }
+    button:active, a:active { transform: translateY(1px); }
+    button:focus-visible, a:focus-visible { outline: 2px solid var(--color-primary); outline-offset: 2px; }
+    @media (prefers-reduced-motion: reduce) { button, a { transition-duration: .01ms; } }
+  }
+    </style>
+    <style>
+      [data-icon] {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        -webkit-mask-size: contain;
+        mask-size: contain;
+        -webkit-mask-repeat: no-repeat;
+        mask-repeat: no-repeat;
+        -webkit-mask-position: center;
+        mask-position: center;
+        background-color: currentColor;
+      }
+    </style>
+</head>
+<body class="font-sans antialiased" style="font-family: var(--font-sans); background: var(--color-bg-app); color: var(--color-text-primary); margin: 0;">
+  <main class="min-h-screen" style="width: 390px; max-width: 100%; margin: 0 auto; padding: 0 16px 28px;">
+    <header class="sticky top-0 z-20 flex items-center" style="height: 56px; margin: 0 -16px; padding: 0 16px; background: rgba(248, 250, 252, 0.96); border-bottom: 1px solid var(--color-border); backdrop-filter: blur(14px);">
+      <button data-dom-id="providers-back" aria-label="返回" class="flex items-center justify-center shrink-0" style="width: 40px; height: 40px; border: 1px solid var(--color-border); border-radius: var(--radius-md); background: var(--color-bg-surface); color: var(--color-text-primary);">
+        <i data-lucide="chevron-left" style="width: 20px; height: 20px;"></i>
+      </button>
+      <h1 class="min-w-0 flex-1 truncate text-center" style="margin: 0; padding-right: 40px; font-size: var(--text-lg); line-height: var(--leading-tight); font-weight: var(--font-weight-semibold); letter-spacing: -0.01em; color: var(--color-text-primary);">AI 工具</h1>
+    </header>
+
+    <section style="padding-top: 16px;">
+      <article style="border: 1px solid var(--color-border); border-radius: 16px; background: var(--color-bg-surface); padding: 16px; box-shadow: var(--shadow-card);">
+        <div class="flex items-start" style="gap: 12px;">
+          <div class="flex items-center justify-center shrink-0" style="width: 48px; height: 48px; border-radius: 14px; background: var(--color-primary); color: var(--color-text-inverse);">
+            <i data-lucide="bot" style="width: 25px; height: 25px;"></i>
+          </div>
+          <div class="min-w-0 flex-1">
+            <div class="flex items-center justify-between" style="gap: 10px;">
+              <h2 class="truncate" style="margin: 0; font-size: var(--text-xl); line-height: var(--leading-tight); font-weight: var(--font-weight-bold); color: var(--color-text-primary);">AI Workbench</h2>
+              <span class="inline-flex shrink-0 items-center whitespace-nowrap" style="height: 24px; padding: 0 8px; border-radius: var(--radius-md); background: var(--color-primary-soft); color: var(--color-primary); font-size: var(--text-xs); font-weight: var(--font-weight-semibold);">v0.3.2</span>
+            </div>
+            <p class="line-clamp-2" style="margin: 7px 0 0; font-size: var(--text-base); line-height: var(--leading-normal); color: var(--color-text-secondary);">统一管理本机 AI 编程 Provider 的安装、登录与路径状态。</p>
+          </div>
+        </div>
+        <div style="margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--color-border);">
+          <div class="flex items-center justify-between" style="gap: 12px; font-size: var(--text-base); line-height: var(--leading-normal);">
+            <span class="shrink-0" style="color: var(--color-text-secondary);">安装目录</span>
+            <code class="min-w-0 truncate text-right" style="font-family: var(--font-mono); color: var(--color-text-primary);">~/ai-workbench/providers</code>
+          </div>
+          <div class="flex items-center justify-between" style="gap: 12px; margin-top: 8px; font-size: var(--text-base); line-height: var(--leading-normal);">
+            <span class="shrink-0" style="color: var(--color-text-secondary);">检测策略</span>
+            <span class="min-w-0 truncate text-right" style="color: var(--color-text-primary); font-weight: var(--font-weight-medium);">本机路径与登录态</span>
+          </div>
+        </div>
+      </article>
+    </section>
+
+    <section style="margin-top: 20px;">
+      <div class="flex items-end justify-between" style="gap: 12px; margin-bottom: 12px;">
+        <div class="min-w-0">
+          <h2 class="truncate" style="margin: 0; font-size: var(--text-lg); line-height: var(--leading-tight); font-weight: var(--font-weight-bold); color: var(--color-text-primary);">Provider</h2>
+          <p class="truncate" style="margin: 4px 0 0; font-size: var(--text-sm); color: var(--color-text-muted);">4 个工具 · 2 个需处理</p>
+        </div>
+        <button data-dom-id="providers-refresh" class="inline-flex shrink-0 items-center justify-center" style="height: 32px; padding: 0 10px; gap: 6px; border: 1px solid var(--color-border); border-radius: var(--radius-md); background: var(--color-bg-surface); color: var(--color-text-secondary); font-size: var(--text-sm); font-weight: var(--font-weight-semibold);">
+          <i data-lucide="refresh-cw" style="width: 14px; height: 14px;"></i>
+          <span>重检</span>
+        </button>
+      </div>
+
+      <div class="grid grid-cols-1 sm:grid-cols-2" style="gap: 12px;">
+        <article data-dom-id="provider-codex" style="min-height: 148px; border: 1px solid var(--color-border); border-radius: 16px; background: var(--color-bg-surface); padding: 14px; box-shadow: var(--shadow-card);">
+          <div class="flex items-center justify-between" style="gap: 10px;">
+            <div class="flex min-w-0 items-center" style="gap: 10px;">
+              <span class="flex items-center justify-center shrink-0" style="width: 36px; height: 36px; border-radius: var(--radius-lg); background: var(--color-primary-soft); color: var(--color-primary);"><i data-lucide="terminal-square" style="width: 19px; height: 19px;"></i></span>
+              <h3 class="truncate" style="margin: 0; font-size: var(--text-md); line-height: var(--leading-tight); font-weight: var(--font-weight-bold); color: var(--color-text-primary);">Codex</h3>
+            </div>
+            <span class="inline-flex shrink-0 items-center whitespace-nowrap" style="height: 24px; padding: 0 8px; border-radius: var(--radius-md); background: var(--color-primary-soft); color: var(--color-primary); font-size: var(--text-xs); font-weight: var(--font-weight-semibold);">已登录</span>
+          </div>
+          <div style="margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--color-border);">
+            <div class="flex items-center justify-between" style="gap: 10px; font-size: var(--text-base);"><span style="color: var(--color-text-secondary);">安装</span><strong class="truncate text-right" style="color: var(--state-success); font-weight: var(--font-weight-semibold);">已安装</strong></div>
+            <div class="flex items-center justify-between" style="gap: 10px; margin-top: 7px; font-size: var(--text-base);"><span style="color: var(--color-text-secondary);">版本</span><span class="truncate text-right" style="font-family: var(--font-mono); color: var(--color-text-primary);">v0.9.7</span></div>
+            <p class="truncate" style="margin: 9px 0 0; font-size: var(--text-xs); color: var(--color-text-muted);">路径 /usr/local/bin/codex</p>
+          </div>
+        </article>
+
+        <article data-dom-id="provider-claude-code" style="min-height: 148px; border: 1px solid var(--color-border); border-radius: 16px; background: var(--color-bg-surface); padding: 14px; box-shadow: var(--shadow-card);">
+          <div class="flex items-center justify-between" style="gap: 10px;">
+            <div class="flex min-w-0 items-center" style="gap: 10px;">
+              <span class="flex items-center justify-center shrink-0" style="width: 36px; height: 36px; border-radius: var(--radius-lg); background: var(--color-primary-soft); color: var(--color-primary);"><i data-lucide="code-2" style="width: 19px; height: 19px;"></i></span>
+              <h3 class="truncate" style="margin: 0; font-size: var(--text-md); line-height: var(--leading-tight); font-weight: var(--font-weight-bold); color: var(--color-text-primary);">Claude Code</h3>
+            </div>
+            <span class="inline-flex shrink-0 items-center whitespace-nowrap" style="height: 24px; padding: 0 8px; border-radius: var(--radius-md); background: var(--color-primary-soft); color: var(--color-primary); font-size: var(--text-xs); font-weight: var(--font-weight-semibold);">已登录</span>
+          </div>
+          <div style="margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--color-border);">
+            <div class="flex items-center justify-between" style="gap: 10px; font-size: var(--text-base);"><span style="color: var(--color-text-secondary);">安装</span><strong class="truncate text-right" style="color: var(--state-success); font-weight: var(--font-weight-semibold);">已安装</strong></div>
+            <div class="flex items-center justify-between" style="gap: 10px; margin-top: 7px; font-size: var(--text-base);"><span style="color: var(--color-text-secondary);">版本</span><span class="truncate text-right" style="font-family: var(--font-mono); color: var(--color-text-primary);">v1.8.4</span></div>
+            <p class="truncate" style="margin: 9px 0 0; font-size: var(--text-xs); color: var(--color-text-muted);">账号 claude.ai 已授权</p>
+          </div>
+        </article>
+
+        <article data-dom-id="provider-opencode" style="min-height: 148px; border: 1px solid var(--color-border); border-radius: 16px; background: var(--color-bg-surface); padding: 14px; box-shadow: var(--shadow-card);">
+          <div class="flex items-center justify-between" style="gap: 10px;">
+            <div class="flex min-w-0 items-center" style="gap: 10px;">
+              <span class="flex items-center justify-center shrink-0" style="width: 36px; height: 36px; border-radius: var(--radius-lg); background: var(--color-primary-soft); color: var(--color-primary);"><i data-lucide="braces" style="width: 19px; height: 19px;"></i></span>
+              <h3 class="truncate" style="margin: 0; font-size: var(--text-md); line-height: var(--leading-tight); font-weight: var(--font-weight-bold); color: var(--color-text-primary);">OpenCode</h3>
+            </div>
+            <span class="inline-flex shrink-0 items-center whitespace-nowrap" style="height: 24px; padding: 0 8px; border-radius: var(--radius-md); background: var(--color-bg-input); color: var(--color-text-secondary); font-size: var(--text-xs); font-weight: var(--font-weight-semibold);">需登录</span>
+          </div>
+          <div style="margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--color-border);">
+            <div class="flex items-center justify-between" style="gap: 10px; font-size: var(--text-base);"><span style="color: var(--color-text-secondary);">安装</span><strong class="truncate text-right" style="color: var(--state-success); font-weight: var(--font-weight-semibold);">已安装</strong></div>
+            <div class="flex items-center justify-between" style="gap: 10px; margin-top: 7px; font-size: var(--text-base);"><span style="color: var(--color-text-secondary);">版本</span><span class="truncate text-right" style="font-family: var(--font-mono); color: var(--color-text-primary);">v0.6.2</span></div>
+            <p class="truncate" style="margin: 9px 0 0; font-size: var(--text-xs); color: var(--color-text-muted);">登录后启用远程模型</p>
+          </div>
+        </article>
+
+        <article data-dom-id="provider-deepseek" style="min-height: 148px; border: 1px solid var(--color-border); border-radius: 16px; background: var(--color-bg-surface); padding: 14px; box-shadow: var(--shadow-card);">
+          <div class="flex items-center justify-between" style="gap: 10px;">
+            <div class="flex min-w-0 items-center" style="gap: 10px;">
+              <span class="flex items-center justify-center shrink-0" style="width: 36px; height: 36px; border-radius: var(--radius-lg); background: var(--color-primary-soft); color: var(--color-primary);"><i data-lucide="search-code" style="width: 19px; height: 19px;"></i></span>
+              <h3 class="truncate" style="margin: 0; font-size: var(--text-md); line-height: var(--leading-tight); font-weight: var(--font-weight-bold); color: var(--color-text-primary);">DeepSeek</h3>
+            </div>
+            <span class="inline-flex shrink-0 items-center whitespace-nowrap" style="height: 24px; padding: 0 8px; border-radius: var(--radius-md); background: var(--color-bg-input); color: var(--color-text-secondary); font-size: var(--text-xs); font-weight: var(--font-weight-semibold);">未检测到</span>
+          </div>
+          <div style="margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--color-border);">
+            <div class="flex items-center justify-between" style="gap: 10px; font-size: var(--text-base);"><span style="color: var(--color-text-secondary);">安装</span><strong class="truncate text-right" style="color: var(--state-warning); font-weight: var(--font-weight-semibold);">未安装</strong></div>
+            <div class="flex items-center justify-between" style="gap: 10px; margin-top: 7px; font-size: var(--text-base);"><span style="color: var(--color-text-secondary);">版本</span><span class="truncate text-right" style="font-family: var(--font-mono); color: var(--color-text-muted);">—</span></div>
+            <p class="truncate" style="margin: 9px 0 0; font-size: var(--text-xs); color: var(--color-text-muted);">未发现 deepseek-cli</p>
+          </div>
+        </article>
+      </div>
+    </section>
+
+    <section style="margin-top: 20px;">
+      <article style="border: 1px solid var(--color-border); border-radius: 16px; background: var(--color-bg-surface); padding: 14px; box-shadow: var(--shadow-card);">
+        <h2 style="margin: 0 0 10px; font-size: var(--text-lg); line-height: var(--leading-tight); font-weight: var(--font-weight-bold); color: var(--color-text-primary);">说明</h2>
+        <div style="font-size: var(--text-base); line-height: var(--leading-normal); color: var(--color-text-secondary);">
+          <p class="line-clamp-2" style="margin: 0;">Provider 状态来自本机命令检测与授权缓存，未登录项目不会自动调用模型。</p>
+          <p class="line-clamp-2" style="margin: 8px 0 0;">如需安装或重新授权，请回到设置中的 Provider 管理入口处理。</p>
+        </div>
+      </article>
+    </section>
+  </main>
+
+  <script>
+    lucide.createIcons();
+  </script>
+</body>
+</html>

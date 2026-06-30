@@ -402,22 +402,25 @@ class _AiBubble extends StatelessWidget {
                         ],
                       ),
                       if (hasText || hasSegments) const SizedBox(height: 6),
-                      // 正文
-                      if (hasText)
-                        SelectableText(
-                          message.text!,
-                          style: const TextStyle(
-                            color: AppColors.secondary,
-                            fontSize: 13,
-                            height: 1.6,
-                          ),
-                        ),
                       // 分段（status / tool / thought / error）
                       if (hasSegments)
                         ...message.segments.map(
                           (segment) => Padding(
                             padding: const EdgeInsets.only(top: 6),
                             child: ChatSegmentView(segment: segment),
+                          ),
+                        ),
+                      // 正文
+                      if (hasText)
+                        Padding(
+                          padding: EdgeInsets.only(top: hasSegments ? 8 : 0),
+                          child: SelectableText(
+                            message.text!,
+                            style: const TextStyle(
+                              color: AppColors.secondary,
+                              fontSize: 13,
+                              height: 1.6,
+                            ),
                           ),
                         ),
                       if (isThinking)

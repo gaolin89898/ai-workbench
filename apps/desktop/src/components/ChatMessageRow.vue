@@ -278,7 +278,7 @@ function formatElapsedLabel(value: string) {
       </svg>
     </span>
     <div class="chat-message-body">
-      <details v-if="shouldShowStepContainer && stepGroups.length" class="chat-process-details">
+      <details v-if="shouldShowStepContainer && stepGroups.length" class="chat-process-details" open>
         <summary class="chat-process-summary">
           <span>{{ processHeaderTitle }}</span>
           <span class="chat-process-main-chevron" aria-hidden="true"></span>

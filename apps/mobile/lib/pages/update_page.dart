@@ -23,54 +23,68 @@ class _UpdatePageState extends State<UpdatePage> {
     return Scaffold(
       appBar: AppBar(title: const Text('应用更新')),
       body: ListView(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.fromLTRB(
+          AppSpacing.lg,
+          AppSpacing.lg,
+          AppSpacing.lg,
+          100,
+        ),
         children: [
           AppCard(
+            borderRadius: AppRadius.x2l,
             child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                const Text('移动端更新',
-                    style:
-                        TextStyle(fontSize: 18, fontWeight: FontWeight.w900)),
-                const SizedBox(height: 6),
-                const Text(
-                  '从 GitHub Releases 检查移动端 APK，下载后会交给系统浏览器和安装器处理。',
-                  style: TextStyle(color: AppColors.muted, height: 1.45),
-                ),
-                const SizedBox(height: 16),
+                AppSectionTitle('移动端安装包', subtitle: '从 OpenList 下载最新 APK'),
+                const SizedBox(height: AppSpacing.lg),
                 FilledButton.icon(
                   onPressed: _checking ? null : _checkUpdate,
-                  icon: const Icon(Icons.system_update_alt_outlined),
+                  icon: const Icon(Icons.system_update_alt),
                   label: Text(_checking ? '检查中' : '检查更新'),
                 ),
               ],
             ),
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: AppSpacing.md),
           AppCard(
+            borderRadius: AppRadius.x2l,
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text('更新状态',
-                    style: TextStyle(fontWeight: FontWeight.w900)),
-                const SizedBox(height: 8),
-                Text(_status,
-                    style:
-                        const TextStyle(color: AppColors.muted, height: 1.45)),
+                const Text(
+                  '更新状态',
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.ink,
+                  ),
+                ),
+                const SizedBox(height: AppSpacing.sm),
+                Text(
+                  _status,
+                  style: const TextStyle(
+                    fontSize: 13,
+                    color: AppColors.muted,
+                    height: 1.55,
+                  ),
+                ),
                 if (update != null) ...[
                   const SizedBox(height: 14),
                   _UpdateStatus(update: update),
-                  if (update.available) ...[
-                    const SizedBox(height: 12),
-                    FilledButton.icon(
-                      onPressed: _opening ? null : _openUpdate,
-                      icon: const Icon(Icons.download_outlined),
-                      label: Text(_opening ? '打开中' : '下载新版 APK'),
-                    ),
-                  ],
+                  const SizedBox(height: AppSpacing.md),
+                  FilledButton.icon(
+                    onPressed: _opening ? null : _openUpdate,
+                    icon: const Icon(Icons.open_in_new),
+                    label: Text(_opening ? '打开中' : '打开下载目录'),
+                  ),
                 ],
               ],
             ),
+          ),
+          const SizedBox(height: AppSpacing.md),
+          Text(
+            '当前版本：v${update?.currentVersion ?? '-'}',
+            style: const TextStyle(fontSize: 12, color: AppColors.muted),
           ),
         ],
       ),
@@ -80,14 +94,14 @@ class _UpdatePageState extends State<UpdatePage> {
   Future<void> _checkUpdate() async {
     setState(() {
       _checking = true;
-      _status = '正在检查 GitHub Releases...';
+      _status = '正在检查 OpenList 下载目录...';
     });
     try {
       final update = await _updates.check();
       if (!mounted) return;
       setState(() {
         _update = update;
-        _status = update.available ? '发现新版本 ${update.version}' : '当前已经是最新版本。';
+        _status = '移动端安装包已迁移到 OpenList，请打开下载目录获取最新 APK。';
       });
     } catch (error) {
       if (mounted) setState(() => _status = '检查更新失败：$error');
@@ -101,13 +115,13 @@ class _UpdatePageState extends State<UpdatePage> {
     if (update == null) return;
     setState(() {
       _opening = true;
-      _status = '正在打开下载链接...';
+      _status = '正在打开 OpenList 下载目录...';
     });
     try {
       await _updates.openDownload(update);
-      if (mounted) setState(() => _status = '已打开下载链接，请按系统提示安装 APK。');
+      if (mounted) setState(() => _status = '已打开下载目录，请选择最新 APK 安装。');
     } catch (error) {
-      if (mounted) setState(() => _status = '打开下载失败：$error');
+      if (mounted) setState(() => _status = '打开下载目录失败：$error');
     } finally {
       if (mounted) setState(() => _opening = false);
     }
@@ -121,39 +135,43 @@ class _UpdateStatus extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final color = update.available ? AppColors.success : AppColors.muted;
-    final title = update.available ? '发现新版本 ${update.version}' : '当前已是最新版本';
-    final subtitle = update.available
-        ? '当前版本 ${update.currentVersion}，来源：${update.source}，Release：${update.tagName ?? '未知'}。'
-        : '当前版本 ${update.currentVersion}，来源：${update.source}。';
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: AppColors.surfaceMuted,
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: AppColors.border),
-      ),
+    return AppCard(
+      background: AppColors.surfaceMuted,
+      borderColor: AppColors.border,
+      shadow: const [],
+      padding: const EdgeInsets.all(AppSpacing.md),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(
-            update.available
-                ? Icons.system_update_alt_outlined
-                : Icons.check_circle_outline,
-            color: color,
+          AppIconBox(
+            icon: Icons.folder_open,
+            size: 26,
+            iconSize: 16,
+            borderRadius: AppRadius.lg,
+            background: AppColors.successSoft,
+            foreground: AppColors.successDeep,
           ),
           const SizedBox(width: 10),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(title,
-                    style: const TextStyle(fontWeight: FontWeight.w900)),
+                const Text(
+                  'OpenList 下载目录',
+                  style: TextStyle(
+                    fontWeight: FontWeight.w600,
+                    color: AppColors.ink,
+                  ),
+                ),
                 const SizedBox(height: 4),
-                Text(subtitle,
-                    style:
-                        const TextStyle(color: AppColors.muted, height: 1.4)),
+                Text(
+                  '当前版本 v${update.currentVersion}，来源：${update.source}',
+                  style: const TextStyle(
+                    color: AppColors.muted,
+                    fontSize: 12,
+                    height: 1.4,
+                  ),
+                ),
               ],
             ),
           ),

@@ -170,53 +170,61 @@
               <span style="font-size: 14px; font-weight: 620; color: var(--color-text-primary); flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">my-saas-app</span>
               <span style="font-size: 11px; color: var(--color-text-muted); background: var(--color-bg-elevated); padding: 1px 7px; border-radius: 999px; white-space: nowrap; line-height: 1.5;">main</span>
               <!-- File list icon (active/highlighted) -->
-              <button style="width: 28px; height: 28px; border-radius: 6px; border: none; background: var(--color-bg-hover); color: var(--color-text-primary); cursor: pointer; display: flex; align-items: center; justify-content: center; flex-shrink: 0;" aria-label="文件列表">
-                <i data-lucide="list" style="width: 15px; height: 15px;"></i>
+              <button style="width: 28px; height: 28px; border-radius: 6px; border: none; background: var(--color-bg-active); color: var(--color-primary); cursor: pointer; display: flex; align-items: center; justify-content: center; flex-shrink: 0;" aria-label="文件列表">
+                <i data-lucide="list-tree" style="width: 15px; height: 15px;"></i>
               </button>
             </div>
 
-            <!-- File list under my-saas-app -->
-            <div style="padding-left: 0; display: flex; flex-direction: column; gap: 0;">
-
-              <!-- ▸ src (folder) -->
-              <div style="display: flex; align-items: center; gap: 8px; min-height: 32px; padding: 0 8px 0 32px; cursor: pointer;">
-                <span style="font-size: 14px; color: var(--color-text-muted); flex-shrink: 0; width: 14px; text-align: center;">▸</span>
-                <span style="font-size: 14px; color: var(--color-text-body); flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">src</span>
+            <!-- File tree directly under my-saas-app -->
+            <div style="padding-left: 18px; display: flex; flex-direction: column; gap: 1px; margin-top: 2px;">
+              <div style="display: flex; align-items: center; gap: 5px; min-height: 27px; padding: 0 7px 0 6px; border-radius: 6px; cursor: pointer;">
+                <i data-lucide="chevron-down" style="width: 13px; height: 13px; color: var(--color-text-muted); flex-shrink: 0;"></i>
+                <i data-lucide="folder" style="width: 15px; height: 15px; color: var(--color-text-secondary); flex-shrink: 0;"></i>
+                <span style="font-size: 12.5px; color: var(--color-text-body); flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">src</span>
               </div>
-
-              <!-- ▸ public (folder) -->
-              <div style="display: flex; align-items: center; gap: 8px; min-height: 32px; padding: 0 8px 0 32px; cursor: pointer;">
-                <span style="font-size: 14px; color: var(--color-text-muted); flex-shrink: 0; width: 14px; text-align: center;">▸</span>
-                <span style="font-size: 14px; color: var(--color-text-body); flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">public</span>
+              <div style="display: flex; align-items: center; gap: 6px; min-height: 27px; padding: 0 7px 0 22px; border-radius: 6px; cursor: pointer;">
+                <i data-lucide="file-code" style="width: 14px; height: 14px; color: var(--color-text-secondary); opacity: 0.82; flex-shrink: 0;"></i>
+                <span style="font-size: 12.5px; color: var(--color-text-body); flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">App.vue</span>
               </div>
-
-              <!-- ▸ tests (folder) -->
-              <div style="display: flex; align-items: center; gap: 8px; min-height: 32px; padding: 0 8px 0 32px; cursor: pointer;">
-                <span style="font-size: 14px; color: var(--color-text-muted); flex-shrink: 0; width: 14px; text-align: center;">▸</span>
-                <span style="font-size: 14px; color: var(--color-text-body); flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">tests</span>
+              <div style="display: flex; align-items: center; gap: 6px; min-height: 27px; padding: 0 7px 0 22px; border-radius: 6px; cursor: pointer;">
+                <i data-lucide="file-code" style="width: 14px; height: 14px; color: var(--color-text-secondary); opacity: 0.82; flex-shrink: 0;"></i>
+                <span style="font-size: 12.5px; color: var(--color-text-body); flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">main.ts</span>
               </div>
-
-              <!-- • package.json (1.2 KB) -->
-              <div style="display: flex; align-items: center; gap: 8px; min-height: 32px; padding: 0 8px 0 32px; cursor: pointer;">
-                <span style="font-size: 14px; color: var(--color-text-muted); flex-shrink: 0; width: 14px; text-align: center;">•</span>
-                <span style="font-size: 14px; color: var(--color-text-body); flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">package.json</span>
-                <span style="font-size: 12px; color: var(--color-text-muted); margin-left: auto; white-space: nowrap; flex-shrink: 0;">1.2 KB</span>
+              <div style="display: flex; align-items: center; gap: 5px; min-height: 27px; padding: 0 7px 0 22px; border-radius: 6px; cursor: pointer;">
+                <i data-lucide="chevron-down" style="width: 13px; height: 13px; color: var(--color-text-muted); flex-shrink: 0;"></i>
+                <i data-lucide="folder" style="width: 14px; height: 14px; color: var(--color-text-secondary); opacity: 0.9; flex-shrink: 0;"></i>
+                <span style="font-size: 12.5px; color: var(--color-text-body); flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">components</span>
               </div>
-
-              <!-- • tsconfig.json (0.8 KB) -->
-              <div style="display: flex; align-items: center; gap: 8px; min-height: 32px; padding: 0 8px 0 32px; cursor: pointer;">
-                <span style="font-size: 14px; color: var(--color-text-muted); flex-shrink: 0; width: 14px; text-align: center;">•</span>
-                <span style="font-size: 14px; color: var(--color-text-body); flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">tsconfig.json</span>
-                <span style="font-size: 12px; color: var(--color-text-muted); margin-left: auto; white-space: nowrap; flex-shrink: 0;">0.8 KB</span>
+              <div style="display: flex; align-items: center; gap: 6px; min-height: 27px; padding: 0 7px 0 38px; border-radius: 6px; background: var(--color-bg-hover); cursor: pointer;">
+                <i data-lucide="file-code" style="width: 14px; height: 14px; color: var(--color-text-secondary); opacity: 0.82; flex-shrink: 0;"></i>
+                <span style="font-size: 12.5px; color: var(--color-text-primary); flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">SidebarProjectTree.vue</span>
               </div>
-
-              <!-- • README.md (3.4 KB) -->
-              <div style="display: flex; align-items: center; gap: 8px; min-height: 32px; padding: 0 8px 0 32px; cursor: pointer;">
-                <span style="font-size: 14px; color: var(--color-text-muted); flex-shrink: 0; width: 14px; text-align: center;">•</span>
-                <span style="font-size: 14px; color: var(--color-text-body); flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">README.md</span>
-                <span style="font-size: 12px; color: var(--color-text-muted); margin-left: auto; white-space: nowrap; flex-shrink: 0;">3.4 KB</span>
+              <div style="display: flex; align-items: center; gap: 6px; min-height: 27px; padding: 0 7px 0 38px; border-radius: 6px; cursor: pointer;">
+                <i data-lucide="file-code" style="width: 14px; height: 14px; color: var(--color-text-secondary); opacity: 0.82; flex-shrink: 0;"></i>
+                <span style="font-size: 12.5px; color: var(--color-text-body); flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">ChatView.vue</span>
               </div>
-
+              <div style="display: flex; align-items: center; gap: 5px; min-height: 27px; padding: 0 7px 0 6px; border-radius: 6px; cursor: pointer;">
+                <i data-lucide="chevron-right" style="width: 13px; height: 13px; color: var(--color-text-muted); flex-shrink: 0;"></i>
+                <i data-lucide="folder" style="width: 15px; height: 15px; color: var(--color-text-secondary); flex-shrink: 0;"></i>
+                <span style="font-size: 12.5px; color: var(--color-text-body); flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">public</span>
+              </div>
+              <div style="display: flex; align-items: center; gap: 5px; min-height: 27px; padding: 0 7px 0 6px; border-radius: 6px; cursor: pointer;">
+                <i data-lucide="chevron-right" style="width: 13px; height: 13px; color: var(--color-text-muted); flex-shrink: 0;"></i>
+                <i data-lucide="folder" style="width: 15px; height: 15px; color: var(--color-text-secondary); flex-shrink: 0;"></i>
+                <span style="font-size: 12.5px; color: var(--color-text-body); flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">tests</span>
+              </div>
+              <div style="display: flex; align-items: center; gap: 6px; min-height: 27px; padding: 0 7px 0 6px; border-radius: 6px; cursor: pointer;">
+                <i data-lucide="braces" style="width: 14px; height: 14px; color: var(--color-text-secondary); opacity: 0.82; flex-shrink: 0;"></i>
+                <span style="font-size: 12.5px; color: var(--color-text-body); flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">package.json</span>
+              </div>
+              <div style="display: flex; align-items: center; gap: 6px; min-height: 27px; padding: 0 7px 0 6px; border-radius: 6px; cursor: pointer;">
+                <i data-lucide="settings" style="width: 14px; height: 14px; color: var(--color-text-secondary); opacity: 0.82; flex-shrink: 0;"></i>
+                <span style="font-size: 12.5px; color: var(--color-text-body); flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">tsconfig.json</span>
+              </div>
+              <div style="display: flex; align-items: center; gap: 6px; min-height: 27px; padding: 0 7px 0 6px; border-radius: 6px; cursor: pointer;">
+                <i data-lucide="book-open" style="width: 14px; height: 14px; color: var(--color-text-secondary); opacity: 0.82; flex-shrink: 0;"></i>
+                <span style="font-size: 12.5px; color: var(--color-text-body); flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">README.md</span>
+              </div>
             </div>
           </div>
 

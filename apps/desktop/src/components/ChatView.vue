@@ -7,7 +7,6 @@ import { desktopApi, type AiProvider, type ChatImageAttachment } from "../servic
 
 const providerClaudeIcon = new URL("../assets/icons/provider-claude.svg", import.meta.url).href;
 const providerCodexIcon = new URL("../assets/icons/provider-codex.svg", import.meta.url).href;
-const providerDeepseekIcon = new URL("../assets/icons/provider-deepseek.svg", import.meta.url).href;
 const providerOpencodeIcon = new URL("../assets/icons/provider-opencode.svg", import.meta.url).href;
 const sendIcon = new URL("../assets/icons/send.svg", import.meta.url).href;
 const imageRemoveIcon = new URL("../assets/icons/image-remove.svg", import.meta.url).href;
@@ -24,7 +23,6 @@ const builtInProviders: AiProvider[] = [
   { id: "codex", name: "Codex", command: "codex", builtIn: true, enabled: true },
   { id: "claude", name: "Claude Code", command: "claude", builtIn: true, enabled: true },
   { id: "opencode", name: "OpenCode", command: "opencode", builtIn: true, enabled: true },
-  { id: "deepseek", name: "DeepSeek TUI", command: "deepseek", builtIn: true, enabled: true },
 ];
 const providerOrder = new Map(builtInProviders.map((provider, index) => [provider.id, index]));
 
@@ -78,7 +76,6 @@ const canSend = computed(() => Boolean(prompt.value.trim() || imageAttachments.v
 const providerIcons: Record<string, string> = {
   claude: providerClaudeIcon,
   codex: providerCodexIcon,
-  deepseek: providerDeepseekIcon,
   opencode: providerOpencodeIcon,
 };
 
