@@ -17,6 +17,7 @@ $pubspecPath = Join-Path $mobileDir 'pubspec.yaml'
 $androidSdk = Join-Path $env:LOCALAPPDATA 'Android/Sdk'
 $flutterDir = Join-Path $env:USERPROFILE 'flutter'
 $releaseDir = Join-Path $root 'releases/mobile'
+$rcloneConfig = Join-Path $root '.uploads/rclone.conf'
 
 if (-not $RemotePath) {
   $RemotePath = [System.Uri]::UnescapeDataString(
@@ -80,8 +81,9 @@ if (-not $User -or -not $Password) {
 
 $obscuredPass = (& rclone obscure $Password).Trim()
 $remoteExists = $false
+New-Item -ItemType Directory -Force -Path (Split-Path $rcloneConfig) | Out-Null
 try {
-  $configDump = rclone config dump
+  $configDump = rclone --config $rcloneConfig config dump
   if ($configDump) {
     $config = $configDump | ConvertFrom-Json
     $remoteExists = $null -ne $config.PSObject.Properties[$RemoteName]
@@ -91,13 +93,13 @@ try {
 }
 
 if ($remoteExists) {
-  rclone config update $RemoteName url $WebDavUrl vendor other user $User pass $obscuredPass | Out-Null
+  rclone --config $rcloneConfig config update $RemoteName url $WebDavUrl vendor other user $User pass $obscuredPass | Out-Null
 } else {
-  rclone config create $RemoteName webdav url $WebDavUrl vendor other user $User pass $obscuredPass | Out-Null
+  rclone --config $rcloneConfig config create $RemoteName webdav url $WebDavUrl vendor other user $User pass $obscuredPass | Out-Null
 }
 
 $target = "${RemoteName}:$RemotePath/$apkName"
-rclone copyto $distApk $target --progress
+rclone --config $rcloneConfig copyto $distApk $target --progress
 if ($LASTEXITCODE -ne 0) {
   throw "rclone upload failed with exit code $LASTEXITCODE"
 }
