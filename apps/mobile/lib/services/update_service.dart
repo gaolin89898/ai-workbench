@@ -7,13 +7,13 @@ import 'package:url_launcher/url_launcher.dart';
 
 const _openListMobileFolderUrl =
     'https://openlist.gaolin.xin/%E5%A4%B8%E5%85%8B%E7%BD%91%E7%9B%98/%E7%A7%BB%E5%8A%A8%E7%AB%AF';
-const _mobileApkFileName = 'ai-workbench-mobile-0.1.24.apk';
+const _mobileApkFileName = 'ai-workbench-mobile-0.1.25.apk';
 const _mobileApkUrl =
     'https://openlist.gaolin.xin/dav/%E5%A4%B8%E5%85%8B%E7%BD%91%E7%9B%98/%E7%A7%BB%E5%8A%A8%E7%AB%AF/$_mobileApkFileName';
 const _openListUser = 'admin';
 const _openListPassword = '070900gl';
 const _currentMobileVersion =
-    String.fromEnvironment('MOBILE_VERSION', defaultValue: '0.1.24');
+    String.fromEnvironment('MOBILE_VERSION', defaultValue: '0.1.25');
 
 class MobileUpdateInfo {
   const MobileUpdateInfo({
@@ -47,7 +47,7 @@ class MobileUpdateService {
       available: true,
       currentVersion: _currentMobileVersion,
       source: 'OpenList',
-      version: '0.1.24',
+      version: '0.1.25',
       releaseUrl: _openListMobileFolderUrl,
       apkUrl: _mobileApkUrl,
       body: '移动端安装包将从 OpenList 直接下载并安装。',
