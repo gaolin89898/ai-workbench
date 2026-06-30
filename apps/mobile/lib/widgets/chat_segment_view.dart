@@ -21,6 +21,132 @@ class ChatSegmentView extends StatelessWidget {
   }
 }
 
+class ChatMessageContent extends StatelessWidget {
+  const ChatMessageContent({super.key, required this.message});
+
+  final ChatMessage message;
+
+  @override
+  Widget build(BuildContext context) {
+    final visibleSegments = message.segments.where((s) {
+      if (s.stepId == 'runtime-status' || s.stepId == 'initial-thinking') return false;
+      if (s.type == 'status' && s.stepId == 'final-summary') return false;
+      return true;
+    }).toList();
+
+    final groups = <_SegmentGroup>[];
+    final processRun = <ChatSegment>[];
+    for (final segment in visibleSegments) {
+      if (_isProcessSegment(segment)) {
+        processRun.add(segment);
+        continue;
+      }
+      if (processRun.isNotEmpty) {
+        groups.add(_SegmentGroup.process(processRun));
+        processRun.clear();
+      }
+      groups.add(_SegmentGroup.segment(segment));
+    }
+    if (processRun.isNotEmpty) groups.add(_SegmentGroup.process(processRun));
+
+    final finalText = _finalContentText(message);
+    final isThinking = message.pending && finalText.isEmpty && message.segments.isEmpty;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        for (final group in groups) ...[
+          if (group.isProcess)
+            _ProcessGroupCard(segments: group.segments, pending: message.pending)
+          else
+            ChatSegmentView(segment: group.singleSegment),
+          const SizedBox(height: 8),
+        ],
+        if (isThinking)
+          const _TypingText()
+        else if (finalText.trim().isNotEmpty)
+          SelectableText(
+            finalText,
+            style: const TextStyle(color: AppColors.ink, fontSize: 13, height: 1.62),
+          ),
+      ],
+    );
+  }
+}
+
+class _ProcessGroupCard extends StatelessWidget {
+  const _ProcessGroupCard({required this.segments, required this.pending});
+
+  final List<ChatSegment> segments;
+  final bool pending;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 8),
+      decoration: BoxDecoration(
+        color: AppColors.surfaceMuted,
+        borderRadius: BorderRadius.circular(AppRadius.lg),
+        border: Border.all(color: AppColors.border),
+      ),
+      child: Theme(
+        data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+        child: ExpansionTile(
+          initiallyExpanded: pending,
+          tilePadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 0),
+          childrenPadding: const EdgeInsets.fromLTRB(10, 0, 10, 10),
+          dense: true,
+          visualDensity: VisualDensity.compact,
+          iconColor: AppColors.muted,
+          collapsedIconColor: AppColors.muted,
+          title: Row(
+            children: [
+              Container(
+                width: 6,
+                height: 6,
+                decoration: BoxDecoration(
+                  color: pending ? AppColors.warning : AppColors.successDeep,
+                  shape: BoxShape.circle,
+                ),
+              ),
+              const SizedBox(width: 6),
+              Expanded(
+                child: Text(
+                  '执行过程 · ${segments.length} 步',
+                  style: const TextStyle(
+                    color: AppColors.secondary,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          children: [
+            for (final segment in segments)
+              Padding(
+                padding: const EdgeInsets.only(top: 8),
+                child: ChatSegmentView(segment: segment, compact: true),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _SegmentGroup {
+  final bool isProcess;
+  final List<ChatSegment> segments;
+
+  const _SegmentGroup._({required this.isProcess, required this.segments});
+
+  factory _SegmentGroup.segment(ChatSegment segment) => _SegmentGroup._(isProcess: false, segments: [segment]);
+  factory _SegmentGroup.process(List<ChatSegment> segments) => _SegmentGroup._(isProcess: true, segments: segments);
+
+  ChatSegment get singleSegment => segments.first;
+}
+
 class ChatProcessPanel extends StatelessWidget {
   const ChatProcessPanel({super.key, required this.segments, this.pending = false});
 

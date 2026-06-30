@@ -9,6 +9,7 @@
   - [x] SubTask 2.2: 桌面端为移动端发起的运行创建 pending assistant 消息。
   - [x] SubTask 2.3: 桌面端在 pending 期间不允许历史刷新覆盖实时过程。
   - [x] SubTask 2.4: 桌面端 assistant 消息同时渲染过程 `segments` 和最终正文 `text`。
+  - [x] SubTask 2.5: 桌面端实时 delta 只更新最终正文 `text`，不写入过程 `segments`，避免逐字竖排和重复正文。
 
 - [x] Task 3: 修复移动端实时消息状态。
   - [x] SubTask 3.1: 移动端实时合并同一条 pending assistant 消息的 `segments` 和 `text`。

@@ -108,9 +108,8 @@ type PendingAssistant = {
   message: ChatMessage;
   prompt: string;
   steps: Map<string, ChatSegment>;
-  currentTextStepId: string | null;
-  textSegmentCounter: number;
   finalText: string;
+  currentAgentMessageStepId: string | null;
   startedAt: number;
   hasBackendStatus: boolean;
   lastStatusText: string;
@@ -668,9 +667,8 @@ async function sendPrompt(prompt: string, images: ChatImageAttachment[] = []) {
     message: assistantMessage,
     prompt: promptForSession,
     steps: new Map([["initial-thinking", assistantMessage.segments![0]]]),
-    currentTextStepId: null,
-    textSegmentCounter: 0,
     finalText: "",
+    currentAgentMessageStepId: null,
     startedAt: performance.now(),
     hasBackendStatus: false,
     lastStatusText: "",
@@ -819,9 +817,8 @@ function ensureIncomingPendingAssistant(sessionId: string, history: ChatMessage[
     message: assistantMessage,
     prompt: "",
     steps: new Map([["initial-thinking", assistantMessage.segments![0]]]),
-    currentTextStepId: null,
-    textSegmentCounter: 0,
     finalText: "",
+    currentAgentMessageStepId: null,
     startedAt: performance.now(),
     hasBackendStatus: false,
     lastStatusText: "",
@@ -865,37 +862,33 @@ function replacePendingAssistantText(sessionId: string, text: string, done = fal
   const pending = pendingAssistants.get(sessionId);
   if (!pending) return;
   pending.finalText = extractAssistantText(text);
-  const textSegments = [...pending.steps.entries()].filter(([, segment]) => segment.type === "text");
-  if (pending.finalText.trim() && textSegments.length === 0) {
-    const stepId = nextPendingTextStepId(pending);
-    pending.currentTextStepId = stepId;
-    pending.steps.delete("initial-thinking");
-    pending.steps.set(stepId, { type: "text", stepId, text: pending.finalText });
-  } else if (textSegments.length === 1) {
-    const [stepId, segment] = textSegments[0];
-    pending.steps.set(stepId, { ...segment, text: pending.finalText } as ChatSegment);
-  }
+  pending.steps.delete("initial-thinking");
   syncPendingAssistantSegments(sessionId, done);
   thinkingSessionIds.value = { ...thinkingSessionIds.value, [sessionId]: !done };
 }
 
-function appendPendingAssistantText(sessionId: string, text: string) {
+function appendPendingAssistantText(sessionId: string, text: string, stepId?: string | null) {
   const pending = pendingAssistants.get(sessionId);
   if (!pending || !text) return;
-  pending.finalText = extractAssistantText(`${pending.finalText}${text}`);
+  if (stepId && stepId !== pending.currentAgentMessageStepId) {
+    if (pending.currentAgentMessageStepId && pending.finalText.trim()) {
+      const thoughtStepId = `thought-${pending.currentAgentMessageStepId}`;
+      pending.steps.set(thoughtStepId, {
+        type: "thought",
+        stepId: thoughtStepId,
+        title: "中间结论",
+        text: pending.finalText.trim(),
+        collapsed: true,
+      });
+    }
+    pending.finalText = text;
+    pending.currentAgentMessageStepId = stepId;
+  } else {
+    pending.finalText = extractAssistantText(`${pending.finalText}${text}`);
+  }
   pending.steps.delete("initial-thinking");
-  const stepId = pending.currentTextStepId ?? nextPendingTextStepId(pending);
-  pending.currentTextStepId = stepId;
-  const segment = pending.steps.get(stepId);
-  const previous = segment?.type === "text" ? segment.text : "";
-  pending.steps.set(stepId, { type: "text", stepId, text: `${previous}${text}` });
   syncPendingAssistantSegments(sessionId, false);
   thinkingSessionIds.value = { ...thinkingSessionIds.value, [sessionId]: true };
-}
-
-function nextPendingTextStepId(pending: PendingAssistant) {
-  pending.textSegmentCounter += 1;
-  return `assistant-text-${pending.textSegmentCounter}`;
 }
 
 function completePendingAssistantFromExec(sessionId: string) {
@@ -996,8 +989,6 @@ function upsertPendingSegment(sessionId: string, segment: ChatSegment) {
     syncPendingAssistantSegments(sessionId, pending.message.pending === false);
     return;
   }
-  const isNewStep = !pending.steps.has(stepId);
-  if (isNewStep) pending.currentTextStepId = null;
   pending.steps.set(stepId, { ...(pending.steps.get(stepId) ?? {}), ...segment } as ChatSegment);
   syncPendingAssistantSegments(sessionId, pending.message.pending === false);
 }
@@ -1124,7 +1115,7 @@ async function handleAiChatOutputEvent(event: AiChatOutputEvent) {
   if (event.kind === "delta") {
     const pending = pendingAssistants.get(event.aiSessionId);
     if (!pending) return;
-    appendPendingAssistantText(event.aiSessionId, event.text ?? "");
+    appendPendingAssistantText(event.aiSessionId, event.text ?? "", event.stepId);
     setChatRunState(event.aiSessionId, {
       active: true,
       phase: "running",

@@ -33,6 +33,7 @@ class WorkspaceController extends ChangeNotifier {
   bool showArchived = false;
   final Map<String, List<ChatMessage>> messagesBySession = {};
   final Map<String, String> runStatusBySession = {};
+  final Map<String, String?> _currentAgentMessageStepIds = {};
   bool _notifyQueued = false;
 
   // Client-side session state (matching desktop's localStorage pattern)
@@ -425,6 +426,7 @@ class WorkspaceController extends ChangeNotifier {
         }
       }
       runStatusBySession[sessionId] = '已完成';
+      _currentAgentMessageStepIds.remove(sessionId);
     } else if (kind == 'error') {
       final errorMessage = ChatMessage(
         role: ChatRole.error,
@@ -439,15 +441,40 @@ class WorkspaceController extends ChangeNotifier {
       runStatusBySession[sessionId] = '执行失败';
     } else if (kind == 'delta') {
       final deltaText = (text != null && text.isNotEmpty) ? text : segment?.text;
+      final deltaStepId = json['stepId'] as String?;
+      final currentStepId = _currentAgentMessageStepIds[sessionId];
+      final isStepChange = deltaStepId != null && deltaStepId != currentStepId;
+      List<ChatSegment> thoughtSegments = const [];
+      if (isStepChange && currentStepId != null) {
+        final pending = pendingIndex >= 0 ? current[pendingIndex] : null;
+        final prevText = (pending?.text ?? '').trim();
+        if (prevText.isNotEmpty) {
+          thoughtSegments = [
+            ChatSegment(
+              type: 'thought',
+              stepId: 'thought-$currentStepId',
+              title: '中间结论',
+              text: prevText,
+              collapsed: true,
+            ),
+          ];
+        }
+      }
       final incomingSegments = [
+        ...thoughtSegments,
         ...segments,
         if (segment != null) segment,
       ];
+      if (isStepChange) {
+        _currentAgentMessageStepIds[sessionId] = deltaStepId;
+      }
       if (pendingIndex >= 0) {
         final pending = current[pendingIndex];
-        final accumulated = deltaText == null || deltaText.isEmpty
-            ? pending.text
-            : (pending.text ?? '') + deltaText;
+        final accumulated = isStepChange
+            ? (deltaText ?? '')
+            : (deltaText == null || deltaText.isEmpty
+                ? pending.text
+                : (pending.text ?? '') + deltaText);
         current[pendingIndex] = pending.copyWith(
           text: accumulated,
           segments: _mergeSegments(pending.segments, incomingSegments),
@@ -458,9 +485,11 @@ class WorkspaceController extends ChangeNotifier {
         );
         if (lastAssistantIndex >= 0 && current[lastAssistantIndex].pending) {
           final pending = current[lastAssistantIndex];
-          final accumulated = deltaText == null || deltaText.isEmpty
-              ? pending.text
-              : (pending.text ?? '') + deltaText;
+          final accumulated = isStepChange
+              ? (deltaText ?? '')
+              : (deltaText == null || deltaText.isEmpty
+                  ? pending.text
+                  : (pending.text ?? '') + deltaText);
           current[lastAssistantIndex] = pending.copyWith(
             text: accumulated,
             segments: _mergeSegments(pending.segments, incomingSegments),

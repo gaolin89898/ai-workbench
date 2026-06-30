@@ -328,6 +328,7 @@ class DesktopCloudSync {
   // local DB schema does not store project_path on local_ai_sessions.
   private sessionProjectPaths = new Map<string, string>();
   private mobileAssistantDrafts = new Map<string, { text: string; segments: unknown[]; savedText: string }>();
+  private mobileDeltaBuffers = new Map<string, { text: string; segments: unknown[]; timer: ReturnType<typeof setTimeout> | null; deviceId: string }>();
 
   constructor(mainWindow: BrowserWindow) {
     this.mainWindow = mainWindow;
@@ -551,6 +552,46 @@ class DesktopCloudSync {
     }
   }
 
+  private static readonly DELTA_FLUSH_MS = 100;
+
+  private flushMobileDelta(sessionId: string): void {
+    const buffer = this.mobileDeltaBuffers.get(sessionId);
+    if (!buffer) return;
+    if (buffer.timer) {
+      clearTimeout(buffer.timer);
+      buffer.timer = null;
+    }
+    if (buffer.text) {
+      this.send({
+        type: "ai.chat.output",
+        deviceId: buffer.deviceId,
+        aiSessionId: sessionId,
+        kind: "delta",
+        text: buffer.text,
+        segments: buffer.segments,
+      });
+    }
+    this.mobileDeltaBuffers.delete(sessionId);
+  }
+
+  private scheduleMobileDeltaFlush(deviceId: string, sessionId: string, text: string, segments: unknown[]): void {
+    let buffer = this.mobileDeltaBuffers.get(sessionId);
+    if (!buffer) {
+      buffer = { text: "", segments: [], timer: null, deviceId };
+      this.mobileDeltaBuffers.set(sessionId, buffer);
+    }
+    buffer.text += text;
+    buffer.segments = segments;
+    buffer.deviceId = deviceId;
+    if (!buffer.timer) {
+      const captured = buffer;
+      buffer.timer = setTimeout(() => {
+        captured.timer = null;
+        this.flushMobileDelta(sessionId);
+      }, DesktopCloudSync.DELTA_FLUSH_MS);
+    }
+  }
+
   createRendererAndMobileAiChatSender(rendererSender: { send: (channel: string, ...args: unknown[]) => void }) {
     const config = loadStoredConfig();
     const deviceId = config?.deviceId;
@@ -569,23 +610,11 @@ class DesktopCloudSync {
         if (event.kind === "delta" && event.text) {
           draft.text += event.text;
           this.mobileAssistantDrafts.set(event.aiSessionId, draft);
-          this.send({
-            type: "ai.chat.output",
-            deviceId,
-            ...event,
-            text: event.text,
-            segments: draft.segments,
-          });
-          this.send({
-            type: "ai.message.delta",
-            deviceId,
-            aiSessionId: event.aiSessionId,
-            content: event.text,
-            sequence: Date.now(),
-          });
+          this.scheduleMobileDeltaFlush(deviceId, event.aiSessionId, event.text, draft.segments);
           return;
         }
         if (event.kind === "done") {
+          this.flushMobileDelta(event.aiSessionId);
           const finalText = event.text?.trim() ? event.text : draft.text;
           this.mobileAssistantDrafts.set(event.aiSessionId, draft);
           this.send({
@@ -597,6 +626,7 @@ class DesktopCloudSync {
           });
           return;
         }
+        this.flushMobileDelta(event.aiSessionId);
         this.mobileAssistantDrafts.set(event.aiSessionId, draft);
         this.send({
           type: "ai.chat.output",
@@ -624,23 +654,11 @@ class DesktopCloudSync {
         if (event.kind === "delta" && event.text) {
           draft.text += event.text;
           this.mobileAssistantDrafts.set(event.aiSessionId, draft);
-          this.send({
-            type: "ai.chat.output",
-            deviceId,
-            ...event,
-            text: event.text,
-            segments: draft.segments,
-          });
-          this.send({
-            type: "ai.message.delta",
-            deviceId,
-            aiSessionId: event.aiSessionId,
-            content: event.text,
-            sequence: Date.now(),
-          });
+          this.scheduleMobileDeltaFlush(deviceId, event.aiSessionId, event.text, draft.segments);
           return;
         }
         if (event.kind === "done") {
+          this.flushMobileDelta(event.aiSessionId);
           const finalText = event.text?.trim() ? event.text : draft.text;
           if (finalText.trim() && finalText !== draft.savedText) {
             appendLocalAiMessage(event.aiSessionId, "assistant", encodeStructuredHistoryContent(finalText, draft.segments));
@@ -656,6 +674,7 @@ class DesktopCloudSync {
           });
           return;
         }
+        this.flushMobileDelta(event.aiSessionId);
         this.mobileAssistantDrafts.set(event.aiSessionId, draft);
         this.send({
           type: "ai.chat.output",
@@ -877,6 +896,10 @@ class DesktopCloudSync {
   stop(): void {
     this.stopped = true;
     this.stopTimers();
+    for (const [, buffer] of this.mobileDeltaBuffers) {
+      if (buffer.timer) clearTimeout(buffer.timer);
+    }
+    this.mobileDeltaBuffers.clear();
     if (this.reconnectTimer) {
       clearTimeout(this.reconnectTimer);
       this.reconnectTimer = null;

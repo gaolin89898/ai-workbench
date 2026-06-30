@@ -442,28 +442,40 @@ function handleNotification(
     }
     case "item/agentMessage/delta": {
       const delta = extractDelta(params);
+      const stepId = extractItemId(params);
       if (delta) {
         emit(sender, {
           aiSessionId,
           kind: "delta",
           text: delta,
-          segment: { type: "text", text: delta },
+          stepId: stepId ?? null,
         });
       }
       break;
     }
     case "item/commandExecution/outputDelta": {
       const delta = extractDelta(params);
-      if (delta) {
-        emit(sender, { aiSessionId, kind: "delta", text: delta });
+      const stepId = extractItemId(params);
+      if (delta && stepId) {
+        const prev = session.commandOutputBuffers.get(stepId) ?? "";
+        const accumulated = prev + delta;
+        session.commandOutputBuffers.set(stepId, accumulated);
+        emit(sender, {
+          aiSessionId,
+          kind: "step-update",
+          stepId,
+          segment: { type: "tool", stepId, toolName: "command", status: "running", output: accumulated },
+        });
       }
       break;
     }
     case "item/completed": {
+      const completedStepId = extractItemId(params);
+      if (completedStepId) session.commandOutputBuffers.delete(completedStepId);
       emit(sender, {
         aiSessionId,
         kind: "step-update",
-        stepId: extractItemId(params) ?? null,
+        stepId: completedStepId ?? null,
         segment: buildItemCompletedSegment(params),
       });
       break;

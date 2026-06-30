@@ -1049,7 +1049,7 @@ class _ProjectSessionRow extends StatelessWidget {
                   ),
                   const SizedBox(height: 2),
                   Text(
-                    '${session.providerId} · ${session.status}',
+                    '${session.providerId} · ${_sessionStatusLabel(session.status)}',
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: const TextStyle(fontSize: 12, color: AppColors.muted),
@@ -1228,18 +1228,63 @@ IconData _providerIcon(String providerId) {
 (AppStatusStyle, String) _sessionStatus(
     AiSessionMeta session, String? runStatus) {
   if (session.archived) return (AppStatusStyle.neutral, '已归档');
-  if (runStatus != null) return (AppStatusStyle.primary, runStatus);
-  switch (session.status) {
+  if (runStatus != null) {
+    return (_sessionStatusStyle(runStatus), _sessionStatusLabel(runStatus));
+  }
+  return (
+    _sessionStatusStyle(session.status),
+    _sessionStatusLabel(session.status),
+  );
+}
+
+String _sessionStatusLabel(String status) {
+  switch (status.trim().toLowerCase()) {
+    case '':
+    case 'idle':
+      return '空闲';
     case 'running':
     case 'active':
-      return (AppStatusStyle.primary, '运行中');
-    case 'idle':
-      return (AppStatusStyle.neutral, '空闲');
+      return '运行中';
+    case 'created':
+    case 'pending':
+    case 'queued':
+      return '待处理';
+    case 'completed':
+    case 'complete':
+    case 'success':
+    case 'done':
+      return '已完成';
+    case 'failed':
+    case 'failure':
     case 'error':
-      return (AppStatusStyle.danger, '错误');
+      return '失败';
+    case 'exited':
+      return '已退出';
     default:
-      return (AppStatusStyle.neutral,
-          session.status.isEmpty ? '空闲' : session.status);
+      return status;
+  }
+}
+
+AppStatusStyle _sessionStatusStyle(String status) {
+  switch (status.trim().toLowerCase()) {
+    case 'running':
+    case 'active':
+      return AppStatusStyle.primary;
+    case 'completed':
+    case 'complete':
+    case 'success':
+    case 'done':
+      return AppStatusStyle.success;
+    case 'failed':
+    case 'failure':
+    case 'error':
+      return AppStatusStyle.danger;
+    case 'created':
+    case 'pending':
+    case 'queued':
+      return AppStatusStyle.info;
+    default:
+      return AppStatusStyle.neutral;
   }
 }
 
