@@ -2,7 +2,7 @@ param(
   [string]$Version,
   [string]$RemoteName = 'openlist-mobile',
   [string]$WebDavUrl = 'https://openlist.gaolin.xin/dav',
-  [string]$RemotePath = '夸克网盘/移动端',
+  [string]$RemotePath,
   [string]$User = $env:OPENLIST_USER,
   [string]$Password = $env:OPENLIST_PASS,
   [switch]$NoBuild,
@@ -17,6 +17,12 @@ $pubspecPath = Join-Path $mobileDir 'pubspec.yaml'
 $androidSdk = Join-Path $env:LOCALAPPDATA 'Android/Sdk'
 $flutterDir = Join-Path $env:USERPROFILE 'flutter'
 $releaseDir = Join-Path $root 'releases/mobile'
+
+if (-not $RemotePath) {
+  $RemotePath = [System.Uri]::UnescapeDataString(
+    '%E5%A4%B8%E5%85%8B%E7%BD%91%E7%9B%98/%E7%A7%BB%E5%8A%A8%E7%AB%AF'
+  )
+}
 
 if (-not $Version) {
   $pubspec = Get-Content -Raw -Path $pubspecPath
@@ -75,8 +81,11 @@ if (-not $User -or -not $Password) {
 $obscuredPass = (& rclone obscure $Password).Trim()
 $remoteExists = $false
 try {
-  rclone config show $RemoteName | Out-Null
-  $remoteExists = $true
+  $configDump = rclone config dump
+  if ($configDump) {
+    $config = $configDump | ConvertFrom-Json
+    $remoteExists = $null -ne $config.PSObject.Properties[$RemoteName]
+  }
 } catch {
   $remoteExists = $false
 }
@@ -89,4 +98,7 @@ if ($remoteExists) {
 
 $target = "${RemoteName}:$RemotePath/$apkName"
 rclone copyto $distApk $target --progress
+if ($LASTEXITCODE -ne 0) {
+  throw "rclone upload failed with exit code $LASTEXITCODE"
+}
 Write-Host "Uploaded: $target"
