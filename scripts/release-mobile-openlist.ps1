@@ -37,6 +37,7 @@ $versionName = ($Version -split '\+')[0]
 $apkName = "ai-workbench-mobile-$versionName.apk"
 $builtApk = Join-Path $mobileDir 'build/app/outputs/flutter-apk/app-release.apk'
 $distApk = Join-Path $releaseDir $apkName
+$manifestPath = Join-Path $releaseDir 'latest.json'
 
 $env:ANDROID_HOME = $androidSdk
 $env:ANDROID_SDK_ROOT = $androidSdk
@@ -66,7 +67,24 @@ if (-not (Test-Path $builtApk)) {
 
 New-Item -ItemType Directory -Force -Path $releaseDir | Out-Null
 Copy-Item -LiteralPath $builtApk -Destination $distApk -Force
+$apkUrlPath = [System.Uri]::EscapeDataString($apkName)
+$manifest = [ordered]@{
+  version = $versionName
+  versionCode = ($Version -split '\+')[1]
+  tagName = "mobile-v$versionName"
+  apkFileName = $apkName
+  apkUrl = "$WebDavUrl/$([System.Uri]::EscapeDataString($RemotePath).Replace('%2F', '/'))/$apkUrlPath"
+  notes = "AI Workbench mobile $versionName"
+  updatedAt = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ")
+}
+$manifestJson = $manifest | ConvertTo-Json
+[System.IO.File]::WriteAllText(
+  (Resolve-Path $manifestPath),
+  $manifestJson,
+  [System.Text.UTF8Encoding]::new($false)
+)
 Write-Host "APK ready: $distApk"
+Write-Host "Manifest ready: $manifestPath"
 
 if ($NoUpload) {
   return
@@ -104,3 +122,10 @@ if ($LASTEXITCODE -ne 0) {
   throw "rclone upload failed with exit code $LASTEXITCODE"
 }
 Write-Host "Uploaded: $target"
+
+$manifestTarget = "${RemoteName}:$RemotePath/latest.json"
+rclone --config $rcloneConfig copyto $manifestPath $manifestTarget --progress
+if ($LASTEXITCODE -ne 0) {
+  throw "rclone manifest upload failed with exit code $LASTEXITCODE"
+}
+Write-Host "Uploaded: $manifestTarget"
