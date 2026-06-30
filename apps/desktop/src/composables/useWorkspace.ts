@@ -1,6 +1,6 @@
 import { computed, ref, watch } from "vue";
 import router from "../router";
-import { desktopApi, type AiProvider, type AiSession, type ChatImageAttachment, type ChatMessage, type ChatSegment, type DesktopPairingStatus, type ProviderStatus, type TerminalSession, type ViewName, type WorkspaceProject } from "../services/desktop";
+import { desktopApi, type AiChatOutputEvent, type AiProvider, type AiSession, type ChatImageAttachment, type ChatMessage, type ChatSegment, type DesktopPairingStatus, type ProviderStatus, type TerminalSession, type ViewName, type WorkspaceProject } from "../services/desktop";
 import { decodeAssistantMessageFromStorage, encodeAssistantMessageForStorage, extractAssistantText } from "../utils/chat";
 
 const providers = ref<AiProvider[]>([]);
@@ -576,8 +576,9 @@ function selectAiSessionFromDropdown(sessionId: string) {
 
 async function loadAiSessionHistory(sessionId: string) {
   try {
+    if (pendingAssistants.has(sessionId)) return;
     const history = await desktopApi.listLocalAiHistory(sessionId);
-    if (activeAiSession.value?.id !== sessionId) return;
+    if (activeAiSession.value?.id !== sessionId || pendingAssistants.has(sessionId)) return;
     chatMessages.value = history.map((message) => {
       if (message.role !== "assistant") {
         const decoded = decodeAssistantMessageFromStorage(message.content);
@@ -767,10 +768,33 @@ async function sendPrompt(prompt: string, images: ChatImageAttachment[] = []) {
   }
 }
 
+function activateIncomingAiSession(sessionId: string) {
+  if (activeAiSession.value?.id === sessionId) return true;
+  const session = aiSessions.value.find((item) => item.id === sessionId);
+  if (!session) return false;
+  pushChatDebugEvent(`移动端发起执行，桌面端切换到会话：${sessionId.slice(0, 8)}`);
+  if (activeAiSession.value?.id) void saveAssistantDraft(activeAiSession.value.id);
+  activeAiSession.value = session;
+  markSessionRead(session.id);
+  syncChatControlsWithSession(session);
+  switchView("aiSessions");
+  chatMessages.value = [];
+  void refreshShellLiveState(session.id);
+  return true;
+}
+
+async function ensureIncomingPendingAssistantAfterRefresh(sessionId: string) {
+  if (activeAiSession.value?.id === sessionId || pendingAssistants.has(sessionId)) {
+    return pendingAssistants.get(sessionId) ?? ensureIncomingPendingAssistant(sessionId);
+  }
+  await loadLocalWorkspace();
+  return ensureIncomingPendingAssistant(sessionId);
+}
+
 function ensureIncomingPendingAssistant(sessionId: string) {
   const existing = pendingAssistants.get(sessionId);
   if (existing) return existing;
-  if (activeAiSession.value?.id !== sessionId) return null;
+  if (!activateIncomingAiSession(sessionId)) return null;
   const providerName = providerNameForSession(sessionId);
   const assistantClientId = chatClientId("assistant");
   const assistantMessage: ChatMessage = {
@@ -1059,9 +1083,19 @@ async function initAiEventListeners() {
     };
     }),
     desktopApi.onAiChatOutput((event) => {
-      let pending = pendingAssistants.get(event.aiSessionId);
+      void handleAiChatOutputEvent(event);
+    }),
+  ]).then(() => {
+    aiEventsInitialized = true;
+  });
+  return aiEventsInitPromise;
+}
+
+async function handleAiChatOutputEvent(event: AiChatOutputEvent) {
+  let pending = pendingAssistants.get(event.aiSessionId);
       if (!pending && event.kind !== "done" && event.kind !== "error") {
         pending = ensureIncomingPendingAssistant(event.aiSessionId) ?? undefined;
+        if (!pending) pending = await ensureIncomingPendingAssistantAfterRefresh(event.aiSessionId) ?? undefined;
       }
       const providerName = providerNameForSession(event.aiSessionId);
       const runtimeName = providerRuntimeName(activeAiSession.value?.id === event.aiSessionId ? activeAiSession.value.providerId : aiSessions.value.find((session) => session.id === event.aiSessionId)?.providerId);
@@ -1158,11 +1192,6 @@ async function initAiEventListeners() {
           detail: event.text ?? `${providerName} 执行失败`,
         });
       }
-    }),
-  ]).then(() => {
-    aiEventsInitialized = true;
-  });
-  return aiEventsInitPromise;
 }
 
 async function initWorkspaceEventListeners() {

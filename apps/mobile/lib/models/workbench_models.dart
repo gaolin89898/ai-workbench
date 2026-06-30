@@ -233,7 +233,10 @@ class ChatSegment {
     this.summary,
     this.input,
     this.output,
+    this.diff,
     this.message,
+    this.collapsed,
+    this.durationMs,
     this.additions,
     this.deletions,
   });
@@ -251,7 +254,10 @@ class ChatSegment {
   final String? summary;
   final String? input;
   final String? output;
+  final String? diff;
   final String? message;
+  final bool? collapsed;
+  final int? durationMs;
   final int? additions;
   final int? deletions;
 
@@ -269,7 +275,10 @@ class ChatSegment {
         summary: json['summary'] as String?,
         input: json['input'] as String?,
         output: json['output'] as String?,
+        diff: json['diff'] as String?,
         message: json['message'] as String?,
+        collapsed: json['collapsed'] as bool?,
+        durationMs: json['durationMs'] as int?,
         additions: json['additions'] as int?,
         deletions: json['deletions'] as int?,
       );

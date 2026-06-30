@@ -39,6 +39,7 @@ interface CodexSession {
   sender: Sender;
   closed: boolean;
   stderrBuffer: string;
+  commandOutputBuffers: Map<string, string>;
   turnResolver: { resolve: () => void; reject: (error: Error) => void } | null;
   errorEmitted: boolean;
   cancelled: boolean;
@@ -524,6 +525,7 @@ function createSession(
     sender,
     closed: false,
     stderrBuffer: "",
+    commandOutputBuffers: new Map(),
     turnResolver: null,
     errorEmitted: false,
     cancelled: false,

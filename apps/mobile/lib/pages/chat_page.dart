@@ -50,7 +50,6 @@ class _ChatPageState extends State<ChatPage> {
         });
         final title = ws.getEffectiveTitle(session);
         final runStatus = ws.runStatusBySession[session.id] ?? session.status;
-        // 运行中：状态包含发送/执行/思考 或最后一条助手消息仍在 pending
         final isRunning = _isRunningStatus(runStatus) ||
             (messages.isNotEmpty &&
                 messages.last.role == ChatRole.assistant &&
@@ -88,7 +87,6 @@ class _ChatPageState extends State<ChatPage> {
               ],
             ),
             actions: [
-              // 更多操作：重命名 / 归档恢复
               PopupMenuButton<String>(
                 tooltip: '更多',
                 icon: const Icon(Icons.more_vert, size: 20),
@@ -111,7 +109,6 @@ class _ChatPageState extends State<ChatPage> {
           ),
           body: Column(
             children: [
-              // 归档提示
               if (session.archived)
                 Padding(
                   padding: const EdgeInsets.fromLTRB(
@@ -143,7 +140,6 @@ class _ChatPageState extends State<ChatPage> {
                     ),
                   ),
                 ),
-              // 消息列表
               Expanded(
                 child: ListView.builder(
                   controller: _scroll,
@@ -154,7 +150,6 @@ class _ChatPageState extends State<ChatPage> {
                       : _MessageItem(message: messages[index]),
                 ),
               ),
-              // 底部输入栏
               SafeArea(
                 top: false,
                 child: Container(
@@ -213,7 +208,6 @@ class _ChatPageState extends State<ChatPage> {
     );
   }
 
-  // 是否为运行中状态
   bool _isRunningStatus(String status) {
     return status.contains('发送') ||
         status.contains('执行') ||
@@ -265,11 +259,6 @@ extension _FirstOrNull<T> on Iterable<T> {
   }
 }
 
-// =============================================================================
-// 消息渲染
-// =============================================================================
-
-/// 单条消息的容器：根据角色分派到不同的子 widget。
 class _MessageItem extends StatelessWidget {
   const _MessageItem({required this.message});
 
@@ -290,7 +279,6 @@ class _MessageItem extends StatelessWidget {
   }
 }
 
-/// 用户消息：右对齐气泡，主色背景白字。
 class _UserBubble extends StatelessWidget {
   const _UserBubble({required this.message});
 
@@ -301,7 +289,7 @@ class _UserBubble extends StatelessWidget {
     return Align(
       alignment: Alignment.centerRight,
       child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 312), // 约 82% 宽
+        constraints: const BoxConstraints(maxWidth: 312),
         child: Container(
           margin: const EdgeInsets.only(bottom: AppSpacing.md),
           padding: const EdgeInsets.symmetric(
@@ -333,7 +321,6 @@ class _UserBubble extends StatelessWidget {
   }
 }
 
-/// AI 消息：左侧头像 + 名字 + 内容卡。
 class _AiBubble extends StatelessWidget {
   const _AiBubble({required this.message});
 
@@ -341,15 +328,12 @@ class _AiBubble extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final hasText = (message.text ?? '').isNotEmpty;
-    final hasSegments = message.segments.isNotEmpty;
-    final isThinking = message.pending && !hasText && !hasSegments;
+    final isThinking = message.pending && (message.text ?? '').isEmpty && message.segments.isEmpty;
     return Padding(
       padding: const EdgeInsets.only(bottom: AppSpacing.md),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // 头像方框
           AppIconBox(
             icon: Icons.smart_toy_outlined,
             size: 24,
@@ -363,7 +347,6 @@ class _AiBubble extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // 名字
                 const Text(
                   'AI 工作台',
                   style: TextStyle(
@@ -373,61 +356,13 @@ class _AiBubble extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(height: 4),
-                // 内容卡
                 AppCard(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 12,
-                    vertical: 11,
-                  ),
+                  padding: const EdgeInsets.all(12),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      // 思考中标题
-                      Row(
-                        children: [
-                          Icon(
-                            isThinking ? Icons.psychology_outlined : Icons.auto_awesome_outlined,
-                            size: 14,
-                            color: AppColors.primary,
-                          ),
-                          const SizedBox(width: 6),
-                          Text(
-                            isThinking ? '思考中' : '回复',
-                            style: const TextStyle(
-                              color: AppColors.ink,
-                              fontSize: 13,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                        ],
-                      ),
-                      if (hasText || hasSegments) const SizedBox(height: 6),
-                      // 分段（status / tool / thought / error）
-                      if (hasSegments)
-                        ...message.segments.map(
-                          (segment) => Padding(
-                            padding: const EdgeInsets.only(top: 6),
-                            child: ChatSegmentView(segment: segment),
-                          ),
-                        ),
-                      // 正文
-                      if (hasText)
-                        Padding(
-                          padding: EdgeInsets.only(top: hasSegments ? 8 : 0),
-                          child: SelectableText(
-                            message.text!,
-                            style: const TextStyle(
-                              color: AppColors.secondary,
-                              fontSize: 13,
-                              height: 1.6,
-                            ),
-                          ),
-                        ),
-                      if (isThinking)
-                        const Padding(
-                          padding: EdgeInsets.only(top: 4),
-                          child: _TypingCursor(),
-                        ),
+                      ChatProcessPanel(segments: message.segments, pending: message.pending),
+                      ChatFinalContent(text: message.text ?? '', pending: isThinking),
                     ],
                   ),
                 ),
@@ -440,7 +375,6 @@ class _AiBubble extends StatelessWidget {
   }
 }
 
-/// 系统消息：居中浅灰文字。
 class _SystemLine extends StatelessWidget {
   const _SystemLine(this.text);
 
@@ -464,7 +398,6 @@ class _SystemLine extends StatelessWidget {
   }
 }
 
-/// 错误消息：居中红色文字。
 class _ErrorLine extends StatelessWidget {
   const _ErrorLine(this.text);
 
@@ -483,46 +416,6 @@ class _ErrorLine extends StatelessWidget {
           fontSize: 12,
           height: 1.5,
         ),
-      ),
-    );
-  }
-}
-
-/// 流式光标，跟随 pending 文本。
-class _TypingCursor extends StatefulWidget {
-  const _TypingCursor();
-
-  @override
-  State<_TypingCursor> createState() => _TypingCursorState();
-}
-
-class _TypingCursorState extends State<_TypingCursor>
-    with SingleTickerProviderStateMixin {
-  late final AnimationController _ctrl;
-
-  @override
-  void initState() {
-    super.initState();
-    _ctrl = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 600),
-    )..repeat(reverse: true);
-  }
-
-  @override
-  void dispose() {
-    _ctrl.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return AnimatedBuilder(
-      animation: _ctrl,
-      builder: (context, _) => Container(
-        width: 2,
-        height: 14,
-        color: AppColors.primary.withValues(alpha: _ctrl.value),
       ),
     );
   }

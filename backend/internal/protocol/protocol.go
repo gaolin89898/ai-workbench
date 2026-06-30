@@ -95,7 +95,7 @@ type AiSession struct {
 // AiHistoryMessage mirrors the shared AiHistoryMessage struct.
 type AiHistoryMessage struct {
 	Role      AiMessageRole `json:"role"`
-	Content   string        `json:"content"`
+	Content   any           `json:"content"`
 	CreatedAt time.Time     `json:"createdAt"`
 }
 
@@ -234,12 +234,13 @@ type AiHistoryResponse struct {
 // AiChatOutput: "ai.chat.output".
 type AiChatOutput struct {
 	BaseMessage
-	DeviceId    string       `json:"deviceId"`
-	AiSessionId string       `json:"aiSessionId"`
-	Kind        string       `json:"kind"`
-	Text        *string      `json:"text"`
-	StepId      *string      `json:"stepId"`
-	Segment     *ChatSegment `json:"segment"`
+	DeviceId    string        `json:"deviceId"`
+	AiSessionId string        `json:"aiSessionId"`
+	Kind        string        `json:"kind"`
+	Text        *string       `json:"text"`
+	StepId      *string       `json:"stepId"`
+	Segment     *ChatSegment  `json:"segment"`
+	Segments    []ChatSegment `json:"segments"`
 }
 
 // AiSessionArchive: "ai.session.archive".

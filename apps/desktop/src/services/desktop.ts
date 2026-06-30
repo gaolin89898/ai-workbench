@@ -223,6 +223,7 @@ export type AiChatOutputEvent = {
   text?: string;
   stepId?: string | null;
   segment?: ChatSegment | null;
+  segments?: ChatSegment[];
 };
 
 export type AiHistoryChangedEvent = {

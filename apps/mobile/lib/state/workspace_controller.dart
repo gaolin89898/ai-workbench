@@ -448,13 +448,23 @@ class WorkspaceController extends ChangeNotifier {
       final nextSegment = segment ?? ChatSegment(type: 'status', label: text ?? 'AI 正在执行', icon: 'think');
       if (pendingIndex >= 0) {
         final pending = current[pendingIndex];
-        current[pendingIndex] = pending.copyWith(segments: [...pending.segments, nextSegment]);
+        current[pendingIndex] = pending.copyWith(segments: _mergeSegment(pending.segments, nextSegment));
       } else {
         current.add(ChatMessage(role: ChatRole.assistant, pending: true, segments: [nextSegment]));
       }
       runStatusBySession[sessionId] = text ?? nextSegment.label ?? 'AI 正在执行';
     }
     messagesBySession[sessionId] = current;
+  }
+
+  List<ChatSegment> _mergeSegment(List<ChatSegment> source, ChatSegment segment) {
+    final stepId = segment.stepId;
+    if (stepId == null || stepId.isEmpty) return [...source, segment];
+    final index = source.indexWhere((item) => item.stepId == stepId);
+    if (index < 0) return [...source, segment];
+    final next = [...source];
+    next[index] = segment;
+    return next;
   }
 
   void _handleMessageDelta(Map<String, dynamic> json) {
