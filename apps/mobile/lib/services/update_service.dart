@@ -3,7 +3,7 @@ import 'package:url_launcher/url_launcher.dart';
 const _openListMobileUrl =
     'https://openlist.gaolin.xin/%E5%A4%B8%E5%85%8B%E7%BD%91%E7%9B%98/%E7%A7%BB%E5%8A%A8%E7%AB%AF';
 const _currentMobileVersion =
-    String.fromEnvironment('MOBILE_VERSION', defaultValue: '0.1.22');
+    String.fromEnvironment('MOBILE_VERSION', defaultValue: '0.1.24');
 
 class MobileUpdateInfo {
   const MobileUpdateInfo({
