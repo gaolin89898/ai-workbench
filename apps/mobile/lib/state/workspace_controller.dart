@@ -399,12 +399,14 @@ class WorkspaceController extends ChangeNotifier {
     final pendingIndex = current.lastIndexWhere((message) => message.pending && message.role == ChatRole.assistant);
     if (kind == 'done') {
       final pending = pendingIndex >= 0 ? current[pendingIndex] : null;
+      final incomingSegments = [
+        ...segments,
+        if (segment != null) segment,
+      ];
       final doneText = (text != null && text.isNotEmpty) ? text : pending?.text;
-      final doneSegments = segments.isNotEmpty
-          ? segments
-          : segment != null
-              ? [segment]
-              : (pending?.segments ?? const <ChatSegment>[]);
+      final doneSegments = pending == null
+          ? incomingSegments
+          : _mergeSegments(pending.segments, incomingSegments);
       final done = ChatMessage(
         role: ChatRole.assistant,
         text: doneText,
@@ -413,7 +415,9 @@ class WorkspaceController extends ChangeNotifier {
       if (pendingIndex >= 0) {
         current[pendingIndex] = done;
       } else if ((doneText ?? '').isNotEmpty || doneSegments.isNotEmpty) {
-        final lastAssistantIndex = current.lastIndexWhere((message) => message.role == ChatRole.assistant);
+        final lastAssistantIndex = current.lastIndexWhere(
+          (message) => message.role == ChatRole.assistant,
+        );
         if (lastAssistantIndex >= 0 && current[lastAssistantIndex].pending) {
           current[lastAssistantIndex] = done;
         } else {
@@ -435,26 +439,86 @@ class WorkspaceController extends ChangeNotifier {
       runStatusBySession[sessionId] = '执行失败';
     } else if (kind == 'delta') {
       final deltaText = (text != null && text.isNotEmpty) ? text : segment?.text;
-      if (deltaText != null && deltaText.isNotEmpty) {
-        if (pendingIndex >= 0) {
-          final pending = current[pendingIndex];
-          final accumulated = (pending.text ?? '') + deltaText;
-          current[pendingIndex] = pending.copyWith(text: accumulated);
-        } else {
-          current.add(ChatMessage(role: ChatRole.assistant, pending: true, text: deltaText));
+      final incomingSegments = [
+        ...segments,
+        if (segment != null) segment,
+      ];
+      if (pendingIndex >= 0) {
+        final pending = current[pendingIndex];
+        final accumulated = deltaText == null || deltaText.isEmpty
+            ? pending.text
+            : (pending.text ?? '') + deltaText;
+        current[pendingIndex] = pending.copyWith(
+          text: accumulated,
+          segments: _mergeSegments(pending.segments, incomingSegments),
+        );
+      } else {
+        final lastAssistantIndex = current.lastIndexWhere(
+          (message) => message.role == ChatRole.assistant,
+        );
+        if (lastAssistantIndex >= 0 && current[lastAssistantIndex].pending) {
+          final pending = current[lastAssistantIndex];
+          final accumulated = deltaText == null || deltaText.isEmpty
+              ? pending.text
+              : (pending.text ?? '') + deltaText;
+          current[lastAssistantIndex] = pending.copyWith(
+            text: accumulated,
+            segments: _mergeSegments(pending.segments, incomingSegments),
+          );
+        } else if ((deltaText ?? '').isNotEmpty || incomingSegments.isNotEmpty) {
+          current.add(ChatMessage(
+            role: ChatRole.assistant,
+            pending: true,
+            text: deltaText,
+            segments: incomingSegments,
+          ));
         }
       }
     } else {
-      final nextSegment = segment ?? ChatSegment(type: 'status', label: text ?? 'AI 正在执行', icon: 'think');
+      if (text == 'mobile sent message') return;
+      final incomingSegments = [
+        ...segments,
+        if (segment != null) segment,
+        if (segment == null && segments.isEmpty)
+          ChatSegment(type: 'status', label: text ?? 'AI 正在执行', icon: 'think'),
+      ];
       if (pendingIndex >= 0) {
         final pending = current[pendingIndex];
-        current[pendingIndex] = pending.copyWith(segments: _mergeSegment(pending.segments, nextSegment));
+        current[pendingIndex] = pending.copyWith(
+          segments: _mergeSegments(pending.segments, incomingSegments),
+        );
       } else {
-        current.add(ChatMessage(role: ChatRole.assistant, pending: true, segments: [nextSegment]));
+        final lastAssistantIndex = current.lastIndexWhere(
+          (message) => message.role == ChatRole.assistant,
+        );
+        if (lastAssistantIndex >= 0 && current[lastAssistantIndex].pending) {
+          final pending = current[lastAssistantIndex];
+          current[lastAssistantIndex] = pending.copyWith(
+            segments: _mergeSegments(pending.segments, incomingSegments),
+          );
+        } else {
+          current.add(ChatMessage(
+            role: ChatRole.assistant,
+            pending: true,
+            segments: incomingSegments,
+          ));
+        }
       }
-      runStatusBySession[sessionId] = text ?? nextSegment.label ?? 'AI 正在执行';
+      runStatusBySession[sessionId] =
+          text ?? (incomingSegments.isEmpty ? null : incomingSegments.last.label) ?? 'AI 正在执行';
     }
     messagesBySession[sessionId] = current;
+  }
+
+  List<ChatSegment> _mergeSegments(
+    List<ChatSegment> source,
+    List<ChatSegment> segments,
+  ) {
+    var next = [...source];
+    for (final segment in segments) {
+      next = _mergeSegment(next, segment);
+    }
+    return next;
   }
 
   List<ChatSegment> _mergeSegment(List<ChatSegment> source, ChatSegment segment) {
@@ -463,9 +527,34 @@ class WorkspaceController extends ChangeNotifier {
     final index = source.indexWhere((item) => item.stepId == stepId);
     if (index < 0) return [...source, segment];
     final next = [...source];
-    next[index] = segment;
+    next[index] = _mergeSegmentFields(next[index], segment);
     return next;
   }
+
+  ChatSegment _mergeSegmentFields(
+    ChatSegment previous,
+    ChatSegment next,
+  ) => ChatSegment(
+        type: next.type,
+        stepId: next.stepId ?? previous.stepId,
+        text: next.text ?? previous.text,
+        label: next.label ?? previous.label,
+        detail: next.detail ?? previous.detail,
+        icon: next.icon ?? previous.icon,
+        title: next.title ?? previous.title,
+        toolName: next.toolName ?? previous.toolName,
+        command: next.command ?? previous.command,
+        status: next.status ?? previous.status,
+        summary: next.summary ?? previous.summary,
+        input: next.input ?? previous.input,
+        output: next.output ?? previous.output,
+        diff: next.diff ?? previous.diff,
+        message: next.message ?? previous.message,
+        collapsed: next.collapsed ?? previous.collapsed,
+        durationMs: next.durationMs ?? previous.durationMs,
+        additions: next.additions ?? previous.additions,
+        deletions: next.deletions ?? previous.deletions,
+      );
 
   void _handleMessageDelta(Map<String, dynamic> json) {
     final sessionId = json['aiSessionId'] as String;
@@ -478,7 +567,20 @@ class WorkspaceController extends ChangeNotifier {
       final accumulated = (pending.text ?? '') + content;
       current[pendingIndex] = pending.copyWith(text: accumulated);
     } else {
-      current.add(ChatMessage(role: ChatRole.assistant, pending: true, text: content));
+      final lastAssistantIndex = current.lastIndexWhere(
+        (message) => message.role == ChatRole.assistant,
+      );
+      if (lastAssistantIndex >= 0 && current[lastAssistantIndex].pending) {
+        final pending = current[lastAssistantIndex];
+        final accumulated = (pending.text ?? '') + content;
+        current[lastAssistantIndex] = pending.copyWith(text: accumulated);
+      } else {
+        current.add(ChatMessage(
+          role: ChatRole.assistant,
+          pending: true,
+          text: content,
+        ));
+      }
     }
     messagesBySession[sessionId] = current;
   }

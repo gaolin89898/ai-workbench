@@ -272,7 +272,7 @@ export function registerIpcHandlers(win?: BrowserWindow): void {
 
   ipcMain.handle("run_ai_chat", async (_event, args: [RunAiChatRequest]) => {
     const req = args[0];
-    const sender = getSender();
+    const sender = getDesktopCloudSync()?.createRendererAndMobileAiChatSender(getSender()) ?? getSender();
     // Resume an existing Claude session if we have a providerSessionId stored.
     const session = db.getLocalAiSession(req.aiSessionId);
     const existingSessionId = session?.providerSessionId ?? null;
@@ -288,7 +288,8 @@ export function registerIpcHandlers(win?: BrowserWindow): void {
     const req = args[0];
     const session = db.getLocalAiSession(req.aiSessionId);
     const existingSessionId = session?.providerSessionId ?? null;
-    const providerSessionId = await runCodexChat(req, getSender());
+    const sender = getDesktopCloudSync()?.createRendererAndMobileAiChatSender(getSender()) ?? getSender();
+    const providerSessionId = await runCodexChat(req, sender);
     db.updateLocalAiSession(req.aiSessionId, {
       providerSessionId: providerSessionId || existingSessionId,
       status: "completed",

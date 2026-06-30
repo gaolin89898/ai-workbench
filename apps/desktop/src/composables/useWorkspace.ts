@@ -574,25 +574,30 @@ function selectAiSessionFromDropdown(sessionId: string) {
   if (session) void setActiveAiSession(session);
 }
 
+async function loadAiSessionHistorySnapshot(sessionId: string) {
+  const history = await desktopApi.listLocalAiHistory(sessionId);
+  return history.map((message) => {
+    if (message.role !== "assistant") {
+      const decoded = decodeAssistantMessageFromStorage(message.content);
+      return { role: message.role, text: decoded.text, images: decoded.images };
+    }
+    const decoded = decodeAssistantMessageFromStorage(message.content);
+    return {
+      role: message.role,
+      text: decoded.text,
+      segments: decoded.segments,
+    };
+  });
+}
+
 async function loadAiSessionHistory(sessionId: string) {
   try {
     if (pendingAssistants.has(sessionId)) return;
-    const history = await desktopApi.listLocalAiHistory(sessionId);
+    const history = await loadAiSessionHistorySnapshot(sessionId);
     if (activeAiSession.value?.id !== sessionId || pendingAssistants.has(sessionId)) return;
-    chatMessages.value = history.map((message) => {
-      if (message.role !== "assistant") {
-        const decoded = decodeAssistantMessageFromStorage(message.content);
-        return { role: message.role, text: decoded.text, images: decoded.images };
-      }
-      const decoded = decodeAssistantMessageFromStorage(message.content);
-      return {
-        role: message.role,
-        text: decoded.text,
-        segments: decoded.segments,
-      };
-    });
+    chatMessages.value = history;
   } catch (error) {
-    chatMessages.value = [{ role: "error", text: `读取历史失败：${String(error)}` }];
+    if (!pendingAssistants.has(sessionId)) chatMessages.value = [{ role: "error", text: `读取历史失败：${String(error)}` }];
   }
 }
 
@@ -784,18 +789,18 @@ function activateIncomingAiSession(sessionId: string) {
 }
 
 async function ensureIncomingPendingAssistantAfterRefresh(sessionId: string) {
-  if (activeAiSession.value?.id === sessionId || pendingAssistants.has(sessionId)) {
-    return pendingAssistants.get(sessionId) ?? ensureIncomingPendingAssistant(sessionId);
-  }
+  if (pendingAssistants.has(sessionId)) return pendingAssistants.get(sessionId) ?? null;
   await loadLocalWorkspace();
-  return ensureIncomingPendingAssistant(sessionId);
+  const history = await loadAiSessionHistorySnapshot(sessionId).catch(() => []);
+  return ensureIncomingPendingAssistant(sessionId, history);
 }
 
-function ensureIncomingPendingAssistant(sessionId: string) {
+function ensureIncomingPendingAssistant(sessionId: string, history: ChatMessage[] = []) {
   const existing = pendingAssistants.get(sessionId);
   if (existing) return existing;
   if (!activateIncomingAiSession(sessionId)) return null;
   const providerName = providerNameForSession(sessionId);
+  if (history.length) chatMessages.value = history;
   const assistantClientId = chatClientId("assistant");
   const assistantMessage: ChatMessage = {
     clientId: assistantClientId,
@@ -903,7 +908,7 @@ function completePendingAssistantFromExec(sessionId: string) {
   const finalText = extractAssistantText(pending.finalText.trim());
   const finalSegments = pending.message.segments;
   const draft = assistantDrafts.get(sessionId);
-  if (draft && pending.prompt.trim() && finalText && finalText !== draft.savedText) {
+  if (draft && finalText && finalText !== draft.savedText) {
     assistantDrafts.set(sessionId, { ...draft, savedText: finalText });
     void desktopApi.appendLocalAiMessage(sessionId, "assistant", encodeAssistantMessageForStorage({
       text: finalText,
@@ -1031,7 +1036,7 @@ function isPersistentStatusSegment(segment: ChatSegment) {
 }
 
 function shouldHideBackendStatus(text: string) {
-  return text.includes("已生成一段回复") || text.includes("继续等待最终完成信号");
+  return text.includes("已生成一段回复") || text.includes("继续等待最终完成信号") || text === "mobile sent message";
 }
 
 function patchPendingAssistant(sessionId: string, patch: Partial<ChatMessage>) {
@@ -1093,40 +1098,42 @@ async function initAiEventListeners() {
 
 async function handleAiChatOutputEvent(event: AiChatOutputEvent) {
   let pending = pendingAssistants.get(event.aiSessionId);
-      if (!pending && event.kind !== "done" && event.kind !== "error") {
-        pending = ensureIncomingPendingAssistant(event.aiSessionId) ?? undefined;
-        if (!pending) pending = await ensureIncomingPendingAssistantAfterRefresh(event.aiSessionId) ?? undefined;
-      }
-      const providerName = providerNameForSession(event.aiSessionId);
-      const runtimeName = providerRuntimeName(activeAiSession.value?.id === event.aiSessionId ? activeAiSession.value.providerId : aiSessions.value.find((session) => session.id === event.aiSessionId)?.providerId);
-      const elapsedMs = pending ? Math.round(performance.now() - pending.startedAt) : undefined;
-      const elapsedText = elapsedMs === undefined ? "" : `，用时 ${formatElapsedMs(elapsedMs)}`;
-      pushChatDebugEvent(describeChatEventForLog(event, elapsedText));
-      if (event.kind === "status") {
-        if (event.segment) {
-          upsertPendingSegment(event.aiSessionId, event.segment);
-        } else {
-          updatePendingAssistantStatus(event.aiSessionId, event.text ?? "");
-        }
-        return;
-      }
-      if (event.kind === "step-start" || event.kind === "step-update") {
-        if (event.segment) upsertPendingSegment(event.aiSessionId, event.segment);
-        return;
-      }
-      if (event.kind === "delta") {
-        const pending = pendingAssistants.get(event.aiSessionId);
-        if (!pending) return;
-        appendPendingAssistantText(event.aiSessionId, event.text ?? "");
-        setChatRunState(event.aiSessionId, {
-          active: true,
-          phase: "running",
-          title: `${providerName} 正在回复`,
-          detail: `正在流式接收回复${elapsedText}。`,
-        });
-        return;
-      }
-      if (event.kind === "done") {
+  if (!pending && event.kind !== "done" && event.kind !== "error") {
+    const created = shouldHideBackendStatus(event.text ?? "")
+      ? await ensureIncomingPendingAssistantAfterRefresh(event.aiSessionId)
+      : ensureIncomingPendingAssistant(event.aiSessionId) ?? await ensureIncomingPendingAssistantAfterRefresh(event.aiSessionId);
+    pending = created ?? undefined;
+  }
+  const providerName = providerNameForSession(event.aiSessionId);
+  const runtimeName = providerRuntimeName(activeAiSession.value?.id === event.aiSessionId ? activeAiSession.value.providerId : aiSessions.value.find((session) => session.id === event.aiSessionId)?.providerId);
+  const elapsedMs = pending ? Math.round(performance.now() - pending.startedAt) : undefined;
+  const elapsedText = elapsedMs === undefined ? "" : `，用时 ${formatElapsedMs(elapsedMs)}`;
+  pushChatDebugEvent(describeChatEventForLog(event, elapsedText));
+  if (event.kind === "status") {
+    if (event.segment) {
+      upsertPendingSegment(event.aiSessionId, event.segment);
+    } else {
+      updatePendingAssistantStatus(event.aiSessionId, event.text ?? "");
+    }
+    return;
+  }
+  if (event.kind === "step-start" || event.kind === "step-update") {
+    if (event.segment) upsertPendingSegment(event.aiSessionId, event.segment);
+    return;
+  }
+  if (event.kind === "delta") {
+    const pending = pendingAssistants.get(event.aiSessionId);
+    if (!pending) return;
+    appendPendingAssistantText(event.aiSessionId, event.text ?? "");
+    setChatRunState(event.aiSessionId, {
+      active: true,
+      phase: "running",
+      title: `${providerName} 正在回复`,
+      detail: `正在流式接收回复${elapsedText}。`,
+    });
+    return;
+  }
+  if (event.kind === "done") {
         if (!pending) {
           if (activeAiSession.value?.id === event.aiSessionId) {
             void loadAiSessionHistory(event.aiSessionId);
@@ -1200,11 +1207,11 @@ async function initWorkspaceEventListeners() {
   workspaceEventsInitPromise = desktopApi.onWorkspaceChanged(() => {
     const activeSessionId = activeAiSession.value?.id;
     void loadLocalWorkspace();
-    if (activeSessionId) void loadAiSessionHistory(activeSessionId);
+    if (activeSessionId && !pendingAssistants.has(activeSessionId)) void loadAiSessionHistory(activeSessionId);
   }).then(async () => {
     await desktopApi.onAiHistoryChanged((event) => {
       void loadLocalWorkspace();
-      if (activeAiSession.value?.id === event.aiSessionId) {
+      if (activeAiSession.value?.id === event.aiSessionId && !pendingAssistants.has(event.aiSessionId)) {
         void loadAiSessionHistory(event.aiSessionId);
       }
     });

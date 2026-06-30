@@ -57,7 +57,11 @@ func TestParseAiSessionArchive(t *testing.T) {
 }
 
 func TestParseAiChatOutput(t *testing.T) {
-	roundTrip(t, `{"type":"ai.chat.output","deviceId":"11111111-1111-1111-1111-111111111111","aiSessionId":"22222222-2222-2222-2222-222222222222","kind":"status","text":"running","stepId":"runtime-status","segment":{"type":"status","stepId":"runtime-status","label":"Codex 正在执行","icon":"think"}}`, "ai.chat.output")
+	roundTrip(t, `{"type":"ai.chat.output","deviceId":"11111111-1111-1111-1111-111111111111","aiSessionId":"22222222-2222-2222-2222-222222222222","kind":"status","text":"running","stepId":"runtime-status","segment":{"type":"status","stepId":"runtime-status","label":"Codex 正在执行","icon":"think"},"segments":[{"type":"status","stepId":"runtime-status","label":"Codex 正在执行","icon":"think"}]}`, "ai.chat.output")
+}
+
+func TestParseAiHistoryResponseStructuredContent(t *testing.T) {
+	roundTrip(t, `{"type":"ai.history.response","deviceId":"11111111-1111-1111-1111-111111111111","aiSessionId":"22222222-2222-2222-2222-222222222222","requestId":"33333333-3333-4333-8333-333333333333","messages":[{"role":"assistant","content":{"text":"完成","segments":[{"type":"status","stepId":"runtime-status","label":"已完成","icon":"check"}]},"createdAt":"2024-01-02T03:04:05Z"}]}`, "ai.history.response")
 }
 
 func TestParseGitStatusSnapshot(t *testing.T) {

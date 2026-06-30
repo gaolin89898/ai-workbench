@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 enum ChatRole { user, assistant, system, error }
 
 ChatRole chatRoleFromString(String value) {
@@ -192,6 +194,8 @@ class AiHistoryMessage {
     this.segments = const [],
   });
 
+  static const _structuredMessagePrefix = '__AI_WORKBENCH_MESSAGE_V1__';
+
   final ChatRole role;
   final String content;
   final String createdAt;
@@ -199,15 +203,13 @@ class AiHistoryMessage {
 
   factory AiHistoryMessage.fromJson(Map<String, dynamic> json) {
     final rawContent = json['content'];
-    if (rawContent is Map<String, dynamic>) {
+    final structuredContent = _decodeStructuredContent(rawContent);
+    if (structuredContent != null) {
       return AiHistoryMessage(
         role: chatRoleFromString(json['role'] as String),
-        content: rawContent['text'] as String? ?? '',
+        content: structuredContent.text,
         createdAt: json['createdAt'] as String,
-        segments: ((rawContent['segments'] as List<dynamic>?) ?? const [])
-            .whereType<Map<String, dynamic>>()
-            .map(ChatSegment.fromJson)
-            .toList(),
+        segments: structuredContent.segments,
       );
     }
     return AiHistoryMessage(
@@ -216,6 +218,33 @@ class AiHistoryMessage {
       createdAt: json['createdAt'] as String,
     );
   }
+
+  static _StructuredHistoryContent? _decodeStructuredContent(dynamic rawContent) {
+    try {
+      final content = rawContent is String && rawContent.startsWith(_structuredMessagePrefix)
+          ? jsonDecode(
+              rawContent.substring(_structuredMessagePrefix.length),
+            )
+          : rawContent;
+      if (content is! Map<String, dynamic>) return null;
+      return _StructuredHistoryContent(
+        text: content['text'] as String? ?? '',
+        segments: ((content['segments'] as List<dynamic>?) ?? const [])
+            .whereType<Map<String, dynamic>>()
+            .map(ChatSegment.fromJson)
+            .toList(),
+      );
+    } catch (_) {
+      return null;
+    }
+  }
+}
+
+class _StructuredHistoryContent {
+  const _StructuredHistoryContent({required this.text, required this.segments});
+
+  final String text;
+  final List<ChatSegment> segments;
 }
 
 class ChatSegment {

@@ -328,7 +328,8 @@ class _AiBubble extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final isThinking = message.pending && (message.text ?? '').isEmpty && message.segments.isEmpty;
+    final finalText = _finalContentText(message);
+    final isThinking = message.pending && finalText.isEmpty && message.segments.isEmpty;
     return Padding(
       padding: const EdgeInsets.only(bottom: AppSpacing.md),
       child: Row(
@@ -362,7 +363,7 @@ class _AiBubble extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       ChatProcessPanel(segments: message.segments, pending: message.pending),
-                      ChatFinalContent(text: message.text ?? '', pending: isThinking),
+                      ChatFinalContent(text: finalText, pending: isThinking),
                     ],
                   ),
                 ),
@@ -373,6 +374,17 @@ class _AiBubble extends StatelessWidget {
       ),
     );
   }
+}
+
+String _finalContentText(ChatMessage message) {
+  final text = (message.text ?? '').trim();
+  if (text.isNotEmpty) return text;
+  final textSegments = message.segments
+      .where((segment) => segment.type == 'text')
+      .map((segment) => segment.text?.trim() ?? '')
+      .where((value) => value.isNotEmpty)
+      .toList();
+  return textSegments.join('\n\n');
 }
 
 class _SystemLine extends StatelessWidget {

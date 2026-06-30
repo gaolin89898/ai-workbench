@@ -352,6 +352,7 @@ class ChatBubble extends StatelessWidget {
     final isUser = message.role == ChatRole.user;
     final isError = message.role == ChatRole.error;
     final isSystem = message.role == ChatRole.system;
+    final finalText = _finalContentText(message);
     if (isSystem) {
       return Center(
         child: Container(
@@ -383,7 +384,7 @@ class ChatBubble extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   ChatProcessPanel(segments: message.segments, pending: message.pending),
-                  ChatFinalContent(text: message.text ?? '', pending: message.pending),
+                  ChatFinalContent(text: finalText, pending: message.pending && finalText.trim().isEmpty),
                 ],
               ),
       ),
@@ -398,6 +399,17 @@ class _TypingText extends StatelessWidget {
   Widget build(BuildContext context) {
     return const Text('处理中...', style: TextStyle(color: AppColors.muted, fontSize: 12));
   }
+}
+
+String _finalContentText(ChatMessage message) {
+  final text = (message.text ?? '').trim();
+  if (text.isNotEmpty) return text;
+  final textSegments = message.segments
+      .where((segment) => segment.type == 'text')
+      .map((segment) => segment.text?.trim() ?? '')
+      .where((value) => value.isNotEmpty)
+      .toList();
+  return textSegments.join('\n\n');
 }
 
 bool _isProcessSegment(ChatSegment segment) {

@@ -9,9 +9,18 @@ const props = defineProps<{
 }>();
 
 const rawSegments = computed<ChatSegmentType[]>(() => {
-  if (props.message.segments?.length) return props.message.segments;
+  const messageText = extractAssistantText(props.message.text ?? "").trim();
+  if (props.message.segments?.length) {
+    if (props.message.role !== "assistant" || !messageText) return props.message.segments;
+    const hasFinalTextSegment = props.message.segments.some((segment) => (
+      segment.type === "text" && extractAssistantText(segment.text).trim() === messageText
+    ));
+    return hasFinalTextSegment
+      ? props.message.segments
+      : [...props.message.segments, { type: "text", text: messageText }];
+  }
   if (props.message.role === "assistant") {
-    return assistantOutputToSegments(extractAssistantText(props.message.text ?? ""), "");
+    return assistantOutputToSegments(messageText, "");
   }
   return [{ type: "text", text: formatChatMessageText(props.message.text ?? "") }];
 });
@@ -42,27 +51,23 @@ const shouldShowStepContainer = computed(() => {
   return props.message.role === "assistant" && (Boolean(processSummary.value) || hasProcessSegments.value);
 });
 
-const stepTitle = computed(() => processSummary.value?.label ?? "正在处理");
-
 type SegmentGroup =
   | { type: "segment"; segment: ChatSegmentType }
   | { type: "process"; segments: ChatSegmentType[] };
 
-const finalContentStartIndex = computed(() => {
-  if (!shouldShowStepContainer.value) return 0;
-  for (let index = segments.value.length - 1; index >= 0; index -= 1) {
-    const segment = segments.value[index];
-    if (segment === processSummary.value) continue;
-    if (segment.type === "text" || segment.type === "error") return index;
-  }
-  return segments.value.length;
+const processSegments = computed(() => {
+  if (!shouldShowStepContainer.value) return [];
+  return segments.value.filter((segment) => (
+    isProcessSegment(segment)
+    && segment.stepId !== "runtime-status"
+    && segment.stepId !== "initial-thinking"
+    && segment !== processSummary.value
+  ));
 });
 
-const stepGroups = computed(() => {
-  if (!shouldShowStepContainer.value) return [];
-  return groupSegments(segments.value.slice(0, finalContentStartIndex.value).filter((segment) => (
-    segment.stepId !== "runtime-status" && segment.stepId !== "initial-thinking"
-  )));
+const finalContentSegments = computed(() => {
+  if (!shouldShowStepContainer.value) return segments.value;
+  return segments.value.filter((segment) => segment !== processSummary.value && !isProcessSegment(segment));
 });
 
 const processElapsed = computed(() => {
@@ -73,16 +78,11 @@ const processElapsed = computed(() => {
 
 const processHeaderTitle = computed(() => {
   const elapsed = processElapsed.value;
-  if (elapsed) return `已处理 ${elapsed}`;
-  return stepTitle.value;
+  if (elapsed) return `执行过程 · ${elapsed}`;
+  return "执行过程";
 });
 
-const contentGroups = computed(() => {
-  const sourceSegments = shouldShowStepContainer.value
-    ? segments.value.slice(finalContentStartIndex.value)
-    : segments.value;
-  return groupSegments(sourceSegments.filter((segment) => segment !== processSummary.value));
-});
+const contentGroups = computed(() => groupSegments(finalContentSegments.value));
 
 function groupSegments(sourceSegments: ChatSegmentType[]) {
   const groups: SegmentGroup[] = [];
@@ -112,7 +112,7 @@ function groupSegments(sourceSegments: ChatSegmentType[]) {
 }
 
 function isProcessSegment(segment: ChatSegmentType) {
-  return segment.type === "tool" || segment.type === "status" || segment.type === "thought";
+  return segment.type === "tool" || segment.type === "status" || segment.type === "thought" || segment.type === "error";
 }
 
 function isImageOnlyPromptText(text: string) {
@@ -248,10 +248,6 @@ function countCommandOutputSignals(text: string) {
   return signals.reduce((count, pattern) => count + (pattern.test(text) ? 1 : 0), 0);
 }
 
-function processGroupTitle(count: number) {
-  return `执行了 ${count} 个步骤`;
-}
-
 function formatElapsedLabel(value: string) {
   const secondsMatch = value.match(/^(\d+(?:\.\d+)?)s$/i) ?? value.match(/^(\d+)秒$/);
   if (!secondsMatch) return value;
@@ -278,42 +274,31 @@ function formatElapsedLabel(value: string) {
       </svg>
     </span>
     <div class="chat-message-body">
-      <details v-if="shouldShowStepContainer && stepGroups.length" class="chat-process-details" open>
+      <details v-if="shouldShowStepContainer && processSegments.length" class="chat-process-details" open>
         <summary class="chat-process-summary">
           <span>{{ processHeaderTitle }}</span>
           <span class="chat-process-main-chevron" aria-hidden="true"></span>
         </summary>
         <div class="chat-process-body">
-          <template v-for="(group, index) in stepGroups" :key="index">
-            <ChatSegment v-if="group.type === 'segment'" :segment="group.segment" />
-            <details v-else class="chat-process-group">
-              <summary>
-                <span>{{ processGroupTitle(group.segments.length) }}</span>
-                <svg class="chat-process-chevron" viewBox="0 0 16 16" fill="none" aria-hidden="true">
-                  <path d="M5 6.5 8 9.5l3-3" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" />
-                </svg>
-              </summary>
-              <div class="chat-process-group-body">
-                <ChatSegment v-for="(segment, segmentIndex) in group.segments" :key="segmentIndex" :segment="segment" />
-              </div>
-            </details>
-          </template>
+          <ChatSegment v-for="(segment, index) in processSegments" :key="index" :segment="segment" />
         </div>
       </details>
-      <template v-for="(group, index) in visibleContentGroups" :key="index">
-        <ChatSegment v-if="group.type === 'segment'" :segment="group.segment" />
-        <details v-else class="chat-process-group">
-          <summary>
-            <span>{{ processGroupTitle(group.segments.length) }}</span>
-            <svg class="chat-process-chevron" viewBox="0 0 16 16" fill="none" aria-hidden="true">
-              <path d="M5 6.5 8 9.5l3-3" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" />
-            </svg>
-          </summary>
-          <div class="chat-process-group-body">
-            <ChatSegment v-for="(segment, segmentIndex) in group.segments" :key="segmentIndex" :segment="segment" />
-          </div>
-        </details>
-      </template>
+      <div v-if="visibleContentGroups.length" class="chat-final-content">
+        <template v-for="(group, index) in visibleContentGroups" :key="index">
+          <ChatSegment v-if="group.type === 'segment'" :segment="group.segment" />
+          <details v-else class="chat-process-group">
+            <summary>
+              <span>执行过程 · {{ group.segments.length }} 步</span>
+              <svg class="chat-process-chevron" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+                <path d="M5 6.5 8 9.5l3-3" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" />
+              </svg>
+            </summary>
+            <div class="chat-process-group-body">
+              <ChatSegment v-for="(segment, segmentIndex) in group.segments" :key="segmentIndex" :segment="segment" />
+            </div>
+          </details>
+        </template>
+      </div>
       <div v-if="message.images?.length" class="chat-message-images" :aria-label="`已附 ${message.images.length} 张图片`">
         <button
           v-for="image in message.images"

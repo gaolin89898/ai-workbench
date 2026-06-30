@@ -73,6 +73,11 @@ function mergeChatSegment(segments: unknown[], segment: unknown): unknown[] {
   return next;
 }
 
+function mergeChatSegments(segments: unknown[], incoming: unknown): unknown[] {
+  if (!Array.isArray(incoming)) return segments;
+  return incoming.reduce((next, segment) => mergeChatSegment(next, segment), segments);
+}
+
 function loadStoredConfig(): StoredCloudConfig | null {
   try {
     if (!fs.existsSync(configPath)) return null;
@@ -546,17 +551,31 @@ class DesktopCloudSync {
     }
   }
 
-  private createAiChatSender(deviceId: string) {
+  createRendererAndMobileAiChatSender(rendererSender: { send: (channel: string, ...args: unknown[]) => void }) {
+    const config = loadStoredConfig();
+    const deviceId = config?.deviceId;
     return {
       send: (channel: string, ...args: unknown[]) => {
-        this.notify(channel, ...args);
-        if (channel !== "ai-chat-output") return;
+        rendererSender.send(channel, ...args);
+        if (!deviceId || channel !== "ai-chat-output") return;
         const event = args[0] as AiChatOutputEvent | undefined;
         if (!event?.aiSessionId) return;
+        if (event.kind === "status" && event.text === "mobile sent message") return;
         const draft = this.mobileAssistantDrafts.get(event.aiSessionId) ?? { text: "", segments: [], savedText: "" };
+        draft.segments = mergeChatSegments(draft.segments, event.segments);
+        if (event.segment) {
+          draft.segments = mergeChatSegment(draft.segments, event.segment);
+        }
         if (event.kind === "delta" && event.text) {
           draft.text += event.text;
           this.mobileAssistantDrafts.set(event.aiSessionId, draft);
+          this.send({
+            type: "ai.chat.output",
+            deviceId,
+            ...event,
+            text: event.text,
+            segments: draft.segments,
+          });
           this.send({
             type: "ai.message.delta",
             deviceId,
@@ -566,17 +585,9 @@ class DesktopCloudSync {
           });
           return;
         }
-        if (event.segment) {
-          draft.segments = mergeChatSegment(draft.segments, event.segment);
-          this.mobileAssistantDrafts.set(event.aiSessionId, draft);
-        }
         if (event.kind === "done") {
           const finalText = event.text?.trim() ? event.text : draft.text;
-          if (finalText.trim() && finalText !== draft.savedText) {
-            appendLocalAiMessage(event.aiSessionId, "assistant", encodeStructuredHistoryContent(finalText, draft.segments));
-            draft.savedText = finalText;
-            this.mobileAssistantDrafts.set(event.aiSessionId, draft);
-          }
+          this.mobileAssistantDrafts.set(event.aiSessionId, draft);
           this.send({
             type: "ai.chat.output",
             deviceId,
@@ -586,10 +597,71 @@ class DesktopCloudSync {
           });
           return;
         }
+        this.mobileAssistantDrafts.set(event.aiSessionId, draft);
         this.send({
           type: "ai.chat.output",
           deviceId,
           ...event,
+          segments: draft.segments,
+        });
+      },
+    };
+  }
+
+  private createAiChatSender(deviceId: string) {
+    return {
+      send: (channel: string, ...args: unknown[]) => {
+        this.notify(channel, ...args);
+        if (channel !== "ai-chat-output") return;
+        const event = args[0] as AiChatOutputEvent | undefined;
+        if (!event?.aiSessionId) return;
+        if (event.kind === "status" && event.text === "mobile sent message") return;
+        const draft = this.mobileAssistantDrafts.get(event.aiSessionId) ?? { text: "", segments: [], savedText: "" };
+        draft.segments = mergeChatSegments(draft.segments, event.segments);
+        if (event.segment) {
+          draft.segments = mergeChatSegment(draft.segments, event.segment);
+        }
+        if (event.kind === "delta" && event.text) {
+          draft.text += event.text;
+          this.mobileAssistantDrafts.set(event.aiSessionId, draft);
+          this.send({
+            type: "ai.chat.output",
+            deviceId,
+            ...event,
+            text: event.text,
+            segments: draft.segments,
+          });
+          this.send({
+            type: "ai.message.delta",
+            deviceId,
+            aiSessionId: event.aiSessionId,
+            content: event.text,
+            sequence: Date.now(),
+          });
+          return;
+        }
+        if (event.kind === "done") {
+          const finalText = event.text?.trim() ? event.text : draft.text;
+          if (finalText.trim() && finalText !== draft.savedText) {
+            appendLocalAiMessage(event.aiSessionId, "assistant", encodeStructuredHistoryContent(finalText, draft.segments));
+            draft.savedText = finalText;
+          }
+          this.mobileAssistantDrafts.set(event.aiSessionId, draft);
+          this.send({
+            type: "ai.chat.output",
+            deviceId,
+            ...event,
+            text: finalText,
+            segments: draft.segments,
+          });
+          return;
+        }
+        this.mobileAssistantDrafts.set(event.aiSessionId, draft);
+        this.send({
+          type: "ai.chat.output",
+          deviceId,
+          ...event,
+          segments: draft.segments,
         });
       },
     };
