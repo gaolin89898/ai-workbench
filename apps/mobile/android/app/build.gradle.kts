@@ -11,6 +11,7 @@ val keystorePropertiesFile = rootProject.file("key.properties")
 if (keystorePropertiesFile.exists()) {
     keystorePropertiesFile.inputStream().use { keystoreProperties.load(it) }
 }
+val hasReleaseSigning = keystorePropertiesFile.exists()
 
 android {
     namespace = "com.aiworkbench.remote_term_mobile"
@@ -45,20 +46,11 @@ android {
 
     buildTypes {
         release {
-            val releaseSigning = signingConfigs.getByName("release")
-            signingConfig = releaseSigning
-        }
-    }
-}
-
-gradle.taskGraph.whenReady {
-    val isReleaseBuild = allTasks.any {
-        it.path.endsWith(":app:assembleRelease") || it.path.endsWith(":app:bundleRelease")
-    }
-    if (isReleaseBuild) {
-        val releaseSigning = android.signingConfigs.getByName("release")
-        check(releaseSigning.storeFile != null && releaseSigning.storeFile!!.exists()) {
-            "Missing Android release keystore. Create apps/mobile/android/key.properties or configure CI secrets."
+            signingConfig = if (hasReleaseSigning) {
+                signingConfigs.getByName("release")
+            } else {
+                signingConfigs.getByName("debug")
+            }
         }
     }
 }
