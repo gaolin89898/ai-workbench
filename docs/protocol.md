@@ -151,6 +151,67 @@
 }
 ```
 
+### 结构化 AI 输出
+
+桌面端可以用 `ai.chat.output` 推送结构化执行过程。移动端和桌面端本地 UI 都会把 `segment` / `segments` 渲染为状态、工具调用、审批卡片、错误或最终文本。
+
+```json
+{
+  "type": "ai.chat.output",
+  "deviceId": "00000000-0000-0000-0000-000000000000",
+  "aiSessionId": "22222222-2222-2222-2222-222222222222",
+  "kind": "step-start",
+  "text": "正在执行命令",
+  "stepId": "tool-1",
+  "segment": {
+    "type": "tool",
+    "stepId": "tool-1",
+    "toolName": "shell",
+    "command": "pnpm run build",
+    "status": "running"
+  },
+  "segments": []
+}
+```
+
+常见 `kind`：
+
+- `status`：运行状态更新。
+- `step-start` / `step-update`：工具调用或审批状态变化。
+- `delta`：文本增量。
+- `done`：本轮完成。
+- `error`：本轮失败。
+
+常见 `segment.type`：
+
+- `text`
+- `status`
+- `thought`
+- `tool`
+- `approval`
+- `error`
+
+### 审批响应
+
+当 Codex 请求执行命令或应用文件修改时，桌面端会通过 `ai.chat.output` 推送 `approval` segment。移动端或桌面端用户选择后，通过 `ai.approval.respond` 返回一次性审批结果。
+
+```json
+{
+  "type": "ai.approval.respond",
+  "deviceId": "00000000-0000-0000-0000-000000000000",
+  "aiSessionId": "22222222-2222-2222-2222-222222222222",
+  "approvalId": "approval-1",
+  "decision": "approved"
+}
+```
+
+`decision` 目前只接受：
+
+- `approved`
+- `denied`
+
+服务端会校验账号、设备和会话归属，然后把消息转发给在线桌面端；真正响应 Codex 审批的是桌面端本地进程。
+
 ### AI 输出结束
 
 ```json
@@ -160,6 +221,32 @@
   "aiSessionId": "22222222-2222-2222-2222-222222222222",
   "status": "idle",
   "summary": "已完成登录流程检查"
+}
+```
+
+### 归档 / 恢复 AI 会话
+
+移动端可请求归档或恢复某个 AI 会话。服务端只校验归属并转发给桌面端，桌面端更新本机 SQLite 后再通过快照同步给移动端。
+
+```json
+{
+  "type": "ai.session.archive",
+  "deviceId": "00000000-0000-0000-0000-000000000000",
+  "aiSessionId": "22222222-2222-2222-2222-222222222222",
+  "archived": true
+}
+```
+
+### 重命名 AI 会话
+
+HTTP `PATCH /ai-sessions/:sessionId` 持久化云端标题后，会向桌面端转发 `ai.session.rename`，让本机 SQLite 的标题保持一致。
+
+```json
+{
+  "type": "ai.session.rename",
+  "deviceId": "00000000-0000-0000-0000-000000000000",
+  "aiSessionId": "22222222-2222-2222-2222-222222222222",
+  "title": "检查登录模块"
 }
 ```
 

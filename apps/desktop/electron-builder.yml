@@ -22,7 +22,7 @@ linux:
     - deb
   category: Development
   maintainer: gaolin89898
-  artifactName: ${productName}-${version}-${arch}.${ext}
+  artifactName: AI-Workbench-${version}-${arch}.${ext}
 deb:
   depends:
     - libgtk-3-0
@@ -36,7 +36,7 @@ deb:
     - libgbm1
     - libasound2
 appImage:
-  artifactName: ${productName}-${version}-${arch}.AppImage
+  artifactName: AI-Workbench-${version}-${arch}.AppImage
 publish:
   provider: github
   owner: gaolin89898

@@ -4,11 +4,12 @@ AI 工作台是一个多 AI Agent 桌面工作台原型，目标体验类似 Cod
 
 它的核心思路是：**桌面端负责真正运行本机 AI CLI，后端负责账号、配对和消息转发，移动端负责远程查看和控制桌面上的项目与 AI 会话。**
 
-项目当前包含三端：
+项目当前包含四个主要部分：
 
 - `backend`：Go 云端中转服务（`net/http` + `pgx`），负责账号、配对、设备、Provider 状态、项目元信息、AI 会话元信息、WebSocket 转发和高危内容检查。
-- `apps/desktop`：Electron 桌面主应用，负责本机 AI 工具检测、项目登记、Git 状态读取、本地 SQLite 历史能力、本地 AI 会话、shell pty 调试终端和配对入口。
+- `apps/desktop`：Electron 桌面主应用，负责本机 AI 工具检测、项目登记、Git 状态读取、本地 SQLite 历史能力、本地 AI 会话、独立项目 shell 和配对入口。
 - `apps/mobile`：Flutter 移动端，负责登录、设备列表、项目、AI 工具状态、AI 会话、聊天式控制、日志和设置。
+- `user-admin-system`：Vue 3 + Arco Design 管理后台，用于查看用户、桌面端/移动端在线状态、修改账号信息和重置密码。
 
 ## 项目速览
 
@@ -17,13 +18,14 @@ AI 工作台是一个多 AI Agent 桌面工作台原型，目标体验类似 Cod
 ├── apps/
 │   ├── desktop/              # Vue 3 + Electron 桌面端
 │   │   ├── src/              # 桌面端前端页面、路由和渲染进程逻辑
-│   │   ├── src/main/         # Electron 主进程（本地 SQLite、pty、本地 AI 会话、自动更新）
+│   │   ├── src/main/         # Electron 主进程（本地 SQLite、项目 shell、AI 会话、自动更新）
 │   │   └── src/preload/      # Electron preload 脚本
 │   └── mobile/               # Flutter 移动端
 ├── backend/                  # Go 后端服务和数据库迁移
+├── user-admin-system/        # Web 用户管理后台
 ├── docs/protocol.md          # WebSocket 协议说明
 ├── docker-compose.yml        # 本地 PostgreSQL
-└── Dockerfile                # 后端容器镜像
+└── docker-compose.prod.yml   # 生产 PostgreSQL + Go 后端编排
 ```
 
 主要入口：
@@ -34,14 +36,15 @@ AI 工作台是一个多 AI Agent 桌面工作台原型，目标体验类似 Cod
 - 桌面路由：[apps/desktop/src/router.ts](apps/desktop/src/router.ts)
 - 桌面主进程：[apps/desktop/src/main/index.ts](apps/desktop/src/main/index.ts)
 - 移动端入口：[apps/mobile/lib/main.dart](apps/mobile/lib/main.dart)
+- 用户管理后台入口：[user-admin-system/src/main.ts](user-admin-system/src/main.ts)
 
 ## 当前定位
 
 项目当前定位为 **AI 工作台**。
 
-核心使用路径是：用户先选择一个本地项目，然后创建新的 AI 会话，或接管已有的 `tmux` / `screen` 会话继续工作。
+核心使用路径是：用户先选择一个本地项目，然后在聊天页创建新的 AI 会话；终端页提供这个项目目录下的普通 shell，不会为了打开终端而创建 AI 会话。
 
-桌面端负责承载主要工作流，包括本地 Shell PTY、本地 AI 会话、本地项目管理和完整 AI 聊天历史。`tmux` / `screen` 仍然保留，用于兼容已有工作环境、接管历史会话和调试。
+桌面端负责承载主要工作流，包括独立项目 shell、本地 AI 会话、本地项目管理和完整 AI 聊天历史。`tmux` / `screen` 仍然保留，用于兼容已有工作环境、接管历史会话和调试。
 
 云端只作为账号、设备配对、状态同步和消息转发层使用。它保存设备、项目、会话元信息、摘要、状态和活动日志，不保存完整聊天内容。
 
@@ -65,11 +68,13 @@ AI_WORKBENCH_DB
 
 - 账号注册和登录。
 - 桌面设备配对。
+- 桌面端账号密码登录和 OAuth 设备绑定。
 - 设备列表、设备详情、活动日志、用户设置。
 - Provider 定义和每台桌面的 Provider 状态。
 - 每台桌面的项目列表和 AI 会话元信息。
 - AI 会话创建请求转发给在线桌面。
-- `ai.message.send`、`ai.history.request` 等 AI 协议的 WebSocket 转发。
+- `ai.message.send`、`ai.approval.respond`、`ai.session.archive`、`ai.history.request` 等 AI 协议的 WebSocket 转发。
+- 用户管理接口：列出用户、修改账号资料、重置密码。
 - 继续保留 `terminal.*` 协议作为底层兼容层。
 
 桌面端：
@@ -79,10 +84,11 @@ AI_WORKBENCH_DB
 - 添加本机项目目录并读取 `git branch --show-current`、`git status --short`。
 - 创建本地 AI 会话记录，并保存 provider、项目路径、标题、状态、摘要、归档状态和更新时间。
 - 本地 AI 会话可预热会话、记录 provider thread id，并在后续消息中 resume。
-- 支持 shell pty 调试终端：启动、输入、resize、读取缓冲、停止，并通过主进程事件推送输出。
+- 支持独立项目 shell：按项目路径启动 PTY、输入、resize、读取缓冲、停止，并通过主进程事件推送输出；该 shell 与 AI 会话解耦。
 - 接管已有 tmux/screen 会话的界面入口。
 - 本地 SQLite 表：`local_ai_sessions`、`local_ai_messages`。
 - 支持本地 AI 会话归档 / 取消归档。
+- 支持 Codex 审批卡片，移动端和桌面端都可以响应本次命令或文件修改审批。
 - 桌面配对入口。
 
 移动端：
@@ -92,7 +98,7 @@ AI_WORKBENCH_DB
 - 项目列表、项目详情，并从项目入口创建或接管 AI 会话。
 - AI 工具状态页。
 - AI 会话列表、新建 AI 会话、聊天页。
-- 通过 WebSocket 发送 `ai.message.send`，接收 `ai.message.delta` 和 `ai.history.response`。
+- 通过 WebSocket 发送 `ai.message.send`、`ai.approval.respond`、`ai.session.archive`，接收 `ai.chat.output`、`ai.message.delta` 和 `ai.history.response`。
 - 日志页和设置页。
 - 底层终端调试页仍可打开 tmux/screen 会话。
 
@@ -147,7 +153,7 @@ export DINGTALK_REDIRECT_URL=https://你的服务域名/oauth/dingtalk/callback
 
 - Node.js 22
 - pnpm 10
-- Electron 33（首次 `pnpm install` 时自动拉取）
+- Electron 42（首次 `pnpm install` 时自动拉取）
 
 依赖装好后运行：
 
@@ -157,7 +163,7 @@ pnpm install
 pnpm dev
 ```
 
-`pnpm dev` 等价于 `electron-vite dev`，会同时启动渲染进程的 Vite dev server 和 Electron 主进程。如果 dev server 端口被占用，修改 [apps/desktop/electron.vite.config.ts](apps/desktop/electron.vite.config.ts) 中的配置。默认窗口为 1440×900，最小 1024×640，可在主进程中调整。
+`pnpm dev` 等价于 `electron-vite dev`，会同时启动渲染进程的 Vite dev server 和 Electron 主进程。渲染进程默认固定使用 `127.0.0.1:1420`；如果端口被占用，需要先停止旧的 dev 进程，或修改 [apps/desktop/electron.vite.config.ts](apps/desktop/electron.vite.config.ts) 中的配置。默认窗口为 1440×900，最小 1024×640，可在主进程中调整。
 
 桌面端本机历史数据库默认在：
 
@@ -190,6 +196,18 @@ http://127.0.0.1:3000
 
 如果手机真机访问本机服务，需要把 `127.0.0.1` 换成电脑在局域网里的 IP，并确保防火墙允许访问。
 
+## 启动用户管理后台
+
+用户管理后台位于 `user-admin-system`，基于 Vue 3、Vite 和 Arco Design。开发服务器默认把 `/api` 代理到当前生产后端 `http://8.162.12.148:3000`，可在 [user-admin-system/vite.config.ts](user-admin-system/vite.config.ts) 中调整。
+
+```bash
+cd user-admin-system
+pnpm install
+pnpm dev
+```
+
+页面会使用 `/auth/login` 或 `/auth/register` 获取 token，再访问 `/admin/users`、`/admin/users/:userId` 和 `/admin/users/:userId/reset-password`。
+
 ## 配对桌面
 
 1. 先在移动端登录，进入配对页生成一次性配对码。
@@ -202,6 +220,10 @@ http://127.0.0.1:3000
 
 - `POST /auth/register`
 - `POST /auth/login`
+- `POST /desktop/login`
+- `POST /desktop/pairing-requests`
+- `GET /desktop/pairing-requests/:code`
+- `POST /desktop/pairing-requests/:code/approve`
 - `GET /oauth/dingtalk/start`
 - `GET /oauth/dingtalk/callback`
 - `GET /oauth/dingtalk/poll`
@@ -220,6 +242,13 @@ AI 工作台元信息：
 - `GET /devices/:deviceId/ai-sessions`：获取某台桌面的 AI 会话元信息。
 - `POST /devices/:deviceId/ai-sessions`：创建 AI 会话元信息，并向在线桌面转发创建请求。
 - `GET /ai-sessions/:sessionId`：获取单个 AI 会话元信息。
+- `PATCH /ai-sessions/:sessionId`：重命名 AI 会话，并转发给在线桌面同步本地 SQLite。
+
+管理后台：
+
+- `GET /admin/users`：列出系统用户及桌面端 / 移动端在线状态。
+- `PATCH /admin/users/:userId`：修改用户账号或显示名。
+- `POST /admin/users/:userId/reset-password`：重置用户密码。
 
 兼容 / 调试：
 
@@ -249,6 +278,9 @@ AI 主协议包括：
 - `ai.sessions.snapshot`
 - `ai.session.create`
 - `ai.message.send`
+- `ai.approval.respond`
+- `ai.session.archive`
+- `ai.chat.output`
 - `ai.message.delta`
 - `ai.message.done`
 - `ai.history.request`
@@ -270,7 +302,7 @@ go test ./...
 
 ```bash
 cd apps/desktop
-pnpm build
+pnpm run build
 ```
 
 打包 Linux 安装包：
@@ -289,6 +321,13 @@ flutter analyze
 
 当前环境如果没有 Flutter SDK，会看到 `flutter: command not found`，需要先安装 Flutter 后再执行。
 
+用户管理后台构建：
+
+```bash
+cd user-admin-system
+pnpm run build
+```
+
 ## 桌面端自动更新
 
 桌面端使用 electron-updater 从 GitHub Releases 拉取更新。发布 `v*` 标签后，GitHub Actions 会构建 Electron 安装包并上传 `latest.yml`，桌面端可在“设置 -> 应用更新”里检查、下载并重启安装。
@@ -297,16 +336,17 @@ flutter analyze
 
 ## 设计稿
 
-`.pen` 设计稿位于仓库根目录：
+设计稿和导出的 HTML 预览位于以下目录：
 
-- `icon.pen`：图标设计稿。
-- `pencil-new.pen`：整体 UI 设计稿（桌面端 + 移动端），包含工作台首页、AI 工具、新建 AI 会话、聊天会话、项目详情、设置，以及移动端工作台、项目、新建会话、AI 聊天、AI 工具、日志/设置等页面。
+- `ai-workbench-desktop-light-design/`：桌面端浅色工作台设计稿和页面预览。
+- `ai-workbench-mobile-design/`：移动端设计稿和页面预览。
+- `ai-workbench-mobile-redesign-draft/`：移动端重设计草稿。
 
 设计稿导出的临时资源可能不会全部保留在仓库中，实际应用图标以 `apps/desktop/src/assets/icons/` 为准。
 
 ## v1 边界
 
-- v1 不直接接管任意图形终端窗口。主路径优先走桌面端本地 AI 会话；`tmux` / `screen` 作为兼容和调试路径保留。
+- v1 不直接接管任意图形终端窗口。主路径优先走桌面端本地 AI 会话；终端页只是当前项目目录下的普通 shell，不会自动创建 AI 会话；`tmux` / `screen` 作为兼容和调试路径保留。
 - “接管已有会话”指接管已有 `tmux` / `screen` 的 window/pane；Codex、Claude Code 等工具内部自己的项目/对话历史不属于系统会话列表，只有当它们运行在某个 tmux/screen pane 里时才能被接管。
 - Windows v1 优先走 WSL + tmux。
 - 云端不保存完整聊天内容，只保存元信息和摘要。

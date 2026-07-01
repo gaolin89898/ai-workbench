@@ -7,9 +7,11 @@ Go 后端通过 Docker Compose 部署在生产服务器上，由 PostgreSQL 17 +
 | 组件 | 镜像 | 说明 |
 | --- | --- | --- |
 | postgres | `postgres:17` | 数据持久化到 named volume `postgres-data` |
-| server | 本地构建 `ai-workbench-server` | 基于 [Dockerfile](../Dockerfile) 多阶段构建，golang:1.22-alpine 编译，alpine:3.20 运行 |
+| server | 本地构建 `ai-workbench-server` | 基于根目录 `Dockerfile` 构建 Go 后端运行镜像 |
 
 编排文件：[docker-compose.prod.yml](../docker-compose.prod.yml)
+
+> `backend/Dockerfile.runtime` 和 `backend/docker-compose.prod.yml` 是后端运行镜像的备用/历史部署文件；当前根目录生产部署主路径使用根目录 [docker-compose.prod.yml](../docker-compose.prod.yml)。
 密钥文件：服务器上 `/opt/ai-workbench/.env`（权限 600，不入库）
 
 ## 服务器信息
@@ -203,7 +205,7 @@ docker exec -it ai-workbench-postgres-1 psql -U remote_term -d remote_term \
 
 ### 构建时 `go: downloading ... i/o timeout`
 
-`proxy.golang.org` 被墙。Dockerfile 已配置 `GOPROXY=https://goproxy.cn,direct`，若仍失败检查服务器 DNS。
+`proxy.golang.org` 被墙。根目录 Dockerfile 已配置国内 Go 代理；若仍失败，先检查服务器 DNS 和 Docker 网络。
 
 ### 外部访问 502 / 超时
 
