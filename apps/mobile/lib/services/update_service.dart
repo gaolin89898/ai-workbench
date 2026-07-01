@@ -141,7 +141,9 @@ class MobileUpdateService {
       if (item is! Map<String, dynamic>) continue;
       if (item['draft'] == true || item['prerelease'] == true) continue;
       final tagName = item['tag_name'] as String? ?? '';
-      if (!tagName.startsWith('mobile-v')) continue;
+      if (!tagName.startsWith('v') && !tagName.startsWith('mobile-v')) {
+        continue;
+      }
       final assets = item['assets'] as List<dynamic>? ?? const [];
       final hasApk = assets.any((asset) {
         return asset is Map<String, dynamic> &&
@@ -153,7 +155,7 @@ class MobileUpdateService {
   }
 
   String? _mobileVersionFromTag(String tagName) {
-    final match = RegExp(r'^mobile-v(.+)$').firstMatch(tagName);
+    final match = RegExp(r'^(?:mobile-)?v(.+)$').firstMatch(tagName);
     return match?.group(1);
   }
 
