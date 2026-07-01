@@ -208,8 +208,9 @@ export function createLocalAiSession(params: {
   title: string;
   status: string;
   summary?: string | null;
+  updatedAt?: string | null;
 }): AiSession {
-  const now = new Date().toISOString();
+  const now = params.updatedAt || new Date().toISOString();
   db.prepare(
     `INSERT INTO local_ai_sessions
       (id, provider_id, terminal_session_id, provider_session_id, title, status, summary, archived_at, updated_at)
@@ -251,6 +252,7 @@ export function updateLocalAiSession(
     status: string;
     summary: string | null;
     title: string;
+    updatedAt: string | null;
   }>
 ): AiSession {
   const sets: string[] = [];
@@ -271,8 +273,13 @@ export function updateLocalAiSession(
     sets.push("title = ?");
     values.push(updates.title);
   }
-  sets.push("updated_at = ?");
-  values.push(new Date().toISOString());
+  if (updates.updatedAt !== undefined) {
+    sets.push("updated_at = ?");
+    values.push(updates.updatedAt ?? new Date().toISOString());
+  } else {
+    sets.push("updated_at = ?");
+    values.push(new Date().toISOString());
+  }
   values.push(aiSessionId);
   const result = db
     .prepare(`UPDATE local_ai_sessions SET ${sets.join(", ")} WHERE id = ?`)
@@ -320,10 +327,111 @@ export function appendLocalAiMessage(
   ).run(aiSessionId, role, content, now);
 }
 
+export function replaceLocalAiHistory(
+  aiSessionId: string,
+  messages: Array<{ role: ChatMessage["role"]; content: string; createdAt?: string }>
+): void {
+  const insert = db.prepare(
+    `INSERT INTO local_ai_messages (ai_session_id, role, content, created_at)
+     VALUES (?, ?, ?, ?)`
+  );
+  const replace = db.transaction(() => {
+    db.prepare("DELETE FROM local_ai_messages WHERE ai_session_id = ?").run(aiSessionId);
+    for (const message of messages) {
+      insert.run(aiSessionId, message.role, message.content, message.createdAt ?? new Date().toISOString());
+    }
+  });
+  replace();
+}
+
+export function mergeLocalAiHistory(
+  aiSessionId: string,
+  messages: Array<{ role: ChatMessage["role"]; content: string; createdAt?: string }>
+): boolean {
+  const existingRows = db
+    .prepare("SELECT id, role, content, created_at FROM local_ai_messages WHERE ai_session_id = ? ORDER BY id ASC")
+    .all(aiSessionId) as Array<{ id: number; role: string; content: string; created_at: string }>;
+  const exactSeen = new Set(existingRows.map((message) =>
+    `${message.role}\u0000${message.created_at}\u0000${message.content}`
+  ));
+  const rowsByTurn = new Map<string, Array<{ id: number; content: string }>>();
+  for (const row of existingRows) {
+    const key = `${row.role}\u0000${row.created_at}`;
+    rowsByTurn.set(key, [...(rowsByTurn.get(key) ?? []), { id: row.id, content: row.content }]);
+  }
+  const insert = db.prepare(
+    `INSERT INTO local_ai_messages (ai_session_id, role, content, created_at)
+     VALUES (?, ?, ?, ?)`
+  );
+  const update = db.prepare("UPDATE local_ai_messages SET content = ? WHERE id = ?");
+  const removeDuplicate = db.prepare("DELETE FROM local_ai_messages WHERE id = ?");
+  let changed = 0;
+  const merge = db.transaction(() => {
+    for (const message of messages) {
+      const createdAt = message.createdAt ?? new Date().toISOString();
+      const key = `${message.role}\u0000${createdAt}\u0000${message.content}`;
+      if (exactSeen.has(key)) continue;
+      const turnKey = `${message.role}\u0000${createdAt}`;
+      const existingTurnRows = rowsByTurn.get(turnKey);
+      if (existingTurnRows?.length) {
+        const keeper = existingTurnRows[0];
+        if (keeper.content !== message.content) {
+          update.run(message.content, keeper.id);
+          keeper.content = message.content;
+          changed += 1;
+        }
+        for (const duplicate of existingTurnRows.slice(1)) {
+          removeDuplicate.run(duplicate.id);
+          changed += 1;
+        }
+        rowsByTurn.set(turnKey, [keeper]);
+        exactSeen.add(key);
+        continue;
+      }
+      const result = insert.run(aiSessionId, message.role, message.content, createdAt);
+      const insertedId = Number(result.lastInsertRowid);
+      rowsByTurn.set(turnKey, [{ id: insertedId, content: message.content }]);
+      exactSeen.add(key);
+      changed += 1;
+    }
+  });
+  merge();
+  return changed > 0;
+}
+
+function compactLocalAiHistory(aiSessionId: string): void {
+  const rows = db
+    .prepare("SELECT id, role, content, created_at FROM local_ai_messages WHERE ai_session_id = ? ORDER BY id ASC")
+    .all(aiSessionId) as Array<{ id: number; role: string; content: string; created_at: string }>;
+  const bestByTurn = new Map<string, { id: number; content: string }>();
+  const idsToDelete: number[] = [];
+  for (const row of rows) {
+    const key = `${row.role}\u0000${row.created_at}`;
+    const current = bestByTurn.get(key);
+    if (!current) {
+      bestByTurn.set(key, { id: row.id, content: row.content });
+      continue;
+    }
+    if (row.content.length > current.content.length) {
+      idsToDelete.push(current.id);
+      bestByTurn.set(key, { id: row.id, content: row.content });
+    } else {
+      idsToDelete.push(row.id);
+    }
+  }
+  if (!idsToDelete.length) return;
+  const remove = db.prepare("DELETE FROM local_ai_messages WHERE id = ?");
+  const compact = db.transaction(() => {
+    for (const id of idsToDelete) remove.run(id);
+  });
+  compact();
+}
+
 export function listLocalAiHistory(aiSessionId: string): AiHistoryMessage[] {
+  compactLocalAiHistory(aiSessionId);
   const rows = db
     .prepare(
-      "SELECT * FROM local_ai_messages WHERE ai_session_id = ? ORDER BY id ASC"
+      "SELECT * FROM local_ai_messages WHERE ai_session_id = ? ORDER BY datetime(created_at) ASC, id ASC"
     )
     .all(aiSessionId) as MessageRow[];
   return rows.map(rowToMessage);

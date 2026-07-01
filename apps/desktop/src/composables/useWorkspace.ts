@@ -1,12 +1,13 @@
 import { computed, ref, watch } from "vue";
 import router from "../router";
-import { desktopApi, type AiChatOutputEvent, type AiProvider, type AiSession, type ChatImageAttachment, type ChatMessage, type ChatSegment, type DesktopPairingStatus, type ProviderStatus, type TerminalSession, type ViewName, type WorkspaceProject } from "../services/desktop";
+import { desktopApi, type AiChatOutputEvent, type AiProvider, type AiSession, type ChatImageAttachment, type ChatMessage, type ChatSegment, type CodexProjectSession, type DesktopPairingStatus, type ProviderStatus, type TerminalSession, type ViewName, type WorkspaceProject } from "../services/desktop";
 import { decodeAssistantMessageFromStorage, encodeAssistantMessageForStorage, extractAssistantText } from "../utils/chat";
 
 const providers = ref<AiProvider[]>([]);
 const providerStatuses = ref<ProviderStatus[]>([]);
 const projects = ref<WorkspaceProject[]>([]);
 const aiSessions = ref<AiSession[]>([]);
+const codexProjectSessions = ref<Record<string, CodexProjectSession[]>>({});
 const terminalSessions = ref<TerminalSession[]>([]);
 const activeAiSession = ref<AiSession | null>(null);
 const showArchivedSessions = ref(false);
@@ -109,6 +110,7 @@ type PendingAssistant = {
   prompt: string;
   steps: Map<string, ChatSegment>;
   finalText: string;
+  lastCommittedText: string;
   currentAgentMessageStepId: string | null;
   startedAt: number;
   hasBackendStatus: boolean;
@@ -160,7 +162,7 @@ function formatCompactElapsedMs(elapsedMs: number) {
 
 function elapsedStatusLabel(startedAt: number) {
   const elapsedMs = Math.max(0, Math.round(performance.now() - startedAt));
-  return `已处理 ${formatCompactElapsedMs(elapsedMs)}`;
+  return `正在思考 ${formatCompactElapsedMs(elapsedMs)}`;
 }
 
 function providerDisplayName(providerId?: string | null) {
@@ -257,6 +259,10 @@ function chatClientId(prefix: string) {
   return `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
+function projectShellSessionId(projectPath: string) {
+  return `project:${projectPath}`;
+}
+
 const routePaths: Record<ViewName, string> = {
   workspace: "/workspace",
   projects: "/projects",
@@ -313,7 +319,23 @@ async function loadLocalWorkspace() {
   ]);
   projects.value = storedProjects;
   aiSessions.value = storedSessions;
+  await refreshCodexProjectSessions(storedProjects);
   ensureSelectedProject();
+}
+
+async function refreshCodexProjectSessions(projectList = projects.value) {
+  if (!projectList.length) {
+    codexProjectSessions.value = {};
+    return;
+  }
+  const entries = await Promise.all(projectList.map(async (project) => {
+    try {
+      return [project.path, await desktopApi.listCodexProjectSessions(project.path)] as const;
+    } catch {
+      return [project.path, []] as const;
+    }
+  }));
+  codexProjectSessions.value = Object.fromEntries(entries);
 }
 
 function ensureSelectedProject() {
@@ -503,6 +525,25 @@ async function createAiSession(): Promise<AiSession | null> {
   }
 }
 
+async function importCodexProjectSession(session: CodexProjectSession): Promise<AiSession | null> {
+  try {
+    const imported = await desktopApi.importCodexProjectSession({
+      projectPath: session.cwd,
+      providerSessionId: session.id,
+      title: session.title,
+      updatedAt: session.updatedAt,
+    });
+    aiSessions.value = [imported, ...aiSessions.value.filter((item) => item.id !== imported.id)].sort(sortSessionsByUpdatedAt);
+    await setActiveAiSession(imported);
+    await refreshCodexProjectSessions();
+    return imported;
+  } catch (error) {
+    chatMessages.value = [{ role: "error", text: `打开 Codex 会话失败：${String(error)}` }];
+    switchView("aiSessions");
+    return null;
+  }
+}
+
 function warmupAiForSession(sessionId: string) {
   const providerName = providerNameForSession(sessionId);
   pushChatDebugEvent(`warmup ${providerName}: ${sessionId.slice(0, 8)}`);
@@ -542,6 +583,33 @@ async function startShellForActiveSession(forceRestart = false) {
 
 async function restartShellForActiveSession() {
   await startShellForActiveSession(true);
+}
+
+async function startShellForProject(projectPath: string, forceRestart = false) {
+  await initAiEventListeners();
+  const cwd = projectPath.trim();
+  if (!cwd) return "";
+  const sessionId = projectShellSessionId(cwd);
+  if (liveShellSessions.value[sessionId] && !forceRestart) return sessionId;
+  try {
+    if (forceRestart) {
+      shellBuffers.value = { ...shellBuffers.value, [sessionId]: "" };
+      liveShellSessions.value = { ...liveShellSessions.value, [sessionId]: false };
+    }
+    await desktopApi.startShellPty({ aiSessionId: sessionId, cwd });
+    liveShellSessions.value = { ...liveShellSessions.value, [sessionId]: true };
+  } catch (error) {
+    liveShellSessions.value = { ...liveShellSessions.value, [sessionId]: false };
+    shellBuffers.value = {
+      ...shellBuffers.value,
+      [sessionId]: `启动 shell 失败：${String(error)}\r\n`,
+    };
+  }
+  return sessionId;
+}
+
+async function restartShellForProject(projectPath: string) {
+  await startShellForProject(projectPath, true);
 }
 
 async function setActiveAiSession(session: AiSession) {
@@ -589,15 +657,20 @@ async function loadAiSessionHistorySnapshot(sessionId: string) {
   });
 }
 
-async function loadAiSessionHistory(sessionId: string) {
+async function loadAiSessionHistory(sessionId: string, options: { force?: boolean } = {}) {
   try {
-    if (pendingAssistants.has(sessionId)) return;
+    if (!options.force && pendingAssistants.has(sessionId)) return;
     const history = await loadAiSessionHistorySnapshot(sessionId);
-    if (activeAiSession.value?.id !== sessionId || pendingAssistants.has(sessionId)) return;
+    if (activeAiSession.value?.id !== sessionId || (!options.force && pendingAssistants.has(sessionId))) return;
     chatMessages.value = history;
   } catch (error) {
-    if (!pendingAssistants.has(sessionId)) chatMessages.value = [{ role: "error", text: `读取历史失败：${String(error)}` }];
+    if (options.force || !pendingAssistants.has(sessionId)) chatMessages.value = [{ role: "error", text: `读取历史失败：${String(error)}` }];
   }
+}
+
+function isCodexExternalMirrorSession(session: AiSession | null) {
+  if (!session || session.providerId !== "codex" || !session.providerSessionId || !session.summary) return false;
+  return !session.providerSessionId.startsWith("app-server:");
 }
 
 async function sendPrompt(prompt: string, images: ChatImageAttachment[] = []) {
@@ -668,6 +741,7 @@ async function sendPrompt(prompt: string, images: ChatImageAttachment[] = []) {
     prompt: promptForSession,
     steps: new Map([["initial-thinking", assistantMessage.segments![0]]]),
     finalText: "",
+    lastCommittedText: "",
     currentAgentMessageStepId: null,
     startedAt: performance.now(),
     hasBackendStatus: false,
@@ -719,6 +793,9 @@ async function sendPrompt(prompt: string, images: ChatImageAttachment[] = []) {
       pushChatDebugEvent(`${providerName} 进程已退出：用时 ${formatElapsedMs(elapsedMs)}`);
       replacePendingAssistantText(sessionId, pending.finalText, true);
       completePendingAssistantFromExec(sessionId);
+      window.setTimeout(() => {
+        void loadAiSessionHistory(sessionId, { force: true });
+      }, 600);
       setChatRunState(sessionId, {
         active: false,
         phase: "done",
@@ -818,6 +895,7 @@ function ensureIncomingPendingAssistant(sessionId: string, history: ChatMessage[
     prompt: "",
     steps: new Map([["initial-thinking", assistantMessage.segments![0]]]),
     finalText: "",
+    lastCommittedText: "",
     currentAgentMessageStepId: null,
     startedAt: performance.now(),
     hasBackendStatus: false,
@@ -845,7 +923,6 @@ function updatePendingAssistantStatus(sessionId: string, text: string) {
     title: described.title,
     detail: described.detail,
   });
-  pending.steps.delete("initial-thinking");
   if (text.includes("会话已连接")) {
     pending.steps.delete("conversation-guided");
   } else if (!pending.steps.has("runtime-status")) {
@@ -862,31 +939,33 @@ function replacePendingAssistantText(sessionId: string, text: string, done = fal
   const pending = pendingAssistants.get(sessionId);
   if (!pending) return;
   pending.finalText = extractAssistantText(text);
-  pending.steps.delete("initial-thinking");
   syncPendingAssistantSegments(sessionId, done);
   thinkingSessionIds.value = { ...thinkingSessionIds.value, [sessionId]: !done };
+}
+
+function commitCurrentAssistantTextAsThought(pending: PendingAssistant) {
+  const currentStepId = pending.currentAgentMessageStepId;
+  const previousFinalText = extractAssistantText(pending.finalText.trim());
+  if (!currentStepId || !previousFinalText || previousFinalText === pending.lastCommittedText) return;
+  const thoughtStepId = `process-text-${currentStepId}`;
+  pending.steps.set(thoughtStepId, {
+    type: "text",
+    stepId: thoughtStepId,
+    text: previousFinalText,
+  });
+  pending.lastCommittedText = previousFinalText;
 }
 
 function appendPendingAssistantText(sessionId: string, text: string, stepId?: string | null) {
   const pending = pendingAssistants.get(sessionId);
   if (!pending || !text) return;
   if (stepId && stepId !== pending.currentAgentMessageStepId) {
-    if (pending.currentAgentMessageStepId && pending.finalText.trim()) {
-      const thoughtStepId = `thought-${pending.currentAgentMessageStepId}`;
-      pending.steps.set(thoughtStepId, {
-        type: "thought",
-        stepId: thoughtStepId,
-        title: "中间结论",
-        text: pending.finalText.trim(),
-        collapsed: true,
-      });
-    }
+    commitCurrentAssistantTextAsThought(pending);
     pending.finalText = text;
     pending.currentAgentMessageStepId = stepId;
   } else {
     pending.finalText = extractAssistantText(`${pending.finalText}${text}`);
   }
-  pending.steps.delete("initial-thinking");
   syncPendingAssistantSegments(sessionId, false);
   thinkingSessionIds.value = { ...thinkingSessionIds.value, [sessionId]: true };
 }
@@ -894,8 +973,8 @@ function appendPendingAssistantText(sessionId: string, text: string, stepId?: st
 function completePendingAssistantFromExec(sessionId: string) {
   const pending = pendingAssistants.get(sessionId);
   if (!pending) return;
-  const text = pending.message.text?.trim() ?? "";
-  if (!text) return;
+  const text = extractAssistantText((pending.finalText || pending.message.text || "").trim());
+  pending.finalText = text;
   upsertCompletionSummary(sessionId);
   syncPendingAssistantSegments(sessionId, true);
   const finalText = extractAssistantText(pending.finalText.trim());
@@ -962,10 +1041,8 @@ function upsertPendingSegment(sessionId: string, segment: ChatSegment) {
   const pending = pendingAssistants.get(sessionId);
   const stepId = segment.stepId;
   if (!pending || !stepId) return;
-  pending.steps.delete("initial-thinking");
   if (segment.type === "status") {
     if (shouldHideBackendStatus(segment.label)) return;
-    if (pending.lastStatusText === segment.label) return;
     pending.lastStatusText = segment.label;
     pending.hasBackendStatus = true;
     const providerName = providerNameForSession(sessionId);
@@ -976,10 +1053,12 @@ function upsertPendingSegment(sessionId: string, segment: ChatSegment) {
       title: described.title,
       detail: segment.detail ?? described.detail,
     });
-    pending.steps.delete("initial-thinking");
     if (segment.label.includes("会话已连接")) {
       pending.steps.delete("conversation-guided");
-    } else if (!pending.steps.has("runtime-status")) {
+    } else {
+      pending.steps.set(stepId, { ...(pending.steps.get(stepId) ?? {}), ...segment } as ChatSegment);
+    }
+    if (!pending.steps.has("runtime-status")) {
       pending.steps.set("runtime-status", {
         type: "status",
         stepId: "runtime-status",
@@ -988,6 +1067,9 @@ function upsertPendingSegment(sessionId: string, segment: ChatSegment) {
     }
     syncPendingAssistantSegments(sessionId, pending.message.pending === false);
     return;
+  }
+  if (segment.type === "tool") {
+    commitCurrentAssistantTextAsThought(pending);
   }
   pending.steps.set(stepId, { ...(pending.steps.get(stepId) ?? {}), ...segment } as ChatSegment);
   syncPendingAssistantSegments(sessionId, pending.message.pending === false);
@@ -998,13 +1080,18 @@ function syncPendingAssistantSegments(sessionId: string, done = false) {
   if (!pending) return;
   const segments = [...pending.steps.values()].filter((segment) => (
     !done || segment.type !== "status" || isPersistentStatusSegment(segment)
-  ));
+  )).map((segment) => finalizeSegmentForDone(segment, done));
   patchPendingAssistant(sessionId, {
     pending: !done,
     role: "assistant",
     text: pending.finalText,
     segments,
   });
+}
+
+function finalizeSegmentForDone(segment: ChatSegment, done: boolean): ChatSegment {
+  if (!done || segment.type !== "tool" || segment.status !== "running") return segment;
+  return { ...segment, status: "success" };
 }
 
 function upsertCompletionSummary(sessionId: string) {
@@ -1017,6 +1104,7 @@ function upsertCompletionSummary(sessionId: string) {
     type: "status",
     stepId: "final-summary",
     label: `已处理 ${formatCompactElapsedMs(elapsedMs)}`,
+    durationMs: elapsedMs,
   });
 }
 
@@ -1057,8 +1145,23 @@ async function sendShellInput(text: string) {
   await desktopApi.sendShellInput({ aiSessionId: sessionId, text, submit: false });
 }
 
+async function sendProjectShellInput(projectPath: string, text: string) {
+  const sessionId = projectPath ? projectShellSessionId(projectPath) : "";
+  if (!sessionId || !text) return;
+  if (!liveShellSessions.value[sessionId]) await startShellForProject(projectPath);
+  if (liveShellSessions.value[sessionId] === false) return;
+  await desktopApi.sendShellInput({ aiSessionId: sessionId, text, submit: false });
+}
+
 async function resizeShell(cols: number, rows: number) {
   const sessionId = activeAiSession.value?.id;
+  if (!sessionId) return;
+  if (liveShellSessions.value[sessionId] === false) return;
+  await desktopApi.resizeShell({ aiSessionId: sessionId, cols, rows });
+}
+
+async function resizeProjectShell(projectPath: string, cols: number, rows: number) {
+  const sessionId = projectPath ? projectShellSessionId(projectPath) : "";
   if (!sessionId) return;
   if (liveShellSessions.value[sessionId] === false) return;
   await desktopApi.resizeShell({ aiSessionId: sessionId, cols, rows });
@@ -1139,6 +1242,9 @@ async function handleAiChatOutputEvent(event: AiChatOutputEvent) {
           replacePendingAssistantText(event.aiSessionId, pending.finalText, true);
         }
         completePendingAssistantFromExec(event.aiSessionId);
+        window.setTimeout(() => {
+          void loadAiSessionHistory(event.aiSessionId, { force: true });
+        }, 600);
         setChatRunState(event.aiSessionId, {
           active: false,
           phase: "done",
@@ -1198,11 +1304,17 @@ async function initWorkspaceEventListeners() {
   workspaceEventsInitPromise = desktopApi.onWorkspaceChanged(() => {
     const activeSessionId = activeAiSession.value?.id;
     void loadLocalWorkspace();
-    if (activeSessionId && !pendingAssistants.has(activeSessionId)) void loadAiSessionHistory(activeSessionId);
+    if (activeSessionId && !isCodexExternalMirrorSession(activeAiSession.value) && !pendingAssistants.has(activeSessionId)) {
+      void loadAiSessionHistory(activeSessionId);
+    }
   }).then(async () => {
     await desktopApi.onAiHistoryChanged((event) => {
       void loadLocalWorkspace();
-      if (activeAiSession.value?.id === event.aiSessionId && !pendingAssistants.has(event.aiSessionId)) {
+      if (
+        activeAiSession.value?.id === event.aiSessionId
+        && !isCodexExternalMirrorSession(activeAiSession.value)
+        && !pendingAssistants.has(event.aiSessionId)
+      ) {
         void loadAiSessionHistory(event.aiSessionId);
       }
     });
@@ -1525,6 +1637,7 @@ export function useWorkspace() {
     providerStatuses,
     projects,
     aiSessions,
+    codexProjectSessions,
     terminalSessions,
     activeAiSession,
     showArchivedSessions,
@@ -1560,11 +1673,13 @@ export function useWorkspace() {
     shellBuffers,
     liveShellSessions,
     thinkingSessionIds,
+    projectShellSessionId,
     activeSessions,
     archivedSessions,
     refreshWorkspace,
     loadProviders,
     loadLocalWorkspace,
+    refreshCodexProjectSessions,
     detectProviders,
     refreshTerminalSessions,
     chooseProject,
@@ -1576,17 +1691,22 @@ export function useWorkspace() {
     resetChatControlsForNewSession,
     createAiSessionForProject,
     attachAiSessionForProject,
+    importCodexProjectSession,
     prepareProjectSession,
     createAiSession,
     startShellForActiveSession,
     restartShellForActiveSession,
+    startShellForProject,
+    restartShellForProject,
     setActiveAiSession,
     selectAiSessionFromDropdown,
     loadAiSessionHistory,
     sendPrompt,
     stopActiveAiChat,
     sendShellInput,
+    sendProjectShellInput,
     resizeShell,
+    resizeProjectShell,
     archiveAiSession,
     renameAiSession,
     isSessionPinned,

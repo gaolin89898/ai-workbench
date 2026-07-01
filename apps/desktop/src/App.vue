@@ -9,6 +9,7 @@ const checkingAuth = ref(true);
 const authenticated = ref(false);
 const email = ref("");
 const password = ref("");
+const showPassword = ref(false);
 const loading = ref(false);
 const oauthLoading = ref(false);
 const oauthStatus = ref("");
@@ -126,7 +127,31 @@ function handleLogout() {
         </label>
         <label class="desktop-login-field">
           <span>密码</span>
-          <input v-model="password" type="password" autocomplete="current-password" placeholder="请输入密码" />
+          <div class="desktop-login-password-input">
+            <input
+              v-model="password"
+              :type="showPassword ? 'text' : 'password'"
+              autocomplete="current-password"
+              placeholder="请输入密码"
+            />
+            <button
+              type="button"
+              class="desktop-login-password-toggle"
+              :aria-label="showPassword ? '隐藏密码' : '显示密码'"
+              @click="showPassword = !showPassword"
+            >
+              <svg v-if="showPassword" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                <path d="M3 3l18 18" stroke="currentColor" stroke-width="2" stroke-linecap="round" />
+                <path d="M10.6 10.6a2 2 0 0 0 2.8 2.8" stroke="currentColor" stroke-width="2" stroke-linecap="round" />
+                <path d="M9.9 4.4A9.8 9.8 0 0 1 12 4c5 0 8.3 4.2 9.5 6a2.5 2.5 0 0 1 0 2.1 14.4 14.4 0 0 1-2.1 2.7" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
+                <path d="M6.4 6.4A14.1 14.1 0 0 0 2.5 10a2.5 2.5 0 0 0 0 2.1C3.7 13.8 7 18 12 18c1.2 0 2.3-.2 3.3-.7" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
+              </svg>
+              <svg v-else viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                <path d="M2.5 10.9a2.5 2.5 0 0 0 0 2.2C3.7 14.9 7 19 12 19s8.3-4.1 9.5-5.9a2.5 2.5 0 0 0 0-2.2C20.3 9.1 17 5 12 5s-8.3 4.1-9.5 5.9Z" stroke="currentColor" stroke-width="2" stroke-linejoin="round" />
+                <circle cx="12" cy="12" r="3" stroke="currentColor" stroke-width="2" />
+              </svg>
+            </button>
+          </div>
         </label>
         <p v-if="error" class="desktop-login-error">{{ error }}</p>
         <button class="desktop-login-button" type="submit" :disabled="loading">

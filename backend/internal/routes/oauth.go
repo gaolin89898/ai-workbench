@@ -1,27 +1,29 @@
 // Package routes: OAuth handlers for third-party login.
 //
 // 钉钉扫码登录（网站应用）流程：
-//   1. 客户端 GET /oauth/dingtalk/start
-//        → 服务端生成 state，存到 oauthSessions + 设置 cookie
-//        → 返回 { authUrl, state }，客户端用 BrowserWindow/系统浏览器打开
-//   2. 用户在钉钉扫码确认 → 钉钉回调 /oauth/dingtalk/callback?code=...&state=...
-//        → 服务端校验 state、换 accessToken、拉用户信息、查/建本地用户、签发 JWT
-//        → 结果存到 oauthSessions[state]，并返回给浏览器一个简单的 HTML 提示页
-//   3. 客户端用 state 轮询 GET /oauth/dingtalk/poll?state=...
-//        → pending: 服务端仍在等钉钉回调
-//        → success: 返回 { accessToken, refreshToken, userId, displayName, provider }
-//        → error: 返回错误信息
-//        → expired: 超过 10 分钟
+//  1. 客户端 GET /oauth/dingtalk/start
+//     → 服务端生成 state，存到 oauthSessions + 设置 cookie
+//     → 返回 { authUrl, state }，客户端用 BrowserWindow/系统浏览器打开
+//  2. 用户在钉钉扫码确认 → 钉钉回调 /oauth/dingtalk/callback?code=...&state=...
+//     → 服务端校验 state、换 accessToken、拉用户信息、查/建本地用户、签发 JWT
+//     → 结果存到 oauthSessions[state]，并返回给浏览器一个简单的 HTML 提示页
+//  3. 客户端用 state 轮询 GET /oauth/dingtalk/poll?state=...
+//     → pending: 服务端仍在等钉钉回调
+//     → success: 返回 { accessToken, refreshToken, userId, displayName, provider }
+//     → error: 返回错误信息
+//     → expired: 超过 10 分钟
 //
 // 凭证通过环境变量 DINGTALK_CLIENT_ID/SECRET/REDIRECT_URL 注入。三者任一为空
 // 时 start/callback/poll 都返回 503。
 package routes
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"html"
 	"io"
 	"net/http"
 	"net/url"
@@ -80,6 +82,15 @@ type dingTalkTokenResponse struct {
 	AccessToken  string `json:"accessToken"`
 	RefreshToken string `json:"refreshToken"`
 	ExpiresIn    int64  `json:"expiresIn"`
+}
+
+// dingTalkTokenRequest is the JSON body expected by DingTalk's
+// userAccessToken endpoint.
+type dingTalkTokenRequest struct {
+	ClientID     string `json:"clientId"`
+	ClientSecret string `json:"clientSecret"`
+	Code         string `json:"code"`
+	GrantType    string `json:"grantType"`
 }
 
 // dingTalkUserInfo 钉钉 /contact/users/me 接口的响应（只关心部分字段）。
@@ -193,7 +204,7 @@ func (h *Handler) dingTalkOAuthCallback(w http.ResponseWriter, r *http.Request) 
 			errMessage: err.Error(),
 			createdAt:  session.createdAt,
 		})
-		writeError(w, http.StatusUnauthorized, "dingtalk token exchange failed: "+err.Error())
+		writeOAuthCallbackFailure(w, "登录失败", "钉钉授权校验失败，请回到 AI 工作台重试。")
 		return
 	}
 
@@ -205,7 +216,7 @@ func (h *Handler) dingTalkOAuthCallback(w http.ResponseWriter, r *http.Request) 
 			errMessage: err.Error(),
 			createdAt:  session.createdAt,
 		})
-		writeError(w, http.StatusUnauthorized, "dingtalk user info failed: "+err.Error())
+		writeOAuthCallbackFailure(w, "登录失败", "无法获取钉钉用户信息，请回到 AI 工作台重试。")
 		return
 	}
 	externalID := userInfo.UnionID
@@ -218,7 +229,7 @@ func (h *Handler) dingTalkOAuthCallback(w http.ResponseWriter, r *http.Request) 
 			errMessage: "dingtalk returned no user identifier",
 			createdAt:  session.createdAt,
 		})
-		writeError(w, http.StatusUnauthorized, "dingtalk returned no user identifier")
+		writeOAuthCallbackFailure(w, "登录失败", "钉钉没有返回可绑定的用户标识，请联系管理员检查应用权限。")
 		return
 	}
 
@@ -230,7 +241,7 @@ func (h *Handler) dingTalkOAuthCallback(w http.ResponseWriter, r *http.Request) 
 			errMessage: err.Error(),
 			createdAt:  session.createdAt,
 		})
-		writeError(w, http.StatusInternalServerError, "oauth user create failed: "+err.Error())
+		writeOAuthCallbackFailure(w, "登录失败", "本地账号绑定失败，请回到 AI 工作台重试。")
 		return
 	}
 
@@ -242,7 +253,7 @@ func (h *Handler) dingTalkOAuthCallback(w http.ResponseWriter, r *http.Request) 
 			errMessage: "token sign failed",
 			createdAt:  session.createdAt,
 		})
-		writeInternal(w)
+		writeOAuthCallbackFailure(w, "登录失败", "本地登录凭证生成失败，请回到 AI 工作台重试。")
 		return
 	}
 	refreshToken, err := auth.GenerateRefreshToken(userID, h.Secret)
@@ -252,7 +263,7 @@ func (h *Handler) dingTalkOAuthCallback(w http.ResponseWriter, r *http.Request) 
 			errMessage: "refresh token sign failed",
 			createdAt:  session.createdAt,
 		})
-		writeInternal(w)
+		writeOAuthCallbackFailure(w, "登录失败", "本地刷新凭证生成失败，请回到 AI 工作台重试。")
 		return
 	}
 
@@ -279,6 +290,19 @@ func (h *Handler) dingTalkOAuthCallback(w http.ResponseWriter, r *http.Request) 
 		`p{color:#64748b;margin-top:8px}</style></head><body><main>`+
 		`<h1>✓</h1><p>登录成功，请回到 AI 工作台应用</p></main>`+
 		`<script>setTimeout(()=>window.close(),3000)</script></body></html>`)
+}
+
+func writeOAuthCallbackFailure(w http.ResponseWriter, title, message string) {
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.WriteHeader(http.StatusOK)
+	_, _ = io.WriteString(w, `<!doctype html><html><head><meta charset="utf-8"><title>`+
+		html.EscapeString(title)+`</title>`+
+		`<style>body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;`+
+		`display:flex;align-items:center;justify-content:center;height:100vh;margin:0;`+
+		`background:#f8fafc;color:#0f172a}main{text-align:center;max-width:520px;padding:24px}`+
+		`h1{color:#ef4444;font-size:28px;margin:0 0 10px}p{color:#64748b;margin:0;line-height:1.6}</style>`+
+		`</head><body><main><h1>`+html.EscapeString(title)+`</h1><p>`+html.EscapeString(message)+`</p></main>`+
+		`<script>setTimeout(()=>window.close(),5000)</script></body></html>`)
 }
 
 // dingTalkOAuthPoll 客户端用 state 轮询登录结果。
@@ -310,7 +334,7 @@ func (h *Handler) dingTalkOAuthPoll(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, oauthPollResponse{Status: oauthStatusPending})
 	case oauthStatusSuccess:
 		writeJSON(w, http.StatusOK, oauthPollResponse{
-			Status:               oauthStatusSuccess,
+			Status:                oauthStatusSuccess,
 			oauthCallbackResponse: session.result,
 		})
 		// 成功后清掉会话，避免重复消费
@@ -351,9 +375,11 @@ func (h *Handler) oauthDingTalkConfig() *OAuthConfig {
 
 // exchangeDingTalkToken 用 authorizationCode 换 userAccessToken。
 func exchangeDingTalkToken(ctx context.Context, clientID, clientSecret, authCode string) (*dingTalkTokenResponse, error) {
-	body := fmt.Sprintf(`{"clientId":"%s","clientSecret":"%s","code":"%s","grantType":"authorization_code"}`,
-		clientID, clientSecret, authCode)
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, dingTalkTokenURL, strings.NewReader(body))
+	body, err := dingTalkTokenRequestBody(clientID, clientSecret, authCode)
+	if err != nil {
+		return nil, err
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, dingTalkTokenURL, bytes.NewReader(body))
 	if err != nil {
 		return nil, err
 	}
@@ -381,6 +407,15 @@ func exchangeDingTalkToken(ctx context.Context, clientID, clientSecret, authCode
 		return nil, errors.New("dingtalk returned empty accessToken")
 	}
 	return &out, nil
+}
+
+func dingTalkTokenRequestBody(clientID, clientSecret, authCode string) ([]byte, error) {
+	return json.Marshal(dingTalkTokenRequest{
+		ClientID:     clientID,
+		ClientSecret: clientSecret,
+		Code:         authCode,
+		GrantType:    "authorization_code",
+	})
 }
 
 // fetchDingTalkUserInfo 用 accessToken 拉 /contact/users/me。
@@ -415,7 +450,9 @@ func fetchDingTalkUserInfo(ctx context.Context, accessToken string) (*dingTalkUs
 // findOrCreateOAuthUser 按 provider+externalId 查 user_oauth_identities。
 // 已绑定：直接返回 user_id。
 // 未绑定：建新 users 行（无 email 时用 provider+externalId 凑一个占位邮箱，
-//         password_hash 留 NULL），再插 user_oauth_identities。
+//
+//	password_hash 留 NULL），再插 user_oauth_identities。
+//
 // 若 OAuth 返回的 email 已被密码登录用户占用，会自动合并到该用户。
 func (h *Handler) findOrCreateOAuthUser(ctx context.Context, provider, externalID, displayName, email string) (string, string, error) {
 	// 1. 已绑定？
@@ -434,7 +471,7 @@ func (h *Handler) findOrCreateOAuthUser(ctx context.Context, provider, externalI
 	// 2. 未绑定。若 OAuth 返回了 email，尝试按 email 找现有用户合并。
 	displayName = strings.TrimSpace(displayName)
 	if displayName == "" {
-		displayName = fmt.Sprintf("%s用户_%s", provider, externalID[:8])
+		displayName = fmt.Sprintf("%s用户_%s", provider, shortExternalID(externalID))
 	}
 
 	tx, err := h.DB.Pool.Begin(ctx)
@@ -494,4 +531,11 @@ func (h *Handler) findOrCreateOAuthUser(ctx context.Context, provider, externalI
 		return "", "", err
 	}
 	return userID, displayName, nil
+}
+
+func shortExternalID(externalID string) string {
+	if len(externalID) <= 8 {
+		return externalID
+	}
+	return externalID[:8]
 }

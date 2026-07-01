@@ -1,19 +1,30 @@
 <script setup lang="ts">
-import { computed } from "vue";
+import { computed, ref } from "vue";
 import ChatSegment from "./ChatSegment.vue";
 import type { ChatMessage, ChatSegment as ChatSegmentType } from "../services/desktop";
 import { assistantOutputToSegments, extractAssistantText, formatChatMessageText } from "../utils/chat";
 
 const props = defineProps<{
   message: ChatMessage;
+  aiSessionId?: string;
 }>();
+const activeMobileProcessGroupIndex = ref<number | null>(null);
 
 const rawSegments = computed<ChatSegmentType[]>(() => {
-  const messageText = extractAssistantText(props.message.text ?? "").trim();
+  const storedText = extractAssistantText(props.message.text ?? "").trim();
+  const promoted = props.message.role === "assistant"
+    ? promoteFinalTextFromSegments(props.message.segments ?? [], storedText)
+    : { text: storedText, promotedIndex: -1 };
+  const messageText = promoted.text;
   if (props.message.segments?.length) {
     if (props.message.role !== "assistant" || !messageText) return props.message.segments;
-    const processOnlySegments = props.message.segments.filter((segment) => segment.type !== "text");
-    return [...processOnlySegments, { type: "text", text: messageText }];
+    return [
+      ...props.message.segments.filter((segment, index) => (
+        index !== promoted.promotedIndex
+        && (isProcessTextSegment(segment) || segment.type !== "text")
+      )),
+      { type: "text", stepId: "final-answer", text: messageText },
+    ];
   }
   if (props.message.role === "assistant") {
     return assistantOutputToSegments(messageText, "");
@@ -21,7 +32,28 @@ const rawSegments = computed<ChatSegmentType[]>(() => {
   return [{ type: "text", text: formatChatMessageText(props.message.text ?? "") }];
 });
 
-const segments = computed<ChatSegmentType[]>(() => normalizeHistoricalCommandOutputSegments(rawSegments.value));
+function promoteFinalTextFromSegments(sourceSegments: ChatSegmentType[], fallbackText: string) {
+  if (fallbackText || !sourceSegments.length) return { text: fallbackText, promotedIndex: -1 };
+  for (let index = sourceSegments.length - 1; index >= 0; index -= 1) {
+    const segment = sourceSegments[index];
+    if (!isProcessTextSegment(segment) || !looksLikeFinalAssistantText(segment.text)) continue;
+    return { text: segment.text.trim(), promotedIndex: index };
+  }
+  return { text: fallbackText, promotedIndex: -1 };
+}
+
+function looksLikeFinalAssistantText(text: string) {
+  const normalized = text.trim();
+  if (!normalized) return false;
+  if (normalized.length >= 160) return true;
+  return /^(?:已按|我已|我会|结论|总结|这里|现在|可以|如果|这次|这样)/.test(normalized)
+    || /(?:已完成|已处理|已修复|已实现|构建通过|验证通过|不会|可以|需要|建议)/.test(normalized);
+}
+
+const segments = computed<ChatSegmentType[]>(() => {
+  const normalized = normalizeProcessCommentarySegments(normalizeHistoricalCommandOutputSegments(rawSegments.value));
+  return normalizeCompletedToolStatuses(normalized);
+});
 
 const processSummary = computed(() => {
   return segments.value.find((segment) => segment.type === "status" && segment.stepId === "final-summary");
@@ -31,12 +63,16 @@ type RenderGroup =
   | { type: "segment"; segment: ChatSegmentType }
   | { type: "process"; segments: ChatSegmentType[] };
 
+type ProcessBodyItem =
+  | { type: "segment"; segment: ChatSegmentType }
+  | { type: "stage"; title: string; segments: ChatSegmentType[]; conclusion?: ChatSegmentType };
+
 const visibleSegments = computed<ChatSegmentType[]>(() => {
   const isUserImageOnly = props.message.role === "user"
     && props.message.images?.length
     && isImageOnlyPromptText(props.message.text ?? "");
   return segments.value.filter((segment) => {
-    if (segment.stepId === "runtime-status" || segment.stepId === "initial-thinking") return false;
+    if (!props.message.pending && (segment.stepId === "runtime-status" || segment.stepId === "initial-thinking")) return false;
     if (segment === processSummary.value) return false;
     if (isUserImageOnly && segment.type === "text" && isImageOnlyPromptText(segment.text)) return false;
     return true;
@@ -44,29 +80,233 @@ const visibleSegments = computed<ChatSegmentType[]>(() => {
 });
 
 const contentGroups = computed<RenderGroup[]>(() => {
+  const segments = visibleSegments.value;
+  const firstProcessIndex = segments.findIndex(isProcessGroupSegment);
+  if (firstProcessIndex < 0) {
+    return segments.map((segment) => ({ type: "segment", segment }));
+  }
+
+  let lastProcessIndex = firstProcessIndex;
+  for (let index = firstProcessIndex + 1; index < segments.length; index += 1) {
+    if (isProcessGroupSegment(segments[index])) lastProcessIndex = index;
+  }
+  const processEndIndex = props.message.pending ? segments.length - 1 : completedProcessEndIndex(segments, lastProcessIndex);
+
   const groups: RenderGroup[] = [];
-  let processRun: ChatSegmentType[] = [];
-  for (const segment of visibleSegments.value) {
-    if (isProcessSegment(segment)) {
-      processRun.push(segment);
-      continue;
-    }
-    if (processRun.length) {
-      groups.push({ type: "process", segments: processRun });
-      processRun = [];
-    }
+  for (const segment of segments.slice(0, firstProcessIndex)) {
     groups.push({ type: "segment", segment });
   }
-  if (processRun.length) groups.push({ type: "process", segments: processRun });
+  groups.push({ type: "process", segments: segments.slice(firstProcessIndex, processEndIndex + 1) });
+  for (const segment of segments.slice(processEndIndex + 1)) {
+    groups.push({ type: "segment", segment });
+  }
   return groups;
 });
 
+const showPendingThinking = computed(() => {
+  if (!props.message.pending || props.message.role !== "assistant") return false;
+  const hasVisibleContent = visibleSegments.value.some((segment) => {
+    if (isProcessGroupSegment(segment)) return true;
+    return segment.type !== "text" || Boolean(segment.text?.trim());
+  });
+  return !hasVisibleContent && !props.message.images?.length;
+});
+
+const activeMobileProcessGroup = computed(() => {
+  const index = activeMobileProcessGroupIndex.value;
+  if (index === null) return null;
+  const group = contentGroups.value[index];
+  return group?.type === "process" ? { group, index } : null;
+});
+
 function isProcessSegment(segment: ChatSegmentType) {
-  return segment.type === "tool" || segment.type === "status" || segment.type === "thought" || segment.type === "error";
+  return segment.type === "tool" || segment.type === "status" || segment.type === "thought" || segment.type === "approval" || segment.type === "error";
+}
+
+function isProcessGroupSegment(segment: ChatSegmentType) {
+  return isProcessSegment(segment) || isProcessTextSegment(segment);
+}
+
+function isProcessTextSegment(segment: ChatSegmentType) {
+  return segment.type === "text" && isProcessTextStepId(segment.stepId);
+}
+
+function isProcessTextStepId(stepId?: string) {
+  return Boolean(stepId && /^(?:process-text|thought|commentary)-/.test(stepId));
+}
+
+function completedProcessEndIndex(segments: ChatSegmentType[], lastProcessIndex: number) {
+  const lastIndex = segments.length - 1;
+  if (lastIndex > lastProcessIndex && segments[lastIndex]?.type === "text" && Boolean(segments[lastIndex].text?.trim())) {
+    return Math.max(lastProcessIndex, lastIndex - 1);
+  }
+  return lastProcessIndex;
+}
+
+function processGroupHasFinalText(groupIndex: number) {
+  return contentGroups.value.slice(groupIndex + 1).some((group) => {
+    return group.type === "segment" && group.segment.type === "text" && Boolean(group.segment.text?.trim());
+  });
+}
+
+function processGroupTitle(group: Extract<RenderGroup, { type: "process" }>, groupIndex: number) {
+  const duration = processGroupDurationMs(group.segments);
+  const prefix = props.message.pending && !processGroupHasFinalText(groupIndex) ? "正在处理" : "已处理";
+  return duration ? `${prefix} ${formatCompactDuration(duration)}` : prefix;
+}
+
+function processGroupOpen(groupIndex: number) {
+  return Boolean(props.message.pending && !processGroupHasFinalText(groupIndex));
+}
+
+function processGroupDurationMs(segments: ChatSegmentType[]) {
+  if (processSummary.value?.durationMs) return processSummary.value.durationMs;
+  const groupDuration = segments.reduce((max, segment) => {
+    if (segment.type !== "tool" && segment.type !== "thought") return max;
+    return Math.max(max, segment.durationMs ?? 0);
+  }, 0);
+  return groupDuration;
+}
+
+function onProcessSummaryClick(event: MouseEvent, group: Extract<RenderGroup, { type: "process" }>, groupIndex: number) {
+  if (!isMobileProcessSheetViewport()) return;
+  event.preventDefault();
+  activeMobileProcessGroupIndex.value = groupIndex;
+}
+
+function closeMobileProcessSheet() {
+  activeMobileProcessGroupIndex.value = null;
+}
+
+function isMobileProcessSheetViewport() {
+  return window.matchMedia("(max-width: 720px)").matches;
+}
+
+function formatCompactDuration(durationMs: number) {
+  if (durationMs < 1000) return `${durationMs}ms`;
+  const totalSeconds = Math.max(1, Math.round(durationMs / 1000));
+  const seconds = totalSeconds % 60;
+  const totalMinutes = Math.floor(totalSeconds / 60);
+  if (!totalMinutes) return `${seconds}秒`;
+  const minutes = totalMinutes % 60;
+  const hours = Math.floor(totalMinutes / 60);
+  if (!hours) return seconds ? `${minutes}分${seconds}秒` : `${minutes}分`;
+  return seconds ? `${hours}时${minutes}分${seconds}秒` : `${hours}时${minutes}分`;
+}
+
+function processBodyItems(group: Extract<RenderGroup, { type: "process" }>): ProcessBodyItem[] {
+  const items: ProcessBodyItem[] = [];
+  let stageRun: ChatSegmentType[] = [];
+  let conclusion: ChatSegmentType | undefined;
+
+  const flushStageRun = () => {
+    if (!stageRun.length) {
+      if (conclusion) {
+        items.push({ type: "segment", segment: conclusion });
+        conclusion = undefined;
+      }
+      return;
+    }
+    items.push({
+      type: "stage",
+      title: processStageTitle(stageRun),
+      segments: stageRun,
+      conclusion,
+    });
+    stageRun = [];
+    conclusion = undefined;
+  };
+
+  for (const segment of group.segments) {
+    if (isProcessConclusionSegment(segment)) {
+      conclusion = segment;
+      flushStageRun();
+      continue;
+    }
+    if (isProcessStageSegment(segment)) {
+      stageRun.push(segment);
+      continue;
+    }
+    flushStageRun();
+    items.push({ type: "segment", segment });
+  }
+  flushStageRun();
+  return items;
+}
+
+function isProcessStageSegment(segment: ChatSegmentType) {
+  return segment.type === "thought" || segment.type === "status" || segment.type === "tool" || segment.type === "approval" || segment.type === "error";
+}
+
+function isProcessConclusionSegment(segment: ChatSegmentType) {
+  return segment.type === "text" && isProcessTextStepId(segment.stepId);
+}
+
+function processStageTitle(segments: ChatSegmentType[]) {
+  const runningTool = segments.find((segment) => segment.type === "tool" && segment.status === "running");
+  if (runningTool?.type === "tool") return toolStageTitle(runningTool);
+  const pendingApproval = segments.find((segment) => segment.type === "approval" && segment.status === "pending");
+  if (pendingApproval?.type === "approval") return pendingApproval.approvalKind === "fileChange" ? "正在修改文件" : "正在等待命令确认";
+  const latestStatus = [...segments].reverse().find((segment) => segment.type === "status");
+  if (latestStatus?.type === "status") return latestStatus.label;
+  const hasThought = segments.some((segment) => segment.type === "thought");
+  if (hasThought) return props.message.pending ? "正在思考" : "已思考";
+  const erroredTool = segments.find((segment) => segment.type === "tool" && segment.status === "error");
+  if (erroredTool?.type === "tool") return "处理失败";
+  return props.message.pending ? "正在处理" : "已处理";
+}
+
+function toolStageTitle(segment: Extract<ChatSegmentType, { type: "tool" }>) {
+  if (segment.toolName.includes("修改") || segment.toolName.includes("文件")) return "正在修改文件";
+  if (segment.toolName.includes("扫描")) return "正在扫描项目";
+  if (segment.toolName.includes("命令") || segment.command) return "正在运行命令";
+  return segment.summary || `正在处理 ${segment.toolName}`;
+}
+
+function processStageDurationMs(segments: ChatSegmentType[]) {
+  return segments.reduce((total, segment) => total + ("durationMs" in segment ? segment.durationMs ?? 0 : 0), 0);
+}
+
+function processStageRunning(segments: ChatSegmentType[]) {
+  return segments.some((segment) => {
+    return segment.type === "tool" && segment.status === "running"
+      || segment.type === "approval" && segment.status === "pending";
+  });
 }
 
 function isImageOnlyPromptText(text: string) {
   return /^查看这\s*\d+\s*张图片$/.test(text.trim());
+}
+
+function normalizeProcessCommentarySegments(sourceSegments: ChatSegmentType[]) {
+  const normalized: ChatSegmentType[] = [];
+  for (let index = 0; index < sourceSegments.length; index += 1) {
+    const segment = sourceSegments[index];
+    if (!isProcessCommentaryThought(segment)) {
+      normalized.push(segment);
+      continue;
+    }
+
+    const next = sourceSegments[index + 1];
+    normalized.push({ type: "text", stepId: `process-text-${segment.stepId ?? index}`, text: segment.text });
+    if (next?.type === "tool") {
+      normalized.push(next);
+      index += 1;
+    }
+  }
+  return normalized;
+}
+
+function isProcessCommentaryThought(segment: ChatSegmentType) {
+  return segment.type === "thought" && (segment.title === "执行说明" || segment.title === "中间结论");
+}
+
+function normalizeCompletedToolStatuses(sourceSegments: ChatSegmentType[]) {
+  if (props.message.pending) return sourceSegments;
+  return sourceSegments.map((segment) => {
+    if (segment.type !== "tool" || segment.status !== "running") return segment;
+    return { ...segment, status: "success" };
+  });
 }
 
 function collectAdjacentCommandOutput(sourceSegments: ChatSegmentType[], startIndex: number, command?: string) {
@@ -212,20 +452,44 @@ function countCommandOutputSignals(text: string) {
     </span>
     <div class="chat-message-body">
       <template v-for="(group, index) in contentGroups" :key="index">
-        <ChatSegment v-if="group.type === 'segment'" :segment="group.segment" />
-        <details v-else class="chat-process-group" :open="message.pending">
-          <summary class="chat-process-group-summary">
+        <ChatSegment v-if="group.type === 'segment'" :segment="group.segment" :ai-session-id="aiSessionId" />
+        <details v-else class="chat-process-group" :open="processGroupOpen(index)">
+          <summary class="chat-process-group-summary" @click="onProcessSummaryClick($event, group, index)">
             <span class="chat-process-group-icon" :class="{ running: message.pending }" aria-hidden="true"></span>
-            <span>执行过程 · {{ group.segments.length }} 步</span>
+            <span>{{ processGroupTitle(group, index) }}</span>
             <svg class="chat-process-chevron" viewBox="0 0 16 16" fill="none" aria-hidden="true">
               <path d="M5 6.5 8 9.5l3-3" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" />
             </svg>
           </summary>
           <div class="chat-process-group-body">
-            <ChatSegment v-for="(segment, segmentIndex) in group.segments" :key="segmentIndex" :segment="segment" />
+            <template v-for="(item, itemIndex) in processBodyItems(group)" :key="itemIndex">
+              <ChatSegment v-if="item.type === 'segment'" :segment="item.segment" :ai-session-id="aiSessionId" />
+              <section v-else class="chat-process-stage">
+                <header class="chat-process-stage-header">
+                  <span class="chat-process-stage-dot" :class="{ running: processStageRunning(item.segments) }" aria-hidden="true"></span>
+                  <strong>{{ item.title }}</strong>
+                  <small v-if="processStageDurationMs(item.segments)">{{ formatCompactDuration(processStageDurationMs(item.segments)) }}</small>
+                </header>
+                <div class="chat-process-stage-body">
+                  <ChatSegment
+                    v-for="(segment, segmentIndex) in item.segments"
+                    :key="segmentIndex"
+                    :segment="segment"
+                    :ai-session-id="aiSessionId"
+                  />
+                  <div v-if="item.conclusion" class="chat-process-stage-conclusion">
+                    <ChatSegment :segment="item.conclusion" :ai-session-id="aiSessionId" />
+                  </div>
+                </div>
+              </section>
+            </template>
           </div>
         </details>
       </template>
+      <div v-if="showPendingThinking" class="chat-pending-line">
+        <span>正在思考</span>
+        <span class="thinking-dots" aria-hidden="true"><i></i><i></i><i></i></span>
+      </div>
       <div v-if="message.images?.length" class="chat-message-images" :aria-label="`已附 ${message.images.length} 张图片`">
         <button
           v-for="image in message.images"
@@ -238,5 +502,52 @@ function countCommandOutputSignals(text: string) {
         </button>
       </div>
     </div>
+    <Teleport to="body">
+      <div
+        v-if="activeMobileProcessGroup"
+        class="chat-process-sheet"
+        role="dialog"
+        aria-modal="true"
+        aria-label="执行过程"
+        @click.self="closeMobileProcessSheet"
+      >
+        <section class="chat-process-sheet-panel">
+          <header class="chat-process-sheet-header">
+            <div>
+              <small>执行过程</small>
+              <strong>{{ processGroupTitle(activeMobileProcessGroup.group, activeMobileProcessGroup.index) }}</strong>
+            </div>
+            <button type="button" aria-label="关闭执行过程" @click="closeMobileProcessSheet">
+              <svg viewBox="0 0 16 16" fill="none" aria-hidden="true">
+                <path d="M4.5 4.5 11.5 11.5M11.5 4.5 4.5 11.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" />
+              </svg>
+            </button>
+          </header>
+          <div class="chat-process-sheet-body">
+            <template v-for="(item, itemIndex) in processBodyItems(activeMobileProcessGroup.group)" :key="itemIndex">
+              <ChatSegment v-if="item.type === 'segment'" :segment="item.segment" :ai-session-id="aiSessionId" />
+              <section v-else class="chat-process-stage">
+                <header class="chat-process-stage-header">
+                  <span class="chat-process-stage-dot" :class="{ running: processStageRunning(item.segments) }" aria-hidden="true"></span>
+                  <strong>{{ item.title }}</strong>
+                  <small v-if="processStageDurationMs(item.segments)">{{ formatCompactDuration(processStageDurationMs(item.segments)) }}</small>
+                </header>
+                <div class="chat-process-stage-body">
+                  <ChatSegment
+                    v-for="(segment, segmentIndex) in item.segments"
+                    :key="segmentIndex"
+                    :segment="segment"
+                    :ai-session-id="aiSessionId"
+                  />
+                  <div v-if="item.conclusion" class="chat-process-stage-conclusion">
+                    <ChatSegment :segment="item.conclusion" :ai-session-id="aiSessionId" />
+                  </div>
+                </div>
+              </section>
+            </template>
+          </div>
+        </section>
+      </div>
+    </Teleport>
   </div>
 </template>

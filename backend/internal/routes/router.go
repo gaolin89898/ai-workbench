@@ -87,6 +87,9 @@ func (h *Handler) Router() http.Handler {
 	authed.HandleFunc("GET /activity-logs", h.listActivityLogs)
 	authed.HandleFunc("GET /settings", h.getSettings)
 	authed.HandleFunc("PUT /settings", h.updateSettings)
+	authed.HandleFunc("GET /admin/users", h.listManagedUsers)
+	authed.HandleFunc("PATCH /admin/users/{userId}", h.updateManagedUser)
+	authed.HandleFunc("POST /admin/users/{userId}/reset-password", h.resetManagedUserPassword)
 
 	mux.Handle("/", auth.AuthMiddleware(h.Secret, authed))
 
@@ -98,7 +101,7 @@ func (h *Handler) Router() http.Handler {
 func corsMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Access-Control-Allow-Origin", "*")
-		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
+		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS")
 		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
 		if r.Method == http.MethodOptions {
 			w.WriteHeader(http.StatusNoContent)

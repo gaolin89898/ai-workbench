@@ -36,7 +36,8 @@ class _UpdatePageState extends State<UpdatePage> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                AppSectionTitle('移动端安装包', subtitle: '从 OpenList 直接下载最新 APK'),
+                AppSectionTitle('移动端安装包',
+                    subtitle: '从 GitHub Releases 下载最新 APK'),
                 const SizedBox(height: AppSpacing.lg),
                 FilledButton.icon(
                   onPressed: _checking ? null : _checkUpdate,
@@ -76,12 +77,14 @@ class _UpdatePageState extends State<UpdatePage> {
                 if (update != null) ...[
                   const SizedBox(height: 14),
                   _UpdateStatus(update: update),
-                  const SizedBox(height: AppSpacing.md),
-                  FilledButton.icon(
-                    onPressed: _opening ? null : _installUpdate,
-                    icon: const Icon(Icons.download),
-                    label: Text(_opening ? '下载中' : '下载安装包'),
-                  ),
+                  if (update.available) ...[
+                    const SizedBox(height: AppSpacing.md),
+                    FilledButton.icon(
+                      onPressed: _opening ? null : _installUpdate,
+                      icon: const Icon(Icons.download),
+                      label: Text(_opening ? '下载中' : '下载安装包'),
+                    ),
+                  ],
                 ],
               ],
             ),
@@ -100,14 +103,16 @@ class _UpdatePageState extends State<UpdatePage> {
     setState(() {
       _checking = true;
       _progress = null;
-      _status = '正在检查 OpenList 安装包...';
+      _status = '正在检查 GitHub Releases...';
     });
     try {
       final update = await _updates.check();
       if (!mounted) return;
       setState(() {
         _update = update;
-        _status = '发现移动端安装包 v${update.version ?? update.currentVersion}，可直接下载并安装。';
+        _status = update.available
+            ? '发现移动端安装包 v${update.version ?? update.currentVersion}，可直接下载并安装。'
+            : '当前已是最新版本 v${update.currentVersion}。';
       });
     } catch (error) {
       if (mounted) setState(() => _status = '检查更新失败：$error');

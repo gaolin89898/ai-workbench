@@ -20,6 +20,7 @@ class _LoginPageState extends State<LoginPage> {
   final _password = TextEditingController();
   bool _loading = false;
   bool _oauthLoading = false;
+  bool _showPassword = false;
   String? _oauthStatus;
   String? _error;
 
@@ -77,8 +78,7 @@ class _LoginPageState extends State<LoginPage> {
                             height: 56,
                             decoration: BoxDecoration(
                               gradient: AppColors.primaryGradient,
-                              borderRadius:
-                                  BorderRadius.circular(AppRadius.xl),
+                              borderRadius: BorderRadius.circular(AppRadius.xl),
                             ),
                             child: const Icon(
                               Icons.terminal,
@@ -115,8 +115,7 @@ class _LoginPageState extends State<LoginPage> {
                           padding: const EdgeInsets.symmetric(horizontal: 10),
                           decoration: BoxDecoration(
                             color: AppColors.surface,
-                            borderRadius:
-                                BorderRadius.circular(AppRadius.full),
+                            borderRadius: BorderRadius.circular(AppRadius.full),
                             border: Border.all(color: AppColors.border),
                           ),
                           child: Row(
@@ -156,7 +155,21 @@ class _LoginPageState extends State<LoginPage> {
                               controller: _password,
                               icon: Icons.lock_outline,
                               hint: '密码',
-                              obscureText: true,
+                              obscureText: !_showPassword,
+                              suffix: IconButton(
+                                tooltip: _showPassword ? '隐藏密码' : '显示密码',
+                                icon: Icon(
+                                  _showPassword
+                                      ? Icons.visibility_off_outlined
+                                      : Icons.visibility_outlined,
+                                  size: 18,
+                                ),
+                                color: AppColors.muted,
+                                onPressed: () {
+                                  setState(
+                                      () => _showPassword = !_showPassword);
+                                },
+                              ),
                             ),
                             const SizedBox(height: AppSpacing.sm),
                             // 忘记密码链接
@@ -215,8 +228,7 @@ class _LoginPageState extends State<LoginPage> {
                               style: OutlinedButton.styleFrom(
                                 minimumSize: const Size.fromHeight(48),
                                 backgroundColor: AppColors.surface,
-                                side:
-                                    const BorderSide(color: AppColors.border),
+                                side: const BorderSide(color: AppColors.border),
                                 shape: RoundedRectangleBorder(
                                   borderRadius:
                                       BorderRadius.circular(AppRadius.lg),
@@ -232,8 +244,8 @@ class _LoginPageState extends State<LoginPage> {
                                     height: 28,
                                     decoration: BoxDecoration(
                                       color: AppColors.dingtalk,
-                                      borderRadius: BorderRadius.circular(
-                                          AppRadius.md),
+                                      borderRadius:
+                                          BorderRadius.circular(AppRadius.md),
                                     ),
                                     child: const Center(
                                       child: Text(
@@ -265,8 +277,7 @@ class _LoginPageState extends State<LoginPage> {
                       // ---- status-area：状态提示或错误 ----
                       _StatusArea(
                         error: _error,
-                        hint: _oauthStatus ??
-                            '使用桌面端账号登录，将自动同步已配对设备。',
+                        hint: _oauthStatus ?? '使用桌面端账号登录，将自动同步已配对设备。',
                       ),
                       const SizedBox(height: AppSpacing.lg),
                       // ---- device-note：底部说明 ----
@@ -406,6 +417,7 @@ class _IconPrefixTextField extends StatelessWidget {
     required this.hint,
     this.obscureText = false,
     this.keyboardType,
+    this.suffix,
   });
 
   final TextEditingController controller;
@@ -413,6 +425,7 @@ class _IconPrefixTextField extends StatelessWidget {
   final String hint;
   final bool obscureText;
   final TextInputType? keyboardType;
+  final Widget? suffix;
 
   @override
   Widget build(BuildContext context) {
@@ -447,12 +460,16 @@ class _IconPrefixTextField extends StatelessWidget {
                 enabledBorder: InputBorder.none,
                 focusedBorder: InputBorder.none,
                 isDense: true,
-                contentPadding:
-                    const EdgeInsets.symmetric(vertical: 14),
+                contentPadding: const EdgeInsets.symmetric(vertical: 14),
                 filled: false,
               ),
             ),
           ),
+          if (suffix != null)
+            Padding(
+              padding: const EdgeInsets.only(right: 4),
+              child: suffix!,
+            ),
         ],
       ),
     );

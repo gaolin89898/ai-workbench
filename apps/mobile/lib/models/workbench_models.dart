@@ -264,6 +264,12 @@ class ChatSegment {
     this.output,
     this.diff,
     this.message,
+    this.approvalId,
+    this.approvalKind,
+    this.reason,
+    this.cwd,
+    this.grantRoot,
+    this.fileChanges = const [],
     this.collapsed,
     this.durationMs,
     this.additions,
@@ -285,6 +291,12 @@ class ChatSegment {
   final String? output;
   final String? diff;
   final String? message;
+  final String? approvalId;
+  final String? approvalKind;
+  final String? reason;
+  final String? cwd;
+  final String? grantRoot;
+  final List<String> fileChanges;
   final bool? collapsed;
   final int? durationMs;
   final int? additions;
@@ -306,6 +318,14 @@ class ChatSegment {
         output: json['output'] as String?,
         diff: json['diff'] as String?,
         message: json['message'] as String?,
+        approvalId: json['approvalId'] as String?,
+        approvalKind: json['approvalKind'] as String?,
+        reason: json['reason'] as String?,
+        cwd: json['cwd'] as String?,
+        grantRoot: json['grantRoot'] as String?,
+        fileChanges: ((json['fileChanges'] as List<dynamic>?) ?? const [])
+            .whereType<String>()
+            .toList(),
         collapsed: json['collapsed'] as bool?,
         durationMs: json['durationMs'] as int?,
         additions: json['additions'] as int?,

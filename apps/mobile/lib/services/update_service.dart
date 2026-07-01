@@ -5,13 +5,10 @@ import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
 import 'package:url_launcher/url_launcher.dart';
 
-const _openListMobileFolderUrl =
-    'https://openlist.gaolin.xin/%E5%A4%B8%E5%85%8B%E7%BD%91%E7%9B%98/%E7%A7%BB%E5%8A%A8%E7%AB%AF';
-const _openListDavBaseUrl =
-    'https://openlist.gaolin.xin/dav/%E5%A4%B8%E5%85%8B%E7%BD%91%E7%9B%98/%E7%A7%BB%E5%8A%A8%E7%AB%AF';
-const _mobileManifestUrl = '$_openListDavBaseUrl/latest.json';
-const _openListUser = 'admin';
-const _openListPassword = '070900gl';
+const _githubReleasesApiUrl =
+    'https://api.github.com/repos/gaolin89898/ai-workbench/releases?per_page=30';
+const _githubReleasesUrl =
+    'https://github.com/gaolin89898/ai-workbench/releases';
 const _currentMobileVersion =
     String.fromEnvironment('MOBILE_VERSION', defaultValue: '0.1.27');
 
@@ -46,29 +43,48 @@ class MobileUpdateService {
 
   Future<MobileUpdateInfo> check() async {
     final response = await http.get(
-      Uri.parse(_mobileManifestUrl),
-      headers: _authHeaders,
+      Uri.parse(_githubReleasesApiUrl),
+      headers: const {'Accept': 'application/vnd.github+json'},
     );
     if (response.statusCode < 200 || response.statusCode >= 300) {
-      throw Exception('检查更新失败：HTTP ${response.statusCode}');
+      throw Exception('检查 GitHub Releases 失败：HTTP ${response.statusCode}');
     }
 
-    final data = jsonDecode(utf8.decode(response.bodyBytes)) as Map<String, dynamic>;
-    final latestVersion = data['version'] as String? ?? _currentMobileVersion;
+    final releases =
+        jsonDecode(utf8.decode(response.bodyBytes)) as List<dynamic>;
+    final release = _latestMobileRelease(releases);
+    if (release == null) {
+      throw Exception('GitHub Releases 中没有找到移动端安装包。');
+    }
+    final assets = (release['assets'] as List<dynamic>? ?? const []);
+    final apkAsset = assets.cast<Map<String, dynamic>?>().firstWhere(
+          (asset) => (asset?['name'] as String? ?? '').endsWith('.apk'),
+          orElse: () => null,
+        );
+    if (apkAsset == null) {
+      throw Exception('GitHub Release 中没有 APK 资产。');
+    }
+
+    final tagName = release['tag_name'] as String? ?? '';
+    final latestVersion =
+        _mobileVersionFromTag(tagName) ?? _currentMobileVersion;
     final apkFileName =
-        data['apkFileName'] as String? ?? 'ai-workbench-mobile-$latestVersion.apk';
-    final apkUrl = data['apkUrl'] as String? ?? '$_openListDavBaseUrl/$apkFileName';
+        apkAsset['name'] as String? ?? 'ai-workbench-mobile-$latestVersion.apk';
+    final apkUrl = apkAsset['browser_download_url'] as String?;
+    if (apkUrl == null || apkUrl.isEmpty) {
+      throw Exception('GitHub Release APK 缺少下载地址。');
+    }
 
     return MobileUpdateInfo(
       available: _compareVersions(latestVersion, _currentMobileVersion) > 0,
       currentVersion: _currentMobileVersion,
-      source: 'OpenList',
+      source: 'GitHub Releases',
       version: latestVersion,
-      tagName: data['tagName'] as String?,
-      releaseUrl: _openListMobileFolderUrl,
+      tagName: tagName,
+      releaseUrl: release['html_url'] as String? ?? _githubReleasesUrl,
       apkUrl: apkUrl,
       apkFileName: apkFileName,
-      body: data['notes'] as String?,
+      body: release['body'] as String?,
     );
   }
 
@@ -81,11 +97,10 @@ class MobileUpdateService {
       throw Exception('没有可下载的 APK 地址。');
     }
 
-    final apkFileName =
-        update.apkFileName ?? 'ai-workbench-mobile-${update.version ?? update.currentVersion}.apk';
+    final apkFileName = update.apkFileName ??
+        'ai-workbench-mobile-${update.version ?? update.currentVersion}.apk';
     final apkFile = File('${Directory.systemTemp.path}/$apkFileName');
     final request = http.Request('GET', Uri.parse(apkUrl));
-    request.headers.addAll(_authHeaders);
 
     final response = await request.send();
     if (response.statusCode < 200 || response.statusCode >= 300) {
@@ -121,10 +136,26 @@ class MobileUpdateService {
     }
   }
 
-  Map<String, String> get _authHeaders => {
-        'Authorization':
-            'Basic ${base64Encode(utf8.encode('$_openListUser:$_openListPassword'))}',
-      };
+  Map<String, dynamic>? _latestMobileRelease(List<dynamic> releases) {
+    for (final item in releases) {
+      if (item is! Map<String, dynamic>) continue;
+      if (item['draft'] == true || item['prerelease'] == true) continue;
+      final tagName = item['tag_name'] as String? ?? '';
+      if (!tagName.startsWith('mobile-v')) continue;
+      final assets = item['assets'] as List<dynamic>? ?? const [];
+      final hasApk = assets.any((asset) {
+        return asset is Map<String, dynamic> &&
+            (asset['name'] as String? ?? '').endsWith('.apk');
+      });
+      if (hasApk) return item;
+    }
+    return null;
+  }
+
+  String? _mobileVersionFromTag(String tagName) {
+    final match = RegExp(r'^mobile-v(.+)$').firstMatch(tagName);
+    return match?.group(1);
+  }
 
   int _compareVersions(String left, String right) {
     final leftParts = _versionParts(left);

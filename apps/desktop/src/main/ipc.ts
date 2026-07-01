@@ -9,7 +9,7 @@
 // Example: window.desktop.ipc.pairDesktop("http://...", "ABC123") ->
 //   ipcMain.handle("pair_desktop", (_event, args) => { const [server, code] = args; ... })
 
-import { ipcMain, BrowserWindow, clipboard, shell, type WebContents } from "electron";
+import { ipcMain, BrowserWindow, clipboard, shell, type IpcMainInvokeEvent, type WebContents } from "electron";
 import { randomUUID } from "node:crypto";
 import { readdir, stat } from "node:fs/promises";
 import path from "node:path";
@@ -28,7 +28,8 @@ import {
   getCloudConfig,
   getDesktopCloudSync,
 } from "./sync";
-import { runCodexChat, stopCodexChat } from "./codex";
+import { respondCodexApproval, runCodexChat, stopCodexChat } from "./codex";
+import { listCodexProjectSessions, syncCodexHistoryMirror } from "./codex_sessions";
 import { runAiChat, stopAiChat } from "./claude";
 import { checkAppUpdate, installAppUpdate, initUpdater } from "./updater";
 import type {
@@ -38,10 +39,48 @@ import type {
   ResizeShellRequest,
   RunAiChatRequest,
   RunCodexChatRequest,
+  CodexApprovalResponseRequest,
   ChatMessage,
+  ImportCodexProjectSessionRequest,
 } from "../services/desktop";
 
 let mainWindow: BrowserWindow | null = null;
+
+type SafeIpcError = {
+  __AI_WORKBENCH_IPC_ERROR__: true;
+  name: string;
+  message: string;
+  stack?: string;
+};
+
+function toSafeIpcError(error: unknown): SafeIpcError {
+  if (error instanceof Error) {
+    return {
+      __AI_WORKBENCH_IPC_ERROR__: true,
+      name: error.name || "Error",
+      message: error.message || "IPC 调用失败",
+      stack: error.stack,
+    };
+  }
+  return {
+    __AI_WORKBENCH_IPC_ERROR__: true,
+    name: "Error",
+    message: typeof error === "string" ? error : "IPC 调用失败",
+  };
+}
+
+function handle<TArgs extends unknown[], TResult>(
+  channel: string,
+  listener: (event: IpcMainInvokeEvent, args: TArgs) => Promise<TResult> | TResult,
+) {
+  ipcMain.handle(channel, async (event, args: TArgs) => {
+    try {
+      return await listener(event, args);
+    } catch (error) {
+      return toSafeIpcError(error);
+    }
+  });
+}
 
 /**
  * Resolve a WebContents sender for streaming events (shell output / AI chat
@@ -99,51 +138,51 @@ export function registerIpcHandlers(win?: BrowserWindow): void {
 
   // Old tmux/screen agent sessions were removed; terminal sessions now stream
   // live via PTY events. Kept as an empty-array stub for API compatibility.
-  ipcMain.handle("list_sessions", async () => []);
+  handle("list_sessions", async () => []);
 
   // ---------- cloud pairing ----------
 
-  ipcMain.handle("login_desktop", async (_event, args: [string, string, string]) =>
+  handle("login_desktop", async (_event, args: [string, string, string]) =>
     loginDesktop(args[0], args[1], args[2])
   );
 
-  ipcMain.handle("logout_desktop", async () => {
+  handle("logout_desktop", async () => {
     logoutDesktop();
   });
 
   // OAuth 登录完成后，前端把 token/userId 传过来保存
-  ipcMain.handle("save_oauth_login", async (_event, args: [string, string, string, string]) => {
+  handle("save_oauth_login", async (_event, args: [string, string, string, string]) => {
     const [serverUrl, accessToken, userId, displayName] = args;
     await saveOAuthLogin(serverUrl, accessToken, userId, displayName);
   });
 
   // 在系统默认浏览器中打开 URL（用于 OAuth 授权跳转，避免 BrowserWindow 限制）
-  ipcMain.handle("open_external_url", async (_event, args: [string]) => {
+  handle("open_external_url", async (_event, args: [string]) => {
     const url = args[0];
     if (typeof url === "string" && /^https?:\/\//i.test(url)) {
       await shell.openExternal(url);
     }
   });
 
-  ipcMain.handle("pair_desktop", async (_event, args: [string, string]) =>
+  handle("pair_desktop", async (_event, args: [string, string]) =>
     pairDesktop(args[0], args[1])
   );
 
-  ipcMain.handle("create_desktop_pairing_request", async (_event, args: [string]) =>
+  handle("create_desktop_pairing_request", async (_event, args: [string]) =>
     createDesktopPairingRequest(args[0])
   );
 
-  ipcMain.handle("get_desktop_pairing_status", async (_event, args: [string, string]) =>
+  handle("get_desktop_pairing_status", async (_event, args: [string, string]) =>
     getDesktopPairingStatus(args[0], args[1])
   );
 
-  ipcMain.handle("build_desktop_pairing_qr_payload", async (_event, args: [string, string]) =>
+  handle("build_desktop_pairing_qr_payload", async (_event, args: [string, string]) =>
     buildDesktopPairingQrPayload(args[0], args[1])
   );
 
-  ipcMain.handle("get_cloud_config", async () => getCloudConfig());
+  handle("get_cloud_config", async () => getCloudConfig());
 
-  ipcMain.handle("read_clipboard_image", async () => {
+  handle("read_clipboard_image", async () => {
     const image = clipboard.readImage();
     if (image.isEmpty()) return null;
     return {
@@ -155,20 +194,20 @@ export function registerIpcHandlers(win?: BrowserWindow): void {
 
   // ---------- AI providers ----------
 
-  ipcMain.handle("list_ai_providers", async () => providers.listAiProviders());
+  handle("list_ai_providers", async () => providers.listAiProviders());
 
-  ipcMain.handle("detect_ai_providers", async () => providers.detectAiProviders());
+  handle("detect_ai_providers", async () => providers.detectAiProviders());
 
   // ---------- workspace projects ----------
 
-  ipcMain.handle("add_workspace_project", async (_event, args: [string]) => {
+  handle("add_workspace_project", async (_event, args: [string]) => {
     const project = await db.addWorkspaceProject(args[0]);
     getSender().send("workspace-changed");
     getDesktopCloudSync()?.pushProjectSnapshot();
     return project;
   });
 
-  ipcMain.handle("choose_workspace_project", async () => {
+  handle("choose_workspace_project", async () => {
     const projectPath = await projects.chooseWorkspaceProjectPath(mainWindow);
     if (!projectPath) return null;
     const project = await db.addWorkspaceProject(projectPath);
@@ -177,27 +216,27 @@ export function registerIpcHandlers(win?: BrowserWindow): void {
     return project;
   });
 
-  ipcMain.handle("list_workspace_projects", async () => db.listWorkspaceProjects());
+  handle("list_workspace_projects", async () => db.listWorkspaceProjects());
 
-  ipcMain.handle("rename_workspace_project", async (_event, args: [string, string]) =>
+  handle("rename_workspace_project", async (_event, args: [string, string]) =>
     db.renameWorkspaceProject(args[0], args[1])
   );
 
-  ipcMain.handle("remove_workspace_project", async (_event, args: [string]) => {
+  handle("remove_workspace_project", async (_event, args: [string]) => {
     db.removeWorkspaceProject(args[0]);
   });
 
-  ipcMain.handle("open_project_in_file_manager", async (_event, args: [string]) =>
+  handle("open_project_in_file_manager", async (_event, args: [string]) =>
     projects.openProjectInFileManager(args[0])
   );
 
-  ipcMain.handle("list_project_files", async (_event, args: [string, string | null]) =>
+  handle("list_project_files", async (_event, args: [string, string | null]) =>
     listProjectFiles(args[0], args[1])
   );
 
   // ---------- AI sessions ----------
 
-  ipcMain.handle("create_ai_session", async (_event, args: [CreateAiSessionRequest]) => {
+  handle("create_ai_session", async (_event, args: [CreateAiSessionRequest]) => {
     const req = args[0];
     const id = randomUUID();
 
@@ -228,7 +267,7 @@ export function registerIpcHandlers(win?: BrowserWindow): void {
     return session;
   });
 
-  ipcMain.handle("restart_ai_session", async (_event, args: [string]) =>
+  handle("restart_ai_session", async (_event, args: [string]) =>
     db.updateLocalAiSession(args[0], {
       status: "idle",
       providerSessionId: null,
@@ -236,7 +275,7 @@ export function registerIpcHandlers(win?: BrowserWindow): void {
     })
   );
 
-  ipcMain.handle(
+    handle(
     "append_local_ai_message",
     async (_event, args: [string, ChatMessage["role"], string]) =>
       db.appendLocalAiMessage(args[0], args[1], args[2])
@@ -244,33 +283,33 @@ export function registerIpcHandlers(win?: BrowserWindow): void {
 
   // ---------- shell PTY ----------
 
-  ipcMain.handle("start_shell_pty", async (_event, args: [StartShellPtyRequest]) => {
+  handle("start_shell_pty", async (_event, args: [StartShellPtyRequest]) => {
     pty.startShellPty(args[0], getSender());
   });
 
-  ipcMain.handle("send_shell_input", async (_event, args: [ShellInputRequest]) => {
+  handle("send_shell_input", async (_event, args: [ShellInputRequest]) => {
     pty.sendShellInput(args[0]);
   });
 
-  ipcMain.handle("resize_shell", async (_event, args: [ResizeShellRequest]) => {
+  handle("resize_shell", async (_event, args: [ResizeShellRequest]) => {
     pty.resizeShell(args[0]);
   });
 
-  ipcMain.handle("get_shell_buffer", async (_event, args: [string]) =>
+  handle("get_shell_buffer", async (_event, args: [string]) =>
     pty.getShellBuffer(args[0])
   );
 
-  ipcMain.handle("stop_shell_pty", async (_event, args: [string]) => {
+  handle("stop_shell_pty", async (_event, args: [string]) => {
     pty.stopShellPty(args[0]);
   });
 
-  ipcMain.handle("is_shell_live", async (_event, args: [string]) =>
+  handle("is_shell_live", async (_event, args: [string]) =>
     pty.isShellLive(args[0])
   );
 
   // ---------- AI chat ----------
 
-  ipcMain.handle("run_ai_chat", async (_event, args: [RunAiChatRequest]) => {
+  handle("run_ai_chat", async (_event, args: [RunAiChatRequest]) => {
     const req = args[0];
     const sender = getDesktopCloudSync()?.createRendererAndMobileAiChatSender(getSender()) ?? getSender();
     // Resume an existing Claude session if we have a providerSessionId stored.
@@ -284,7 +323,7 @@ export function registerIpcHandlers(win?: BrowserWindow): void {
     return providerSessionId;
   });
 
-  ipcMain.handle("run_codex_chat", async (_event, args: [RunCodexChatRequest]) => {
+  handle("run_codex_chat", async (_event, args: [RunCodexChatRequest]) => {
     const req = args[0];
     const session = db.getLocalAiSession(req.aiSessionId);
     const existingSessionId = session?.providerSessionId ?? null;
@@ -297,40 +336,93 @@ export function registerIpcHandlers(win?: BrowserWindow): void {
     return providerSessionId;
   });
 
-  ipcMain.handle("stop_ai_chat", async (_event, args: [string]) => {
+  handle("stop_ai_chat", async (_event, args: [string]) => {
     const aiSessionId = args[0];
     return stopCodexChat(aiSessionId) || stopAiChat(aiSessionId);
   });
 
+  handle("respond_codex_approval", async (_event, args: [CodexApprovalResponseRequest]) => {
+    const req = args[0];
+    return respondCodexApproval(req.aiSessionId, req.approvalId, req.decision);
+  });
+
   // Simplified warmup: return the current session record. (Full pre-warm of
   // the provider subprocess is handled lazily on the first chat turn.)
-  ipcMain.handle("warmup_ai_session", async (_event, args: [string]) =>
+  handle("warmup_ai_session", async (_event, args: [string]) =>
     db.getLocalAiSession(args[0])
   );
 
-  ipcMain.handle("warmup_codex_session", async (_event, args: [string]) =>
+  handle("warmup_codex_session", async (_event, args: [string]) =>
     db.getLocalAiSession(args[0])
   );
 
   // ---------- AI history ----------
 
-  ipcMain.handle("list_local_ai_history", async (_event, args: [string]) =>
-    db.listLocalAiHistory(args[0])
+  handle("list_local_ai_history", async (_event, args: [string]) => {
+    const synced = await syncCodexHistoryMirror(args[0]);
+    if (synced) {
+      getDesktopCloudSync()?.pushSessionSnapshot();
+      getSender().send("ai-history-changed", { aiSessionId: args[0] });
+    }
+    return db.listLocalAiHistory(args[0]);
+  });
+
+  handle("list_local_ai_sessions", async () => db.listLocalAiSessions());
+
+  handle("list_codex_project_sessions", async (_event, args: [string]) =>
+    listCodexProjectSessions(args[0], db.listLocalAiSessions())
   );
 
-  ipcMain.handle("list_local_ai_sessions", async () => db.listLocalAiSessions());
+  handle("import_codex_project_session", async (_event, args: [ImportCodexProjectSessionRequest]) => {
+    const req = args[0];
+    const providerSessionId = req.providerSessionId.trim();
+    const projectPath = req.projectPath.trim();
+    if (!providerSessionId) throw new Error("providerSessionId is required");
+    if (!projectPath) throw new Error("projectPath is required");
+    const existing = db.listLocalAiSessions().find((session) => session.providerSessionId === providerSessionId);
+    if (existing) {
+      const synced = await syncCodexHistoryMirror(existing.id);
+      if (synced) {
+        getDesktopCloudSync()?.pushSessionSnapshot();
+        getSender().send("ai-history-changed", { aiSessionId: existing.id });
+      }
+      return existing;
+    }
 
-  ipcMain.handle("archive_local_ai_session", async (_event, args: [string, boolean]) =>
+    try {
+      if (!db.getWorkspaceProjectByPath(projectPath)) {
+        await db.addWorkspaceProject(projectPath);
+      }
+    } catch {
+      // project registration is best-effort; the imported session still keeps its path in summary
+    }
+
+    const session = db.createLocalAiSession({
+      id: randomUUID(),
+      providerId: "codex",
+      providerSessionId,
+      title: req.title.trim() || "Codex 会话",
+      status: "idle",
+      summary: projectPath,
+      updatedAt: req.updatedAt,
+    });
+    await syncCodexHistoryMirror(session.id);
+    getDesktopCloudSync()?.pushSessionSnapshot();
+    getSender().send("workspace-changed");
+    return session;
+  });
+
+  handle("archive_local_ai_session", async (_event, args: [string, boolean]) =>
     db.archiveLocalAiSession(args[0], args[1])
   );
 
-  ipcMain.handle("rename_local_ai_session", async (_event, args: [string, string]) =>
+  handle("rename_local_ai_session", async (_event, args: [string, string]) =>
     db.updateLocalAiSession(args[0], { title: args[1] })
   );
 
   // Rename a session everywhere: local SQLite + backend PATCH (which also
   // forwards ai.session.rename to other clients over WS).
-  ipcMain.handle("rename_ai_session", async (_event, args: [string, string]) => {
+  handle("rename_ai_session", async (_event, args: [string, string]) => {
     const [aiSessionId, title] = args;
     const sync = getDesktopCloudSync();
     if (sync) {
@@ -343,13 +435,13 @@ export function registerIpcHandlers(win?: BrowserWindow): void {
 
   // Multi-window sessions are not supported in the current Electron build;
   // no-op for now.
-  ipcMain.handle("open_session_in_new_window", async () => {
+  handle("open_session_in_new_window", async () => {
     /* no-op */
   });
 
   // ---------- app update ----------
 
-  ipcMain.handle("check_app_update", async () => checkAppUpdate());
+  handle("check_app_update", async () => checkAppUpdate());
 
-  ipcMain.handle("install_app_update", async () => installAppUpdate());
+  handle("install_app_update", async () => installAppUpdate());
 }

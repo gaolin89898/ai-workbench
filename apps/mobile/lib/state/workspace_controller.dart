@@ -17,6 +17,9 @@ class WorkspaceController extends ChangeNotifier {
   final RealtimeClient realtime;
   StreamSubscription<Map<String, dynamic>>? _events;
   static const _devicesReloadInterval = Duration(seconds: 5);
+  static const _historyRefreshInterval = Duration(seconds: 5);
+  Timer? _historyRefreshTimer;
+  String? _openSessionId;
   Future<void>? _loadDevicesInFlight;
   DateTime? _lastDevicesLoadedAt;
   final Map<String, Future<AiSessionMeta?>> _createSessionInFlight = {};
@@ -34,6 +37,7 @@ class WorkspaceController extends ChangeNotifier {
   final Map<String, List<ChatMessage>> messagesBySession = {};
   final Map<String, String> runStatusBySession = {};
   final Map<String, String?> _currentAgentMessageStepIds = {};
+  final Map<String, String> _lastCommittedAssistantTexts = {};
   bool _notifyQueued = false;
 
   // Client-side session state (matching desktop's localStorage pattern)
@@ -41,13 +45,16 @@ class WorkspaceController extends ChangeNotifier {
   final Set<String> _unreadSessionIds = {};
   final Map<String, String> _localTitleOverrides = {};
 
-  bool isSessionPinned(String sessionId) => _pinnedSessionIds.contains(sessionId);
-  bool isSessionUnread(String sessionId) => _unreadSessionIds.contains(sessionId);
+  bool isSessionPinned(String sessionId) =>
+      _pinnedSessionIds.contains(sessionId);
+  bool isSessionUnread(String sessionId) =>
+      _unreadSessionIds.contains(sessionId);
   String getEffectiveTitle(AiSessionMeta session) =>
       _localTitleOverrides[session.id] ?? session.title;
 
   List<AiSessionMeta> get visibleSessions {
-    final filtered = sessions.where((s) => showArchived ? s.archived : !s.archived).toList();
+    final filtered =
+        sessions.where((s) => showArchived ? s.archived : !s.archived).toList();
     // Sort: pinned first, then by updatedAt desc
     filtered.sort((a, b) {
       final aPinned = _pinnedSessionIds.contains(a.id) ? 0 : 1;
@@ -58,8 +65,11 @@ class WorkspaceController extends ChangeNotifier {
     return filtered;
   }
 
-  List<AiSessionMeta> sessionsForProject(String path) =>
-      sessions.where((session) => session.summary == path && (showArchived ? session.archived : !session.archived)).toList();
+  List<AiSessionMeta> sessionsForProject(String path) => sessions
+      .where((session) =>
+          session.summary == path &&
+          (showArchived ? session.archived : !session.archived))
+      .toList();
 
   bool isCreatingSession(WorkspaceProject project, {String? providerId}) {
     final device = selectedDevice;
@@ -138,7 +148,8 @@ class WorkspaceController extends ChangeNotifier {
     });
   }
 
-  Future<AiSessionMeta?> createSession(WorkspaceProject project, {String providerId = 'codex'}) async {
+  Future<AiSessionMeta?> createSession(WorkspaceProject project,
+      {String providerId = 'codex'}) async {
     final device = selectedDevice;
     if (device == null) return null;
     final key = '${device.id}\x00${project.id}\x00$providerId';
@@ -173,21 +184,41 @@ class WorkspaceController extends ChangeNotifier {
       );
       _upsertSession(session);
       messagesBySession[session.id] = [
-        ChatMessage(role: ChatRole.system, text: '已创建 $providerId 会话。现在可以发送 prompt。'),
+        ChatMessage(
+            role: ChatRole.system, text: '已创建 $providerId 会话。现在可以发送 prompt。'),
       ];
       return session;
     });
   }
 
   void openSession(AiSessionMeta session) {
+    _openSessionId = session.id;
     messagesBySession.putIfAbsent(
       session.id,
       () => const [ChatMessage(role: ChatRole.system, text: '正在从桌面端拉取本地历史...')],
     );
     final device = selectedDevice;
     if (device != null) realtime.requestHistory(device.id, session.id);
+    _startHistoryRefresh(session.id);
     markSessionRead(session.id);
     _notifySafely();
+  }
+
+  void closeSession(AiSessionMeta session) {
+    if (_openSessionId != session.id) return;
+    _openSessionId = null;
+    _historyRefreshTimer?.cancel();
+    _historyRefreshTimer = null;
+  }
+
+  void _startHistoryRefresh(String sessionId) {
+    _historyRefreshTimer?.cancel();
+    _historyRefreshTimer = Timer.periodic(_historyRefreshInterval, (_) {
+      if (_openSessionId != sessionId) return;
+      final device = selectedDevice;
+      if (device == null) return;
+      realtime.requestHistory(device.id, sessionId);
+    });
   }
 
   void sendPrompt(AiSessionMeta session, String prompt) {
@@ -195,7 +226,8 @@ class WorkspaceController extends ChangeNotifier {
     final trimmed = prompt.trim();
     if (device == null || trimmed.isEmpty) return;
     if (session.archived) {
-      _appendMessage(session.id, const ChatMessage(role: ChatRole.error, text: '这个会话已归档。请先恢复后再发送。'));
+      _appendMessage(session.id,
+          const ChatMessage(role: ChatRole.error, text: '这个会话已归档。请先恢复后再发送。'));
       return;
     }
     _appendMessage(session.id, ChatMessage(role: ChatRole.user, text: trimmed));
@@ -204,7 +236,12 @@ class WorkspaceController extends ChangeNotifier {
       ChatMessage(
         role: ChatRole.assistant,
         pending: true,
-        segments: [ChatSegment(type: 'status', label: '等待 ${session.providerId} 返回...', icon: 'think')],
+        segments: [
+          ChatSegment(
+              type: 'status',
+              label: '等待 ${session.providerId} 返回...',
+              icon: 'think')
+        ],
       ),
     ];
     runStatusBySession[session.id] = '正在发送给 ${session.providerId}';
@@ -214,18 +251,31 @@ class WorkspaceController extends ChangeNotifier {
     _maybeRenameUntitledSession(session, trimmed);
   }
 
+  void respondApproval(
+      AiSessionMeta session, String approvalId, String decision) {
+    final device = selectedDevice;
+    if (device == null) return;
+    if (decision != 'approved' && decision != 'denied') return;
+    realtime.respondApproval(device.id, session.id, approvalId, decision);
+    runStatusBySession[session.id] = decision == 'approved' ? '已同意审批' : '已拒绝审批';
+    notifyListeners();
+  }
+
   /// If the session still has the default title, derive a new title from the
   /// first prompt line and persist it via the backend PATCH endpoint. The
   /// server then forwards ai.session.rename to the desktop so its local
   /// SQLite title stays in sync.
-  Future<void> _maybeRenameUntitledSession(AiSessionMeta session, String prompt) async {
+  Future<void> _maybeRenameUntitledSession(
+      AiSessionMeta session, String prompt) async {
     const untitledNames = {'新的 AI CLI 会话', '接管已有 AI CLI 会话'};
     if (!untitledNames.contains(session.title)) return;
     final firstLine = prompt
         .split(RegExp(r'\r?\n'))
-        .firstWhere((line) => line.trim().isNotEmpty, orElse: () => '新的 AI CLI 会话')
+        .firstWhere((line) => line.trim().isNotEmpty,
+            orElse: () => '新的 AI CLI 会话')
         .trim();
-    final title = firstLine.length > 24 ? '${firstLine.substring(0, 24)}...' : firstLine;
+    final title =
+        firstLine.length > 24 ? '${firstLine.substring(0, 24)}...' : firstLine;
     if (title.isEmpty || title == session.title) return;
     try {
       final updated = await api.renameAiSession(session.id, title: title);
@@ -303,7 +353,9 @@ class WorkspaceController extends ChangeNotifier {
 
   void _saveTitleOverrides() {
     SharedPreferences.getInstance().then((prefs) {
-      final entries = _localTitleOverrides.entries.map((e) => '${e.key}\x00${e.value}').toList();
+      final entries = _localTitleOverrides.entries
+          .map((e) => '${e.key}\x00${e.value}')
+          .toList();
       prefs.setStringList('titleOverrides', entries);
     });
   }
@@ -339,19 +391,25 @@ class WorkspaceController extends ChangeNotifier {
 
   void _handleRealtime(Map<String, dynamic> json) {
     final device = selectedDevice;
-    if (device != null && json['deviceId'] != null && json['deviceId'] != device.id) return;
+    if (device != null &&
+        json['deviceId'] != null &&
+        json['deviceId'] != device.id) return;
     switch (json['type']) {
       case 'desktop.heartbeat':
-        if (device != null) selectedDevice = device.copyWith(online: true, lastSeenAt: json['timestamp'] as String?);
+        if (device != null)
+          selectedDevice = device.copyWith(
+              online: true, lastSeenAt: json['timestamp'] as String?);
         break;
       case 'providers.snapshot':
         providerStatuses = ((json['providers'] as List<dynamic>?) ?? const [])
-            .map((item) => ProviderStatus.fromJson(item as Map<String, dynamic>))
+            .map(
+                (item) => ProviderStatus.fromJson(item as Map<String, dynamic>))
             .toList();
         break;
       case 'projects.snapshot':
         projects = ((json['projects'] as List<dynamic>?) ?? const [])
-            .map((item) => WorkspaceProject.fromJson(item as Map<String, dynamic>))
+            .map((item) =>
+                WorkspaceProject.fromJson(item as Map<String, dynamic>))
             .toList();
         break;
       case 'ai.sessions.snapshot':
@@ -361,10 +419,15 @@ class WorkspaceController extends ChangeNotifier {
         break;
       case 'ai.history.response':
         final sessionId = json['aiSessionId'] as String;
-        messagesBySession[sessionId] = ((json['messages'] as List<dynamic>?) ?? const [])
-            .map((item) => AiHistoryMessage.fromJson(item as Map<String, dynamic>))
-            .map((item) => ChatMessage(role: item.role, text: item.content, segments: item.segments))
-            .toList();
+        messagesBySession[sessionId] =
+            ((json['messages'] as List<dynamic>?) ?? const [])
+                .map((item) =>
+                    AiHistoryMessage.fromJson(item as Map<String, dynamic>))
+                .map((item) => ChatMessage(
+                    role: item.role,
+                    text: item.content,
+                    segments: item.segments))
+                .toList();
         break;
       case 'ai.chat.output':
         _handleChatOutput(json);
@@ -379,7 +442,11 @@ class WorkspaceController extends ChangeNotifier {
       case 'terminal.error':
         final sessionId = json['aiSessionId'] as String?;
         if (sessionId != null) {
-          _appendMessage(sessionId, ChatMessage(role: ChatRole.error, text: json['message'] as String? ?? '远程错误'));
+          _appendMessage(
+              sessionId,
+              ChatMessage(
+                  role: ChatRole.error,
+                  text: json['message'] as String? ?? '远程错误'));
         }
         break;
     }
@@ -391,13 +458,17 @@ class WorkspaceController extends ChangeNotifier {
     final kind = json['kind'] as String? ?? 'status';
     final text = json['text'] as String?;
     final segmentJson = json['segment'] as Map<String, dynamic>?;
-    final segment = segmentJson == null ? null : ChatSegment.fromJson(segmentJson);
+    final segment =
+        segmentJson == null ? null : ChatSegment.fromJson(segmentJson);
     final segments = ((json['segments'] as List<dynamic>?) ?? const [])
         .whereType<Map<String, dynamic>>()
         .map(ChatSegment.fromJson)
         .toList();
-    final current = [...(messagesBySession[sessionId] ?? const <ChatMessage>[])];
-    final pendingIndex = current.lastIndexWhere((message) => message.pending && message.role == ChatRole.assistant);
+    final current = [
+      ...(messagesBySession[sessionId] ?? const <ChatMessage>[])
+    ];
+    final pendingIndex = current.lastIndexWhere(
+        (message) => message.pending && message.role == ChatRole.assistant);
     if (kind == 'done') {
       final pending = pendingIndex >= 0 ? current[pendingIndex] : null;
       final incomingSegments = [
@@ -427,6 +498,7 @@ class WorkspaceController extends ChangeNotifier {
       }
       runStatusBySession[sessionId] = '已完成';
       _currentAgentMessageStepIds.remove(sessionId);
+      _lastCommittedAssistantTexts.remove(sessionId);
     } else if (kind == 'error') {
       final errorMessage = ChatMessage(
         role: ChatRole.error,
@@ -439,26 +511,19 @@ class WorkspaceController extends ChangeNotifier {
         current.add(errorMessage);
       }
       runStatusBySession[sessionId] = '执行失败';
+      _currentAgentMessageStepIds.remove(sessionId);
+      _lastCommittedAssistantTexts.remove(sessionId);
     } else if (kind == 'delta') {
-      final deltaText = (text != null && text.isNotEmpty) ? text : segment?.text;
+      final deltaText =
+          (text != null && text.isNotEmpty) ? text : segment?.text;
       final deltaStepId = json['stepId'] as String?;
       final currentStepId = _currentAgentMessageStepIds[sessionId];
       final isStepChange = deltaStepId != null && deltaStepId != currentStepId;
       List<ChatSegment> thoughtSegments = const [];
       if (isStepChange && currentStepId != null) {
         final pending = pendingIndex >= 0 ? current[pendingIndex] : null;
-        final prevText = (pending?.text ?? '').trim();
-        if (prevText.isNotEmpty) {
-          thoughtSegments = [
-            ChatSegment(
-              type: 'thought',
-              stepId: 'thought-$currentStepId',
-              title: '中间结论',
-              text: prevText,
-              collapsed: true,
-            ),
-          ];
-        }
+        if (pending != null)
+          thoughtSegments = _commitCurrentTextAsThought(sessionId, pending);
       }
       final incomingSegments = [
         ...thoughtSegments,
@@ -494,7 +559,8 @@ class WorkspaceController extends ChangeNotifier {
             text: accumulated,
             segments: _mergeSegments(pending.segments, incomingSegments),
           );
-        } else if ((deltaText ?? '').isNotEmpty || incomingSegments.isNotEmpty) {
+        } else if ((deltaText ?? '').isNotEmpty ||
+            incomingSegments.isNotEmpty) {
           current.add(ChatMessage(
             role: ChatRole.assistant,
             pending: true,
@@ -511,10 +577,18 @@ class WorkspaceController extends ChangeNotifier {
         if (segment == null && segments.isEmpty)
           ChatSegment(type: 'status', label: text ?? 'AI 正在执行', icon: 'think'),
       ];
+      final hasToolSegment =
+          incomingSegments.any((segment) => segment.type == 'tool');
       if (pendingIndex >= 0) {
         final pending = current[pendingIndex];
+        final committedSegments = hasToolSegment
+            ? _commitCurrentTextAsThought(sessionId, pending)
+            : const <ChatSegment>[];
         current[pendingIndex] = pending.copyWith(
-          segments: _mergeSegments(pending.segments, incomingSegments),
+          segments: _mergeSegments(pending.segments, [
+            ...committedSegments,
+            ...incomingSegments,
+          ]),
         );
       } else {
         final lastAssistantIndex = current.lastIndexWhere(
@@ -522,8 +596,14 @@ class WorkspaceController extends ChangeNotifier {
         );
         if (lastAssistantIndex >= 0 && current[lastAssistantIndex].pending) {
           final pending = current[lastAssistantIndex];
+          final committedSegments = hasToolSegment
+              ? _commitCurrentTextAsThought(sessionId, pending)
+              : const <ChatSegment>[];
           current[lastAssistantIndex] = pending.copyWith(
-            segments: _mergeSegments(pending.segments, incomingSegments),
+            segments: _mergeSegments(pending.segments, [
+              ...committedSegments,
+              ...incomingSegments,
+            ]),
           );
         } else {
           current.add(ChatMessage(
@@ -533,8 +613,9 @@ class WorkspaceController extends ChangeNotifier {
           ));
         }
       }
-      runStatusBySession[sessionId] =
-          text ?? (incomingSegments.isEmpty ? null : incomingSegments.last.label) ?? 'AI 正在执行';
+      runStatusBySession[sessionId] = text ??
+          (incomingSegments.isEmpty ? null : incomingSegments.last.label) ??
+          'AI 正在执行';
     }
     messagesBySession[sessionId] = current;
   }
@@ -550,7 +631,31 @@ class WorkspaceController extends ChangeNotifier {
     return next;
   }
 
-  List<ChatSegment> _mergeSegment(List<ChatSegment> source, ChatSegment segment) {
+  List<ChatSegment> _commitCurrentTextAsThought(
+    String sessionId,
+    ChatMessage pending,
+  ) {
+    final currentStepId = _currentAgentMessageStepIds[sessionId];
+    final prevText = (pending.text ?? '').trim();
+    if (currentStepId == null ||
+        prevText.isEmpty ||
+        prevText == _lastCommittedAssistantTexts[sessionId]) {
+      return const [];
+    }
+    _lastCommittedAssistantTexts[sessionId] = prevText;
+    return [
+      ChatSegment(
+        type: 'thought',
+        stepId: 'thought-$currentStepId',
+        title: '中间结论',
+        text: prevText,
+        collapsed: true,
+      ),
+    ];
+  }
+
+  List<ChatSegment> _mergeSegment(
+      List<ChatSegment> source, ChatSegment segment) {
     final stepId = segment.stepId;
     if (stepId == null || stepId.isEmpty) return [...source, segment];
     final index = source.indexWhere((item) => item.stepId == stepId);
@@ -563,7 +668,8 @@ class WorkspaceController extends ChangeNotifier {
   ChatSegment _mergeSegmentFields(
     ChatSegment previous,
     ChatSegment next,
-  ) => ChatSegment(
+  ) =>
+      ChatSegment(
         type: next.type,
         stepId: next.stepId ?? previous.stepId,
         text: next.text ?? previous.text,
@@ -579,6 +685,14 @@ class WorkspaceController extends ChangeNotifier {
         output: next.output ?? previous.output,
         diff: next.diff ?? previous.diff,
         message: next.message ?? previous.message,
+        approvalId: next.approvalId ?? previous.approvalId,
+        approvalKind: next.approvalKind ?? previous.approvalKind,
+        reason: next.reason ?? previous.reason,
+        cwd: next.cwd ?? previous.cwd,
+        grantRoot: next.grantRoot ?? previous.grantRoot,
+        fileChanges: next.fileChanges.isNotEmpty
+            ? next.fileChanges
+            : previous.fileChanges,
         collapsed: next.collapsed ?? previous.collapsed,
         durationMs: next.durationMs ?? previous.durationMs,
         additions: next.additions ?? previous.additions,
@@ -589,8 +703,11 @@ class WorkspaceController extends ChangeNotifier {
     final sessionId = json['aiSessionId'] as String;
     final content = json['content'] as String? ?? '';
     if (content.isEmpty) return;
-    final current = [...(messagesBySession[sessionId] ?? const <ChatMessage>[])];
-    final pendingIndex = current.lastIndexWhere((message) => message.pending && message.role == ChatRole.assistant);
+    final current = [
+      ...(messagesBySession[sessionId] ?? const <ChatMessage>[])
+    ];
+    final pendingIndex = current.lastIndexWhere(
+        (message) => message.pending && message.role == ChatRole.assistant);
     if (pendingIndex >= 0) {
       final pending = current[pendingIndex];
       final accumulated = (pending.text ?? '') + content;
@@ -620,7 +737,10 @@ class WorkspaceController extends ChangeNotifier {
   }
 
   void _appendMessage(String sessionId, ChatMessage message) {
-    messagesBySession[sessionId] = [...(messagesBySession[sessionId] ?? const []), message];
+    messagesBySession[sessionId] = [
+      ...(messagesBySession[sessionId] ?? const []),
+      message
+    ];
     _notifySafely();
   }
 
@@ -633,6 +753,7 @@ class WorkspaceController extends ChangeNotifier {
 
   @override
   void dispose() {
+    _historyRefreshTimer?.cancel();
     _events?.cancel();
     realtime.close();
     super.dispose();

@@ -54,6 +54,16 @@ class RealtimeClient {
     });
   }
 
+  void respondApproval(String deviceId, String aiSessionId, String approvalId, String decision) {
+    send({
+      'type': 'ai.approval.respond',
+      'deviceId': deviceId,
+      'aiSessionId': aiSessionId,
+      'approvalId': approvalId,
+      'decision': decision,
+    });
+  }
+
   void archiveSession(String deviceId, String aiSessionId, bool archived) {
     send({
       'type': 'ai.session.archive',

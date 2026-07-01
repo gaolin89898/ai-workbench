@@ -16,21 +16,37 @@ class ChatPage extends StatefulWidget {
 }
 
 class _ChatPageState extends State<ChatPage> {
+  static const _autoScrollBottomThreshold = 96.0;
   final _prompt = TextEditingController();
   final _scroll = ScrollController();
   String? _historyRequestedFor;
+  WorkspaceController? _workspace;
+
+  bool get _isNearBottom {
+    if (!_scroll.hasClients) return true;
+    final position = _scroll.position;
+    return position.maxScrollExtent - position.pixels <=
+        _autoScrollBottomThreshold;
+  }
+
+  void _scrollToBottom() {
+    if (!_scroll.hasClients) return;
+    _scroll.jumpTo(_scroll.position.maxScrollExtent);
+  }
 
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
+    _workspace = WorkspaceScope.of(context);
     if (_historyRequestedFor != widget.session.id) {
       _historyRequestedFor = widget.session.id;
-      WorkspaceScope.of(context).openSession(widget.session);
+      _workspace?.openSession(widget.session);
     }
   }
 
   @override
   void dispose() {
+    _workspace?.closeSession(widget.session);
     _prompt.dispose();
     _scroll.dispose();
     super.dispose();
@@ -42,18 +58,22 @@ class _ChatPageState extends State<ChatPage> {
     return AnimatedBuilder(
       animation: ws,
       builder: (context, _) {
-        final session = ws.sessions.where((item) => item.id == widget.session.id).firstOrNull ??
+        final session = ws.sessions
+                .where((item) => item.id == widget.session.id)
+                .firstOrNull ??
             widget.session;
-        final messages = ws.messagesBySession[session.id] ?? const <ChatMessage>[];
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (_scroll.hasClients) _scroll.jumpTo(_scroll.position.maxScrollExtent);
-        });
+        final messages =
+            ws.messagesBySession[session.id] ?? const <ChatMessage>[];
         final title = ws.getEffectiveTitle(session);
         final runStatus = ws.runStatusBySession[session.id] ?? session.status;
         final isRunning = _isRunningStatus(runStatus) ||
             (messages.isNotEmpty &&
                 messages.last.role == ChatRole.assistant &&
                 messages.last.pending);
+        final shouldStickToBottom = _isNearBottom;
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (shouldStickToBottom) _scrollToBottom();
+        });
         return Scaffold(
           backgroundColor: AppColors.background,
           appBar: AppBar(
@@ -78,7 +98,9 @@ class _ChatPageState extends State<ChatPage> {
                       const SizedBox(height: 3),
                       AppStatusBadge(
                         isRunning ? '运行中' : '空闲',
-                        style: isRunning ? AppStatusStyle.warning : AppStatusStyle.neutral,
+                        style: isRunning
+                            ? AppStatusStyle.warning
+                            : AppStatusStyle.neutral,
                         dot: true,
                       ),
                     ],
@@ -124,7 +146,8 @@ class _ChatPageState extends State<ChatPage> {
                     shadow: const [],
                     child: Row(
                       children: [
-                        const Icon(Icons.archive_outlined, size: 14, color: AppColors.danger),
+                        const Icon(Icons.archive_outlined,
+                            size: 14, color: AppColors.danger),
                         const SizedBox(width: AppSpacing.sm),
                         Expanded(
                           child: Text(
@@ -147,7 +170,15 @@ class _ChatPageState extends State<ChatPage> {
                   itemCount: messages.isEmpty ? 1 : messages.length,
                   itemBuilder: (_, index) => messages.isEmpty
                       ? const _SystemLine('桌面在线时会从本机 SQLite 拉取历史。')
-                      : _MessageItem(message: messages[index]),
+                      : _MessageItem(
+                          message: messages[index],
+                          onApproval: (segment, decision) {
+                            final approvalId = segment.approvalId;
+                            if (approvalId == null || approvalId.isEmpty)
+                              return;
+                            ws.respondApproval(session, approvalId, decision);
+                          },
+                        ),
                 ),
               ),
               SafeArea(
@@ -194,7 +225,8 @@ class _ChatPageState extends State<ChatPage> {
                               borderRadius: BorderRadius.circular(AppRadius.lg),
                             ),
                           ),
-                          child: const Icon(Icons.arrow_upward, size: 17, color: AppColors.inverse),
+                          child: const Icon(Icons.arrow_upward,
+                              size: 17, color: AppColors.inverse),
                         ),
                       ),
                     ],
@@ -235,7 +267,9 @@ class _ChatPageState extends State<ChatPage> {
         title: const Text('重命名会话'),
         content: TextField(controller: ctrl, autofocus: true),
         actions: [
-          TextButton(onPressed: () => Navigator.of(ctx).pop(), child: const Text('取消')),
+          TextButton(
+              onPressed: () => Navigator.of(ctx).pop(),
+              child: const Text('取消')),
           FilledButton(
             onPressed: () {
               final trimmed = ctrl.text.trim();
@@ -260,9 +294,10 @@ extension _FirstOrNull<T> on Iterable<T> {
 }
 
 class _MessageItem extends StatelessWidget {
-  const _MessageItem({required this.message});
+  const _MessageItem({required this.message, this.onApproval});
 
   final ChatMessage message;
+  final void Function(ChatSegment segment, String decision)? onApproval;
 
   @override
   Widget build(BuildContext context) {
@@ -270,7 +305,7 @@ class _MessageItem extends StatelessWidget {
       case ChatRole.user:
         return _UserBubble(message: message);
       case ChatRole.assistant:
-        return _AiBubble(message: message);
+        return _AiBubble(message: message, onApproval: onApproval);
       case ChatRole.system:
         return _SystemLine(message.text ?? '');
       case ChatRole.error:
@@ -322,9 +357,10 @@ class _UserBubble extends StatelessWidget {
 }
 
 class _AiBubble extends StatelessWidget {
-  const _AiBubble({required this.message});
+  const _AiBubble({required this.message, this.onApproval});
 
   final ChatMessage message;
+  final void Function(ChatSegment segment, String decision)? onApproval;
 
   @override
   Widget build(BuildContext context) {
@@ -357,7 +393,8 @@ class _AiBubble extends StatelessWidget {
                 const SizedBox(height: 4),
                 AppCard(
                   padding: const EdgeInsets.all(12),
-                  child: ChatMessageContent(message: message),
+                  child: ChatMessageContent(
+                      message: message, onApproval: onApproval),
                 ),
               ],
             ),

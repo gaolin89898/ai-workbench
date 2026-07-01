@@ -1,10 +1,12 @@
 <script setup lang="ts">
 import { computed } from "vue";
+import { desktopApi } from "../services/desktop";
 import type { ChatSegment as ChatSegmentType } from "../services/desktop";
 import { extractAssistantText } from "../utils/chat";
 
 const props = defineProps<{
   segment: ChatSegmentType;
+  aiSessionId?: string;
 }>();
 
 type MarkdownBlock =
@@ -27,9 +29,12 @@ type DiffLine = {
 };
 
 const toolDiffLines = computed<DiffLine[]>(() => {
-  if (props.segment.type !== "tool" || !props.segment.diff) return [];
-  return parseDiffLines(props.segment.diff);
+  if (props.segment.type !== "tool") return [];
+  const diff = toolDiffText(props.segment);
+  return diff ? parseDiffLines(diff) : [];
 });
+
+const approvalBusy = computed(() => props.segment.type === "approval" && props.segment.status !== "pending");
 
 function formatDuration(durationMs?: number) {
   if (!durationMs) return "";
@@ -38,8 +43,13 @@ function formatDuration(durationMs?: number) {
 }
 
 function toolLineTitle(segment: Extract<ChatSegmentType, { type: "tool" }>) {
-  const command = shortenCommand(segment.command);
+  const patchFiles = patchFileList(toolDiffText(segment));
+  const command = patchFiles.length ? shortFileList(patchFiles) : shortenCommand(segment.command);
   const verb = segment.status === "running" ? "正在" : "已";
+  if (isStdinContinuationSegment(segment)) {
+    if (segment.status === "error") return "读取命令输出失败";
+    return segment.status === "running" ? "正在读取命令输出" : "已读取命令输出";
+  }
   if (isUserMessageSegment(segment)) {
     if (segment.status === "error") return "处理失败";
     return segment.status === "running" ? "正在处理" : "已处理";
@@ -52,7 +62,7 @@ function toolLineTitle(segment: Extract<ChatSegmentType, { type: "tool" }>) {
     if (segment.status === "error") return command ? `修改 ${command} 文件失败` : "修改文件失败";
     return command
       ? `${segment.status === "running" ? "正在修改" : "已修改"} ${command} 文件`
-      : (segment.status === "running" ? "正在修改文件" : "已修改文件");
+      : (segment.status === "running" ? "正在处理文件修改" : "已处理文件修改");
   }
   if (segment.toolName.includes("命令") || segment.command) {
     if (segment.status === "error") return command ? `运行失败 ${command}` : "运行命令失败";
@@ -63,16 +73,19 @@ function toolLineTitle(segment: Extract<ChatSegmentType, { type: "tool" }>) {
 }
 
 function toolLineMeta(segment: Extract<ChatSegmentType, { type: "tool" }>) {
-  const parts: string[] = [];
-  if (segment.additions !== undefined) parts.push(`+${segment.additions}`);
-  if (segment.deletions !== undefined) parts.push(`-${segment.deletions}`);
-  if (segment.status === "error") parts.push("失败");
-  if (segment.durationMs) parts.push(formatDuration(segment.durationMs));
-  return parts.join(" ");
+  const parts: Array<{ kind: "add" | "delete" | "error" | "duration"; text: string }> = [];
+  const stats = diffStats(toolDiffText(segment));
+  const additions = segment.additions ?? stats.additions;
+  const deletions = segment.deletions ?? stats.deletions;
+  if (additions !== undefined) parts.push({ kind: "add", text: `+${additions}` });
+  if (deletions !== undefined) parts.push({ kind: "delete", text: `-${deletions}` });
+  if (segment.status === "error") parts.push({ kind: "error", text: "失败" });
+  if (segment.durationMs) parts.push({ kind: "duration", text: formatDuration(segment.durationMs) });
+  return parts;
 }
 
 function toolHasDetails(segment: Extract<ChatSegmentType, { type: "tool" }>) {
-  return Boolean(segment.input || segment.output || segment.diff);
+  return Boolean(toolVisibleInput(segment) || toolVisibleOutput(segment) || toolDiffText(segment));
 }
 
 function toolDetailText(segment: Extract<ChatSegmentType, { type: "tool" }>, value?: string) {
@@ -84,6 +97,14 @@ function toolDetailText(segment: Extract<ChatSegmentType, { type: "tool" }>, val
 function isUserMessageSegment(segment: Extract<ChatSegmentType, { type: "tool" }>) {
   return /(?:^|[:\s])(?:userMessage|user_message)(?:$|[:\s])/i.test(segment.toolName)
     || /(?:^|[:\s])(?:userMessage|user_message)(?:$|[:\s])/i.test(segment.summary ?? "");
+}
+
+function isStdinContinuationSegment(segment: Extract<ChatSegmentType, { type: "tool" }>) {
+  const input = segment.input ?? "";
+  return segment.toolName === "文件修改"
+    && input.includes("\"session_id\"")
+    && input.includes("\"yield_time_ms\"")
+    && input.includes("\"max_output_tokens\"");
 }
 
 function extractUserRequest(text: string) {
@@ -101,8 +122,64 @@ function shortenCommand(command?: string) {
   return unquoted.length > 88 ? `${unquoted.slice(0, 85)}...` : unquoted;
 }
 
+function toolDiffText(segment: Extract<ChatSegmentType, { type: "tool" }>) {
+  if (segment.diff?.trim()) return segment.diff;
+  const input = segment.input?.trim() ?? "";
+  return input.startsWith("*** Begin Patch") ? input : "";
+}
+
+function toolVisibleInput(segment: Extract<ChatSegmentType, { type: "tool" }>) {
+  return toolDiffText(segment) ? "" : segment.input;
+}
+
+function toolVisibleOutput(segment: Extract<ChatSegmentType, { type: "tool" }>) {
+  return cleanToolOutput(segment.output ?? "");
+}
+
+function cleanToolOutput(output: string) {
+  const lines = output.replace(/\r\n/g, "\n").split("\n");
+  const outputIndex = lines.findIndex((line) => line.trim() === "Output:");
+  const visibleLines = (outputIndex >= 0 ? lines.slice(outputIndex + 1) : lines).filter((line) => {
+    const trimmed = line.trim();
+    if (/^(Chunk ID|Wall time|Process exited with code|Original token count):/.test(trimmed)) return false;
+    if (trimmed === "Output:") return false;
+    if (trimmed === "Failed to create stream fd: Operation not permitted") return false;
+    return true;
+  });
+  return visibleLines.join("\n").trim();
+}
+
+function patchFileList(diff: string) {
+  const files: string[] = [];
+  const seen = new Set<string>();
+  for (const line of diff.replace(/\r\n/g, "\n").split("\n")) {
+    const match = line.match(/^\*\*\* (?:Add|Update|Delete) File: (.+)$/);
+    const file = match?.[1]?.trim();
+    if (!file || seen.has(file)) continue;
+    seen.add(file);
+    files.push(file);
+  }
+  return files;
+}
+
+function shortFileList(files: string[]) {
+  if (files.length <= 2) return files.join(", ");
+  return `${files.slice(0, 2).join(", ")} 等 ${files.length} 个`;
+}
+
+function diffStats(diff: string): { additions?: number; deletions?: number } {
+  if (!diff.trim()) return {};
+  let additions = 0;
+  let deletions = 0;
+  for (const line of diff.replace(/\r\n/g, "\n").split("\n")) {
+    if (line.startsWith("+") && !line.startsWith("+++")) additions += 1;
+    if (line.startsWith("-") && !line.startsWith("---")) deletions += 1;
+  }
+  return { additions, deletions };
+}
+
 function parseDiffLines(diff: string): DiffLine[] {
-  return diff.replace(/\r\n/g, "\n").split("\n").map((line) => {
+  return diff.replace(/\r\n/g, "\n").split("\n").filter((line) => !isPatchWrapperLine(line)).map((line) => {
     if (line.startsWith("+") && !line.startsWith("+++")) return { type: "add", text: line };
     if (line.startsWith("-") && !line.startsWith("---")) return { type: "delete", text: line };
     if (line.startsWith("@@") || line.startsWith("diff ") || line.startsWith("index ") || line.startsWith("+++") || line.startsWith("---")) {
@@ -110,6 +187,13 @@ function parseDiffLines(diff: string): DiffLine[] {
     }
     return { type: "context", text: line };
   });
+}
+
+function isPatchWrapperLine(line: string) {
+  return line.startsWith("*** Begin Patch")
+    || line.startsWith("*** End Patch")
+    || /^\*\*\* (?:Add|Update|Delete) File: /.test(line)
+    || line.startsWith("@@");
 }
 
 function parseMarkdownBlocks(text: string): MarkdownBlock[] {
@@ -251,6 +335,23 @@ function inlineParts(text: string) {
   if (lastIndex < text.length) parts.push({ code: false, text: text.slice(lastIndex) });
   return parts;
 }
+
+function approvalMeta(segment: Extract<ChatSegmentType, { type: "approval" }>) {
+  const parts: string[] = [];
+  if (segment.cwd) parts.push(`目录 ${segment.cwd}`);
+  if (segment.grantRoot) parts.push(`授权目录 ${segment.grantRoot}`);
+  if (segment.fileChanges?.length) parts.push(`${segment.fileChanges.length} 个文件`);
+  return parts.join(" · ");
+}
+
+async function respondApproval(decision: "approved" | "denied") {
+  if (props.segment.type !== "approval" || !props.aiSessionId || props.segment.status !== "pending") return;
+  await desktopApi.respondCodexApproval({
+    aiSessionId: props.aiSessionId,
+    approvalId: props.segment.approvalId,
+    decision,
+  });
+}
 </script>
 
 <template>
@@ -352,43 +453,65 @@ function inlineParts(text: string) {
     <div class="chat-segment-content">{{ segment.text }}</div>
   </details>
 
-  <details
-    v-else-if="segment.type === 'tool'"
-    class="chat-segment-tool"
-    :class="[segment.status, { expandable: toolHasDetails(segment) }]"
-  >
-    <summary>
-      <span class="chat-segment-tool-copy" :class="{ shimmer: segment.status === 'running' }">
-        <strong>{{ toolLineTitle(segment) }}</strong>
-        <small v-if="toolLineMeta(segment)">{{ toolLineMeta(segment) }}</small>
-      </span>
-      <svg v-if="toolHasDetails(segment)" class="chat-segment-tool-chevron" viewBox="0 0 16 16" fill="none" aria-hidden="true">
-        <path d="M5 6.5 8 9.5l3-3" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" />
-      </svg>
-    </summary>
-    <div v-if="segment.input || segment.output || segment.diff" class="chat-segment-tool-details">
-      <section v-if="toolDiffLines.length" class="chat-segment-diff-section">
-        <div class="chat-segment-diff">
-          <div
-            v-for="(line, lineIndex) in toolDiffLines"
-            :key="lineIndex"
-            class="chat-segment-diff-line"
-            :class="line.type"
-          >
-            <code>{{ line.text || " " }}</code>
+  <template v-else-if="segment.type === 'tool'">
+    <details
+      v-if="toolHasDetails(segment)"
+      class="chat-segment-tool expandable"
+      :class="segment.status"
+    >
+      <summary class="chat-segment-tool-line">
+        <span class="chat-segment-tool-copy" :class="{ shimmer: segment.status === 'running' }">
+          <strong>{{ toolLineTitle(segment) }}</strong>
+          <small v-if="toolLineMeta(segment).length" class="chat-segment-tool-meta">
+            <span
+              v-for="(item, itemIndex) in toolLineMeta(segment)"
+              :key="itemIndex"
+              :class="`meta-${item.kind}`"
+            >{{ item.text }}</span>
+          </small>
+        </span>
+        <svg class="chat-segment-tool-chevron" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+          <path d="M5 6.5 8 9.5l3-3" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" />
+        </svg>
+      </summary>
+      <div class="chat-segment-tool-details">
+        <section v-if="toolDiffLines.length" class="chat-segment-diff-section">
+          <div class="chat-segment-diff">
+            <div
+              v-for="(line, lineIndex) in toolDiffLines"
+              :key="lineIndex"
+              class="chat-segment-diff-line"
+              :class="line.type"
+            >
+              <code>{{ line.text || " " }}</code>
+            </div>
           </div>
-        </div>
-      </section>
-      <details v-if="segment.input" class="chat-segment-output-block">
-        <summary>查看输入</summary>
-        <pre>{{ toolDetailText(segment, segment.input) }}</pre>
-      </details>
-      <details v-if="segment.output" class="chat-segment-output-block">
-        <summary>查看输出</summary>
-        <pre>{{ toolDetailText(segment, segment.output) }}</pre>
-      </details>
+        </section>
+        <section v-if="toolVisibleInput(segment)" class="chat-segment-output-block">
+          <strong>输入</strong>
+          <pre>{{ toolDetailText(segment, toolVisibleInput(segment)) }}</pre>
+        </section>
+        <section v-if="toolVisibleOutput(segment)" class="chat-segment-output-block">
+          <strong>输出</strong>
+          <pre>{{ toolDetailText(segment, toolVisibleOutput(segment)) }}</pre>
+        </section>
+      </div>
+    </details>
+    <div v-else class="chat-segment-tool" :class="segment.status">
+      <div class="chat-segment-tool-line">
+        <span class="chat-segment-tool-copy" :class="{ shimmer: segment.status === 'running' }">
+          <strong>{{ toolLineTitle(segment) }}</strong>
+          <small v-if="toolLineMeta(segment).length" class="chat-segment-tool-meta">
+            <span
+              v-for="(item, itemIndex) in toolLineMeta(segment)"
+              :key="itemIndex"
+              :class="`meta-${item.kind}`"
+            >{{ item.text }}</span>
+          </small>
+        </span>
+      </div>
     </div>
-  </details>
+  </template>
 
   <article v-else-if="segment.type === 'error'" class="chat-segment-error">
     <strong>{{ segment.title || "执行出错" }}</strong>
@@ -397,5 +520,30 @@ function inlineParts(text: string) {
       <summary>查看详情</summary>
       <pre>{{ segment.detail }}</pre>
     </details>
+  </article>
+
+  <article v-else-if="segment.type === 'approval'" class="chat-segment-approval" :class="segment.status">
+    <div class="chat-segment-approval-header">
+      <span class="chat-segment-approval-icon" aria-hidden="true">
+        <svg viewBox="0 0 16 16" fill="none">
+          <path d="M8 1.8 13.2 4v3.8c0 3.1-2.1 5.4-5.2 6.4-3.1-1-5.2-3.3-5.2-6.4V4L8 1.8Z" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round" />
+          <path d="m5.8 8.1 1.4 1.4 3-3.2" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" />
+        </svg>
+      </span>
+      <span>
+        <strong>{{ segment.title }}</strong>
+        <small v-if="approvalMeta(segment)">{{ approvalMeta(segment) }}</small>
+      </span>
+    </div>
+    <p v-if="segment.reason" class="chat-segment-approval-reason">{{ segment.reason }}</p>
+    <pre v-if="segment.command" class="chat-segment-approval-code">{{ segment.command }}</pre>
+    <ul v-if="segment.fileChanges?.length" class="chat-segment-approval-files">
+      <li v-for="file in segment.fileChanges.slice(0, 6)" :key="file">{{ file }}</li>
+    </ul>
+    <p v-if="segment.detail" class="chat-segment-approval-detail">{{ segment.detail }}</p>
+    <div class="chat-segment-approval-actions">
+      <button type="button" class="button secondary" :disabled="approvalBusy || !aiSessionId" @click="respondApproval('denied')">拒绝</button>
+      <button type="button" class="button primary" :disabled="approvalBusy || !aiSessionId" @click="respondApproval('approved')">同意本次</button>
+    </div>
   </article>
 </template>

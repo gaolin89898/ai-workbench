@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
-import { desktopApi, type AiProvider, type AiSession, type SavedCloudConfig, type TerminalSession, type ViewName, type WorkspaceFileEntry, type WorkspaceProject } from "../services/desktop";
+import { desktopApi, type AiProvider, type AiSession, type CodexProjectSession, type SavedCloudConfig, type TerminalSession, type ViewName, type WorkspaceFileEntry, type WorkspaceProject } from "../services/desktop";
 
 const archiveBoxIcon = new URL("../assets/icons/archive-box.svg", import.meta.url).href;
 const projectFolderIcon = new URL("../assets/icons/project-folder.svg", import.meta.url).href;
@@ -17,6 +17,11 @@ const linkIcon = new URL("../assets/icons/link.svg", import.meta.url).href;
 const gitForkIcon = new URL("../assets/icons/git-fork.svg", import.meta.url).href;
 const branchForkIcon = new URL("../assets/icons/branch-fork.svg", import.meta.url).href;
 const windowIcon = new URL("../assets/icons/window.svg", import.meta.url).href;
+const terminalIcon = new URL("../assets/icons/terminal.svg", import.meta.url).href;
+const providerCodexIcon = new URL("../assets/icons/provider-codex.svg", import.meta.url).href;
+const providerClaudeIcon = new URL("../assets/icons/provider-claude.svg", import.meta.url).href;
+const providerOpencodeIcon = new URL("../assets/icons/provider-opencode.svg", import.meta.url).href;
+const providerDeepseekIcon = new URL("../assets/icons/provider-deepseek.svg", import.meta.url).href;
 
 const chevronDownSvg = '<svg viewBox="0 0 20 20" aria-hidden="true"><path d="M5 7.5 10 12.5 15 7.5"/></svg>';
 const chevronRightSvg = '<svg viewBox="0 0 20 20" aria-hidden="true"><path d="M7.5 5 12.5 10 7.5 15"/></svg>';
@@ -26,6 +31,7 @@ const props = defineProps<{
   providers: AiProvider[];
   terminalSessions: TerminalSession[];
   activeSessions: AiSession[];
+  codexProjectSessions: Record<string, CodexProjectSession[]>;
   activeAiSession: AiSession | null;
   selectedProjectPath: string;
   thinkingSessionIds: Record<string, boolean>;
@@ -41,6 +47,7 @@ const emit = defineEmits<{
   createSession: [path: string, providerId: string];
   attachSession: [path: string, terminalSessionId: string, providerId: string];
   selectSession: [session: AiSession];
+  importCodexSession: [session: CodexProjectSession];
   archiveSession: [sessionId: string, archived: boolean];
   switchView: [view: ViewName];
   renameProject: [project: WorkspaceProject, name: string];
@@ -90,19 +97,55 @@ function toggleProjectCollapsed(path: string) {
 }
 const COLLAPSED_SESSION_LIMIT = 5;
 
+type ProjectSessionListItem =
+  | { kind: "local"; id: string; updatedAt: string; session: AiSession }
+  | { kind: "codex"; id: string; updatedAt: string; session: CodexProjectSession };
+
 function sessionsForProject(path: string) {
   return props.activeSessions.filter((session) => session.summary === path);
 }
 
+function allSessionsForProject(path: string): ProjectSessionListItem[] {
+  const localSessions = sessionsForProject(path);
+  const localProviderSessionIds = new Set(
+    localSessions
+      .map((session) => session.providerSessionId)
+      .filter((value): value is string => Boolean(value))
+  );
+  const localItems: ProjectSessionListItem[] = localSessions.map((session) => ({
+    kind: "local",
+    id: session.id,
+    updatedAt: session.updatedAt ?? "",
+    session,
+  }));
+  const codexItems: ProjectSessionListItem[] = codexSessionsForProject(path)
+    .filter((session) => !localProviderSessionIds.has(session.id))
+    .map((session) => ({
+      kind: "codex",
+      id: session.id,
+      updatedAt: session.updatedAt,
+      session,
+    }));
+  return [...localItems, ...codexItems].sort((left, right) => {
+    const rightTime = Date.parse(right.updatedAt);
+    const leftTime = Date.parse(left.updatedAt);
+    return (Number.isNaN(rightTime) ? 0 : rightTime) - (Number.isNaN(leftTime) ? 0 : leftTime);
+  });
+}
+
 function visibleSessionsForProject(path: string) {
-  const sessions = sessionsForProject(path);
+  const sessions = allSessionsForProject(path);
   if (expandedProjectSessions.value[path]) return sessions;
   return sessions.slice(0, COLLAPSED_SESSION_LIMIT);
 }
 
 function hiddenSessionCountForProject(path: string) {
   if (expandedProjectSessions.value[path]) return 0;
-  return Math.max(0, sessionsForProject(path).length - COLLAPSED_SESSION_LIMIT);
+  return Math.max(0, allSessionsForProject(path).length - COLLAPSED_SESSION_LIMIT);
+}
+
+function codexSessionsForProject(path: string) {
+  return props.codexProjectSessions[path] ?? [];
 }
 
 function isProjectSessionsExpanded(path: string) {
@@ -457,6 +500,12 @@ function selectSession(session: AiSession) {
   emit("switchView", "aiSessions");
 }
 
+function importCodexSession(session: CodexProjectSession) {
+  openContextMenu.value = null;
+  emit("importCodexSession", session);
+  emit("switchView", "aiSessions");
+}
+
 function chooseProjectFromSidebar() {
   openProjectMenuPath.value = null;
   openContextMenu.value = null;
@@ -473,9 +522,38 @@ function providerIdFromTool(tool: string) {
   return props.providers.some((provider) => provider.id === normalized) ? normalized : (props.providers[0]?.id ?? "codex");
 }
 
+function providerIcon(providerId?: string | null) {
+  const normalized = (providerId ?? "").toLowerCase();
+  if (normalized === "codex") return providerCodexIcon;
+  if (normalized === "claude") return providerClaudeIcon;
+  if (normalized === "opencode") return providerOpencodeIcon;
+  if (normalized === "deepseek") return providerDeepseekIcon;
+  return terminalIcon;
+}
+
+function projectSessionIcon(item: ProjectSessionListItem) {
+  if (item.kind === "codex") return providerCodexIcon;
+  if (item.session.terminalSessionId) return terminalIcon;
+  return providerIcon(item.session.providerId);
+}
+
+function projectSessionIconLabel(item: ProjectSessionListItem) {
+  if (item.kind === "codex") return "Codex 外部会话";
+  if (item.session.terminalSessionId) return "接管终端会话";
+  return `${item.session.providerId} 会话`;
+}
+
 function sessionTimeLabel(session: AiSession) {
   if (!session.updatedAt) return "";
-  const time = Date.parse(session.updatedAt);
+  return relativeTimeLabel(session.updatedAt);
+}
+
+function codexSessionTimeLabel(session: CodexProjectSession) {
+  return relativeTimeLabel(session.updatedAt);
+}
+
+function relativeTimeLabel(value: string) {
+  const time = Date.parse(value);
   if (Number.isNaN(time)) return "";
   const diffMs = Date.now() - time;
   const minute = 60 * 1000;
@@ -487,8 +565,28 @@ function sessionTimeLabel(session: AiSession) {
   return `${Math.floor(diffMs / day)} 天`;
 }
 
+function codexSessionSourceLabel(session: CodexProjectSession) {
+  const source = session.source?.trim();
+  if (!source) return "Codex";
+  if (source === "vscode") return "VS Code";
+  if (source === "cli") return "CLI";
+  return source;
+}
+
+function projectSessionTitle(item: ProjectSessionListItem) {
+  return item.session.title;
+}
+
+function projectSessionTimeLabel(item: ProjectSessionListItem) {
+  return item.kind === "local" ? sessionTimeLabel(item.session) : codexSessionTimeLabel(item.session);
+}
+
+function projectSessionSubtitle(item: ProjectSessionListItem) {
+  return item.kind === "codex" ? codexSessionSourceLabel(item.session) : "";
+}
+
 function isThinking(session: AiSession) {
-  return Boolean(props.thinkingSessionIds[session.id]);
+  return Boolean(props.thinkingSessionIds[session.id] || session.status === "running");
 }
 
 function openSessionContextMenu(event: MouseEvent, session: AiSession) {
@@ -714,45 +812,62 @@ onBeforeUnmount(() => {
                 </div>
               </template>
             </template>
-            <template v-else-if="sessionsForProject(project.path).length">
+            <template v-else-if="allSessionsForProject(project.path).length">
               <div
-                v-for="session in visibleSessionsForProject(project.path)"
-                :key="session.id"
+                v-for="item in visibleSessionsForProject(project.path)"
+                :key="`${item.kind}:${item.id}`"
                 class="tree-chat-row"
-                :class="{ active: activeAiSession?.id === session.id, terminal: Boolean(session.terminalSessionId) }"
-                @contextmenu.prevent.stop="openSessionContextMenu($event, session)"
+                :class="{
+                  active: item.kind === 'local' && activeAiSession?.id === item.session.id,
+                  terminal: item.kind === 'local' && Boolean(item.session.terminalSessionId),
+                  external: item.kind === 'codex',
+                }"
+                @contextmenu.prevent.stop="item.kind === 'local' && openSessionContextMenu($event, item.session)"
               >
                 <button
                   class="tree-chat"
-                  :class="{ active: activeAiSession?.id === session.id, terminal: Boolean(session.terminalSessionId) }"
+                  :class="{
+                    active: item.kind === 'local' && activeAiSession?.id === item.session.id,
+                    terminal: item.kind === 'local' && Boolean(item.session.terminalSessionId),
+                    external: item.kind === 'codex',
+                  }"
                   type="button"
-                  @click="selectSession(session)"
+                  :title="item.kind === 'codex' ? `${item.session.cwd}\n${item.session.id}` : undefined"
+                  @click="item.kind === 'local' ? selectSession(item.session) : importCodexSession(item.session)"
                 >
                   <span class="tree-chat-copy">
                     <span class="tree-chat-title">
+                      <img
+                        class="tree-chat-provider-icon"
+                        :src="projectSessionIcon(item)"
+                        :alt="projectSessionIconLabel(item)"
+                        :title="projectSessionIconLabel(item)"
+                      />
                       <i
-                        v-if="isSessionPinnedLocal(session)"
+                        v-if="item.kind === 'local' && isSessionPinnedLocal(item.session)"
                         class="tree-chat-pin"
                         :title="'已置顶'"
                         aria-hidden="true"
                       >▾</i>
-                      <span>{{ session.title }}</span>
+                      <span>{{ projectSessionTitle(item) }}</span>
                     </span>
-                    <i v-if="isThinking(session)" class="tree-chat-spinner" aria-label="思考中"></i>
+                    <i v-if="item.kind === 'local' && isThinking(item.session)" class="tree-chat-spinner" aria-label="思考中"></i>
                     <i
-                      v-else-if="isSessionUnreadLocal(session)"
+                      v-else-if="item.kind === 'local' && isSessionUnreadLocal(item.session)"
                       class="tree-chat-unread"
                       :title="'未读'"
                       aria-label="未读"
                     ></i>
-                    <small v-else-if="sessionTimeLabel(session)">{{ sessionTimeLabel(session) }}</small>
+                    <small v-else-if="projectSessionTimeLabel(item)">{{ projectSessionTimeLabel(item) }}</small>
+                    <small v-if="projectSessionSubtitle(item)" class="tree-chat-source">{{ projectSessionSubtitle(item) }}</small>
                   </span>
                 </button>
                 <button
+                  v-if="item.kind === 'local'"
                   class="tree-chat-action"
                   title="归档会话"
                   type="button"
-                  @click.stop="archiveSession(session)"
+                  @click.stop="archiveSession(item.session)"
                 >
                   <img :src="archiveBoxIcon" alt="" aria-hidden="true" />
                 </button>
@@ -766,7 +881,7 @@ onBeforeUnmount(() => {
                 <span>展开显示</span>
               </button>
               <button
-                v-else-if="isProjectSessionsExpanded(project.path) && sessionsForProject(project.path).length > COLLAPSED_SESSION_LIMIT"
+                v-else-if="isProjectSessionsExpanded(project.path) && allSessionsForProject(project.path).length > COLLAPSED_SESSION_LIMIT"
                 class="tree-chat-toggle"
                 type="button"
                 @click="toggleProjectSessionsExpanded(project.path)"

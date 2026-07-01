@@ -6,7 +6,7 @@
 import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
 import { createInterface, type Interface } from "node:readline";
 import * as os from "node:os";
-import type { RunCodexChatRequest, AiChatOutputEvent, ChatImageAttachment, ChatSegment } from "../services/desktop";
+import type { RunCodexChatRequest, AiChatOutputEvent, ChatImageAttachment, ChatSegment, CodexApprovalDecision } from "../services/desktop";
 import { getLocalAiSession } from "./db";
 
 // Structural sender — WebContents / BrowserWindow satisfy this, and test
@@ -27,6 +27,15 @@ interface PendingRequest {
   reject: (error: Error) => void;
 }
 
+interface PendingApproval {
+  approvalId: string;
+  requestId: number;
+  method: string;
+  stepId: string;
+  segment: Extract<ChatSegment, { type: "approval" }>;
+  resolved: boolean;
+}
+
 // ---------- Session state ----------
 
 interface CodexSession {
@@ -40,6 +49,7 @@ interface CodexSession {
   closed: boolean;
   stderrBuffer: string;
   commandOutputBuffers: Map<string, string>;
+  pendingApprovals: Map<string, PendingApproval>;
   turnResolver: { resolve: () => void; reject: (error: Error) => void } | null;
   errorEmitted: boolean;
   cancelled: boolean;
@@ -121,6 +131,11 @@ function strOrUndef(v: unknown): string | undefined {
 
 function numOrUndef(v: unknown): number | undefined {
   return typeof v === "number" ? v : undefined;
+}
+
+function arrayOfStrings(v: unknown): string[] {
+  if (!Array.isArray(v)) return [];
+  return v.filter((item): item is string => typeof item === "string" && item.trim().length > 0);
 }
 
 function firstString(...values: unknown[]): string | undefined {
@@ -209,6 +224,84 @@ function extractErrorMessage(params: unknown): string | undefined {
   const errObj = p["error"] as Record<string, unknown> | undefined;
   const msg = p["message"] ?? errObj?.["message"] ?? p["error"];
   return typeof msg === "string" ? msg : undefined;
+}
+
+function approvalStatusTitle(status: Extract<ChatSegment, { type: "approval" }>["status"], kind: "command" | "fileChange") {
+  const noun = kind === "command" ? "命令" : "文件修改";
+  switch (status) {
+    case "approved":
+      return `已同意执行${noun}`;
+    case "denied":
+      return `已拒绝执行${noun}`;
+    case "expired":
+      return `${noun}审批已失效`;
+    case "failed":
+      return `${noun}审批处理失败`;
+    default:
+      return kind === "command" ? "需要同意后执行命令" : "需要同意后修改文件";
+  }
+}
+
+function approvalIdFor(requestId: number, params: Record<string, unknown>) {
+  const explicit = strOrUndef(params["approvalId"]) ?? strOrUndef(params["callId"]);
+  return explicit ? `${requestId}:${explicit}` : `${requestId}`;
+}
+
+function approvalStepIdFor(approvalId: string) {
+  return `approval-${approvalId.replace(/[^a-zA-Z0-9_-]/g, "-")}`;
+}
+
+function commandFromApproval(method: string, params: Record<string, unknown>) {
+  if (method === "execCommandApproval") {
+    const command = arrayOfStrings(params["command"]);
+    return command.join(" ");
+  }
+  return strOrUndef(params["command"]);
+}
+
+function fileChangesFromApproval(params: Record<string, unknown>) {
+  const fileChanges = params["fileChanges"];
+  if (!fileChanges || typeof fileChanges !== "object" || Array.isArray(fileChanges)) return [];
+  return Object.keys(fileChanges as Record<string, unknown>);
+}
+
+function buildApprovalSegment(
+  method: string,
+  requestId: number,
+  params: unknown
+): Extract<ChatSegment, { type: "approval" }> | null {
+  if (!params || typeof params !== "object") return null;
+  const p = params as Record<string, unknown>;
+  const approvalKind = method === "item/fileChange/requestApproval" || method === "applyPatchApproval"
+    ? "fileChange"
+    : "command";
+  const approvalId = approvalIdFor(requestId, p);
+  const stepId = approvalStepIdFor(approvalId);
+  const grantRoot = strOrUndef(p["grantRoot"]);
+  const command = commandFromApproval(method, p);
+  const fileChanges = fileChangesFromApproval(p);
+  const reason = strOrUndef(p["reason"]);
+  const cwd = strOrUndef(p["cwd"]);
+  return {
+    type: "approval",
+    stepId,
+    approvalId,
+    approvalKind,
+    status: "pending",
+    title: approvalStatusTitle("pending", approvalKind),
+    reason,
+    command,
+    cwd,
+    grantRoot,
+    fileChanges,
+  };
+}
+
+function isApprovalRequestMethod(method: string) {
+  return method === "item/commandExecution/requestApproval"
+    || method === "item/fileChange/requestApproval"
+    || method === "execCommandApproval"
+    || method === "applyPatchApproval";
 }
 
 // ---------- ChatSegment builders ----------
@@ -333,6 +426,88 @@ function sendRequest(
   });
 }
 
+function sendResponse(session: CodexSession, id: number, result: unknown): void {
+  if (session.closed) throw new Error("Codex 会话已结束");
+  session.child.stdin.write(JSON.stringify({
+    jsonrpc: "2.0",
+    id,
+    result,
+  }) + "\n");
+}
+
+function sendErrorResponse(session: CodexSession, id: number, message: string): void {
+  if (session.closed) return;
+  session.child.stdin.write(JSON.stringify({
+    jsonrpc: "2.0",
+    id,
+    error: { code: -32000, message },
+  }) + "\n");
+}
+
+function approvalResponseFor(method: string, decision: CodexApprovalDecision) {
+  if (method === "item/commandExecution/requestApproval" || method === "item/fileChange/requestApproval") {
+    return { decision: decision === "approved" ? "accept" : "decline" };
+  }
+  return { decision };
+}
+
+function updateApprovalSegment(
+  session: CodexSession,
+  approval: PendingApproval,
+  status: Extract<ChatSegment, { type: "approval" }>["status"],
+  detail?: string
+): void {
+  approval.segment = {
+    ...approval.segment,
+    status,
+    title: approvalStatusTitle(status, approval.segment.approvalKind),
+    detail,
+  };
+  emit(session.sender, {
+    aiSessionId: session.aiSessionId,
+    kind: "step-update",
+    stepId: approval.stepId,
+    segment: approval.segment,
+  });
+}
+
+function handleApprovalRequest(
+  session: CodexSession,
+  method: string,
+  id: number,
+  params: unknown
+): void {
+  const segment = buildApprovalSegment(method, id, params);
+  if (!segment) {
+    sendResponse(session, id, approvalResponseFor(method, "denied"));
+    return;
+  }
+  const approval: PendingApproval = {
+    approvalId: segment.approvalId,
+    requestId: id,
+    method,
+    stepId: segment.stepId,
+    segment,
+    resolved: false,
+  };
+  session.pendingApprovals.set(segment.approvalId, approval);
+  emit(session.sender, {
+    aiSessionId: session.aiSessionId,
+    kind: "step-start",
+    stepId: segment.stepId,
+    segment,
+  });
+}
+
+function resolvePendingApprovals(session: CodexSession, status: "expired" | "failed", detail?: string): void {
+  for (const approval of session.pendingApprovals.values()) {
+    if (approval.resolved) continue;
+    approval.resolved = true;
+    updateApprovalSegment(session, approval, status, detail);
+  }
+  session.pendingApprovals.clear();
+}
+
 // ---------- Line / notification handling ----------
 
 function handleLine(session: CodexSession, line: string): void {
@@ -350,6 +525,18 @@ function handleLine(session: CodexSession, line: string): void {
 
   if (!message || typeof message !== "object") return;
   const msg = message as Record<string, unknown>;
+
+  // Server request from Codex app-server. The app must answer this id, or the
+  // Codex turn waits indefinitely for approval.
+  if (typeof msg["id"] === "number" && typeof msg["method"] === "string") {
+    const method = msg["method"] as string;
+    if (isApprovalRequestMethod(method)) {
+      handleApprovalRequest(session, method, msg["id"] as number, msg["params"]);
+      return;
+    }
+    sendErrorResponse(session, msg["id"] as number, `Unsupported server request: ${method}`);
+    return;
+  }
 
   // Response to a request (has numeric id)
   if (typeof msg["id"] === "number") {
@@ -538,6 +725,7 @@ function createSession(
     closed: false,
     stderrBuffer: "",
     commandOutputBuffers: new Map(),
+    pendingApprovals: new Map(),
     turnResolver: null,
     errorEmitted: false,
     cancelled: false,
@@ -584,6 +772,7 @@ function handleExit(
     pending.reject(err);
   }
   session.pendingRequests.clear();
+  resolvePendingApprovals(session, "expired", "Codex 会话已结束，审批请求已失效。");
   if (session.turnResolver) {
     session.turnResolver.reject(err);
     session.turnResolver = null;
@@ -602,6 +791,7 @@ function handleSpawnError(session: CodexSession, err: Error): void {
     pending.reject(err);
   }
   session.pendingRequests.clear();
+  resolvePendingApprovals(session, "failed", message);
   if (session.turnResolver) {
     session.turnResolver.reject(err);
     session.turnResolver = null;
@@ -611,6 +801,7 @@ function handleSpawnError(session: CodexSession, err: Error): void {
 
 function killSession(session: CodexSession): void {
   if (session.closed) return;
+  resolvePendingApprovals(session, "expired", "Codex 会话已结束，审批请求已失效。");
   session.closed = true;
   try {
     session.rl.close();
@@ -631,6 +822,7 @@ function killSession(session: CodexSession): void {
 
 function interruptSession(session: CodexSession): void {
   if (session.closed) return;
+  resolvePendingApprovals(session, "expired", "用户已中断当前 AI 会话。");
   session.closed = true;
   try {
     session.rl.close();
@@ -724,6 +916,7 @@ export async function runCodexChat(
       pending.reject(new Error("timeout"));
     }
     session.pendingRequests.clear();
+    resolvePendingApprovals(session, "expired", "Codex 会话超时，审批请求已失效。");
     killSession(session);
   }, CODEX_TURN_TIMEOUT_MS);
 
@@ -791,6 +984,7 @@ export function stopCodexChat(aiSessionId: string): boolean {
     pending.reject(error);
   }
   session.pendingRequests.clear();
+  resolvePendingApprovals(session, "expired", "用户已中断当前 AI 会话。");
   if (session.turnResolver) {
     session.turnResolver.reject(error);
     session.turnResolver = null;
@@ -798,6 +992,33 @@ export function stopCodexChat(aiSessionId: string): boolean {
   interruptSession(session);
   activeCodexSessions.delete(aiSessionId);
   return true;
+}
+
+export function respondCodexApproval(
+  aiSessionId: string,
+  approvalId: string,
+  decision: CodexApprovalDecision
+): boolean {
+  const session = activeCodexSessions.get(aiSessionId);
+  if (!session) return false;
+  const approval = session.pendingApprovals.get(approvalId);
+  if (!approval || approval.resolved) return false;
+  approval.resolved = true;
+  try {
+    sendResponse(session, approval.requestId, approvalResponseFor(approval.method, decision));
+    updateApprovalSegment(
+      session,
+      approval,
+      decision,
+      decision === "approved" ? "用户已同意本次操作。" : "用户已拒绝本次操作。"
+    );
+    session.pendingApprovals.delete(approvalId);
+    return true;
+  } catch (error) {
+    updateApprovalSegment(session, approval, "failed", errorMessage(error));
+    session.pendingApprovals.delete(approvalId);
+    return false;
+  }
 }
 
 /**
@@ -819,6 +1040,7 @@ export async function warmupCodexSession(
       pending.reject(new Error("timeout"));
     }
     session.pendingRequests.clear();
+    resolvePendingApprovals(session, "expired", "Codex 预热超时。");
     killSession(session);
   }, CODEX_WARMUP_TIMEOUT_MS);
 

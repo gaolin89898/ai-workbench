@@ -3,7 +3,7 @@ import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue"
 import ChatMessageRow from "./ChatMessageRow.vue";
 import TerminalView from "./TerminalView.vue";
 import { useWorkspace } from "../composables/useWorkspace";
-import { desktopApi, type AiProvider, type ChatImageAttachment } from "../services/desktop";
+import { desktopApi, type AiProvider, type ChatImageAttachment, type ChatMessage } from "../services/desktop";
 
 const providerClaudeIcon = new URL("../assets/icons/provider-claude.svg", import.meta.url).href;
 const providerCodexIcon = new URL("../assets/icons/provider-codex.svg", import.meta.url).href;
@@ -19,6 +19,10 @@ const chatScroll = ref<HTMLDivElement | null>(null);
 const startPromptBox = ref<HTMLFormElement | null>(null);
 const activeTab = ref<"chat" | "terminal" | "logs">("chat");
 const startMenuOpen = ref(false);
+const AUTO_SCROLL_BOTTOM_THRESHOLD = 96;
+const VIRTUAL_MESSAGE_ESTIMATE = 156;
+const VIRTUAL_SCROLL_OVERSCAN = 900;
+const USER_ANCHOR_LIMIT = 18;
 const builtInProviders: AiProvider[] = [
   { id: "codex", name: "Codex", command: "codex", builtIn: true, enabled: true },
   { id: "claude", name: "Claude Code", command: "claude", builtIn: true, enabled: true },
@@ -78,6 +82,236 @@ const providerIcons: Record<string, string> = {
   codex: providerCodexIcon,
   opencode: providerOpencodeIcon,
 };
+const virtualScrollTop = ref(0);
+const virtualViewportHeight = ref(0);
+const virtualMessageHeights = ref<number[]>([]);
+const virtualRowElements = new Map<number, Element>();
+const virtualRowObservers = new Map<number, ResizeObserver>();
+const hoveredUserAnchorIndex = ref<number | null>(null);
+let chatScrollResizeObserver: ResizeObserver | null = null;
+let pendingPromptAnchorKey: string | null = null;
+let anchorScrollVersion = 0;
+let userAnchorPreviewCloseTimer: ReturnType<typeof window.setTimeout> | null = null;
+
+type UserMessageAnchor = {
+  index: number;
+  key: string;
+  label: string;
+  topPercent: number;
+};
+
+const virtualMessages = computed(() => {
+  const messages = ws.chatMessages.value;
+  const viewportTop = Math.max(0, virtualScrollTop.value - VIRTUAL_SCROLL_OVERSCAN);
+  const viewportBottom = virtualScrollTop.value + virtualViewportHeight.value + VIRTUAL_SCROLL_OVERSCAN;
+  let totalHeight = 0;
+  let topPadding = 0;
+  let visibleStart = 0;
+  let visibleEnd = messages.length;
+  let foundStart = false;
+
+  for (let index = 0; index < messages.length; index += 1) {
+    const height = virtualMessageHeight(index, messages[index]);
+    const nextOffset = totalHeight + height;
+    if (!foundStart && nextOffset >= viewportTop) {
+      visibleStart = index;
+      topPadding = totalHeight;
+      foundStart = true;
+    }
+    if (foundStart && totalHeight > viewportBottom) {
+      visibleEnd = Math.min(visibleEnd, index);
+    }
+    totalHeight = nextOffset;
+  }
+
+  if (!foundStart) {
+    visibleStart = Math.max(0, messages.length - 1);
+    topPadding = Math.max(0, totalHeight - virtualMessageHeight(visibleStart, messages[visibleStart]));
+  }
+
+  const visibleItems = messages.slice(visibleStart, visibleEnd).map((message, offset) => {
+    const index = visibleStart + offset;
+    return {
+      index,
+      key: message.clientId ?? `${message.role}-${index}`,
+      message,
+    };
+  });
+
+  return {
+    totalHeight,
+    topPadding,
+    visibleItems,
+  };
+});
+
+const userMessageAnchors = computed<UserMessageAnchor[]>(() => {
+  const anchors = allUserMessageAnchors();
+  const visibleAnchors = compactUserAnchors(anchors, activeUserAnchorIndex.value);
+  const lastIndex = Math.max(1, visibleAnchors.length - 1);
+  return visibleAnchors.map((anchor, index) => ({
+    ...anchor,
+    topPercent: visibleAnchors.length === 1 ? 50 : 8 + (index / lastIndex) * 84,
+  }));
+});
+
+const activeUserAnchorIndex = computed(() => {
+  const anchors = allUserMessageAnchors();
+  if (!anchors.length) return -1;
+  const targetTop = virtualScrollTop.value + virtualViewportHeight.value * 0.32;
+  let activeIndex = anchors[0].index;
+  for (const anchor of anchors) {
+    if (virtualMessageTop(anchor.index) <= targetTop) activeIndex = anchor.index;
+    else break;
+  }
+  return activeIndex;
+});
+
+const anchorPreviewItems = computed(() => {
+  return allUserMessageAnchors();
+});
+
+function allUserMessageAnchors(): UserMessageAnchor[] {
+  return ws.chatMessages.value.flatMap((message, index) => {
+    if (message.role !== "user") return [];
+    return [{
+      index,
+      key: message.clientId ?? `user-${index}`,
+      label: userAnchorLabel(message, index),
+      topPercent: 50,
+    }];
+  });
+}
+
+function clearUserAnchorPreviewCloseTimer() {
+  if (userAnchorPreviewCloseTimer === null) return;
+  window.clearTimeout(userAnchorPreviewCloseTimer);
+  userAnchorPreviewCloseTimer = null;
+}
+
+function showUserAnchorPreview(index: number) {
+  clearUserAnchorPreviewCloseTimer();
+  hoveredUserAnchorIndex.value = index;
+}
+
+function scheduleUserAnchorPreviewClose() {
+  clearUserAnchorPreviewCloseTimer();
+  userAnchorPreviewCloseTimer = window.setTimeout(() => {
+    hoveredUserAnchorIndex.value = null;
+    userAnchorPreviewCloseTimer = null;
+  }, 220);
+}
+
+function compactUserAnchors(anchors: UserMessageAnchor[], activeIndex: number) {
+  if (anchors.length <= USER_ANCHOR_LIMIT) return anchors;
+  const keep = new Map<number, UserMessageAnchor>();
+  const lastAnchorIndex = anchors.length - 1;
+  keep.set(0, anchors[0]);
+  keep.set(lastAnchorIndex, anchors[lastAnchorIndex]);
+
+  const activeAnchorIndex = Math.max(0, anchors.findIndex((anchor) => anchor.index === activeIndex));
+  for (let offset = -2; offset <= 2; offset += 1) {
+    const index = activeAnchorIndex + offset;
+    if (index >= 0 && index <= lastAnchorIndex) keep.set(index, anchors[index]);
+  }
+
+  const remainingSlots = Math.max(0, USER_ANCHOR_LIMIT - keep.size);
+  for (let slot = 1; slot <= remainingSlots; slot += 1) {
+    const index = Math.round((slot / (remainingSlots + 1)) * lastAnchorIndex);
+    keep.set(index, anchors[index]);
+  }
+
+  return [...keep.entries()]
+    .sort((left, right) => left[0] - right[0])
+    .map((entry) => entry[1]);
+}
+
+function virtualMessageHeight(index: number, message?: ChatMessage) {
+  return virtualMessageHeights.value[index] ?? estimateMessageHeight(message);
+}
+
+function virtualMessageTop(index: number) {
+  const messages = ws.chatMessages.value;
+  let top = 0;
+  for (let currentIndex = 0; currentIndex < index; currentIndex += 1) {
+    top += virtualMessageHeight(currentIndex, messages[currentIndex]);
+  }
+  return top;
+}
+
+function userAnchorLabel(message: ChatMessage, index: number) {
+  const text = userAnchorText(message.text);
+  const fallback = `第 ${index + 1} 条用户消息`;
+  if (!text) return fallback;
+  return text.length > 54 ? `${text.slice(0, 54)}...` : text;
+}
+
+function userAnchorText(text?: string) {
+  return (text ?? "")
+    .replace(/<image\b[^>]*>/gi, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function estimateMessageHeight(message?: ChatMessage) {
+  if (!message) return VIRTUAL_MESSAGE_ESTIMATE;
+  if (message.role === "user") return message.images?.length ? 150 : 76;
+  const textLength = message.text?.length ?? 0;
+  const segmentCount = message.segments?.length ?? 0;
+  const imageHeight = message.images?.length ? 118 : 0;
+  return Math.min(520, Math.max(112, 72 + Math.ceil(textLength / 48) * 24 + segmentCount * 38 + imageHeight));
+}
+
+function updateVirtualViewport() {
+  const el = chatScroll.value;
+  if (!el) return;
+  virtualScrollTop.value = el.scrollTop;
+  virtualViewportHeight.value = el.clientHeight;
+}
+
+function observeChatScroll() {
+  chatScrollResizeObserver?.disconnect();
+  chatScrollResizeObserver = null;
+  if (!chatScroll.value) return;
+  chatScrollResizeObserver = new ResizeObserver(updateVirtualViewport);
+  chatScrollResizeObserver.observe(chatScroll.value);
+  updateVirtualViewport();
+}
+
+function handleChatScroll() {
+  updateVirtualViewport();
+}
+
+function setVirtualMessageRef(index: number, el: Element | null) {
+  const current = virtualRowElements.get(index);
+  if (current && current !== el) {
+    virtualRowObservers.get(index)?.disconnect();
+    virtualRowObservers.delete(index);
+    virtualRowElements.delete(index);
+  }
+  if (!el || current === el) return;
+
+  virtualRowElements.set(index, el);
+  const observer = new ResizeObserver((entries) => {
+    const target = entries[0]?.target;
+    const height = target instanceof HTMLElement ? Math.ceil(target.getBoundingClientRect().height) : 0;
+    if (!height || virtualMessageHeights.value[index] === height) return;
+    const next = [...virtualMessageHeights.value];
+    next[index] = height;
+    virtualMessageHeights.value = next;
+  });
+  observer.observe(el);
+  virtualRowObservers.set(index, observer);
+}
+
+function resetVirtualMeasurements() {
+  for (const observer of virtualRowObservers.values()) observer.disconnect();
+  virtualRowObservers.clear();
+  virtualRowElements.clear();
+  virtualMessageHeights.value = [];
+  virtualScrollTop.value = 0;
+  void nextTick(updateVirtualViewport);
+}
 
 function createAttachmentId() {
   return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
@@ -190,23 +424,110 @@ function closeImagePreview() {
   previewImage.value = null;
 }
 
+function isChatScrolledNearBottom() {
+  const el = chatScroll.value;
+  if (!el) return true;
+  return el.scrollHeight - el.scrollTop - el.clientHeight <= AUTO_SCROLL_BOTTOM_THRESHOLD;
+}
+
+function scrollChatToBottom() {
+  const el = chatScroll.value;
+  if (!el) return;
+  el.scrollTop = el.scrollHeight;
+  updateVirtualViewport();
+}
+
+function scrollToUserMessage(index: number) {
+  const el = chatScroll.value;
+  if (!el) return;
+  const top = Math.max(0, virtualMessageTop(index) - 24);
+  el.scrollTo({ top, behavior: "smooth" });
+}
+
+function latestUserAnchor() {
+  const anchors = userMessageAnchors.value;
+  return anchors.length ? anchors[anchors.length - 1] : null;
+}
+
+async function scrollToUserMessageStable(index: number) {
+  const el = chatScroll.value;
+  if (!el) return;
+  const version = ++anchorScrollVersion;
+  el.scrollTop = Math.max(0, virtualMessageTop(index) - 24);
+  updateVirtualViewport();
+  await nextTick();
+  if (version !== anchorScrollVersion || !chatScroll.value) return;
+  const row = virtualRowElements.get(index);
+  if (!(row instanceof HTMLElement)) return;
+  const containerRect = chatScroll.value.getBoundingClientRect();
+  const rowRect = row.getBoundingClientRect();
+  const delta = rowRect.top - containerRect.top - 24;
+  if (Math.abs(delta) <= 1) return;
+  chatScroll.value.scrollTop += delta;
+  updateVirtualViewport();
+}
+
 watch(
   () => ws.chatMessages.value,
   async () => {
+    const shouldStickToBottom = isChatScrolledNearBottom();
+    const latestAnchor = latestUserAnchor();
+    const shouldAnchorPrompt = Boolean(
+      pendingPromptAnchorKey
+      && latestAnchor
+      && latestAnchor.key !== pendingPromptAnchorKey,
+    );
     await nextTick();
-    if (chatScroll.value) chatScroll.value.scrollTop = chatScroll.value.scrollHeight;
+    updateVirtualViewport();
+    if (shouldAnchorPrompt && latestAnchor) {
+      pendingPromptAnchorKey = null;
+      await scrollToUserMessageStable(latestAnchor.index);
+      return;
+    }
+    if (shouldStickToBottom) scrollChatToBottom();
   },
   { deep: true },
+);
+
+watch(
+  () => ws.chatMessages.value.length,
+  (length) => {
+    if (virtualMessageHeights.value.length > length) {
+      virtualMessageHeights.value = virtualMessageHeights.value.slice(0, length);
+    }
+  },
+);
+
+watch(
+  () => ws.activeAiSession.value?.id,
+  resetVirtualMeasurements,
+);
+
+watch(
+  () => activeTab.value,
+  async () => {
+    await nextTick();
+    observeChatScroll();
+  },
 );
 
 onMounted(() => {
   document.addEventListener("pointerdown", closeStartMenuOnOutsideClick);
   window.addEventListener("keydown", onWindowKeydown);
+  window.addEventListener("resize", updateVirtualViewport);
+  observeChatScroll();
+  void nextTick(updateVirtualViewport);
 });
 
 onBeforeUnmount(() => {
   document.removeEventListener("pointerdown", closeStartMenuOnOutsideClick);
   window.removeEventListener("keydown", onWindowKeydown);
+  window.removeEventListener("resize", updateVirtualViewport);
+  chatScrollResizeObserver?.disconnect();
+  clearUserAnchorPreviewCloseTimer();
+  for (const observer of virtualRowObservers.values()) observer.disconnect();
+  virtualRowObservers.clear();
+  virtualRowElements.clear();
 });
 
 async function send() {
@@ -240,7 +561,14 @@ async function send() {
       return;
     }
   }
-  await ws.sendPrompt(value, images);
+  pendingPromptAnchorKey = latestUserAnchor()?.key ?? "__empty__";
+  try {
+    await ws.sendPrompt(value, images);
+  } finally {
+    if (pendingPromptAnchorKey === (latestUserAnchor()?.key ?? "__empty__")) {
+      pendingPromptAnchorKey = null;
+    }
+  }
 }
 
 function selectStartProvider(providerId = "codex") {
@@ -351,7 +679,7 @@ function onPromptKeydown(event: KeyboardEvent) {
       }"
     >
       <article class="chat-main-panel">
-        <div v-if="activeTab === 'chat'" ref="chatScroll" class="terminal-preview">
+        <div v-if="activeTab === 'chat'" ref="chatScroll" class="terminal-preview" @scroll.passive="handleChatScroll">
           <div v-if="!ws.activeAiSession.value && ws.chatMessages.value.length === 1 && ws.chatMessages.value[0]?.role === 'system'" class="chat-welcome">
             <h2>从一个项目开始聊天</h2>
             <p>左侧选择本地项目，然后新建 AI 会话。聊天页支持 Codex / Claude Code，终端页只提供项目 shell。</p>
@@ -360,18 +688,64 @@ function onPromptKeydown(event: KeyboardEvent) {
             <h2>{{ ws.activeAiSession.value.title }}</h2>
             <p>会话已连接。现在输入 prompt，AI 会在当前项目中处理。</p>
           </div>
-          <template v-else>
-            <ChatMessageRow
-              v-for="(message, index) in ws.chatMessages.value"
-              :key="`${message.role}-${index}`"
-              :message="message"
-            />
-          </template>
+          <div v-else class="chat-virtual-list" :style="{ minHeight: `${virtualMessages.totalHeight}px` }">
+            <div class="chat-virtual-spacer" :style="{ height: `${virtualMessages.topPadding}px` }"></div>
+            <div
+              v-for="item in virtualMessages.visibleItems"
+              :key="item.key"
+              :ref="(el) => setVirtualMessageRef(item.index, el as Element | null)"
+              class="chat-virtual-row"
+            >
+              <ChatMessageRow
+                :message="item.message"
+                :ai-session-id="ws.activeAiSession.value?.id"
+              />
+            </div>
+          </div>
         </div>
-        <div v-else-if="activeTab === 'terminal'" class="terminal-shell">
+        <div
+          v-if="activeTab === 'chat' && userMessageAnchors.length > 1"
+          class="chat-user-anchor-rail"
+          aria-label="用户消息快速跳转"
+          @mouseenter="clearUserAnchorPreviewCloseTimer"
+          @mouseleave="scheduleUserAnchorPreviewClose"
+        >
+          <button
+            v-for="anchor in userMessageAnchors"
+            :key="anchor.key"
+            class="chat-user-anchor"
+            :class="{ active: anchor.index === activeUserAnchorIndex }"
+            :style="{ top: `${anchor.topPercent}%` }"
+            type="button"
+            :title="anchor.label"
+            :aria-label="`跳转到${anchor.label}`"
+            @mouseenter="showUserAnchorPreview(anchor.index)"
+            @focus="showUserAnchorPreview(anchor.index)"
+            @click="scrollToUserMessage(anchor.index)"
+          ></button>
+          <div
+            v-if="hoveredUserAnchorIndex !== null && anchorPreviewItems.length"
+            class="chat-user-anchor-preview"
+            @mouseenter="clearUserAnchorPreviewCloseTimer"
+            @mouseleave="scheduleUserAnchorPreviewClose"
+          >
+            <button
+              v-for="item in anchorPreviewItems"
+              :key="`preview-${item.key}`"
+              type="button"
+              :class="{ active: item.index === (hoveredUserAnchorIndex ?? activeUserAnchorIndex) }"
+              :title="item.label"
+              @click="scrollToUserMessage(item.index)"
+            >
+              <span>{{ item.label }}</span>
+              <i aria-hidden="true"></i>
+            </button>
+          </div>
+        </div>
+        <div v-if="activeTab === 'terminal'" class="terminal-shell">
           <TerminalView />
         </div>
-        <div v-else class="chat-logs-panel">
+        <div v-if="activeTab === 'logs'" class="chat-logs-panel">
           <header>
             <div>
               <strong>执行日志</strong>

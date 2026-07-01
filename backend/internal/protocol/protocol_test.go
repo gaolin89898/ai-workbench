@@ -52,6 +52,10 @@ func TestParseAiMessageSend(t *testing.T) {
 	roundTrip(t, `{"type":"ai.message.send","deviceId":"11111111-1111-1111-1111-111111111111","aiSessionId":"22222222-2222-2222-2222-222222222222","content":"hello","confirmedRisk":false}`, "ai.message.send")
 }
 
+func TestParseAiApprovalRespond(t *testing.T) {
+	roundTrip(t, `{"type":"ai.approval.respond","deviceId":"11111111-1111-1111-1111-111111111111","aiSessionId":"22222222-2222-2222-2222-222222222222","approvalId":"approval-1","decision":"approved"}`, "ai.approval.respond")
+}
+
 func TestParseAiSessionArchive(t *testing.T) {
 	roundTrip(t, `{"type":"ai.session.archive","deviceId":"11111111-1111-1111-1111-111111111111","aiSessionId":"22222222-2222-2222-2222-222222222222","archived":true}`, "ai.session.archive")
 }

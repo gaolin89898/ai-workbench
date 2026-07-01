@@ -125,6 +125,22 @@ http://127.0.0.1:3000
 
 服务启动时会自动执行 `backend/migrations` 里的数据库迁移。
 
+如果要启用钉钉登录，还需要在钉钉开放平台创建应用，并把回调地址配置为：
+
+```text
+https://你的服务域名/oauth/dingtalk/callback
+```
+
+后端启动时注入这 3 个环境变量：
+
+```bash
+export DINGTALK_CLIENT_ID=你的钉钉应用ClientID
+export DINGTALK_CLIENT_SECRET=你的钉钉应用ClientSecret
+export DINGTALK_REDIRECT_URL=https://你的服务域名/oauth/dingtalk/callback
+```
+
+产品流程是：桌面端或移动端请求 `/oauth/dingtalk/start`，后端返回钉钉授权地址；用户在浏览器里扫码确认后，钉钉回调 `/oauth/dingtalk/callback`；后端用回调里的 `code` 换取钉钉用户身份，查找或创建本地账号，再返回本系统登录 token；客户端通过 `/oauth/dingtalk/poll` 轮询拿到结果。
+
 ## 启动桌面端
 
 桌面端基于 Electron + Vue 3，使用 electron-vite 构建。需要先准备：
@@ -186,8 +202,12 @@ http://127.0.0.1:3000
 
 - `POST /auth/register`
 - `POST /auth/login`
+- `GET /oauth/dingtalk/start`
+- `GET /oauth/dingtalk/callback`
+- `GET /oauth/dingtalk/poll`
 - `POST /pairing/codes`
 - `POST /desktop/pair`
+- `POST /desktop/register-device`
 - `GET /devices`
 - `GET /devices/:deviceId`
 

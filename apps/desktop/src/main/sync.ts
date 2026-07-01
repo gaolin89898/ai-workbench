@@ -25,7 +25,8 @@ import {
 } from "./db";
 import { detectAiProviders } from "./providers";
 import { assessCommandRisk } from "./risk";
-import { runCodexChat } from "./codex";
+import { respondCodexApproval, runCodexChat } from "./codex";
+import { syncCodexHistoryMirror } from "./codex_sessions";
 import { runAiChat } from "./claude";
 
 // ---------- Cloud config persistence ----------
@@ -225,7 +226,7 @@ export async function saveOAuthLogin(
     body: JSON.stringify({ name: os.hostname(), os: process.platform }),
   });
   const deviceId: string | undefined = resp.deviceId ?? resp.device_id;
-  const finalToken: string | undefined = resp.accessToken ?? resp.access_token ?? accessToken;
+  const finalToken: string = resp.accessToken ?? resp.access_token ?? accessToken;
   if (!deviceId) {
     throw new Error("服务器未返回 deviceId，无法完成设备绑定");
   }
@@ -484,13 +485,16 @@ class DesktopCloudSync {
         void this.handleAiMessageSend(msg, deviceId);
         break;
       case "ai.history.request":
-        this.handleAiHistoryRequest(msg, deviceId);
+        void this.handleAiHistoryRequest(msg, deviceId);
         break;
       case "ai.session.archive":
         this.handleAiSessionArchive(msg, deviceId);
         break;
       case "ai.session.rename":
         this.handleAiSessionRename(msg, deviceId);
+        break;
+      case "ai.approval.respond":
+        this.handleAiApprovalRespond(msg, deviceId);
         break;
       default:
         // unknown message type — ignore
@@ -783,10 +787,32 @@ class DesktopCloudSync {
     }
   }
 
+  private handleAiApprovalRespond(msg: any, deviceId: string): void {
+    const aiSessionId = typeof msg.aiSessionId === "string" ? msg.aiSessionId : "";
+    const approvalId = typeof msg.approvalId === "string" ? msg.approvalId : "";
+    const decision = msg.decision === "approved" || msg.decision === "denied" ? msg.decision : null;
+    if (!aiSessionId || !approvalId || !decision) return;
+    const ok = respondCodexApproval(aiSessionId, approvalId, decision);
+    if (!ok) {
+      this.send({
+        type: "ai.chat.output",
+        deviceId,
+        aiSessionId,
+        kind: "error",
+        text: "审批请求已失效或无法处理",
+      });
+    }
+  }
+
   /** ai.history.request: reply with the local message history. */
-  private handleAiHistoryRequest(msg: any, deviceId: string): void {
+  private async handleAiHistoryRequest(msg: any, deviceId: string): Promise<void> {
     const aiSessionId: string = msg.aiSessionId;
     const requestId: string = msg.requestId;
+    try {
+      await syncCodexHistoryMirror(aiSessionId);
+    } catch (e) {
+      console.error("handleAiHistoryRequest: codex history sync failed:", e);
+    }
     const messages = listLocalAiHistory(aiSessionId).map((message) => ({
       ...message,
       content: decodeHistoryContent(message.content),

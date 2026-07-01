@@ -37,6 +37,8 @@ func (h *Handler) handleMobileMessage(msg protocol.Message, userID, deviceID uui
 	switch m := msg.(type) {
 	case protocol.AiMessageSend:
 		h.handleAiMessageSend(userID, m)
+	case protocol.AiApprovalRespond:
+		h.handleAiApprovalRespond(userID, m)
 	case protocol.AiHistoryRequest:
 		h.handleAiHistoryRequest(userID, m)
 	case protocol.AiSessionArchive:
@@ -77,6 +79,17 @@ func (h *Handler) handleAiMessageSend(userID uuid.UUID, m protocol.AiMessageSend
 		Risky:    r.Risky,
 	}); err != nil {
 		log.Printf("ws: failed to insert ai message activity log: %v", err)
+	}
+	h.forwardToDesktop(userID, m.DeviceId, m)
+}
+
+func (h *Handler) handleAiApprovalRespond(userID uuid.UUID, m protocol.AiApprovalRespond) {
+	ctx := context.Background()
+	if err := h.DB.EnsureAiSessionOwner(ctx, userID.String(), m.AiSessionId, m.DeviceId); err != nil {
+		return
+	}
+	if m.Decision != "approved" && m.Decision != "denied" {
+		return
 	}
 	h.forwardToDesktop(userID, m.DeviceId, m)
 }

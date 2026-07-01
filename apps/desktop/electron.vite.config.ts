@@ -2,6 +2,17 @@ import { resolve } from "node:path";
 import { defineConfig, externalizeDepsPlugin } from "electron-vite";
 import vue from "@vitejs/plugin-vue";
 
+const ignoredWatchPaths = (path: string): boolean => {
+  const normalizedPath = path.replaceAll("\\", "/");
+  return normalizedPath.split("/").some((part) => [".git", "node_modules", "out", "dist-electron"].includes(part));
+};
+
+const watchOptions = {
+  ignored: ignoredWatchPaths,
+  usePolling: true,
+  interval: 500,
+};
+
 export default defineConfig({
   main: {
     plugins: [externalizeDepsPlugin()],
@@ -37,6 +48,7 @@ export default defineConfig({
       host: "127.0.0.1",
       port: 1420,
       strictPort: true,
+      watch: watchOptions,
     },
     clearScreen: false,
   },

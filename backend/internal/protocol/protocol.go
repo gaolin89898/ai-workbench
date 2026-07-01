@@ -30,9 +30,9 @@ func (b BaseMessage) GetType() string { return b.Type }
 type ProviderAuthStatus string
 
 const (
-	ProviderAuthUnknown    ProviderAuthStatus = "unknown"
-	ProviderAuthSignedIn   ProviderAuthStatus = "signedIn"
-	ProviderAuthSignedOut  ProviderAuthStatus = "signedOut"
+	ProviderAuthUnknown   ProviderAuthStatus = "unknown"
+	ProviderAuthSignedIn  ProviderAuthStatus = "signedIn"
+	ProviderAuthSignedOut ProviderAuthStatus = "signedOut"
 )
 
 // AiSessionStatus mirrors the Rust AiSessionStatus enum (lowercase).
@@ -78,18 +78,18 @@ type WorkspaceProject struct {
 
 // AiSession mirrors the shared AiSession struct.
 type AiSession struct {
-	Id                 string         `json:"id"`
-	UserId             string         `json:"userId"`
-	DeviceId           string         `json:"deviceId"`
-	ProjectId          *string        `json:"projectId"`
-	ProviderId         string         `json:"providerId"`
-	TerminalSessionId  *string        `json:"terminalSessionId"`
-	ProviderSessionId  *string        `json:"providerSessionId"`
-	Title              string         `json:"title"`
-	Status             AiSessionStatus `json:"status"`
-	Summary            *string        `json:"summary"`
-	ArchivedAt         *time.Time     `json:"archivedAt"`
-	UpdatedAt          time.Time      `json:"updatedAt"`
+	Id                string          `json:"id"`
+	UserId            string          `json:"userId"`
+	DeviceId          string          `json:"deviceId"`
+	ProjectId         *string         `json:"projectId"`
+	ProviderId        string          `json:"providerId"`
+	TerminalSessionId *string         `json:"terminalSessionId"`
+	ProviderSessionId *string         `json:"providerSessionId"`
+	Title             string          `json:"title"`
+	Status            AiSessionStatus `json:"status"`
+	Summary           *string         `json:"summary"`
+	ArchivedAt        *time.Time      `json:"archivedAt"`
+	UpdatedAt         time.Time       `json:"updatedAt"`
 }
 
 // AiHistoryMessage mirrors the shared AiHistoryMessage struct.
@@ -158,7 +158,7 @@ type ProjectsSnapshot struct {
 // AiSessionsSnapshot: "ai.sessions.snapshot".
 type AiSessionsSnapshot struct {
 	BaseMessage
-	DeviceId string     `json:"deviceId"`
+	DeviceId string      `json:"deviceId"`
 	Sessions []AiSession `json:"sessions"`
 }
 
@@ -194,6 +194,15 @@ type AiMessageSend struct {
 	ConfirmedRisk bool   `json:"confirmedRisk"`
 }
 
+// AiApprovalRespond: "ai.approval.respond".
+type AiApprovalRespond struct {
+	BaseMessage
+	DeviceId    string `json:"deviceId"`
+	AiSessionId string `json:"aiSessionId"`
+	ApprovalId  string `json:"approvalId"`
+	Decision    string `json:"decision"`
+}
+
 // AiMessageDelta: "ai.message.delta".
 // NOTE: the Rust source names this field `content` (not `delta`); kept as-is
 // for wire compatibility.
@@ -208,10 +217,10 @@ type AiMessageDelta struct {
 // AiMessageDone: "ai.message.done".
 type AiMessageDone struct {
 	BaseMessage
-	DeviceId    string         `json:"deviceId"`
-	AiSessionId string         `json:"aiSessionId"`
+	DeviceId    string          `json:"deviceId"`
+	AiSessionId string          `json:"aiSessionId"`
 	Status      AiSessionStatus `json:"status"`
-	Summary     *string        `json:"summary"`
+	Summary     *string         `json:"summary"`
 }
 
 // AiHistoryRequest: "ai.history.request".
@@ -225,9 +234,9 @@ type AiHistoryRequest struct {
 // AiHistoryResponse: "ai.history.response".
 type AiHistoryResponse struct {
 	BaseMessage
-	DeviceId    string            `json:"deviceId"`
-	AiSessionId string            `json:"aiSessionId"`
-	RequestId   string            `json:"requestId"`
+	DeviceId    string             `json:"deviceId"`
+	AiSessionId string             `json:"aiSessionId"`
+	RequestId   string             `json:"requestId"`
 	Messages    []AiHistoryMessage `json:"messages"`
 }
 
@@ -307,6 +316,10 @@ func ParseMessage(data []byte) (Message, error) {
 		var m AiMessageSend
 		err := json.Unmarshal(data, &m)
 		return m, err
+	case "ai.approval.respond":
+		var m AiApprovalRespond
+		err := json.Unmarshal(data, &m)
+		return m, err
 	case "ai.message.delta":
 		var m AiMessageDelta
 		err := json.Unmarshal(data, &m)
@@ -357,6 +370,7 @@ var (
 	_ Message = AiSessionsSnapshot{}
 	_ Message = AiSessionCreate{}
 	_ Message = AiMessageSend{}
+	_ Message = AiApprovalRespond{}
 	_ Message = AiMessageDelta{}
 	_ Message = AiMessageDone{}
 	_ Message = AiHistoryRequest{}

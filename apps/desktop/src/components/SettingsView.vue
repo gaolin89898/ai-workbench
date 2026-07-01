@@ -190,17 +190,6 @@ async function refreshCloudConfig() {
   }
 }
 
-async function logout() {
-  try {
-    await desktopApi.logoutDesktop();
-  } catch {
-    // 忽略主进程清理失败,仍然在渲染端退出
-  }
-  cloudDeviceId.value = "";
-  cloudPaired.value = false;
-  window.dispatchEvent(new CustomEvent("desktop-logout"));
-}
-
 const deviceIdDisplay = computed(() => {
   if (!cloudDeviceId.value) return "未登录";
   const id = cloudDeviceId.value;
@@ -338,26 +327,7 @@ async function restoreSession(sessionId: string) {
             </div>
           </section>
 
-          <section v-if="settingsPanel === 'connection'" class="settings-section settings-logout-section">
-            <div class="settings-section-heading">
-              <div>
-                <h2 class="settings-section-title">退出登录</h2>
-                <p class="settings-section-description">退出当前账号，清除本地登录凭证并断开与云端服务器的连接。下次启动需要重新登录。</p>
-              </div>
-            </div>
-            <div class="settings-card settings-logout-card">
-              <div class="settings-logout-info">
-                <strong>{{ cloudPaired ? "已登录" : "未登录" }}</strong>
-                <small v-if="cloudPaired">设备 ID：{{ deviceIdDisplay }}</small>
-                <small v-else>当前没有登录会话</small>
-              </div>
-              <button class="button danger" type="button" :disabled="!cloudPaired" @click="logout">
-                退出登录
-              </button>
-            </div>
-          </section>
-
-          <section v-else-if="settingsPanel === 'security'" class="settings-section">
+          <section v-if="settingsPanel === 'security'" class="settings-section">
             <div class="settings-section-heading">
               <div>
                 <h2 class="settings-section-title">安全与历史</h2>

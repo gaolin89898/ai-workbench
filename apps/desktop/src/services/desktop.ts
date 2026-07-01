@@ -26,6 +26,13 @@ export type ProviderStatus = {
   lastCheckedAt: string;
 };
 
+type SafeIpcError = {
+  __AI_WORKBENCH_IPC_ERROR__: true;
+  name: string;
+  message: string;
+  stack?: string;
+};
+
 export type WorkspaceProject = {
   id: string;
   name: string;
@@ -51,6 +58,26 @@ export type AiSession = {
   status: string;
   summary?: string | null;
   archivedAt?: string | null;
+  updatedAt?: string;
+};
+
+export type CodexProjectSession = {
+  id: string;
+  title: string;
+  updatedAt: string;
+  cwd: string;
+  source?: string;
+  originator?: string;
+  cliVersion?: string;
+  modelProvider?: string;
+  filePath: string;
+  imported: boolean;
+};
+
+export type ImportCodexProjectSessionRequest = {
+  projectPath: string;
+  providerSessionId: string;
+  title: string;
   updatedAt?: string;
 };
 
@@ -110,6 +137,7 @@ export type ChatSegment =
       label: string;
       detail?: string;
       icon?: "check" | "read" | "edit" | "search" | "think" | "warn";
+      durationMs?: number;
       additions?: number;
       deletions?: number;
     }
@@ -134,6 +162,20 @@ export type ChatSegment =
       durationMs?: number;
       additions?: number;
       deletions?: number;
+    }
+  | {
+      type: "approval";
+      stepId: string;
+      approvalId: string;
+      approvalKind: "command" | "fileChange";
+      status: "pending" | "approved" | "denied" | "expired" | "failed";
+      title: string;
+      reason?: string;
+      command?: string;
+      cwd?: string;
+      grantRoot?: string;
+      fileChanges?: string[];
+      detail?: string;
     }
   | {
       type: "error";
@@ -170,6 +212,14 @@ export type ShellInputRequest = {
   aiSessionId: string;
   text: string;
   submit: boolean;
+};
+
+export type CodexApprovalDecision = "approved" | "denied";
+
+export type CodexApprovalResponseRequest = {
+  aiSessionId: string;
+  approvalId: string;
+  decision: CodexApprovalDecision;
 };
 
 export type RunCodexChatRequest = {
@@ -246,8 +296,21 @@ function requireDesktopApi() {
   return window.desktop;
 }
 
-function ipc<T>(channel: string, ...args: unknown[]): Promise<T> {
-  return requireDesktopApi().invoke(channel, ...args) as Promise<T>;
+function isSafeIpcError(value: unknown): value is SafeIpcError {
+  return Boolean(value)
+    && typeof value === "object"
+    && (value as SafeIpcError).__AI_WORKBENCH_IPC_ERROR__ === true;
+}
+
+async function ipc<T>(channel: string, ...args: unknown[]): Promise<T> {
+  const result = await requireDesktopApi().invoke(channel, ...args);
+  if (isSafeIpcError(result)) {
+    const error = new Error(result.message);
+    error.name = result.name || "Error";
+    if (result.stack) error.stack = result.stack;
+    throw error;
+  }
+  return result as T;
 }
 
 function on(channel: string, handler: (...args: unknown[]) => void): () => void {
@@ -340,6 +403,8 @@ export const desktopApi = {
     ipc<string>("run_codex_chat", req),
   stopAiChat: (aiSessionId: string): Promise<boolean> =>
     ipc<boolean>("stop_ai_chat", aiSessionId),
+  respondCodexApproval: (req: CodexApprovalResponseRequest): Promise<boolean> =>
+    ipc<boolean>("respond_codex_approval", req),
   warmupAiSession: (aiSessionId: string): Promise<AiSession> =>
     ipc<AiSession>("warmup_ai_session", aiSessionId),
   warmupCodexSession: (aiSessionId: string): Promise<AiSession> =>
@@ -352,6 +417,10 @@ export const desktopApi = {
     ipc<AiHistoryMessage[]>("list_local_ai_history", aiSessionId),
   listLocalAiSessions: (): Promise<AiSession[]> =>
     ipc<AiSession[]>("list_local_ai_sessions"),
+  listCodexProjectSessions: (projectPath: string): Promise<CodexProjectSession[]> =>
+    ipc<CodexProjectSession[]>("list_codex_project_sessions", projectPath),
+  importCodexProjectSession: (req: ImportCodexProjectSessionRequest): Promise<AiSession> =>
+    ipc<AiSession>("import_codex_project_session", req),
   archiveLocalAiSession: (aiSessionId: string, archived: boolean): Promise<AiSession> =>
     ipc<AiSession>("archive_local_ai_session", aiSessionId, archived),
   renameLocalAiSession: (aiSessionId: string, title: string): Promise<AiSession> =>
