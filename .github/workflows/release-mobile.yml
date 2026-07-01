@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
   push:
     tags:
-      - "mobile-v*"
+      - "v*"
 
 permissions:
   contents: write
@@ -54,7 +54,7 @@ jobs:
         working-directory: apps/mobile
         shell: bash
         run: |
-          VERSION="${GITHUB_REF_NAME#mobile-v}"
+          VERSION="${GITHUB_REF_NAME#v}"
           flutter pub get
           flutter build apk --release --dart-define="MOBILE_VERSION=$VERSION"
           mkdir -p release-assets
