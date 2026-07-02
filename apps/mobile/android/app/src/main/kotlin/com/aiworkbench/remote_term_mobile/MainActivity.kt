@@ -26,7 +26,14 @@ class MainActivity : FlutterActivity() {
             }
 
             try {
-                val apkFile = File(path)
+                val sourceApk = File(path)
+                val apkFile = if (sourceApk.parentFile == cacheDir) {
+                    sourceApk
+                } else {
+                    val cachedApk = File(cacheDir, sourceApk.name)
+                    sourceApk.copyTo(cachedApk, overwrite = true)
+                    cachedApk
+                }
                 val apkUri = FileProvider.getUriForFile(
                     this,
                     "${applicationContext.packageName}.fileprovider",
