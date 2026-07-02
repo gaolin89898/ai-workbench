@@ -55,8 +55,9 @@ jobs:
         shell: bash
         run: |
           VERSION="${GITHUB_REF_NAME#v}"
+          BUILD_NUMBER="${VERSION##*.}"
           flutter pub get
-          flutter build apk --release --dart-define="MOBILE_VERSION=$VERSION"
+          flutter build apk --release --build-name="$VERSION" --build-number="$BUILD_NUMBER" --dart-define="MOBILE_VERSION=$VERSION"
           mkdir -p release-assets
           cp build/app/outputs/flutter-apk/app-release.apk "release-assets/ai-workbench-mobile-$VERSION.apk"
 
