@@ -393,12 +393,15 @@ class WorkspaceController extends ChangeNotifier {
     final device = selectedDevice;
     if (device != null &&
         json['deviceId'] != null &&
-        json['deviceId'] != device.id) return;
+        json['deviceId'] != device.id) {
+      return;
+    }
     switch (json['type']) {
       case 'desktop.heartbeat':
-        if (device != null)
+        if (device != null) {
           selectedDevice = device.copyWith(
               online: true, lastSeenAt: json['timestamp'] as String?);
+        }
         break;
       case 'providers.snapshot':
         providerStatuses = ((json['providers'] as List<dynamic>?) ?? const [])
@@ -522,8 +525,9 @@ class WorkspaceController extends ChangeNotifier {
       List<ChatSegment> thoughtSegments = const [];
       if (isStepChange && currentStepId != null) {
         final pending = pendingIndex >= 0 ? current[pendingIndex] : null;
-        if (pending != null)
+        if (pending != null) {
           thoughtSegments = _commitCurrentTextAsThought(sessionId, pending);
+        }
       }
       final incomingSegments = [
         ...thoughtSegments,

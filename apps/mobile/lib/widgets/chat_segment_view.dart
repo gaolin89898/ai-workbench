@@ -36,8 +36,9 @@ class ChatMessageContent extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final visibleSegments = message.segments.where((s) {
-      if (s.stepId == 'runtime-status' || s.stepId == 'initial-thinking')
+      if (s.stepId == 'runtime-status' || s.stepId == 'initial-thinking') {
         return false;
+      }
       if (s.type == 'status' && s.stepId == 'final-summary') return false;
       return true;
     }).toList();
@@ -840,8 +841,9 @@ String _toolTitle(ChatSegment segment) {
     return segment.status == 'running' ? '正在读取命令输出' : '已读取命令输出';
   }
   if (toolName.contains('修改') || toolName.contains('文件')) {
-    if (segment.status == 'error')
+    if (segment.status == 'error') {
       return command.isNotEmpty ? '修改 $command 文件失败' : '修改文件失败';
+    }
     return command.isNotEmpty
         ? '${segment.status == 'running' ? '正在修改' : '已修改'} $command 文件'
         : '${segment.status == 'running' ? '正在处理' : '已处理'}文件修改';
@@ -849,8 +851,9 @@ String _toolTitle(ChatSegment segment) {
   if (toolName.contains('命令') ||
       toolName.contains('command') ||
       (segment.command ?? '').isNotEmpty) {
-    if (segment.status == 'error')
+    if (segment.status == 'error') {
       return command.isNotEmpty ? '运行失败 $command' : '运行命令失败';
+    }
     return command.isNotEmpty ? '$verb运行 $command' : '$verb运行命令';
   }
   if (segment.status == 'error') return segment.summary ?? '处理失败 $toolName';
@@ -867,8 +870,9 @@ List<_ToolMetaItem> _toolMeta(ChatSegment segment) {
   if (additions != null) parts.add((kind: 'add', text: '+$additions'));
   if (deletions != null) parts.add((kind: 'delete', text: '-$deletions'));
   if (segment.status == 'error') parts.add((kind: 'error', text: '失败'));
-  if (segment.durationMs != null)
+  if (segment.durationMs != null) {
     parts.add((kind: 'duration', text: _formatDuration(segment.durationMs!)));
+  }
   return parts;
 }
 
@@ -987,10 +991,12 @@ bool _isPatchWrapperLine(String line) {
 String _approvalMeta(ChatSegment segment) {
   final parts = <String>[];
   if ((segment.cwd ?? '').isNotEmpty) parts.add('目录 ${segment.cwd}');
-  if ((segment.grantRoot ?? '').isNotEmpty)
+  if ((segment.grantRoot ?? '').isNotEmpty) {
     parts.add('授权 ${segment.grantRoot}');
-  if (segment.fileChanges.isNotEmpty)
+  }
+  if (segment.fileChanges.isNotEmpty) {
     parts.add('${segment.fileChanges.length} 个文件');
+  }
   return parts.join(' · ');
 }
 

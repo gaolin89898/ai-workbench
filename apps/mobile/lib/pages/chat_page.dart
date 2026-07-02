@@ -174,8 +174,9 @@ class _ChatPageState extends State<ChatPage> {
                           message: messages[index],
                           onApproval: (segment, decision) {
                             final approvalId = segment.approvalId;
-                            if (approvalId == null || approvalId.isEmpty)
+                            if (approvalId == null || approvalId.isEmpty) {
                               return;
+                            }
                             ws.respondApproval(session, approvalId, decision);
                           },
                         ),

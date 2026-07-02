@@ -445,7 +445,7 @@ class _HeroCard extends StatelessWidget {
                           '当前活动项目',
                           style: TextStyle(
                             fontSize: 12,
-                            color: Colors.white.withOpacity(0.78),
+                            color: Colors.white.withValues(alpha: 0.78),
                           ),
                         ),
                         const SizedBox(height: 6),
@@ -485,9 +485,9 @@ class _HeroCard extends StatelessWidget {
               AppStatusBadge(
                 project == null ? '待同步' : '运行中',
                 style: AppStatusStyle(
-                  Colors.white.withOpacity(0.16),
+                  Colors.white.withValues(alpha: 0.16),
                   Colors.white,
-                  Colors.white.withOpacity(0.22),
+                  Colors.white.withValues(alpha: 0.22),
                 ),
               ),
               const SizedBox(height: 14),
@@ -504,7 +504,7 @@ class _HeroCard extends StatelessWidget {
                   Container(
                     width: 1,
                     height: 28,
-                    color: Colors.white.withOpacity(0.18),
+                    color: Colors.white.withValues(alpha: 0.18),
                   ),
                   Expanded(
                     child: _HeroStatColumn(
@@ -515,7 +515,7 @@ class _HeroCard extends StatelessWidget {
                   Container(
                     width: 1,
                     height: 28,
-                    color: Colors.white.withOpacity(0.18),
+                    color: Colors.white.withValues(alpha: 0.18),
                   ),
                   Expanded(
                     child: _HeroStatColumn(
@@ -571,7 +571,7 @@ class _HeroStatColumn extends StatelessWidget {
           Text(label,
               style: TextStyle(
                 fontSize: 11,
-                color: Colors.white.withOpacity(0.78),
+                color: Colors.white.withValues(alpha: 0.78),
               )),
         ],
       ),

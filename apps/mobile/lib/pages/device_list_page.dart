@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 
 import '../models/workbench_models.dart';
-import '../state/workspace_controller.dart';
 import '../state/workspace_scope.dart';
 import '../widgets/app_theme.dart';
 import 'mobile_shell_page.dart';
