@@ -3,6 +3,7 @@ import { app, type BrowserWindow } from "electron";
 import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
+import { randomUUID } from "node:crypto";
 import WebSocket from "ws";
 import type {
   PairResponse,
@@ -19,9 +20,8 @@ import {
   createLocalAiSession,
   appendLocalAiMessage,
   getLocalAiSession,
-  getWorkspaceProjectByPath,
-  addWorkspaceProject,
   updateLocalAiSession,
+  resolveWorkspaceProjectPath,
 } from "./db";
 import { detectAiProviders } from "./providers";
 import { assessCommandRisk } from "./risk";
@@ -33,14 +33,32 @@ import { runAiChat } from "./claude";
 
 const STRUCTURED_MESSAGE_PREFIX = "__AI_WORKBENCH_MESSAGE_V1__";
 const configPath = path.join(app.getPath("userData"), "cloud-config.json");
+const machineIdPath = path.join(app.getPath("userData"), "machine-id");
 
 interface StoredCloudConfig {
   serverUrl: string;
   deviceId: string;
   accessToken: string;
   paired: boolean;
+  machineId?: string;
   authMode?: "desktop-login" | "pairing";
   displayName?: string;
+}
+
+function getMachineId(): string {
+  try {
+    if (fs.existsSync(machineIdPath)) {
+      const existing = fs.readFileSync(machineIdPath, "utf-8").trim();
+      if (existing) return existing;
+    }
+    const id = randomUUID();
+    fs.mkdirSync(path.dirname(machineIdPath), { recursive: true });
+    fs.writeFileSync(machineIdPath, id, "utf-8");
+    return id;
+  } catch (e) {
+    console.error("Failed to persist machine id:", e);
+    return randomUUID();
+  }
 }
 
 function decodeHistoryContent(content: string): unknown {
@@ -155,6 +173,7 @@ function saveCloudConfig(
     deviceId,
     accessToken,
     paired: true,
+    machineId: getMachineId(),
     authMode,
     displayName,
   });
@@ -167,6 +186,7 @@ export async function loginDesktop(
   password: string
 ): Promise<PairResponse> {
   const normalizedServer = normalizeServerUrl(server);
+  const machineId = getMachineId();
   const resp = await fetchJson(`${normalizedServer}/desktop/login`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -175,6 +195,7 @@ export async function loginDesktop(
       password,
       name: os.hostname(),
       os: process.platform,
+      machineId,
     }),
   });
 
@@ -217,13 +238,14 @@ export async function saveOAuthLogin(
   displayName: string
 ): Promise<void> {
   const normalizedServer = normalizeServerUrl(serverUrl);
+  const machineId = getMachineId();
   const resp = await fetchJson(`${normalizedServer}/desktop/register-device`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
       Authorization: `Bearer ${accessToken}`,
     },
-    body: JSON.stringify({ name: os.hostname(), os: process.platform }),
+    body: JSON.stringify({ name: os.hostname(), os: process.platform, machineId }),
   });
   const deviceId: string | undefined = resp.deviceId ?? resp.device_id;
   const finalToken: string = resp.accessToken ?? resp.access_token ?? accessToken;
@@ -242,6 +264,7 @@ export async function pairDesktop(
   code: string
 ): Promise<PairResponse> {
   const normalizedServer = normalizeServerUrl(server);
+  const machineId = getMachineId();
   const url = `${normalizedServer}/desktop/pair`;
   const resp = await fetchJson(url, {
     method: "POST",
@@ -250,6 +273,7 @@ export async function pairDesktop(
       code,
       name: os.hostname(),
       os: process.platform,
+      machineId,
     }),
   });
   const deviceId: string | undefined = resp.deviceId ?? resp.device_id;
@@ -271,11 +295,12 @@ export async function createDesktopPairingRequest(
   server: string
 ): Promise<DesktopPairingRequest> {
   const normalizedServer = normalizeServerUrl(server);
+  const machineId = getMachineId();
   const url = `${normalizedServer}/desktop/pairing-requests`;
   const resp = await fetchJson(url, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ name: os.hostname(), os: process.platform }),
+    body: JSON.stringify({ name: os.hostname(), os: process.platform, machineId }),
   });
   return {
     code: resp.code,
@@ -507,9 +532,7 @@ class DesktopCloudSync {
     const project = msg.project;
     if (!project?.path) return;
     try {
-      if (!getWorkspaceProjectByPath(project.path)) {
-        await addWorkspaceProject(project.path);
-      }
+      await resolveWorkspaceProjectPath(project.path);
     } catch {
       // project path may not exist on this machine — ignore
     }
@@ -524,17 +547,16 @@ class DesktopCloudSync {
       const projectPath: string | undefined = msg.projectPath;
       const title: string = msg.title;
       const terminalSessionId: string | undefined | null = msg.terminalSessionId;
+      let sessionProjectPath = projectPath ?? null;
 
       if (projectPath) {
-        this.sessionProjectPaths.set(aiSessionId, projectPath);
-        // Best-effort: register the workspace project so it appears in lists.
+        // 如果移动端传入的是已有项目里的子文件夹，会归到已有项目，避免自动新增子项目。
         try {
-          if (!getWorkspaceProjectByPath(projectPath)) {
-            await addWorkspaceProject(projectPath);
-          }
+          sessionProjectPath = await resolveWorkspaceProjectPath(projectPath);
         } catch {
           // project may not exist or git may be unavailable — ignore
         }
+        this.sessionProjectPaths.set(aiSessionId, sessionProjectPath ?? projectPath);
       }
 
       if (!getLocalAiSession(aiSessionId)) {
@@ -544,7 +566,7 @@ class DesktopCloudSync {
           terminalSessionId: terminalSessionId ?? null,
           title: title || "Mobile session",
           status: "idle",
-          summary: projectPath ?? null,
+          summary: sessionProjectPath,
         });
       }
 

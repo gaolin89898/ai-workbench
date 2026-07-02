@@ -9,7 +9,7 @@
 // Example: window.desktop.ipc.pairDesktop("http://...", "ABC123") ->
 //   ipcMain.handle("pair_desktop", (_event, args) => { const [server, code] = args; ... })
 
-import { ipcMain, BrowserWindow, clipboard, shell, type IpcMainInvokeEvent, type WebContents } from "electron";
+import { app, ipcMain, BrowserWindow, clipboard, shell, type IpcMainInvokeEvent, type WebContents } from "electron";
 import { randomUUID } from "node:crypto";
 import { readdir, stat } from "node:fs/promises";
 import path from "node:path";
@@ -240,12 +240,12 @@ export function registerIpcHandlers(win?: BrowserWindow): void {
     const req = args[0];
     const id = randomUUID();
 
+    let sessionProjectPath = req.projectPath || null;
     // Best-effort: register the workspace project so it appears in lists.
+    // 如果传入的是已添加项目里的子文件夹，会归到已有项目，避免自动新增子项目。
     if (req.projectPath) {
       try {
-        if (!db.getWorkspaceProjectByPath(req.projectPath)) {
-          await db.addWorkspaceProject(req.projectPath);
-        }
+        sessionProjectPath = await db.resolveWorkspaceProjectPath(req.projectPath);
       } catch {
         // project may not exist or git may be unavailable — ignore
       }
@@ -257,7 +257,7 @@ export function registerIpcHandlers(win?: BrowserWindow): void {
       terminalSessionId: req.terminalSessionId ?? null,
       title: req.title,
       status: "idle",
-      summary: req.projectPath || null,
+      summary: sessionProjectPath,
     });
 
     // Immediately push the updated session list to the cloud so mobile clients
@@ -440,6 +440,8 @@ export function registerIpcHandlers(win?: BrowserWindow): void {
   });
 
   // ---------- app update ----------
+
+  handle("get_app_version", async () => app.getVersion());
 
   handle("check_app_update", async () => checkAppUpdate());
 

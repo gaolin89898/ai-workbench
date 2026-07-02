@@ -121,12 +121,14 @@ func (d *DB) EnsureProjectOwner(ctx context.Context, deviceID, projectID string)
 }
 
 // EnsureAiSessionOwner returns ErrForbidden if the AI session does not belong
-// to the user+device pair.
+// to the user. The deviceID parameter is retained for API compatibility but
+// no longer used in the query — a user owns all sessions across all their
+// devices, and the desktop's local SQLite is the source of truth for history.
 func (d *DB) EnsureAiSessionOwner(ctx context.Context, userID, aiSessionID, deviceID string) error {
 	var exists bool
 	err := d.Pool.QueryRow(ctx,
-		"SELECT EXISTS(SELECT 1 FROM ai_sessions WHERE id = $1 AND user_id = $2 AND device_id = $3)",
-		aiSessionID, userID, deviceID,
+		"SELECT EXISTS(SELECT 1 FROM ai_sessions WHERE id = $1 AND user_id = $2)",
+		aiSessionID, userID,
 	).Scan(&exists)
 	if err != nil {
 		return err
@@ -205,7 +207,7 @@ func (d *DB) UpsertAiSessions(ctx context.Context, userID, deviceID string, sess
             INSERT INTO ai_sessions (id, user_id, device_id, project_id, provider_id, terminal_session_id, provider_session_id, title, status, summary, archived_at, updated_at)
             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
             ON CONFLICT (id)
-            DO UPDATE SET project_id = EXCLUDED.project_id, provider_id = EXCLUDED.provider_id, terminal_session_id = EXCLUDED.terminal_session_id, provider_session_id = EXCLUDED.provider_session_id, title = EXCLUDED.title, status = EXCLUDED.status, summary = EXCLUDED.summary, archived_at = EXCLUDED.archived_at, updated_at = EXCLUDED.updated_at`
+            DO UPDATE SET device_id = EXCLUDED.device_id, project_id = EXCLUDED.project_id, provider_id = EXCLUDED.provider_id, terminal_session_id = EXCLUDED.terminal_session_id, provider_session_id = EXCLUDED.provider_session_id, title = EXCLUDED.title, status = EXCLUDED.status, summary = EXCLUDED.summary, archived_at = EXCLUDED.archived_at, updated_at = EXCLUDED.updated_at`
 	for _, s := range sessions {
 		if _, err := tx.Exec(ctx, sql,
 			s.Id, userID, deviceID, s.ProjectId, s.ProviderId,

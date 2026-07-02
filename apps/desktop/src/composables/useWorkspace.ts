@@ -32,6 +32,7 @@ const updateResult = ref("尚未检查更新。");
 const updateResultError = ref(false);
 const updateChecking = ref(false);
 const updateInstalling = ref(false);
+const updateCurrentVersion = ref("—");
 const updateAvailableVersion = ref("");
 const updateInstallable = ref(false);
 const chatMessages = ref<ChatMessage[]>([
@@ -287,8 +288,16 @@ watch(selectedProjectPath, () => {
 async function refreshWorkspace() {
   await initAiEventListeners();
   await initWorkspaceEventListeners();
-  await Promise.all([loadCloudConfig(), loadProviders(), loadLocalWorkspace(), detectProviders(), refreshTerminalSessions()]);
+  await Promise.all([loadCloudConfig(), loadProviders(), loadLocalWorkspace(), detectProviders(), refreshTerminalSessions(), loadAppVersion()]);
   ensureSelectedProject();
+}
+
+async function loadAppVersion() {
+  try {
+    updateCurrentVersion.value = await desktopApi.getAppVersion();
+  } catch {
+    updateCurrentVersion.value = "未知";
+  }
 }
 
 async function loadCloudConfig() {
@@ -1581,6 +1590,7 @@ async function checkAppUpdate() {
   updateResult.value = "正在检查 GitHub Releases...";
   try {
     const update = await desktopApi.checkAppUpdate();
+    updateCurrentVersion.value = update.currentVersion || updateCurrentVersion.value;
     if (!update.available) {
       updateAvailableVersion.value = "";
       updateInstallable.value = false;
@@ -1662,6 +1672,7 @@ export function useWorkspace() {
     updateResultError,
     updateChecking,
     updateInstalling,
+    updateCurrentVersion,
     updateAvailableVersion,
     updateInstallable,
     chatMessages,

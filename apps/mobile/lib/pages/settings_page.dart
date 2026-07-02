@@ -55,7 +55,7 @@ class _SettingsPageState extends State<SettingsPage> {
           100,
         ),
         children: [
-          // 状态消息（加载错误 / 保存反馈）
+          // 状态消息（加载错误 / 自动保存反馈）
           if (_status != null)
             Padding(
               padding: const EdgeInsets.only(bottom: AppSpacing.md),
@@ -113,9 +113,7 @@ class _SettingsPageState extends State<SettingsPage> {
                     subtitle: '执行高危命令前需手动确认',
                     trailing: Switch(
                       value: settings.riskConfirmationEnabled,
-                      onChanged: (v) => setState(
-                        () => _settings = _patch(risk: v),
-                      ),
+                      onChanged: (v) => _updateSettings(risk: v),
                     ),
                   ),
                   const Divider(height: 1, color: AppColors.divider),
@@ -127,9 +125,7 @@ class _SettingsPageState extends State<SettingsPage> {
                     subtitle: '将执行的命令写入审计日志',
                     trailing: Switch(
                       value: settings.commandLoggingEnabled,
-                      onChanged: (v) => setState(
-                        () => _settings = _patch(audit: v),
-                      ),
+                      onChanged: (v) => _updateSettings(audit: v),
                     ),
                   ),
                   const Divider(height: 1, color: AppColors.divider),
@@ -160,6 +156,7 @@ class _SettingsPageState extends State<SettingsPage> {
                 onChanged: (v) => setState(
                   () => _settings = _patch(buffer: v.round()),
                 ),
+                onChangeEnd: (v) => _updateSettings(buffer: v.round()),
               ),
             ),
             const SizedBox(height: AppSpacing.xl),
@@ -195,13 +192,6 @@ class _SettingsPageState extends State<SettingsPage> {
               ),
             ),
             const SizedBox(height: AppSpacing.xl),
-
-            // ===== 保存设置（保留原 _save 逻辑） =====
-            FilledButton(
-              onPressed: _save,
-              child: const Text('保存设置'),
-            ),
-            const SizedBox(height: 22),
 
             // ===== 退出登录（白底红边） =====
             SizedBox(
@@ -243,27 +233,36 @@ class _SettingsPageState extends State<SettingsPage> {
     );
   }
 
+  Future<void> _updateSettings({
+    bool? risk,
+    bool? audit,
+    int? buffer,
+  }) async {
+    final previous = _settings;
+    if (previous == null) return;
+    final next = _patch(risk: risk, audit: audit, buffer: buffer);
+    setState(() {
+      _settings = next;
+      _status = null;
+    });
+    try {
+      final saved = await WorkspaceScope.of(context).api.updateSettings(next);
+      if (mounted) setState(() => _settings = saved);
+    } catch (error) {
+      if (mounted) {
+        setState(() {
+          _settings = previous;
+          _status = error.toString();
+        });
+      }
+    }
+  }
+
   Future<void> _load() async {
     if (_settings != null) return;
     try {
       final settings = await WorkspaceScope.of(context).api.settings();
       if (mounted) setState(() => _settings = settings);
-    } catch (error) {
-      if (mounted) setState(() => _status = error.toString());
-    }
-  }
-
-  Future<void> _save() async {
-    final settings = _settings;
-    if (settings == null) return;
-    try {
-      final saved = await WorkspaceScope.of(context).api.updateSettings(settings);
-      if (mounted) {
-        setState(() {
-          _settings = saved;
-          _status = '已保存';
-        });
-      }
     } catch (error) {
       if (mounted) setState(() => _status = error.toString());
     }
@@ -420,10 +419,15 @@ class _AccountRow extends StatelessWidget {
 
 /// 输出缓冲行数滑块行：图标方框 + 标题/副标题 + 当前值 + 滑块。
 class _BufferSliderRow extends StatelessWidget {
-  const _BufferSliderRow({required this.value, required this.onChanged});
+  const _BufferSliderRow({
+    required this.value,
+    required this.onChanged,
+    required this.onChangeEnd,
+  });
 
   final int value;
   final ValueChanged<double> onChanged;
+  final ValueChanged<double> onChangeEnd;
 
   @override
   Widget build(BuildContext context) {
@@ -471,6 +475,7 @@ class _BufferSliderRow extends StatelessWidget {
             divisions: 19,
             label: value.round().toString(),
             onChanged: onChanged,
+            onChangeEnd: onChangeEnd,
           ),
         ],
       ),

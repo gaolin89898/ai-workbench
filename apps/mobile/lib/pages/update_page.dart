@@ -91,7 +91,7 @@ class _UpdatePageState extends State<UpdatePage> {
           ),
           const SizedBox(height: AppSpacing.md),
           Text(
-            '当前版本：v${update?.currentVersion ?? '-'}',
+            '当前版本：v${update?.currentVersion ?? MobileUpdateService.currentVersion}',
             style: const TextStyle(fontSize: 12, color: AppColors.muted),
           ),
         ],

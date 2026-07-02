@@ -424,9 +424,9 @@ async function restoreSession(sessionId: string) {
                 <div class="settings-about-update-row">
                   <div class="settings-about-update-copy">
                     <strong>当前版本</strong>
-                    <small>{{ ws.updateAvailableVersion.value ? "发现可更新版本" : "已是最新或尚未检查" }}</small>
+                    <small>{{ ws.updateAvailableVersion.value ? `发现可更新版本 ${ws.updateAvailableVersion.value}` : "已是最新或尚未检查" }}</small>
                   </div>
-                  <code class="settings-about-update-tag">{{ ws.updateAvailableVersion.value || "—" }}</code>
+                  <code class="settings-about-update-tag">{{ ws.updateCurrentVersion.value }}</code>
                 </div>
                 <div class="settings-about-update-divider" aria-hidden="true"></div>
                 <div class="settings-about-update-actions">

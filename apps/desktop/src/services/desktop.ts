@@ -429,6 +429,8 @@ export const desktopApi = {
     ipc<void>("rename_ai_session", aiSessionId, title),
   openSessionInNewWindow: (aiSessionId: string): Promise<void> =>
     ipc<void>("open_session_in_new_window", aiSessionId),
+  getAppVersion: (): Promise<string> =>
+    ipc<string>("get_app_version"),
   checkAppUpdate: (): Promise<AppUpdateInfo> =>
     ipc<AppUpdateInfo>("check_app_update"),
   installAppUpdate: (): Promise<boolean> =>

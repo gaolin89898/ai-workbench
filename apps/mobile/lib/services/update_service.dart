@@ -39,6 +39,7 @@ class MobileUpdateInfo {
 class MobileUpdateService {
   const MobileUpdateService();
 
+  static const currentVersion = _currentMobileVersion;
   static const _installer = MethodChannel('ai_workbench_mobile/installer');
 
   Future<MobileUpdateInfo> check() async {

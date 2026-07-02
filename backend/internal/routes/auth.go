@@ -8,6 +8,7 @@
 package routes
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -33,10 +34,11 @@ type loginRequest struct {
 }
 
 type desktopLoginRequest struct {
-	Email    string `json:"email"`
-	Password string `json:"password"`
-	Name     string `json:"name"`
-	Os       string `json:"os"`
+	Email     string `json:"email"`
+	Password  string `json:"password"`
+	Name      string `json:"name"`
+	Os        string `json:"os"`
+	MachineID string `json:"machineId"`
 }
 
 // authResponse mirrors Rust AuthResponse { accessToken, refreshToken, userId }.
@@ -53,9 +55,10 @@ type pairingCodeResponse struct {
 }
 
 type pairDesktopRequest struct {
-	Code string `json:"code"`
-	Name string `json:"name"`
-	Os   string `json:"os"`
+	Code      string `json:"code"`
+	Name      string `json:"name"`
+	Os        string `json:"os"`
+	MachineID string `json:"machineId"`
 }
 
 // pairDesktopResponse mirrors Rust PairDesktopResponse { deviceId, accessToken }.
@@ -65,8 +68,9 @@ type pairDesktopResponse struct {
 }
 
 type createDesktopPairingRequest struct {
-	Name string `json:"name"`
-	Os   string `json:"os"`
+	Name      string `json:"name"`
+	Os        string `json:"os"`
+	MachineID string `json:"machineId"`
 }
 
 type desktopPairingRequestResponse struct {
@@ -217,12 +221,7 @@ func (h *Handler) loginDesktop(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var deviceID string
-	err = h.DB.Pool.QueryRow(r.Context(),
-		`INSERT INTO desktop_devices (user_id, name, os, online, last_seen_at)
-		 VALUES ($1, $2, $3, FALSE, NOW()) RETURNING id`,
-		userID, name, osName,
-	).Scan(&deviceID)
+	deviceID, err := h.findOrCreateDesktopDevice(r.Context(), userID, name, osName, req.MachineID)
 	if err != nil {
 		writeInternal(w)
 		return
@@ -292,6 +291,74 @@ func (h *Handler) findOrCreateUser(r *http.Request, email, password string) (str
 	return userID, nil
 }
 
+func (h *Handler) findOrCreateDesktopDevice(ctx context.Context, userID, name, osName, machineID string) (string, error) {
+	machineID = strings.TrimSpace(machineID)
+	if machineID != "" {
+		var deviceID string
+		err := h.DB.Pool.QueryRow(ctx,
+			`SELECT id FROM desktop_devices
+			 WHERE user_id = $1 AND machine_id = $2
+			 ORDER BY last_seen_at DESC NULLS LAST, created_at DESC
+			 LIMIT 1`,
+			userID, machineID,
+		).Scan(&deviceID)
+		if err == nil {
+			_, err = h.DB.Pool.Exec(ctx,
+				`UPDATE desktop_devices
+				 SET name = $1, os = $2, last_seen_at = NOW()
+				 WHERE id = $3`,
+				name, osName, deviceID,
+			)
+			return deviceID, err
+		}
+		if !errors.Is(err, pgx.ErrNoRows) {
+			return "", err
+		}
+	}
+
+	var deviceID string
+	err := h.DB.Pool.QueryRow(ctx,
+		`INSERT INTO desktop_devices (user_id, name, os, machine_id, online, last_seen_at)
+		 VALUES ($1, $2, $3, NULLIF($4, ''), FALSE, NOW()) RETURNING id`,
+		userID, name, osName, machineID,
+	).Scan(&deviceID)
+	return deviceID, err
+}
+
+func (h *Handler) findOrCreateDesktopDeviceTx(ctx context.Context, tx pgx.Tx, userID, name, osName, machineID string) (string, error) {
+	machineID = strings.TrimSpace(machineID)
+	if machineID != "" {
+		var deviceID string
+		err := tx.QueryRow(ctx,
+			`SELECT id FROM desktop_devices
+			 WHERE user_id = $1 AND machine_id = $2
+			 ORDER BY last_seen_at DESC NULLS LAST, created_at DESC
+			 LIMIT 1`,
+			userID, machineID,
+		).Scan(&deviceID)
+		if err == nil {
+			_, err = tx.Exec(ctx,
+				`UPDATE desktop_devices
+				 SET name = $1, os = $2, last_seen_at = NOW()
+				 WHERE id = $3`,
+				name, osName, deviceID,
+			)
+			return deviceID, err
+		}
+		if !errors.Is(err, pgx.ErrNoRows) {
+			return "", err
+		}
+	}
+
+	var deviceID string
+	err := tx.QueryRow(ctx,
+		`INSERT INTO desktop_devices (user_id, name, os, machine_id, online, last_seen_at)
+		 VALUES ($1, $2, $3, NULLIF($4, ''), FALSE, NOW()) RETURNING id`,
+		userID, name, osName, machineID,
+	).Scan(&deviceID)
+	return deviceID, err
+}
+
 func (h *Handler) verifyUserPassword(w http.ResponseWriter, r *http.Request, email, password string) (string, bool) {
 	var userID, passwordHash string
 	err := h.DB.Pool.QueryRow(r.Context(),
@@ -324,8 +391,9 @@ func (h *Handler) registerDesktopDevice(w http.ResponseWriter, r *http.Request) 
 	}
 
 	var req struct {
-		Name string `json:"name"`
-		Os   string `json:"os"`
+		Name      string `json:"name"`
+		Os        string `json:"os"`
+		MachineID string `json:"machineId"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeBadRequest(w, "invalid request body")
@@ -338,12 +406,7 @@ func (h *Handler) registerDesktopDevice(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	var deviceID string
-	err := h.DB.Pool.QueryRow(r.Context(),
-		`INSERT INTO desktop_devices (user_id, name, os, online, last_seen_at)
-		 VALUES ($1, $2, $3, FALSE, NOW()) RETURNING id`,
-		userID, name, osName,
-	).Scan(&deviceID)
+	deviceID, err := h.findOrCreateDesktopDevice(r.Context(), userID, name, osName, req.MachineID)
 	if err != nil {
 		writeInternal(w)
 		return
@@ -403,8 +466,9 @@ func (h *Handler) createDesktopPairingRequest(w http.ResponseWriter, r *http.Req
 	code := auth.GeneratePairingCode()
 	expiresAt := time.Now().Add(10 * time.Minute)
 	if _, err := h.DB.Pool.Exec(r.Context(),
-		"INSERT INTO desktop_pairing_requests (code, name, os, expires_at) VALUES ($1, $2, $3, $4)",
-		code, name, os, expiresAt,
+		`INSERT INTO desktop_pairing_requests (code, name, os, machine_id, expires_at)
+		 VALUES ($1, $2, $3, NULLIF($4, ''), $5)`,
+		code, name, os, strings.TrimSpace(req.MachineID), expiresAt,
 	); err != nil {
 		writeInternal(w)
 		return
@@ -496,12 +560,13 @@ func (h *Handler) approveDesktopPairingRequest(w http.ResponseWriter, r *http.Re
 		requestID string
 		name      string
 		os        string
+		machineID *string
 	)
 	err = tx.QueryRow(r.Context(),
-		`SELECT id, name, os FROM desktop_pairing_requests
+		`SELECT id, name, os, machine_id FROM desktop_pairing_requests
 		 WHERE code = $1 AND used_at IS NULL AND expires_at > NOW() FOR UPDATE`,
 		code,
-	).Scan(&requestID, &name, &os)
+	).Scan(&requestID, &name, &os, &machineID)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			writeBadRequest(w, "pairing request is invalid or expired")
@@ -511,12 +576,11 @@ func (h *Handler) approveDesktopPairingRequest(w http.ResponseWriter, r *http.Re
 		return
 	}
 
-	var deviceID string
-	err = tx.QueryRow(r.Context(),
-		`INSERT INTO desktop_devices (user_id, name, os, online, last_seen_at)
-		 VALUES ($1, $2, $3, FALSE, NOW()) RETURNING id`,
-		userID, strings.TrimSpace(name), strings.TrimSpace(os),
-	).Scan(&deviceID)
+	machineIDValue := ""
+	if machineID != nil {
+		machineIDValue = *machineID
+	}
+	deviceID, err := h.findOrCreateDesktopDeviceTx(r.Context(), tx, userID, strings.TrimSpace(name), strings.TrimSpace(os), machineIDValue)
 	if err != nil {
 		writeInternal(w)
 		return
@@ -584,12 +648,7 @@ func (h *Handler) pairDesktop(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var deviceID string
-	err = tx.QueryRow(r.Context(),
-		`INSERT INTO desktop_devices (user_id, name, os, online, last_seen_at)
-		 VALUES ($1, $2, $3, FALSE, NOW()) RETURNING id`,
-		uid, strings.TrimSpace(req.Name), strings.TrimSpace(req.Os),
-	).Scan(&deviceID)
+	deviceID, err := h.findOrCreateDesktopDeviceTx(r.Context(), tx, uid, strings.TrimSpace(req.Name), strings.TrimSpace(req.Os), req.MachineID)
 	if err != nil {
 		writeInternal(w)
 		return

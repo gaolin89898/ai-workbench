@@ -198,6 +198,38 @@ export function getWorkspaceProjectByPath(projectPath: string): WorkspaceProject
   return row ? rowToProject(row) : null;
 }
 
+function normalizePathForCompare(value: string): string {
+  return path.resolve(value).replaceAll("\\", "/").replace(/\/+$/, "").toLowerCase();
+}
+
+function isSameOrChildPath(candidatePath: string, parentPath: string): boolean {
+  const candidate = normalizePathForCompare(candidatePath);
+  const parent = normalizePathForCompare(parentPath);
+  return candidate === parent || candidate.startsWith(`${parent}/`);
+}
+
+export function findWorkspaceProjectForPath(projectPath: string): WorkspaceProject | null {
+  const rows = db.prepare("SELECT * FROM local_projects").all() as ProjectRow[];
+  let best: ProjectRow | null = null;
+  let bestLength = -1;
+  for (const row of rows) {
+    if (!isSameOrChildPath(projectPath, row.path)) continue;
+    const length = normalizePathForCompare(row.path).length;
+    if (length > bestLength) {
+      best = row;
+      bestLength = length;
+    }
+  }
+  return best ? rowToProject(best) : null;
+}
+
+export async function resolveWorkspaceProjectPath(projectPath: string): Promise<string> {
+  const existing = findWorkspaceProjectForPath(projectPath);
+  if (existing) return existing.path;
+  const project = await addWorkspaceProject(projectPath);
+  return project.path;
+}
+
 // ---------- AI sessions ----------
 
 export function createLocalAiSession(params: {
