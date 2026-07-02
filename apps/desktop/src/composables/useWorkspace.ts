@@ -974,9 +974,12 @@ function commitCurrentAssistantTextAsThought(pending: PendingAssistant) {
   if (
     !currentStepId
     || !previousFinalText
-    || previousFinalText === pending.lastCommittedText
     || !looksLikeProcessCommentary(previousFinalText)
-  ) return;
+  ) return false;
+  if (previousFinalText === pending.lastCommittedText) {
+    pending.finalText = removeCommittedProcessText(pending.finalText, previousFinalText);
+    return true;
+  }
   const thoughtStepId = `process-text-${currentStepId}`;
   pending.steps.set(thoughtStepId, {
     type: "text",
@@ -984,6 +987,17 @@ function commitCurrentAssistantTextAsThought(pending: PendingAssistant) {
     text: previousFinalText,
   });
   pending.lastCommittedText = previousFinalText;
+  pending.finalText = removeCommittedProcessText(pending.finalText, previousFinalText);
+  return true;
+}
+
+function removeCommittedProcessText(currentText: string, committedText: string) {
+  const current = extractAssistantText(currentText);
+  const committed = extractAssistantText(committedText).trim();
+  if (!committed) return current;
+  if (current.trim() === committed) return "";
+  if (current.startsWith(committed)) return current.slice(committed.length).trimStart();
+  return current;
 }
 
 function looksLikeProcessCommentary(text: string) {
@@ -1077,7 +1091,11 @@ function upsertPendingSegment(sessionId: string, segment: ChatSegment) {
   const stepId = segment.stepId;
   if (!pending || !stepId) return;
   if (segment.type === "status") {
-    if (shouldHideBackendStatus(segment.label)) return;
+    const committedProcessText = commitCurrentAssistantTextAsThought(pending);
+    if (shouldHideBackendStatus(segment.label)) {
+      if (committedProcessText) syncPendingAssistantSegments(sessionId, pending.message.pending === false);
+      return;
+    }
     pending.lastStatusText = segment.label;
     pending.hasBackendStatus = true;
     const providerName = providerNameForSession(sessionId);
@@ -1150,7 +1168,7 @@ function isPersistentStatusSegment(segment: ChatSegment) {
 }
 
 function shouldHideBackendStatus(text: string) {
-  return text.includes("已生成一段回复") || text.includes("继续等待最终完成信号") || text === "mobile sent message";
+  return text.includes("已生成一段回复") || text.includes("继续等待最终完成信号") || text === "mobile sent message" || text === "created";
 }
 
 function patchPendingAssistant(sessionId: string, patch: Partial<ChatMessage>) {
@@ -1226,6 +1244,7 @@ async function initAiEventListeners() {
 }
 
 async function handleAiChatOutputEvent(event: AiChatOutputEvent) {
+  if (event.kind === "status" && shouldHideBackendStatus(event.text ?? "")) return;
   let pending = pendingAssistants.get(event.aiSessionId);
   if (!pending && event.kind !== "done" && event.kind !== "error") {
     const created = shouldHideBackendStatus(event.text ?? "")

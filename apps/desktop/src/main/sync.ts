@@ -25,7 +25,7 @@ import {
 } from "./db";
 import { detectAiProviders } from "./providers";
 import { assessCommandRisk } from "./risk";
-import { respondCodexApproval, runCodexChat } from "./codex";
+import { respondCodexApproval, runCodexChat, warmupCodexSession } from "./codex";
 import { clearCredentials } from "./credentials";
 import { syncCodexHistoryMirror } from "./codex_sessions";
 import { runAiChat } from "./claude";
@@ -107,6 +107,68 @@ function mergeChatSegment(segments: unknown[], segment: unknown): unknown[] {
 function mergeChatSegments(segments: unknown[], incoming: unknown): unknown[] {
   if (!Array.isArray(incoming)) return segments;
   return incoming.reduce((next, segment) => mergeChatSegment(next, segment), segments);
+}
+
+function looksLikeProcessCommentary(text: string) {
+  const normalized = text.trim();
+  if (normalized.length < 8) return false;
+  return /^(?:我先|先|接下来|现在我|我会|我准备|我需要|我将|我来|先看|先检查|正在)/.test(normalized)
+    || /^(?:Let me|I(?:'|’)ll|I am going to|I'm going to)\b/i.test(normalized)
+    || /(?:接下来我|我先看|我会先|我将先|先确认|先检查|先读取|先看一下)/.test(normalized);
+}
+
+function removeCommittedProcessText(currentText: string, committedText: string) {
+  const current = currentText;
+  const committed = committedText.trim();
+  if (!committed) return current;
+  if (current.trim() === committed) return "";
+  if (current.startsWith(committed)) return current.slice(committed.length).trimStart();
+  return current;
+}
+
+function segmentStepId(segment: unknown): string | null {
+  if (!segment || typeof segment !== "object") return null;
+  const stepId = (segment as Record<string, unknown>).stepId;
+  return typeof stepId === "string" && stepId ? stepId : null;
+}
+
+function firstSegmentStepId(segments: unknown): string | null {
+  if (!Array.isArray(segments)) return null;
+  for (const segment of segments) {
+    const stepId = segmentStepId(segment);
+    if (stepId) return stepId;
+  }
+  return null;
+}
+
+interface MobileAssistantDraft {
+  text: string;
+  segments: unknown[];
+  savedText: string;
+  currentStepId?: string | null;
+  lastCommittedText?: string;
+}
+
+function commitDraftProcessText(draft: MobileAssistantDraft, event: AiChatOutputEvent): void {
+  const stepId = event.stepId
+    || segmentStepId(event.segment)
+    || firstSegmentStepId(event.segments)
+    || draft.currentStepId;
+  if (stepId) draft.currentStepId = stepId;
+
+  const processText = draft.text.trim();
+  if (!stepId || !processText || !looksLikeProcessCommentary(processText)) return;
+  if (processText !== draft.lastCommittedText) {
+    draft.segments = mergeChatSegment(draft.segments, {
+      type: "thought",
+      stepId: `thought-${stepId}`,
+      title: "中间结论",
+      text: processText,
+      collapsed: true,
+    });
+    draft.lastCommittedText = processText;
+  }
+  draft.text = removeCommittedProcessText(draft.text, processText);
 }
 
 function loadStoredConfig(): StoredCloudConfig | null {
@@ -366,7 +428,7 @@ class DesktopCloudSync {
   // Tracks projectPath per session for mobile-originated sessions, since the
   // local DB schema does not store project_path on local_ai_sessions.
   private sessionProjectPaths = new Map<string, string>();
-  private mobileAssistantDrafts = new Map<string, { text: string; segments: unknown[]; savedText: string }>();
+  private mobileAssistantDrafts = new Map<string, MobileAssistantDraft>();
   private mobileDeltaBuffers = new Map<string, { text: string; segments: unknown[]; timer: ReturnType<typeof setTimeout> | null; deviceId: string }>();
 
   constructor(mainWindow: BrowserWindow) {
@@ -605,11 +667,26 @@ class DesktopCloudSync {
         });
       }
 
-      this.notify("ai-chat-output", { aiSessionId, kind: "status", text: "created" });
       this.notify("workspace-changed");
       this.notify("ai-history-changed", { aiSessionId });
+      if ((providerId || "claude") === "codex") {
+        void this.warmupCreatedCodexSession(aiSessionId);
+      }
     } catch (e) {
       console.error("handleAiSessionCreate failed:", e);
+    }
+  }
+
+  private async warmupCreatedCodexSession(aiSessionId: string): Promise<void> {
+    try {
+      const warmed = await warmupCodexSession(aiSessionId, { send: () => undefined });
+      if (!warmed.providerSessionId) return;
+      updateLocalAiSession(aiSessionId, { providerSessionId: warmed.providerSessionId });
+      this.notify("workspace-changed");
+      this.notify("ai-history-changed", { aiSessionId });
+      this.pushSessionSnapshot();
+    } catch (e) {
+      console.error("warmupCreatedCodexSession failed:", e);
     }
   }
 
@@ -684,15 +761,17 @@ class DesktopCloudSync {
         if (!event?.aiSessionId) return;
         if (event.kind === "status" && event.text === "mobile sent message") return;
         const draft = this.mobileAssistantDrafts.get(event.aiSessionId) ?? { text: "", segments: [], savedText: "" };
-        draft.segments = mergeChatSegments(draft.segments, event.segments);
-        if (event.segment) {
-          draft.segments = mergeChatSegment(draft.segments, event.segment);
-        }
         if (event.kind === "delta" && event.text) {
+          if (event.stepId) draft.currentStepId = event.stepId;
           draft.text += event.text;
           this.mobileAssistantDrafts.set(event.aiSessionId, draft);
           this.scheduleMobileDeltaFlush(deviceId, event.aiSessionId, event.text, draft.segments);
           return;
+        }
+        if (event.kind !== "done") commitDraftProcessText(draft, event);
+        draft.segments = mergeChatSegments(draft.segments, event.segments);
+        if (event.segment) {
+          draft.segments = mergeChatSegment(draft.segments, event.segment);
         }
         if (event.kind === "done") {
           this.flushMobileDelta(event.aiSessionId);
@@ -730,15 +809,17 @@ class DesktopCloudSync {
         if (!event?.aiSessionId) return;
         if (event.kind === "status" && event.text === "mobile sent message") return;
         const draft = this.mobileAssistantDrafts.get(event.aiSessionId) ?? { text: "", segments: [], savedText: "" };
-        draft.segments = mergeChatSegments(draft.segments, event.segments);
-        if (event.segment) {
-          draft.segments = mergeChatSegment(draft.segments, event.segment);
-        }
         if (event.kind === "delta" && event.text) {
+          if (event.stepId) draft.currentStepId = event.stepId;
           draft.text += event.text;
           this.mobileAssistantDrafts.set(event.aiSessionId, draft);
           this.scheduleMobileDeltaFlush(deviceId, event.aiSessionId, event.text, draft.segments);
           return;
+        }
+        if (event.kind !== "done") commitDraftProcessText(draft, event);
+        draft.segments = mergeChatSegments(draft.segments, event.segments);
+        if (event.segment) {
+          draft.segments = mergeChatSegment(draft.segments, event.segment);
         }
         if (event.kind === "done") {
           this.flushMobileDelta(event.aiSessionId);
@@ -817,7 +898,13 @@ class DesktopCloudSync {
       aiChatSender.send("ai-chat-output", {
         aiSessionId,
         kind: "status",
-        text: "mobile sent message",
+        text: "running",
+        segment: {
+          type: "status",
+          stepId: "mobile-run-started",
+          label: "正在处理",
+          icon: "think",
+        },
       });
 
       try {

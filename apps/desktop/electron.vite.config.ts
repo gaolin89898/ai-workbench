@@ -9,7 +9,7 @@ const ignoredWatchPaths = (path: string): boolean => {
 
 const watchOptions = {
   ignored: ignoredWatchPaths,
-  usePolling: true,
+  usePolling: process.env.ELECTRON_VITE_USE_POLLING === "1",
   interval: 500,
 };
 

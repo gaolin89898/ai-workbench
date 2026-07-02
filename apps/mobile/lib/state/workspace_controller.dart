@@ -203,10 +203,7 @@ class WorkspaceController extends ChangeNotifier {
         projectPath: project.path,
       );
       _upsertSession(session);
-      messagesBySession[session.id] = [
-        ChatMessage(
-            role: ChatRole.system, text: '已创建 $providerId 会话。现在可以发送 prompt。'),
-      ];
+      messagesBySession[session.id] = const <ChatMessage>[];
       return session;
     });
   }
@@ -631,14 +628,14 @@ class WorkspaceController extends ChangeNotifier {
         if (segment == null && segments.isEmpty)
           ChatSegment(type: 'status', label: text ?? 'AI 正在执行', icon: 'think'),
       ];
-      final hasToolSegment =
-          incomingSegments.any((segment) => segment.type == 'tool');
+      final hasProcessSegment = incomingSegments.any(_isProcessChatSegment);
       if (pendingIndex >= 0) {
         final pending = current[pendingIndex];
-        final committedSegments = hasToolSegment
+        final committedSegments = hasProcessSegment
             ? _commitCurrentTextAsThought(sessionId, pending)
             : const <ChatSegment>[];
         current[pendingIndex] = pending.copyWith(
+          text: _textAfterCommittedProcessText(pending.text, committedSegments),
           segments: _mergeSegments(pending.segments, [
             ...committedSegments,
             ...incomingSegments,
@@ -650,10 +647,12 @@ class WorkspaceController extends ChangeNotifier {
         );
         if (lastAssistantIndex >= 0 && current[lastAssistantIndex].pending) {
           final pending = current[lastAssistantIndex];
-          final committedSegments = hasToolSegment
+          final committedSegments = hasProcessSegment
               ? _commitCurrentTextAsThought(sessionId, pending)
               : const <ChatSegment>[];
           current[lastAssistantIndex] = pending.copyWith(
+            text:
+                _textAfterCommittedProcessText(pending.text, committedSegments),
             segments: _mergeSegments(pending.segments, [
               ...committedSegments,
               ...incomingSegments,
@@ -707,6 +706,29 @@ class WorkspaceController extends ChangeNotifier {
         collapsed: true,
       ),
     ];
+  }
+
+  String? _textAfterCommittedProcessText(
+    String? currentText,
+    List<ChatSegment> committedSegments,
+  ) {
+    if (committedSegments.isEmpty) return currentText;
+    final current = currentText ?? '';
+    final committed = (committedSegments.first.text ?? '').trim();
+    if (committed.isEmpty) return currentText;
+    if (current.trim() == committed) return '';
+    if (current.startsWith(committed)) {
+      return current.substring(committed.length).trimLeft();
+    }
+    return currentText;
+  }
+
+  bool _isProcessChatSegment(ChatSegment segment) {
+    return segment.type == 'tool' ||
+        segment.type == 'status' ||
+        segment.type == 'thought' ||
+        segment.type == 'error' ||
+        segment.type == 'approval';
   }
 
   bool _looksLikeProcessCommentary(String text) {

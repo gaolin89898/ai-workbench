@@ -63,8 +63,10 @@ class ChatMessageContent extends StatelessWidget {
     }
     if (processRun.isNotEmpty) groups.add(_SegmentGroup.process(processRun));
 
-    final hasInlineTextSegment = visibleSegments
-        .any((s) => s.type == 'text' && (s.text ?? '').trim().isNotEmpty);
+    final hasInlineTextSegment = visibleSegments.any((s) =>
+        s.type == 'text' &&
+        !_isProcessTextSegment(s) &&
+        (s.text ?? '').trim().isNotEmpty);
     final finalText = hasInlineTextSegment ? '' : _finalContentText(message);
     final hasVisibleContent = visibleSegments.any((segment) {
       if (_isProcessSegment(segment)) return true;
@@ -362,13 +364,7 @@ class _ToolSegment extends StatelessWidget {
     final running = segment.status == 'running';
     final title = _toolTitle(segment);
     final meta = _toolMeta(segment);
-    final visibleInput = _toolVisibleInput(segment);
-    final visibleOutput = _toolVisibleOutput(segment);
-    final diff = _toolDiffText(segment);
-    final hasDetails = visibleInput.isNotEmpty ||
-        visibleOutput.isNotEmpty ||
-        diff.isNotEmpty ||
-        (segment.summary ?? '').isNotEmpty;
+    final hasDetails = _toolHasDetails(segment);
     final line = Container(
       padding: EdgeInsets.symmetric(
           horizontal: compact ? 9 : 10, vertical: compact ? 8 : 10),
@@ -433,25 +429,141 @@ class _ToolSegment extends StatelessWidget {
               ],
             ),
           ),
+          if (hasDetails) ...[
+            const SizedBox(width: 8),
+            const Icon(Icons.chevron_right, size: 18, color: AppColors.muted),
+          ],
         ],
       ),
     );
     if (!hasDetails) return line;
-    return Theme(
-      data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
-      child: ExpansionTile(
-        tilePadding: EdgeInsets.zero,
-        childrenPadding: const EdgeInsets.only(top: 8),
-        initiallyExpanded: false,
-        title: line,
-        trailing:
-            const Icon(Icons.expand_more, size: 18, color: AppColors.muted),
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(AppRadius.md),
+        onTap: () => _showToolDetailsSheet(context, segment),
+        child: line,
+      ),
+    );
+  }
+}
+
+void _showToolDetailsSheet(BuildContext context, ChatSegment segment) {
+  showModalBottomSheet<void>(
+    context: context,
+    isScrollControlled: true,
+    showDragHandle: true,
+    builder: (ctx) => _ToolDetailsSheet(segment: segment),
+  );
+}
+
+class _ToolDetailsSheet extends StatelessWidget {
+  const _ToolDetailsSheet({required this.segment});
+
+  final ChatSegment segment;
+
+  @override
+  Widget build(BuildContext context) {
+    final visibleInput = _toolVisibleInput(segment);
+    final visibleOutput = _toolVisibleOutput(segment);
+    final diff = _toolDiffText(segment);
+    final title = _toolTitle(segment);
+    return SafeArea(
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(16, 0, 16, 20),
+        child: ConstrainedBox(
+          constraints: BoxConstraints(
+            maxHeight: MediaQuery.sizeOf(context).height * 0.78,
+          ),
+          child: ListView(
+            shrinkWrap: true,
+            children: [
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Container(
+                    width: 34,
+                    height: 34,
+                    decoration: BoxDecoration(
+                      color: AppColors.primarySoftSolid,
+                      borderRadius: BorderRadius.circular(AppRadius.lg),
+                    ),
+                    child: const Icon(Icons.terminal,
+                        size: 18, color: AppColors.primary),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          title,
+                          style: const TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w800,
+                            color: AppColors.ink,
+                            height: 1.35,
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          _toolStatusLabel(segment),
+                          style: const TextStyle(
+                            color: AppColors.muted,
+                            fontSize: 12,
+                            height: 1.35,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 16),
+              if ((segment.command ?? '').trim().isNotEmpty)
+                _SheetSection(title: '命令', child: _CodeBlock(segment.command!)),
+              if ((segment.summary ?? '').trim().isNotEmpty)
+                _SheetSection(
+                    title: '摘要', child: _DetailBlock(segment.summary!)),
+              if (visibleInput.trim().isNotEmpty)
+                _SheetSection(title: '输入', child: _CodeBlock(visibleInput)),
+              if (visibleOutput.trim().isNotEmpty)
+                _SheetSection(title: '输出', child: _CodeBlock(visibleOutput)),
+              if (diff.trim().isNotEmpty)
+                _SheetSection(title: '变更', child: _DiffBlock(diff)),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _SheetSection extends StatelessWidget {
+  const _SheetSection({required this.title, required this.child});
+
+  final String title;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          if ((segment.summary ?? '').isNotEmpty)
-            _DetailBlock(segment.summary!),
-          if (visibleInput.isNotEmpty) _CodeBlock(visibleInput),
-          if (visibleOutput.isNotEmpty) _CodeBlock(visibleOutput),
-          if (diff.isNotEmpty) _DiffBlock(diff),
+          Padding(
+            padding: const EdgeInsets.only(bottom: 6),
+            child: Text(
+              title,
+              style: const TextStyle(
+                color: AppColors.secondary,
+                fontSize: 12,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+          ),
+          child,
         ],
       ),
     );
@@ -808,7 +920,8 @@ String _finalContentText(ChatMessage message) {
   final text = (message.text ?? '').trim();
   if (text.isNotEmpty) return text;
   final textSegments = message.segments
-      .where((segment) => segment.type == 'text')
+      .where((segment) =>
+          segment.type == 'text' && !_isProcessTextSegment(segment))
       .map((segment) => segment.text?.trim() ?? '')
       .where((value) => value.isNotEmpty)
       .toList();
@@ -816,11 +929,20 @@ String _finalContentText(ChatMessage message) {
 }
 
 bool _isProcessSegment(ChatSegment segment) {
-  return segment.type == 'tool' ||
+  return _isProcessTextSegment(segment) ||
+      segment.type == 'tool' ||
       segment.type == 'status' ||
       segment.type == 'thought' ||
       segment.type == 'error' ||
       segment.type == 'approval';
+}
+
+bool _isProcessTextSegment(ChatSegment segment) {
+  final stepId = segment.stepId ?? '';
+  return segment.type == 'text' &&
+      (stepId.startsWith('process-text-') ||
+          stepId.startsWith('thought-') ||
+          stepId.startsWith('commentary-'));
 }
 
 bool _shouldShowProcessSegment(ChatSegment segment) {
@@ -905,6 +1027,24 @@ String _toolTitle(ChatSegment segment) {
 }
 
 typedef _ToolMetaItem = ({String kind, String text});
+
+bool _toolHasDetails(ChatSegment segment) {
+  return (segment.command ?? '').trim().isNotEmpty ||
+      (segment.summary ?? '').trim().isNotEmpty ||
+      _toolVisibleInput(segment).trim().isNotEmpty ||
+      _toolVisibleOutput(segment).trim().isNotEmpty ||
+      _toolDiffText(segment).trim().isNotEmpty;
+}
+
+String _toolStatusLabel(ChatSegment segment) {
+  final meta = _toolMeta(segment).map((item) => item.text).join(' · ');
+  final status = switch (segment.status) {
+    'running' => '正在运行',
+    'error' => '运行失败',
+    _ => '已运行',
+  };
+  return meta.isEmpty ? status : '$status · $meta';
+}
 
 List<_ToolMetaItem> _toolMeta(ChatSegment segment) {
   final parts = <_ToolMetaItem>[];
@@ -1051,12 +1191,23 @@ String _formatDuration(int durationMs) {
 }
 
 String _shortenCommand(String? command) {
-  final cleaned = (command ?? '')
+  final cleaned = _unquoteCommand((command ?? '')
       .replaceFirst(RegExp(r'^/usr/bin/(bash|sh)\s+-lc\s+'), '')
       .replaceFirst(RegExp(r'^bash\s+-lc\s+'), '')
-      .trim();
-  final unquoted = cleaned.replaceFirst(RegExp(r'''^['"](.+)['"]$'''), r'$1');
+      .trim());
+  final powershell = RegExp(
+    r'''^(?:"?[^"]*\\powershell(?:\.exe)?"?\s+)?-Command\s+([\s\S]+)$''',
+    caseSensitive: false,
+  ).firstMatch(cleaned);
+  final unquoted = powershell == null
+      ? cleaned
+      : 'PowerShell: ${_unquoteCommand((powershell.group(1) ?? '').trim())}';
   return unquoted.length > 64 ? '${unquoted.substring(0, 61)}...' : unquoted;
+}
+
+String _unquoteCommand(String command) {
+  final quoteMatch = RegExp(r'''^['"](.+)['"]$''').firstMatch(command);
+  return quoteMatch?.group(1) ?? command;
 }
 
 extension _FirstOrNull<T> on Iterable<T> {
