@@ -8,6 +8,7 @@ import { desktopApi, type AiProvider, type ChatImageAttachment, type ChatMessage
 const providerClaudeIcon = new URL("../assets/icons/provider-claude.svg", import.meta.url).href;
 const providerCodexIcon = new URL("../assets/icons/provider-codex.svg", import.meta.url).href;
 const providerOpencodeIcon = new URL("../assets/icons/provider-opencode.svg", import.meta.url).href;
+const providerMimoIcon = new URL("../assets/icons/provider-mimo.svg", import.meta.url).href;
 const sendIcon = new URL("../assets/icons/send.svg", import.meta.url).href;
 const imageRemoveIcon = new URL("../assets/icons/image-remove.svg", import.meta.url).href;
 const ws = useWorkspace();
@@ -81,6 +82,7 @@ const providerIcons: Record<string, string> = {
   claude: providerClaudeIcon,
   codex: providerCodexIcon,
   opencode: providerOpencodeIcon,
+  mimo: providerMimoIcon,
 };
 const virtualScrollTop = ref(0);
 const virtualViewportHeight = ref(0);

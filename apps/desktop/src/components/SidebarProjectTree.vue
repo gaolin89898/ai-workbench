@@ -22,6 +22,7 @@ const providerCodexIcon = new URL("../assets/icons/provider-codex.svg", import.m
 const providerClaudeIcon = new URL("../assets/icons/provider-claude.svg", import.meta.url).href;
 const providerOpencodeIcon = new URL("../assets/icons/provider-opencode.svg", import.meta.url).href;
 const providerDeepseekIcon = new URL("../assets/icons/provider-deepseek.svg", import.meta.url).href;
+const providerMimoIcon = new URL("../assets/icons/provider-mimo.svg", import.meta.url).href;
 
 const chevronDownSvg = '<svg viewBox="0 0 20 20" aria-hidden="true"><path d="M5 7.5 10 12.5 15 7.5"/></svg>';
 const chevronRightSvg = '<svg viewBox="0 0 20 20" aria-hidden="true"><path d="M7.5 5 12.5 10 7.5 15"/></svg>';
@@ -528,6 +529,7 @@ function providerIcon(providerId?: string | null) {
   if (normalized === "claude") return providerClaudeIcon;
   if (normalized === "opencode") return providerOpencodeIcon;
   if (normalized === "deepseek") return providerDeepseekIcon;
+  if (normalized === "mimo") return providerMimoIcon;
   return terminalIcon;
 }
 

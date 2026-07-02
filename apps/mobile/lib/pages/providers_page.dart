@@ -131,6 +131,16 @@ const _providers = <_ProviderInfo>[
     version: '—',
     path: '未发现 deepseek-cli',
   ),
+  _ProviderInfo(
+    id: 'mimo',
+    name: 'MiMo Code',
+    command: 'mimo',
+    icon: Icons.auto_fix_high,
+    status: _ProviderStatus.signedIn,
+    installed: true,
+    version: 'v0.1.0',
+    path: '/home/gl/.mimocode/bin/mimo',
+  ),
 ];
 
 // =============================================================================

@@ -1076,6 +1076,7 @@ const _builtInProviders = [
   ('claude', 'Claude Code', Icons.auto_awesome_outlined),
   ('opencode', 'OpenCode', Icons.code_outlined),
   ('deepseek', 'DeepSeek', Icons.psychology_outlined),
+  ('mimo', 'MiMo Code', Icons.auto_fix_high_outlined),
 ];
 
 Future<void> _showProviderSelector(

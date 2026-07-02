@@ -12,6 +12,7 @@ const BUILTIN_PROVIDERS: AiProvider[] = [
   { id: "codex", name: "Codex CLI", command: "codex", builtIn: true, enabled: true },
   { id: "claude", name: "Claude Code", command: "claude", builtIn: true, enabled: true },
   { id: "opencode", name: "OpenCode", command: "opencode", builtIn: true, enabled: true },
+  { id: "mimo", name: "MiMo Code", command: "mimo", builtIn: true, enabled: true },
 ];
 
 function commandExists(command: string): boolean {
@@ -71,6 +72,11 @@ function detectAuthStatus(providerId: string): string {
     const claudeDir = path.join(home, ".claude");
     const claudeJson = path.join(home, ".claude.json");
     return dirExists(claudeDir) || fileExists(claudeJson) ? "signedIn" : "signedOut";
+  }
+  if (providerId === "mimo") {
+    // mimo: ~/.mimocode/ dir presence implies available.
+    const mimoDir = path.join(home, ".mimocode");
+    return dirExists(mimoDir) ? "signedIn" : "unknown";
   }
   return "unknown";
 }

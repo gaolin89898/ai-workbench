@@ -136,7 +136,7 @@ let workspaceEventsInitialized = false;
 let workspaceEventsInitPromise: Promise<void> | null = null;
 let qrPairingTimer: number | null = null;
 let runningElapsedTimer: number | null = null;
-const supportedChatProviders = new Set(["codex", "claude"]);
+const supportedChatProviders = new Set(["codex", "claude", "mimo"]);
 
 function pushChatDebugEvent(message: string) {
   const time = new Date().toLocaleTimeString();
@@ -169,7 +169,7 @@ function elapsedStatusLabel(startedAt: number) {
 function providerDisplayName(providerId?: string | null) {
   if (!providerId) return "AI";
   return providers.value.find((provider) => provider.id === providerId)?.name
-    ?? ({ codex: "Codex", claude: "Claude Code", opencode: "OpenCode" } as Record<string, string>)[providerId]
+    ?? ({ codex: "Codex", claude: "Claude Code", opencode: "OpenCode", mimo: "MiMo Code" } as Record<string, string>)[providerId]
     ?? "AI";
 }
 

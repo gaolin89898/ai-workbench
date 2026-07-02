@@ -389,10 +389,9 @@ export function registerIpcHandlers(win?: BrowserWindow): void {
       return existing;
     }
 
+    let sessionProjectPath = projectPath;
     try {
-      if (!db.getWorkspaceProjectByPath(projectPath)) {
-        await db.addWorkspaceProject(projectPath);
-      }
+      sessionProjectPath = await db.resolveWorkspaceProjectPath(projectPath);
     } catch {
       // project registration is best-effort; the imported session still keeps its path in summary
     }
@@ -403,7 +402,7 @@ export function registerIpcHandlers(win?: BrowserWindow): void {
       providerSessionId,
       title: req.title.trim() || "Codex 会话",
       status: "idle",
-      summary: projectPath,
+      summary: sessionProjectPath,
       updatedAt: req.updatedAt,
     });
     await syncCodexHistoryMirror(session.id);
