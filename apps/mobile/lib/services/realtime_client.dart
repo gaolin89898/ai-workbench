@@ -10,29 +10,45 @@ class RealtimeClient {
 
   final ApiClient api;
   final _events = StreamController<Map<String, dynamic>>.broadcast();
+  final List<String> _pendingSends = [];
   WebSocketChannel? _channel;
   StreamSubscription<dynamic>? _subscription;
   bool _closed = false;
+  bool _ready = false;
 
   Stream<Map<String, dynamic>> get events => _events.stream;
 
-  bool get connected => _channel != null;
+  bool get connected => _channel != null && _ready;
 
   void connect() {
     if (_channel != null || api.token == null) return;
     _closed = false;
     final channel = WebSocketChannel.connect(api.wsUri('/ws/mobile'));
     _channel = channel;
+    _ready = false;
     _subscription = channel.stream.listen(
       (raw) => _events.add(jsonDecode(raw as String) as Map<String, dynamic>),
       onDone: _scheduleReconnect,
       onError: (_) => _scheduleReconnect(),
     );
+    channel.ready.then((_) {
+      if (_closed || !identical(_channel, channel)) return;
+      _ready = true;
+      _flushPendingSends();
+    }).catchError((_) {
+      if (identical(_channel, channel)) _scheduleReconnect();
+    });
   }
 
   void send(Map<String, dynamic> payload) {
+    final encoded = jsonEncode(payload);
     connect();
-    _channel?.sink.add(jsonEncode(payload));
+    if (_channel == null || !_ready) {
+      _pendingSends.add(encoded);
+      if (_pendingSends.length > 100) _pendingSends.removeAt(0);
+      return;
+    }
+    _channel?.sink.add(encoded);
   }
 
   void requestHistory(String deviceId, String aiSessionId) {
@@ -77,8 +93,19 @@ class RealtimeClient {
     _subscription?.cancel();
     _subscription = null;
     _channel = null;
+    _ready = false;
     if (_closed) return;
     Timer(const Duration(seconds: 2), connect);
+  }
+
+  void _flushPendingSends() {
+    final channel = _channel;
+    if (channel == null || !_ready || _pendingSends.isEmpty) return;
+    final pending = List<String>.from(_pendingSends);
+    _pendingSends.clear();
+    for (final payload in pending) {
+      channel.sink.add(payload);
+    }
   }
 
   Future<void> close() async {
@@ -86,6 +113,8 @@ class RealtimeClient {
     await _subscription?.cancel();
     await _channel?.sink.close();
     _channel = null;
+    _ready = false;
+    _pendingSends.clear();
     await _events.close();
   }
 }

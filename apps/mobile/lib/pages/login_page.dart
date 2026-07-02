@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 
-import '../models/workbench_models.dart';
 import '../services/api_client.dart';
 import '../state/workspace_controller.dart';
 import '../state/workspace_scope.dart';
@@ -21,14 +20,33 @@ class _LoginPageState extends State<LoginPage> {
   bool _loading = false;
   bool _oauthLoading = false;
   bool _showPassword = false;
+  bool _rememberPassword = false;
   String? _oauthStatus;
   String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadSavedCredentials();
+  }
 
   @override
   void dispose() {
     _email.dispose();
     _password.dispose();
     super.dispose();
+  }
+
+  Future<void> _loadSavedCredentials() async {
+    final email = await ApiClient.loadSavedEmail();
+    final password = await ApiClient.loadSavedPassword();
+    if (email != null && password != null && mounted) {
+      setState(() {
+        _email.text = email;
+        _password.text = password;
+        _rememberPassword = true;
+      });
+    }
   }
 
   @override
@@ -193,6 +211,32 @@ class _LoginPageState extends State<LoginPage> {
                                 ),
                               ),
                             ),
+                            const SizedBox(height: AppSpacing.sm),
+                            // 记住密码
+                            Row(
+                              children: [
+                                SizedBox(
+                                  width: 20,
+                                  height: 20,
+                                  child: Checkbox(
+                                    value: _rememberPassword,
+                                    onChanged: (v) => setState(
+                                        () => _rememberPassword = v ?? false),
+                                    activeColor: AppColors.primary,
+                                    materialTapTargetSize:
+                                        MaterialTapTargetSize.shrinkWrap,
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
+                                const Text(
+                                  '记住密码',
+                                  style: TextStyle(
+                                    fontSize: 13,
+                                    color: AppColors.secondary,
+                                  ),
+                                ),
+                              ],
+                            ),
                             const SizedBox(height: AppSpacing.md),
                             // 主按钮"继续"：纯色 AppColors.primary + arrow_right 图标
                             _PrimaryButton(
@@ -327,6 +371,11 @@ class _LoginPageState extends State<LoginPage> {
     try {
       final api = ApiClient(baseUrl: ApiClient.defaultBaseUrl);
       await api.login(_email.text.trim(), _password.text);
+      if (_rememberPassword) {
+        await ApiClient.saveCredentials(_email.text.trim(), _password.text);
+      } else {
+        await ApiClient.clearCredentials();
+      }
       final controller = WorkspaceController(api: api);
       await controller.loadDevices();
       if (!mounted) return;
@@ -388,7 +437,7 @@ class _LoginPageState extends State<LoginPage> {
   }
 
   Future<void> _openWorkspace(WorkspaceController controller) async {
-    final device = _pickInitialDevice(controller.devices);
+    final device = controller.preferredInitialDevice();
     if (device != null) {
       await controller.selectDevice(device);
     }
@@ -399,13 +448,6 @@ class _LoginPageState extends State<LoginPage> {
         child: const MobileShellPage(),
       ),
     ));
-  }
-
-  DesktopDevice? _pickInitialDevice(List<DesktopDevice> devices) {
-    for (final device in devices) {
-      if (device.online) return device;
-    }
-    return devices.isEmpty ? null : devices.first;
   }
 }
 

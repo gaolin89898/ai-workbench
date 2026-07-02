@@ -28,8 +28,9 @@ import {
   getCloudConfig,
   getDesktopCloudSync,
 } from "./sync";
+import { saveCredentials, loadCredentials, clearCredentials } from "./credentials";
 import { respondCodexApproval, runCodexChat, stopCodexChat } from "./codex";
-import { listCodexProjectSessions, syncCodexHistoryMirror } from "./codex_sessions";
+import { syncCodexHistoryMirror } from "./codex_sessions";
 import { runAiChat, stopAiChat } from "./claude";
 import { checkAppUpdate, installAppUpdate, initUpdater } from "./updater";
 import type {
@@ -41,7 +42,6 @@ import type {
   RunCodexChatRequest,
   CodexApprovalResponseRequest,
   ChatMessage,
-  ImportCodexProjectSessionRequest,
 } from "../services/desktop";
 
 let mainWindow: BrowserWindow | null = null;
@@ -149,6 +149,14 @@ export function registerIpcHandlers(win?: BrowserWindow): void {
   handle("logout_desktop", async () => {
     logoutDesktop();
   });
+
+  handle("save_credentials", async (_event, args: [string, string]) =>
+    saveCredentials(args[0], args[1])
+  );
+
+  handle("load_credentials", async () => loadCredentials());
+
+  handle("clear_credentials", async () => clearCredentials());
 
   // OAuth 登录完成后，前端把 token/userId 传过来保存
   handle("save_oauth_login", async (_event, args: [string, string, string, string]) => {
@@ -275,10 +283,14 @@ export function registerIpcHandlers(win?: BrowserWindow): void {
     })
   );
 
-    handle(
+  handle(
     "append_local_ai_message",
-    async (_event, args: [string, ChatMessage["role"], string]) =>
-      db.appendLocalAiMessage(args[0], args[1], args[2])
+    async (_event, args: [string, ChatMessage["role"], string]) => {
+      const [aiSessionId, role, content] = args;
+      db.appendLocalAiMessage(aiSessionId, role, content);
+      getSender().send("ai-history-changed", { aiSessionId });
+      void getDesktopCloudSync()?.pushAiHistory(aiSessionId);
+    }
   );
 
   // ---------- shell PTY ----------
@@ -368,48 +380,6 @@ export function registerIpcHandlers(win?: BrowserWindow): void {
   });
 
   handle("list_local_ai_sessions", async () => db.listLocalAiSessions());
-
-  handle("list_codex_project_sessions", async (_event, args: [string]) =>
-    listCodexProjectSessions(args[0], db.listLocalAiSessions())
-  );
-
-  handle("import_codex_project_session", async (_event, args: [ImportCodexProjectSessionRequest]) => {
-    const req = args[0];
-    const providerSessionId = req.providerSessionId.trim();
-    const projectPath = req.projectPath.trim();
-    if (!providerSessionId) throw new Error("providerSessionId is required");
-    if (!projectPath) throw new Error("projectPath is required");
-    const existing = db.listLocalAiSessions().find((session) => session.providerSessionId === providerSessionId);
-    if (existing) {
-      const synced = await syncCodexHistoryMirror(existing.id);
-      if (synced) {
-        getDesktopCloudSync()?.pushSessionSnapshot();
-        getSender().send("ai-history-changed", { aiSessionId: existing.id });
-      }
-      return existing;
-    }
-
-    let sessionProjectPath = projectPath;
-    try {
-      sessionProjectPath = await db.resolveWorkspaceProjectPath(projectPath);
-    } catch {
-      // project registration is best-effort; the imported session still keeps its path in summary
-    }
-
-    const session = db.createLocalAiSession({
-      id: randomUUID(),
-      providerId: "codex",
-      providerSessionId,
-      title: req.title.trim() || "Codex 会话",
-      status: "idle",
-      summary: sessionProjectPath,
-      updatedAt: req.updatedAt,
-    });
-    await syncCodexHistoryMirror(session.id);
-    getDesktopCloudSync()?.pushSessionSnapshot();
-    getSender().send("workspace-changed");
-    return session;
-  });
 
   handle("archive_local_ai_session", async (_event, args: [string, boolean]) =>
     db.archiveLocalAiSession(args[0], args[1])

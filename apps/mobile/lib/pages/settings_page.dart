@@ -272,6 +272,7 @@ class _SettingsPageState extends State<SettingsPage> {
     final controller = WorkspaceScope.of(context);
     controller.dispose();
     await ApiClient.clearStoredToken();
+    await ApiClient.clearCredentials();
     if (!mounted) return;
     Navigator.of(context).pushAndRemoveUntil(
       MaterialPageRoute(builder: (_) => const LoginPage()),

@@ -26,12 +26,14 @@ import {
 import { detectAiProviders } from "./providers";
 import { assessCommandRisk } from "./risk";
 import { respondCodexApproval, runCodexChat } from "./codex";
+import { clearCredentials } from "./credentials";
 import { syncCodexHistoryMirror } from "./codex_sessions";
 import { runAiChat } from "./claude";
 
 // ---------- Cloud config persistence ----------
 
 const STRUCTURED_MESSAGE_PREFIX = "__AI_WORKBENCH_MESSAGE_V1__";
+const CODEX_APP_SERVER_SESSION_PREFIX = "app-server:";
 const configPath = path.join(app.getPath("userData"), "cloud-config.json");
 const machineIdPath = path.join(app.getPath("userData"), "machine-id");
 
@@ -76,6 +78,16 @@ function encodeStructuredHistoryContent(content: string, segments: unknown[]): s
     text: content,
     segments,
   })}`;
+}
+
+function isCodexExternalMirrorSession(session: { providerId: string; providerSessionId?: string | null }): boolean {
+  return session.providerId === "codex"
+    && Boolean(session.providerSessionId)
+    && !session.providerSessionId!.startsWith(CODEX_APP_SERVER_SESSION_PREFIX);
+}
+
+function listSyncableAiSessions() {
+  return listLocalAiSessions().filter((session) => !isCodexExternalMirrorSession(session));
 }
 
 function mergeChatSegment(segments: unknown[], segment: unknown): unknown[] {
@@ -225,6 +237,7 @@ export function logoutDesktop(): void {
   } catch (e) {
     console.error("Failed to remove cloud config on logout:", e);
   }
+  clearCredentials();
 }
 
 // saveOAuthLogin OAuth 登录后桌面端调用 /desktop/register-device 拿真实
@@ -426,7 +439,7 @@ class DesktopCloudSync {
 
   private pushSnapshots(deviceId: string): void {
     const projects = listWorkspaceProjects();
-    const sessions = listLocalAiSessions();
+    const sessions = listSyncableAiSessions();
     this.send({ type: "projects.snapshot", deviceId, projects });
     this.send({ type: "ai.sessions.snapshot", deviceId, sessions });
     // Provider detection is async (spawns CLI processes); send when ready.
@@ -447,7 +460,7 @@ class DesktopCloudSync {
   pushSessionSnapshot(): void {
     const config = loadStoredConfig();
     if (!config) return;
-    const sessions = listLocalAiSessions();
+    const sessions = listSyncableAiSessions();
     this.send({ type: "ai.sessions.snapshot", deviceId: config.deviceId, sessions });
   }
 
@@ -461,6 +474,28 @@ class DesktopCloudSync {
     if (!config) return;
     const projects = listWorkspaceProjects();
     this.send({ type: "projects.snapshot", deviceId: config.deviceId, projects });
+  }
+
+  /**
+   * Push the latest local history for one AI session to mobile clients.
+   * Desktop-originated user messages are written to SQLite before provider
+   * output starts, so mobile needs this explicit history push to see them.
+   */
+  async pushAiHistory(aiSessionId: string): Promise<void> {
+    const config = loadStoredConfig();
+    if (!config) return;
+    try {
+      await syncCodexHistoryMirror(aiSessionId);
+    } catch (e) {
+      console.error("pushAiHistory: codex history sync failed:", e);
+    }
+    this.send({
+      type: "ai.history.response",
+      deviceId: config.deviceId,
+      aiSessionId,
+      requestId: `push-${Date.now()}`,
+      messages: this.buildHistoryMessages(aiSessionId),
+    });
   }
 
   /**
@@ -618,6 +653,26 @@ class DesktopCloudSync {
     }
   }
 
+  private buildHistoryMessages(aiSessionId: string): Array<Record<string, unknown>> {
+    const messages: Array<Record<string, unknown>> = listLocalAiHistory(aiSessionId).map((message) => ({
+      ...message,
+      content: decodeHistoryContent(message.content),
+    }));
+    const draft = this.mobileAssistantDrafts.get(aiSessionId);
+    if (draft && (draft.text.trim() || draft.segments.length)) {
+      messages.push({
+        role: "assistant",
+        content: {
+          text: draft.text,
+          segments: draft.segments,
+        },
+        createdAt: new Date().toISOString(),
+        pending: true,
+      });
+    }
+    return messages;
+  }
+
   createRendererAndMobileAiChatSender(rendererSender: { send: (channel: string, ...args: unknown[]) => void }) {
     const config = loadStoredConfig();
     const deviceId = config?.deviceId;
@@ -650,6 +705,8 @@ class DesktopCloudSync {
             text: finalText,
             segments: draft.segments,
           });
+          this.mobileAssistantDrafts.delete(event.aiSessionId);
+          void this.pushAiHistory(event.aiSessionId);
           return;
         }
         this.flushMobileDelta(event.aiSessionId);
@@ -698,6 +755,9 @@ class DesktopCloudSync {
             text: finalText,
             segments: draft.segments,
           });
+          this.mobileAssistantDrafts.delete(event.aiSessionId);
+          this.notify("ai-history-changed", { aiSessionId: event.aiSessionId });
+          void this.pushAiHistory(event.aiSessionId);
           return;
         }
         this.flushMobileDelta(event.aiSessionId);
@@ -737,6 +797,8 @@ class DesktopCloudSync {
       }
 
       appendLocalAiMessage(aiSessionId, "user", content);
+      this.notify("ai-history-changed", { aiSessionId });
+      void this.pushAiHistory(aiSessionId);
 
       const session = getLocalAiSession(aiSessionId);
       if (!session) {
@@ -835,16 +897,12 @@ class DesktopCloudSync {
     } catch (e) {
       console.error("handleAiHistoryRequest: codex history sync failed:", e);
     }
-    const messages = listLocalAiHistory(aiSessionId).map((message) => ({
-      ...message,
-      content: decodeHistoryContent(message.content),
-    }));
     this.send({
       type: "ai.history.response",
       deviceId,
       aiSessionId,
       requestId,
-      messages,
+      messages: this.buildHistoryMessages(aiSessionId),
     });
   }
 

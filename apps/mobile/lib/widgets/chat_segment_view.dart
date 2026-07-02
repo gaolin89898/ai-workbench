@@ -35,11 +35,16 @@ class ChatMessageContent extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final processSummary = message.segments
+        .where((segment) =>
+            segment.type == 'status' && segment.stepId == 'final-summary')
+        .firstOrNull;
     final visibleSegments = message.segments.where((s) {
       if (s.stepId == 'runtime-status' || s.stepId == 'initial-thinking') {
         return false;
       }
       if (s.type == 'status' && s.stepId == 'final-summary') return false;
+      if (_isProcessSegment(s) && !_shouldShowProcessSegment(s)) return false;
       return true;
     }).toList();
 
@@ -76,6 +81,7 @@ class ChatMessageContent extends StatelessWidget {
             _ProcessGroupCard(
                 segments: group.segments,
                 pending: message.pending,
+                summarySegment: processSummary,
                 onApproval: onApproval)
           else
             ChatSegmentView(
@@ -97,21 +103,19 @@ class ChatMessageContent extends StatelessWidget {
 
 class _ProcessGroupCard extends StatelessWidget {
   const _ProcessGroupCard(
-      {required this.segments, required this.pending, this.onApproval});
+      {required this.segments,
+      required this.pending,
+      this.summarySegment,
+      this.onApproval});
 
   final List<ChatSegment> segments;
   final bool pending;
+  final ChatSegment? summarySegment;
   final void Function(ChatSegment segment, String decision)? onApproval;
 
   @override
   Widget build(BuildContext context) {
-    if (segments.length == 1) {
-      return Padding(
-        padding: const EdgeInsets.only(bottom: 8),
-        child: ChatSegmentView(
-            segment: segments.first, compact: true, onApproval: onApproval),
-      );
-    }
+    final summary = _summaryLabel(segments, pending, summarySegment);
     return Container(
       margin: const EdgeInsets.only(bottom: 8),
       decoration: BoxDecoration(
@@ -142,7 +146,7 @@ class _ProcessGroupCard extends StatelessWidget {
               const SizedBox(width: 6),
               Expanded(
                 child: Text(
-                  '已运行 ${segments.length} 步',
+                  summary,
                   style: const TextStyle(
                     color: AppColors.secondary,
                     fontSize: 12,
@@ -198,7 +202,11 @@ class ChatProcessPanel extends StatelessWidget {
         .where(_shouldShowProcessSegment)
         .toList();
     if (processSegments.isEmpty) return const SizedBox.shrink();
-    final summary = _summaryLabel(processSegments, pending);
+    final summarySegment = segments
+        .where((segment) =>
+            segment.type == 'status' && segment.stepId == 'final-summary')
+        .firstOrNull;
+    final summary = _summaryLabel(processSegments, pending, summarySegment);
     return Container(
       margin: const EdgeInsets.only(bottom: 10),
       decoration: BoxDecoration(
@@ -816,17 +824,53 @@ bool _isProcessSegment(ChatSegment segment) {
 }
 
 bool _shouldShowProcessSegment(ChatSegment segment) {
-  return segment.stepId != 'initial-thinking';
+  if (segment.stepId == 'initial-thinking' ||
+      segment.stepId == 'runtime-status') {
+    return false;
+  }
+  if (segment.type != 'status') return true;
+  if (segment.stepId == 'final-summary') return false;
+  final label = (segment.label ?? segment.text ?? '').trim();
+  if (label.isEmpty) return false;
+  if (label == '完成' ||
+      label == '已完成' ||
+      label == '正在思考' ||
+      label == 'Codex 正在执行' ||
+      label == 'AI 正在执行') {
+    return false;
+  }
+  return true;
 }
 
-String _summaryLabel(List<ChatSegment> segments, bool pending) {
-  final finalSummary = segments
-      .where((segment) =>
-          segment.type == 'status' && segment.stepId == 'final-summary')
-      .firstOrNull;
-  if (finalSummary?.label != null) return finalSummary!.label!;
-  if (pending) return '正在处理';
-  return '执行过程';
+String _summaryLabel(
+    List<ChatSegment> segments, bool pending, ChatSegment? finalSummary) {
+  final durationMs = finalSummary?.durationMs ?? _processDurationMs(segments);
+  final prefix = pending ? '正在处理' : '已处理';
+  if (durationMs == null || durationMs <= 0) return prefix;
+  return '$prefix ${_formatCompactDuration(durationMs)}';
+}
+
+int? _processDurationMs(List<ChatSegment> segments) {
+  var maxDuration = 0;
+  for (final segment in segments) {
+    final duration = segment.durationMs ?? 0;
+    if (duration > maxDuration) maxDuration = duration;
+  }
+  return maxDuration == 0 ? null : maxDuration;
+}
+
+String _formatCompactDuration(int durationMs) {
+  if (durationMs < 1000) return '${durationMs}ms';
+  final totalSeconds = (durationMs / 1000).round().clamp(1, 1 << 31);
+  final seconds = totalSeconds % 60;
+  final totalMinutes = totalSeconds ~/ 60;
+  if (totalMinutes == 0) return '$seconds秒';
+  final minutes = totalMinutes % 60;
+  final hours = totalMinutes ~/ 60;
+  if (hours == 0) {
+    return seconds == 0 ? '$minutes分' : '$minutes分$seconds秒';
+  }
+  return seconds == 0 ? '$hours时$minutes分' : '$hours时$minutes分$seconds秒';
 }
 
 String _toolTitle(ChatSegment segment) {

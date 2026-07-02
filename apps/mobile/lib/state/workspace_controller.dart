@@ -10,7 +10,7 @@ import '../services/realtime_client.dart';
 
 class WorkspaceController extends ChangeNotifier {
   WorkspaceController({required this.api}) : realtime = RealtimeClient(api) {
-    _loadPersistence();
+    _persistenceLoaded = _loadPersistence();
   }
 
   final ApiClient api;
@@ -21,8 +21,10 @@ class WorkspaceController extends ChangeNotifier {
   Timer? _historyRefreshTimer;
   String? _openSessionId;
   Future<void>? _loadDevicesInFlight;
+  late final Future<void> _persistenceLoaded;
   DateTime? _lastDevicesLoadedAt;
   final Map<String, Future<AiSessionMeta?>> _createSessionInFlight = {};
+  static const _selectedDeviceIdKey = 'selectedDeviceId';
 
   bool loading = false;
   String? error;
@@ -39,6 +41,7 @@ class WorkspaceController extends ChangeNotifier {
   final Map<String, String?> _currentAgentMessageStepIds = {};
   final Map<String, String> _lastCommittedAssistantTexts = {};
   bool _notifyQueued = false;
+  String? _lastSelectedDeviceId;
 
   // Client-side session state (matching desktop's localStorage pattern)
   final Set<String> _pinnedSessionIds = {};
@@ -107,11 +110,13 @@ class WorkspaceController extends ChangeNotifier {
     }
 
     final future = _run(() async {
+      await _persistenceLoaded;
       devices = await api.devices();
       _lastDevicesLoadedAt = DateTime.now();
       if (selectedDevice != null) {
         selectedDevice = _findDevice(selectedDevice!.id);
       }
+      selectedDevice ??= preferredInitialDevice();
     });
     _loadDevicesInFlight = future;
     try {
@@ -125,10 +130,24 @@ class WorkspaceController extends ChangeNotifier {
 
   Future<void> selectDevice(DesktopDevice device) async {
     selectedDevice = device;
+    _lastSelectedDeviceId = device.id;
+    _saveSelectedDevice();
     _notifySafely();
     await refreshWorkspace();
     _events ??= realtime.events.listen(_handleRealtime);
     realtime.connect();
+  }
+
+  DesktopDevice? preferredInitialDevice() {
+    final savedDeviceId = _lastSelectedDeviceId;
+    if (savedDeviceId != null && savedDeviceId.isNotEmpty) {
+      final savedDevice = _findDevice(savedDeviceId);
+      if (savedDevice != null) return savedDevice;
+    }
+    for (final device in devices) {
+      if (device.online) return device;
+    }
+    return devices.isEmpty ? null : devices.first;
   }
 
   Future<void> refreshWorkspace() async {
@@ -138,7 +157,8 @@ class WorkspaceController extends ChangeNotifier {
       final nextProviders = await api.providers();
       final nextProviderStatuses = await api.deviceProviders(device.id);
       final nextProjects = await api.projects(device.id);
-      final nextSessions = await api.aiSessions(device.id);
+      final nextSessions =
+          _filterVisibleAiSessions(await api.aiSessions(device.id));
       final nextLogs = await api.activityLogs(deviceId: device.id);
       providers = nextProviders;
       providerStatuses = nextProviderStatuses;
@@ -330,6 +350,7 @@ class WorkspaceController extends ChangeNotifier {
 
   Future<void> _loadPersistence() async {
     final prefs = await SharedPreferences.getInstance();
+    _lastSelectedDeviceId = prefs.getString(_selectedDeviceIdKey);
     _pinnedSessionIds.addAll(prefs.getStringList('pinnedSessions') ?? []);
     _unreadSessionIds.addAll(prefs.getStringList('unreadSessions') ?? []);
     for (final entry in (prefs.getStringList('titleOverrides') ?? const [])) {
@@ -337,6 +358,17 @@ class WorkspaceController extends ChangeNotifier {
       if (parts.length == 2) _localTitleOverrides[parts[0]] = parts[1];
     }
     _notifySafely();
+  }
+
+  void _saveSelectedDevice() {
+    final deviceId = _lastSelectedDeviceId;
+    SharedPreferences.getInstance().then((prefs) {
+      if (deviceId == null || deviceId.isEmpty) {
+        prefs.remove(_selectedDeviceIdKey);
+      } else {
+        prefs.setString(_selectedDeviceIdKey, deviceId);
+      }
+    });
   }
 
   void _savePinned() {
@@ -418,19 +450,29 @@ class WorkspaceController extends ChangeNotifier {
       case 'ai.sessions.snapshot':
         sessions = ((json['sessions'] as List<dynamic>?) ?? const [])
             .map((item) => AiSessionMeta.fromJson(item as Map<String, dynamic>))
+            .where(_isVisibleAiSession)
             .toList();
         break;
       case 'ai.history.response':
         final sessionId = json['aiSessionId'] as String;
-        messagesBySession[sessionId] =
+        final current = messagesBySession[sessionId] ?? const <ChatMessage>[];
+        final hasPendingAssistant = current.any(
+            (message) => message.role == ChatRole.assistant && message.pending);
+        final historyMessages =
             ((json['messages'] as List<dynamic>?) ?? const [])
-                .map((item) =>
-                    AiHistoryMessage.fromJson(item as Map<String, dynamic>))
-                .map((item) => ChatMessage(
-                    role: item.role,
-                    text: item.content,
-                    segments: item.segments))
-                .toList();
+                .whereType<Map<String, dynamic>>()
+                .map((item) {
+          final history = AiHistoryMessage.fromJson(item);
+          return ChatMessage(
+            role: history.role,
+            text: history.content,
+            pending: item['pending'] == true,
+            segments: history.segments,
+          );
+        }).toList();
+        messagesBySession[sessionId] = hasPendingAssistant
+            ? _mergeHistoryWithPending(current, historyMessages)
+            : historyMessages;
         break;
       case 'ai.chat.output':
         _handleChatOutput(json);
@@ -454,6 +496,26 @@ class WorkspaceController extends ChangeNotifier {
         break;
     }
     _notifySafely();
+  }
+
+  List<ChatMessage> _mergeHistoryWithPending(
+    List<ChatMessage> current,
+    List<ChatMessage> history,
+  ) {
+    final pendingIndex = current.lastIndexWhere(
+      (message) => message.role == ChatRole.assistant && message.pending,
+    );
+    if (pendingIndex < 0) return history;
+    final pending = current[pendingIndex];
+    final historyHasPending = history.any(
+      (message) => message.role == ChatRole.assistant && message.pending,
+    );
+    if (historyHasPending) return history;
+    final currentPrefix = current.take(pendingIndex).toList();
+    if (history.length >= currentPrefix.length) {
+      return [...history, pending];
+    }
+    return [...currentPrefix, pending];
   }
 
   void _handleChatOutput(Map<String, dynamic> json) {
@@ -522,15 +584,7 @@ class WorkspaceController extends ChangeNotifier {
       final deltaStepId = json['stepId'] as String?;
       final currentStepId = _currentAgentMessageStepIds[sessionId];
       final isStepChange = deltaStepId != null && deltaStepId != currentStepId;
-      List<ChatSegment> thoughtSegments = const [];
-      if (isStepChange && currentStepId != null) {
-        final pending = pendingIndex >= 0 ? current[pendingIndex] : null;
-        if (pending != null) {
-          thoughtSegments = _commitCurrentTextAsThought(sessionId, pending);
-        }
-      }
       final incomingSegments = [
-        ...thoughtSegments,
         ...segments,
         if (segment != null) segment,
       ];
@@ -539,11 +593,9 @@ class WorkspaceController extends ChangeNotifier {
       }
       if (pendingIndex >= 0) {
         final pending = current[pendingIndex];
-        final accumulated = isStepChange
-            ? (deltaText ?? '')
-            : (deltaText == null || deltaText.isEmpty
-                ? pending.text
-                : (pending.text ?? '') + deltaText);
+        final accumulated = deltaText == null || deltaText.isEmpty
+            ? pending.text
+            : (pending.text ?? '') + deltaText;
         current[pendingIndex] = pending.copyWith(
           text: accumulated,
           segments: _mergeSegments(pending.segments, incomingSegments),
@@ -554,11 +606,9 @@ class WorkspaceController extends ChangeNotifier {
         );
         if (lastAssistantIndex >= 0 && current[lastAssistantIndex].pending) {
           final pending = current[lastAssistantIndex];
-          final accumulated = isStepChange
-              ? (deltaText ?? '')
-              : (deltaText == null || deltaText.isEmpty
-                  ? pending.text
-                  : (pending.text ?? '') + deltaText);
+          final accumulated = deltaText == null || deltaText.isEmpty
+              ? pending.text
+              : (pending.text ?? '') + deltaText;
           current[lastAssistantIndex] = pending.copyWith(
             text: accumulated,
             segments: _mergeSegments(pending.segments, incomingSegments),
@@ -643,7 +693,8 @@ class WorkspaceController extends ChangeNotifier {
     final prevText = (pending.text ?? '').trim();
     if (currentStepId == null ||
         prevText.isEmpty ||
-        prevText == _lastCommittedAssistantTexts[sessionId]) {
+        prevText == _lastCommittedAssistantTexts[sessionId] ||
+        !_looksLikeProcessCommentary(prevText)) {
       return const [];
     }
     _lastCommittedAssistantTexts[sessionId] = prevText;
@@ -656,6 +707,17 @@ class WorkspaceController extends ChangeNotifier {
         collapsed: true,
       ),
     ];
+  }
+
+  bool _looksLikeProcessCommentary(String text) {
+    final normalized = text.trim();
+    if (normalized.length < 8) return false;
+    return RegExp(r'^(我先|先|接下来|现在我|我会|我准备|我需要|我将|我来|先看|先检查|正在)')
+            .hasMatch(normalized) ||
+        RegExp(r'(接下来我|我先看|我会先|我将先|先确认|先检查|先读取|先看一下)').hasMatch(normalized) ||
+        RegExp(r'''^(Let me|I('|’)ll|I am going to|I'm going to)\b''',
+                caseSensitive: false)
+            .hasMatch(normalized);
   }
 
   List<ChatSegment> _mergeSegment(
@@ -753,6 +815,16 @@ class WorkspaceController extends ChangeNotifier {
       if (device.id == id) return device;
     }
     return null;
+  }
+
+  List<AiSessionMeta> _filterVisibleAiSessions(List<AiSessionMeta> source) =>
+      source.where(_isVisibleAiSession).toList();
+
+  bool _isVisibleAiSession(AiSessionMeta session) {
+    final providerSessionId = session.providerSessionId;
+    return session.providerId != 'codex' ||
+        providerSessionId == null ||
+        providerSessionId.startsWith('app-server:');
   }
 
   @override

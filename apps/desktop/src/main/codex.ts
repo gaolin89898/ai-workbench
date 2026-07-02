@@ -63,6 +63,7 @@ const CODEX_RECONNECT_RETRY_MS = 1200;
 const CODEX_RECONNECT_MAX_RETRIES = 5;
 const CLI_INTERRUPT_FALLBACK_MS = 1500;
 const CODEX_CLIENT_INFO = { name: "AI Workbench", version: "0.1.0" };
+const CODEX_APP_SERVER_SESSION_PREFIX = "app-server:";
 const activeCodexSessions = new Map<string, CodexSession>();
 
 function spawnCodex(args: string[], cwd: string): ChildProcessWithoutNullStreams {
@@ -853,10 +854,24 @@ function interruptSession(session: CodexSession): void {
 
 function lookupExistingProviderSessionId(aiSessionId: string): string | null {
   try {
-    return getLocalAiSession(aiSessionId)?.providerSessionId ?? null;
+    const providerSessionId = getLocalAiSession(aiSessionId)?.providerSessionId ?? null;
+    return decodeAppServerProviderSessionId(providerSessionId);
   } catch {
     return null;
   }
+}
+
+function encodeAppServerProviderSessionId(threadId: string): string {
+  return threadId.startsWith(CODEX_APP_SERVER_SESSION_PREFIX)
+    ? threadId
+    : `${CODEX_APP_SERVER_SESSION_PREFIX}${threadId}`;
+}
+
+function decodeAppServerProviderSessionId(providerSessionId: string | null): string | null {
+  if (!providerSessionId) return null;
+  return providerSessionId.startsWith(CODEX_APP_SERVER_SESSION_PREFIX)
+    ? providerSessionId.slice(CODEX_APP_SERVER_SESSION_PREFIX.length)
+    : providerSessionId;
 }
 
 async function ensureThread(
@@ -896,7 +911,7 @@ async function ensureThread(
  * JSON-RPC connection, starts (or resumes) a thread, sends turn/start, and
  * streams AiChatOutputEvent to the sender until the turn completes.
  *
- * Returns the threadId (providerSessionId).
+ * Returns the app-server tagged threadId (providerSessionId).
  */
 export async function runCodexChat(
   req: RunCodexChatRequest,
@@ -945,12 +960,12 @@ export async function runCodexChat(
 
     clearTimeout(timeout);
     killSession(session);
-    return threadId;
+    return encodeAppServerProviderSessionId(threadId);
   } catch (err) {
     clearTimeout(timeout);
     if (session.cancelled) {
       killSession(session);
-      return session.threadId ?? "";
+      return session.threadId ? encodeAppServerProviderSessionId(session.threadId) : "";
     }
     if (!session.cancelled) {
       emitSessionError(session, errorMessage(err));
@@ -1023,7 +1038,7 @@ export function respondCodexApproval(
 
 /**
  * Pre-warm a Codex session by performing initialize + thread/start without
- * sending a turn. Returns the threadId for later reuse via thread/resume.
+ * sending a turn. Returns the app-server tagged threadId for later reuse via thread/resume.
  *
  * Best-effort: on any failure returns an empty string.
  */
@@ -1049,7 +1064,7 @@ export async function warmupCodexSession(
     const threadId = await ensureThread(session, aiSessionId);
     clearTimeout(timeout);
     killSession(session);
-    return { providerSessionId: threadId };
+    return { providerSessionId: encodeAppServerProviderSessionId(threadId) };
   } catch {
     clearTimeout(timeout);
     killSession(session);

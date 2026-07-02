@@ -10,6 +10,7 @@ const authenticated = ref(false);
 const email = ref("");
 const password = ref("");
 const showPassword = ref(false);
+const rememberPassword = ref(false);
 const loading = ref(false);
 const oauthLoading = ref(false);
 const oauthStatus = ref("");
@@ -20,6 +21,14 @@ onMounted(async () => {
   try {
     const config = await desktopApi.getCloudConfig();
     authenticated.value = Boolean(config?.paired && config.authMode === "desktop-login");
+    if (!authenticated.value) {
+      const saved = await desktopApi.loadCredentials();
+      if (saved) {
+        email.value = saved.email;
+        password.value = saved.password;
+        rememberPassword.value = true;
+      }
+    }
   } catch {
     authenticated.value = false;
   } finally {
@@ -37,6 +46,11 @@ async function login() {
   try {
     const ok = await ws.loginDesktop(ws.settingsServer.value, email.value, password.value);
     if (ok) {
+      if (rememberPassword.value) {
+        await desktopApi.saveCredentials(email.value, password.value);
+      } else {
+        await desktopApi.clearCredentials();
+      }
       password.value = "";
       authenticated.value = true;
     } else {
@@ -102,6 +116,7 @@ function handleLogout() {
   authenticated.value = false;
   email.value = "";
   password.value = "";
+  rememberPassword.value = false;
   error.value = "";
   oauthStatus.value = "";
   // Reset to the default route so the next login starts at the workspace.
@@ -152,6 +167,10 @@ function handleLogout() {
               </svg>
             </button>
           </div>
+        </label>
+        <label class="desktop-login-remember">
+          <input type="checkbox" v-model="rememberPassword" />
+          <span>记住密码</span>
         </label>
         <p v-if="error" class="desktop-login-error">{{ error }}</p>
         <button class="desktop-login-button" type="submit" :disabled="loading">
