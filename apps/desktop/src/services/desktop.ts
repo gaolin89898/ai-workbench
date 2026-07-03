@@ -251,6 +251,7 @@ export type AiChatOutputEvent = {
   aiSessionId: string;
   kind: "status" | "step-start" | "step-update" | "delta" | "done" | "error";
   text?: string;
+  phase?: "process" | "final";
   stepId?: string | null;
   segment?: ChatSegment | null;
   segments?: ChatSegment[];

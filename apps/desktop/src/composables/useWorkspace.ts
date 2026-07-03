@@ -110,7 +110,6 @@ type PendingAssistant = {
   prompt: string;
   steps: Map<string, ChatSegment>;
   finalText: string;
-  lastCommittedText: string;
   currentAgentMessageStepId: string | null;
   startedAt: number;
   hasBackendStatus: boolean;
@@ -815,7 +814,6 @@ async function sendPrompt(prompt: string, images: ChatImageAttachment[] = []) {
     prompt: promptForSession,
     steps: new Map([["initial-thinking", assistantMessage.segments![0]]]),
     finalText: "",
-    lastCommittedText: "",
     currentAgentMessageStepId: null,
     startedAt: performance.now(),
     hasBackendStatus: false,
@@ -969,7 +967,6 @@ function ensureIncomingPendingAssistant(sessionId: string, history: ChatMessage[
     prompt: "",
     steps: new Map([["initial-thinking", assistantMessage.segments![0]]]),
     finalText: "",
-    lastCommittedText: "",
     currentAgentMessageStepId: null,
     startedAt: performance.now(),
     hasBackendStatus: false,
@@ -1017,53 +1014,6 @@ function replacePendingAssistantText(sessionId: string, text: string, done = fal
   thinkingSessionIds.value = { ...thinkingSessionIds.value, [sessionId]: !done };
 }
 
-function commitCurrentAssistantTextAsThought(pending: PendingAssistant) {
-  const currentStepId = pending.currentAgentMessageStepId;
-  const previousFinalText = extractAssistantText(pending.finalText.trim());
-  if (
-    !currentStepId
-    || !previousFinalText
-    || !looksLikeProcessCommentary(previousFinalText)
-  ) return false;
-  if (previousFinalText === pending.lastCommittedText) {
-    pending.finalText = removeCommittedProcessText(pending.finalText, previousFinalText);
-    return true;
-  }
-  const thoughtStepId = `process-text-${currentStepId}`;
-  pending.steps.set(thoughtStepId, {
-    type: "text",
-    stepId: thoughtStepId,
-    text: previousFinalText,
-  });
-  pending.lastCommittedText = previousFinalText;
-  pending.finalText = removeCommittedProcessText(pending.finalText, previousFinalText);
-  return true;
-}
-
-function removeCommittedProcessText(currentText: string, committedText: string) {
-  const current = extractAssistantText(currentText);
-  const committed = extractAssistantText(committedText).trim();
-  if (!committed) return current;
-  if (current.trim() === committed) return "";
-  if (current.startsWith(committed)) return current.slice(committed.length).trimStart();
-  return current;
-}
-
-function looksLikeProcessCommentary(text: string) {
-  const normalized = text.trim();
-  if (normalized.length < 8) return false;
-  return /^(?:我先|先|接下来|现在我|我会|我准备|我需要|我将|我来|先看|先检查|正在)/.test(normalized)
-    || /^(?:Let me|I(?:'|’)ll|I am going to|I'm going to)\b/i.test(normalized)
-    || /(?:接下来我|我先看|我会先|我将先|先确认|先检查|先读取|先看一下)/.test(normalized);
-}
-
-function looksLikeFinalAssistantText(text: string) {
-  const normalized = text.trim();
-  if (!normalized) return false;
-  return /^(?:已按|已改|已更新|已调整|我已|我已经|结论|总结|这里|现在可以|可以|这次|这样)/.test(normalized)
-    || /(?:已完成|已处理|已修复|已实现|已改好|构建通过|验证通过|测试通过|可以|建议)/.test(normalized);
-}
-
 function stripProcessTextFromFinalText(text: string, sourceSegments: ChatSegment[]) {
   let cleaned = text.trim();
   if (!cleaned) return cleaned;
@@ -1079,7 +1029,8 @@ function isProcessTextSegment(segment: ChatSegment) {
   return segment.type === "text" && Boolean(segment.stepId && /^(?:process-text|thought|commentary)-/.test(segment.stepId));
 }
 
-function processTextStepId(stepId: string) {
+function processTextStepId(stepId?: string | null) {
+  if (!stepId) return "process-text-agent-message";
   return stepId.startsWith("process-text-") ? stepId : `process-text-${stepId}`;
 }
 
@@ -1097,17 +1048,17 @@ function removeTextBlock(text: string, block: string) {
   return source.trim();
 }
 
-function appendPendingAssistantText(sessionId: string, text: string, stepId?: string | null) {
+function appendPendingAssistantText(sessionId: string, text: string, stepId?: string | null, phase: AiChatOutputEvent["phase"] = "final") {
   const pending = pendingAssistants.get(sessionId);
   if (!pending || !text) return;
   if (stepId && stepId !== pending.currentAgentMessageStepId) {
     pending.currentAgentMessageStepId = stepId;
   }
-  if (stepId) {
+  if (phase === "process") {
     const processStepId = processTextStepId(stepId);
     const previous = pending.steps.get(processStepId);
     const previousText = previous?.type === "text" ? previous.text : "";
-    pending.steps.delete(stepId);
+    if (stepId) pending.steps.delete(stepId);
     pending.steps.set(processStepId, {
       type: "text",
       stepId: processStepId,
@@ -1120,23 +1071,9 @@ function appendPendingAssistantText(sessionId: string, text: string, stepId?: st
   thinkingSessionIds.value = { ...thinkingSessionIds.value, [sessionId]: true };
 }
 
-function promoteLatestProcessTextAsFinal(pending: PendingAssistant) {
-  if (pending.finalText.trim()) return;
-  const entries = [...pending.steps.entries()];
-  for (let index = entries.length - 1; index >= 0; index -= 1) {
-    const [stepId, segment] = entries[index];
-    if (!isProcessTextSegment(segment) || !looksLikeFinalAssistantText(segment.text)) continue;
-    pending.steps.delete(stepId);
-    pending.finalText = segment.text.trim();
-    return;
-  }
-}
-
 function completePendingAssistantFromExec(sessionId: string) {
   const pending = pendingAssistants.get(sessionId);
   if (!pending) return;
-  commitCurrentAssistantTextAsThought(pending);
-  promoteLatestProcessTextAsFinal(pending);
   const text = extractAssistantText((pending.finalText || pending.message.text || "").trim());
   pending.finalText = stripProcessTextFromFinalText(text, [...pending.steps.values()]);
   upsertCompletionSummary(sessionId);
@@ -1206,9 +1143,7 @@ function upsertPendingSegment(sessionId: string, segment: ChatSegment) {
   const stepId = segment.stepId;
   if (!pending || !stepId) return;
   if (segment.type === "status") {
-    const committedProcessText = commitCurrentAssistantTextAsThought(pending);
     if (shouldHideBackendStatus(segment.label)) {
-      if (committedProcessText) syncPendingAssistantSegments(sessionId, pending.message.pending === false);
       return;
     }
     pending.lastStatusText = segment.label;
@@ -1235,9 +1170,6 @@ function upsertPendingSegment(sessionId: string, segment: ChatSegment) {
     }
     syncPendingAssistantSegments(sessionId, pending.message.pending === false);
     return;
-  }
-  if (segment.type === "tool") {
-    commitCurrentAssistantTextAsThought(pending);
   }
   pending.steps.set(stepId, { ...(pending.steps.get(stepId) ?? {}), ...segment } as ChatSegment);
   syncPendingAssistantSegments(sessionId, pending.message.pending === false);
@@ -1387,7 +1319,7 @@ async function handleAiChatOutputEvent(event: AiChatOutputEvent) {
   if (event.kind === "delta") {
     const pending = pendingAssistants.get(event.aiSessionId);
     if (!pending) return;
-    appendPendingAssistantText(event.aiSessionId, event.text ?? "", event.stepId);
+    appendPendingAssistantText(event.aiSessionId, event.text ?? "", event.stepId, event.phase ?? "final");
     setChatRunState(event.aiSessionId, {
       active: true,
       phase: "running",

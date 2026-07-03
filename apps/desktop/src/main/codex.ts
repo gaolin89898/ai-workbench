@@ -202,6 +202,26 @@ function extractDelta(params: unknown): string | undefined {
   return typeof delta === "string" ? delta : undefined;
 }
 
+function extractTurnFinalText(params: unknown): string | undefined {
+  if (!params || typeof params !== "object") return undefined;
+  const p = params as Record<string, unknown>;
+  const turn = p["turn"] as Record<string, unknown> | undefined;
+  const response = p["response"] as Record<string, unknown> | undefined;
+  const message = p["message"] as Record<string, unknown> | undefined;
+  return firstString(
+    p["last_agent_message"],
+    p["final_message"],
+    p["finalText"],
+    p["final_text"],
+    p["output_text"],
+    turn?.["last_agent_message"],
+    turn?.["final_message"],
+    response?.["output_text"],
+    response?.["text"],
+    message?.["text"],
+  );
+}
+
 function extractErrorMessage(params: unknown): string | undefined {
   if (!params || typeof params !== "object") return undefined;
   const p = params as Record<string, unknown>;
@@ -612,6 +632,7 @@ function handleNotification(
           aiSessionId,
           kind: "delta",
           text: delta,
+          phase: "process",
           stepId: stepId ?? null,
         });
       }
@@ -648,7 +669,7 @@ function handleNotification(
       break;
     }
     case "turn/completed": {
-      emit(sender, { aiSessionId, kind: "done" });
+      emit(sender, { aiSessionId, kind: "done", text: extractTurnFinalText(params), phase: "final" });
       if (session.turnResolver) {
         session.turnResolver.resolve();
         session.turnResolver = null;
