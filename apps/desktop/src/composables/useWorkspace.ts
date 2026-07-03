@@ -701,6 +701,39 @@ function codexTracePending(trace: AiProviderTrace | null | undefined) {
   return trace?.status === "running";
 }
 
+function codexTraceRunState(trace: AiProviderTrace) {
+  if (trace.status === "running") {
+    return {
+      active: true,
+      phase: "running" as const,
+      title: "Codex 正在执行",
+      detail: "正在同步 Codex 执行记录。",
+    };
+  }
+  if (trace.status === "failed") {
+    return {
+      active: false,
+      phase: "error" as const,
+      title: "Codex 执行失败",
+      detail: "Codex 原生状态显示本次执行失败。",
+    };
+  }
+  if (trace.status === "canceled") {
+    return {
+      active: false,
+      phase: "done" as const,
+      title: "Codex 已取消",
+      detail: "Codex 原生状态显示本次执行已取消。",
+    };
+  }
+  return {
+    active: false,
+    phase: "done" as const,
+    title: "Codex 已完成",
+    detail: "执行记录和最终回答已同步。",
+  };
+}
+
 function codexTraceToChatMessage(trace: AiProviderTrace): ChatMessage | null {
   const segments = codexTraceSegments(trace);
   const text = codexTraceFinalText(trace);
@@ -1465,12 +1498,7 @@ async function handleAiTraceUpdateEvent(event: AiTraceUpdateEvent) {
     ...thinkingSessionIds.value,
     [event.aiSessionId]: codexTracePending(event.trace),
   };
-  setChatRunState(event.aiSessionId, {
-    active: codexTracePending(event.trace),
-    phase: codexTracePending(event.trace) ? "running" : "done",
-    title: codexTracePending(event.trace) ? "Codex 正在执行" : "Codex 已完成",
-    detail: codexTracePending(event.trace) ? "正在同步 Codex 执行记录。" : "执行记录和最终回答已同步。",
-  });
+  setChatRunState(event.aiSessionId, codexTraceRunState(event.trace));
 
   if (!codexTracePending(event.trace) && pending) {
     const finalText = codexTraceFinalText(event.trace);

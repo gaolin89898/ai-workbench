@@ -97,6 +97,21 @@ function isCodexSession(aiSessionId: string) {
   return getLocalAiSession(aiSessionId)?.providerId === "codex";
 }
 
+function traceStatus(trace: unknown): string {
+  if (!trace || typeof trace !== "object") return "";
+  const record = trace as Record<string, unknown>;
+  if (typeof record.status === "string") return record.status;
+  const snapshot = record.snapshot;
+  if (snapshot && typeof snapshot === "object" && typeof (snapshot as Record<string, unknown>).status === "string") {
+    return (snapshot as Record<string, unknown>).status as string;
+  }
+  return "";
+}
+
+function isTerminalTraceStatus(status: string): boolean {
+  return status === "completed" || status === "failed" || status === "canceled";
+}
+
 function mergeChatSegment(segments: unknown[], segment: unknown): unknown[] {
   if (!segment || typeof segment !== "object") return segments;
   const record = segment as Record<string, unknown>;
@@ -780,6 +795,7 @@ class DesktopCloudSync {
         if (channel === "ai-trace-update") {
           const event = args[0] as { aiSessionId?: string; trace?: unknown } | undefined;
           if (!deviceId || !event?.aiSessionId || !event.trace) return;
+          const status = traceStatus(event.trace);
           this.send({
             type: "ai.trace.update",
             deviceId,
@@ -789,6 +805,9 @@ class DesktopCloudSync {
               segments: codexTraceSnapshotToSegments((event.trace as Record<string, unknown>).snapshot as any),
             },
           });
+          if (isTerminalTraceStatus(status)) {
+            void this.pushAiHistory(event.aiSessionId);
+          }
           return;
         }
         if (!deviceId || channel !== "ai-chat-output") return;
@@ -855,6 +874,7 @@ class DesktopCloudSync {
         if (channel === "ai-trace-update") {
           const event = args[0] as { aiSessionId?: string; trace?: unknown } | undefined;
           if (!event?.aiSessionId || !event.trace) return;
+          const status = traceStatus(event.trace);
           this.send({
             type: "ai.trace.update",
             deviceId,
@@ -864,6 +884,9 @@ class DesktopCloudSync {
               segments: codexTraceSnapshotToSegments((event.trace as Record<string, unknown>).snapshot as any),
             },
           });
+          if (isTerminalTraceStatus(status)) {
+            void this.pushAiHistory(event.aiSessionId);
+          }
           return;
         }
         if (channel !== "ai-chat-output") return;

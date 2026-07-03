@@ -506,6 +506,9 @@ class WorkspaceController extends ChangeNotifier {
               ? mergedHistory
               : _applyProviderTraceToMessages(sessionId, mergedHistory, trace),
         );
+        if (trace != null && trace.isCodex) {
+          runStatusBySession[sessionId] = _codexTraceStatusLabel(trace);
+        }
         break;
       case 'ai.trace.update':
         final sessionId = json['aiSessionId'] as String;
@@ -518,8 +521,7 @@ class WorkspaceController extends ChangeNotifier {
             messagesBySession[sessionId] = _normalizeSessionMessages(
               _applyProviderTraceToMessages(sessionId, current, trace),
             );
-            runStatusBySession[sessionId] =
-                trace.pending ? 'Codex 正在执行' : '已完成';
+            runStatusBySession[sessionId] = _codexTraceStatusLabel(trace);
           }
         }
         break;
@@ -583,6 +585,21 @@ class WorkspaceController extends ChangeNotifier {
       return [...history, pending];
     }
     return [...currentPrefix, pending];
+  }
+
+  String _codexTraceStatusLabel(AiProviderTrace trace) {
+    switch (trace.status) {
+      case 'running':
+        return 'Codex 正在执行';
+      case 'failed':
+        return 'Codex 执行失败';
+      case 'canceled':
+        return 'Codex 已取消';
+      case 'completed':
+        return 'Codex 已完成';
+      default:
+        return trace.status.isEmpty ? 'Codex 状态未知' : 'Codex ${trace.status}';
+    }
   }
 
   List<ChatMessage> _applyProviderTraceToMessages(
