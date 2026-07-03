@@ -191,6 +191,137 @@ void main() {
     controller.dispose();
   });
 
+  test('process deltas stay in process segments before final answer', () async {
+    final controller =
+        WorkspaceController(api: ApiClient(baseUrl: 'http://127.0.0.1:3000'));
+    controller.messagesBySession['session-1'] = const [
+      ChatMessage(role: ChatRole.user, text: '用户问题'),
+    ];
+
+    controller.handleRealtimeForTesting({
+      'type': 'ai.chat.output',
+      'deviceId': 'device-1',
+      'aiSessionId': 'session-1',
+      'kind': 'delta',
+      'phase': 'process',
+      'stepId': 'agent-message',
+      'text': '执行过程\n',
+    });
+    controller.handleRealtimeForTesting({
+      'type': 'ai.chat.output',
+      'deviceId': 'device-1',
+      'aiSessionId': 'session-1',
+      'kind': 'delta',
+      'phase': 'process',
+      'stepId': 'agent-message',
+      'text': '执行结论',
+    });
+    controller.handleRealtimeForTesting({
+      'type': 'ai.chat.output',
+      'deviceId': 'device-1',
+      'aiSessionId': 'session-1',
+      'kind': 'done',
+      'phase': 'final',
+      'text': '最终回答',
+    });
+
+    final messages = controller.messagesBySession['session-1']!;
+    expect(messages, hasLength(2));
+    final assistant = messages.last;
+    expect(assistant.role, ChatRole.assistant);
+    expect(assistant.pending, isFalse);
+    expect(assistant.text, '最终回答');
+    expect(
+      assistant.segments
+          .where((segment) =>
+              segment.type == 'text' &&
+              segment.stepId == 'process-text-agent-message')
+          .single
+          .text,
+      '执行过程\n执行结论',
+    );
+
+    await Future<void>.delayed(Duration.zero);
+    controller.dispose();
+  });
+
+  test('empty done promotes latest process text instead of clearing reply',
+      () async {
+    final controller =
+        WorkspaceController(api: ApiClient(baseUrl: 'http://127.0.0.1:3000'));
+    controller.messagesBySession['session-1'] = const [
+      ChatMessage(role: ChatRole.user, text: '用户问题'),
+    ];
+
+    controller.handleRealtimeForTesting({
+      'type': 'ai.chat.output',
+      'deviceId': 'device-1',
+      'aiSessionId': 'session-1',
+      'kind': 'delta',
+      'phase': 'process',
+      'stepId': 'agent-message',
+      'text': '这是兜底回答',
+    });
+    controller.handleRealtimeForTesting({
+      'type': 'ai.chat.output',
+      'deviceId': 'device-1',
+      'aiSessionId': 'session-1',
+      'kind': 'done',
+      'phase': 'final',
+      'text': '',
+    });
+
+    final messages = controller.messagesBySession['session-1']!;
+    expect(messages, hasLength(2));
+    final assistant = messages.last;
+    expect(assistant.role, ChatRole.assistant);
+    expect(assistant.pending, isFalse);
+    expect(assistant.text, '这是兜底回答');
+    expect(
+      assistant.segments.any((segment) =>
+          segment.type == 'text' &&
+          segment.stepId == 'process-text-agent-message'),
+      isFalse,
+    );
+
+    await Future<void>.delayed(Duration.zero);
+    controller.dispose();
+  });
+
+  test('empty done keeps accumulated final delta visible', () async {
+    final controller =
+        WorkspaceController(api: ApiClient(baseUrl: 'http://127.0.0.1:3000'));
+    controller.messagesBySession['session-1'] = const [
+      ChatMessage(role: ChatRole.user, text: '用户问题'),
+    ];
+
+    controller.handleRealtimeForTesting({
+      'type': 'ai.chat.output',
+      'deviceId': 'device-1',
+      'aiSessionId': 'session-1',
+      'kind': 'delta',
+      'phase': 'final',
+      'text': '最终回答',
+    });
+    controller.handleRealtimeForTesting({
+      'type': 'ai.chat.output',
+      'deviceId': 'device-1',
+      'aiSessionId': 'session-1',
+      'kind': 'done',
+      'phase': 'final',
+      'text': '',
+    });
+
+    final messages = controller.messagesBySession['session-1']!;
+    expect(messages, hasLength(2));
+    expect(messages.last.role, ChatRole.assistant);
+    expect(messages.last.pending, isFalse);
+    expect(messages.last.text, '最终回答');
+
+    await Future<void>.delayed(Duration.zero);
+    controller.dispose();
+  });
+
   test('realtime status and text pending assistants stay as one reply',
       () async {
     final controller =

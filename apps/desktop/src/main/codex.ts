@@ -49,6 +49,7 @@ interface CodexSession {
   closed: boolean;
   stderrBuffer: string;
   commandOutputBuffers: Map<string, string>;
+  agentMessageBuffer: string;
   pendingApprovals: Map<string, PendingApproval>;
   turnResolver: { resolve: () => void; reject: (error: Error) => void } | null;
   errorEmitted: boolean;
@@ -607,6 +608,7 @@ function handleNotification(
       break;
     }
     case "turn/started": {
+      session.agentMessageBuffer = "";
       emit(sender, {
         aiSessionId,
         kind: "status",
@@ -628,6 +630,7 @@ function handleNotification(
       const delta = extractDelta(params);
       const stepId = extractItemId(params);
       if (delta) {
+        session.agentMessageBuffer += delta;
         emit(sender, {
           aiSessionId,
           kind: "delta",
@@ -669,7 +672,12 @@ function handleNotification(
       break;
     }
     case "turn/completed": {
-      emit(sender, { aiSessionId, kind: "done", text: extractTurnFinalText(params), phase: "final" });
+      emit(sender, {
+        aiSessionId,
+        kind: "done",
+        text: extractTurnFinalText(params) ?? session.agentMessageBuffer,
+        phase: "final",
+      });
       if (session.turnResolver) {
         session.turnResolver.resolve();
         session.turnResolver = null;
@@ -726,6 +734,7 @@ function createSession(
     closed: false,
     stderrBuffer: "",
     commandOutputBuffers: new Map(),
+    agentMessageBuffer: "",
     pendingApprovals: new Map(),
     turnResolver: null,
     errorEmitted: false,

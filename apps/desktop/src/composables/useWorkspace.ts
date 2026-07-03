@@ -1025,6 +1025,25 @@ function stripProcessTextFromFinalText(text: string, sourceSegments: ChatSegment
   return cleaned.trim();
 }
 
+function latestProcessText(pending: PendingAssistant) {
+  const entries = [...pending.steps.values()];
+  for (let index = entries.length - 1; index >= 0; index -= 1) {
+    const segment = entries[index];
+    if (isProcessTextSegment(segment) && segment.text.trim()) return segment.text.trim();
+  }
+  return "";
+}
+
+function removeMatchingProcessText(pending: PendingAssistant, text: string) {
+  const target = text.trim();
+  if (!target) return;
+  for (const [stepId, segment] of pending.steps.entries()) {
+    if (isProcessTextSegment(segment) && segment.text.trim() === target) {
+      pending.steps.delete(stepId);
+    }
+  }
+}
+
 function isProcessTextSegment(segment: ChatSegment) {
   return segment.type === "text" && Boolean(segment.stepId && /^(?:process-text|thought|commentary)-/.test(segment.stepId));
 }
@@ -1074,7 +1093,8 @@ function appendPendingAssistantText(sessionId: string, text: string, stepId?: st
 function completePendingAssistantFromExec(sessionId: string) {
   const pending = pendingAssistants.get(sessionId);
   if (!pending) return;
-  const text = extractAssistantText((pending.finalText || pending.message.text || "").trim());
+  const text = extractAssistantText((pending.finalText || pending.message.text || latestProcessText(pending)).trim());
+  removeMatchingProcessText(pending, text);
   pending.finalText = stripProcessTextFromFinalText(text, [...pending.steps.values()]);
   upsertCompletionSummary(sessionId);
   syncPendingAssistantSegments(sessionId, true);
@@ -1337,9 +1357,9 @@ async function handleAiChatOutputEvent(event: AiChatOutputEvent) {
           return;
         }
         const doneElapsedMs = pending ? Math.round(performance.now() - pending.startedAt) : undefined;
-        if (event.text) {
+        if (event.text?.trim()) {
           replacePendingAssistantText(event.aiSessionId, event.text, true);
-        } else {
+        } else if (pending.finalText.trim()) {
           replacePendingAssistantText(event.aiSessionId, pending.finalText, true);
         }
         completePendingAssistantFromExec(event.aiSessionId);

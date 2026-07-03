@@ -750,6 +750,81 @@ class WorkspaceController extends ChangeNotifier {
             stepId.startsWith('commentary-'));
   }
 
+  String _processTextStepId(String? stepId) {
+    final normalized = (stepId ?? '').trim();
+    return 'process-text-${normalized.isEmpty ? 'agent-message' : normalized}';
+  }
+
+  List<ChatSegment> _appendProcessTextSegment(
+    List<ChatSegment> source,
+    String? stepId,
+    String text,
+  ) {
+    final targetStepId = _processTextStepId(stepId);
+    final index =
+        source.indexWhere((segment) => segment.stepId == targetStepId);
+    if (index < 0) {
+      return [
+        ...source,
+        ChatSegment(type: 'text', stepId: targetStepId, text: text),
+      ];
+    }
+
+    final next = [...source];
+    final previous = next[index];
+    next[index] = ChatSegment(
+      type: previous.type,
+      stepId: previous.stepId,
+      text: (previous.text ?? '') + text,
+      label: previous.label,
+      detail: previous.detail,
+      icon: previous.icon,
+      title: previous.title,
+      toolName: previous.toolName,
+      command: previous.command,
+      status: previous.status,
+      summary: previous.summary,
+      input: previous.input,
+      output: previous.output,
+      diff: previous.diff,
+      message: previous.message,
+      approvalId: previous.approvalId,
+      approvalKind: previous.approvalKind,
+      reason: previous.reason,
+      cwd: previous.cwd,
+      grantRoot: previous.grantRoot,
+      fileChanges: previous.fileChanges,
+      collapsed: previous.collapsed,
+      durationMs: previous.durationMs,
+      additions: previous.additions,
+      deletions: previous.deletions,
+    );
+    return next;
+  }
+
+  String _latestProcessText(List<ChatSegment> segments) {
+    for (var index = segments.length - 1; index >= 0; index -= 1) {
+      final segment = segments[index];
+      if (!_isProcessTextSegment(segment)) continue;
+      final text = segment.text?.trim() ?? '';
+      if (text.isNotEmpty) return text;
+    }
+    return '';
+  }
+
+  List<ChatSegment> _removeMatchingProcessText(
+    List<ChatSegment> segments,
+    String text,
+  ) {
+    final target = text.trim();
+    if (target.isEmpty) return segments;
+    return segments
+        .where((segment) =>
+            !_isProcessTextSegment(segment) ||
+            (segment.text ?? '').trim() != target)
+        .toList();
+  }
+
   String _removeTextBlock(String text, String block) {
     final target = block.trim();
     var source = text.trim();
@@ -770,6 +845,7 @@ class WorkspaceController extends ChangeNotifier {
   void _handleChatOutput(Map<String, dynamic> json) {
     final sessionId = json['aiSessionId'] as String;
     final kind = json['kind'] as String? ?? 'status';
+    final phase = json['phase'] as String?;
     final text = json['text'] as String?;
     final segmentJson = json['segment'] as Map<String, dynamic>?;
     final segment = segmentJson == null
@@ -791,18 +867,26 @@ class WorkspaceController extends ChangeNotifier {
         ...segments,
         if (segment != null) segment,
       ];
-      final doneText = (text != null && text.isNotEmpty) ? text : pending?.text;
-      final doneSegments = pending == null
+      final mergedSegments = pending == null
           ? incomingSegments
           : _mergeSegments(pending.segments, incomingSegments);
+      final explicitText = text?.trim() ?? '';
+      final pendingText = pending?.text?.trim() ?? '';
+      final processText = _latestProcessText(mergedSegments);
+      final doneText = explicitText.isNotEmpty
+          ? explicitText
+          : (pendingText.isNotEmpty ? pendingText : processText);
+      final doneSegments = doneText.isEmpty
+          ? mergedSegments
+          : _removeMatchingProcessText(mergedSegments, doneText);
       final done = ChatMessage(
         role: ChatRole.assistant,
-        text: doneText,
+        text: doneText.isEmpty ? null : doneText,
         segments: doneSegments,
       );
       if (pendingIndex >= 0) {
         current[pendingIndex] = done;
-      } else if ((doneText ?? '').isNotEmpty || doneSegments.isNotEmpty) {
+      } else if (doneText.isNotEmpty || doneSegments.isNotEmpty) {
         final lastAssistantIndex = current.lastIndexWhere(
           (message) => message.role == ChatRole.assistant,
         );
@@ -811,7 +895,7 @@ class WorkspaceController extends ChangeNotifier {
           final previous = current[lastAssistantIndex];
           current[lastAssistantIndex] = ChatMessage(
             role: ChatRole.assistant,
-            text: doneText ?? previous.text,
+            text: doneText.isEmpty ? previous.text : doneText,
             segments: _mergeSegments(previous.segments, doneSegments),
           );
         } else {
@@ -840,22 +924,30 @@ class WorkspaceController extends ChangeNotifier {
           (text != null && text.isNotEmpty) ? text : segment?.text;
       final deltaStepId = json['stepId'] as String?;
       final currentStepId = _currentAgentMessageStepIds[sessionId];
+      final processStepId = deltaStepId ?? currentStepId ?? segment?.stepId;
       final isStepChange = deltaStepId != null && deltaStepId != currentStepId;
-      final incomingSegments = [
+      var incomingSegments = [
         ...segments,
         if (segment != null) segment,
       ];
+      final isProcessDelta = phase == 'process';
       if (isStepChange) {
         _currentAgentMessageStepIds[sessionId] = deltaStepId;
       }
       if (pendingIndex >= 0) {
         final pending = current[pendingIndex];
-        final accumulated = deltaText == null || deltaText.isEmpty
-            ? pending.text
-            : (pending.text ?? '') + deltaText;
+        final accumulated =
+            isProcessDelta || deltaText == null || deltaText.isEmpty
+                ? pending.text
+                : (pending.text ?? '') + deltaText;
+        var nextSegments = _mergeSegments(pending.segments, incomingSegments);
+        if (isProcessDelta && deltaText != null && deltaText.isNotEmpty) {
+          nextSegments =
+              _appendProcessTextSegment(nextSegments, processStepId, deltaText);
+        }
         current[pendingIndex] = pending.copyWith(
           text: accumulated,
-          segments: _mergeSegments(pending.segments, incomingSegments),
+          segments: nextSegments,
         );
       } else {
         final lastAssistantIndex = current.lastIndexWhere(
@@ -863,19 +955,35 @@ class WorkspaceController extends ChangeNotifier {
         );
         if (lastAssistantIndex >= 0 && current[lastAssistantIndex].pending) {
           final pending = current[lastAssistantIndex];
-          final accumulated = deltaText == null || deltaText.isEmpty
-              ? pending.text
-              : (pending.text ?? '') + deltaText;
+          final accumulated =
+              isProcessDelta || deltaText == null || deltaText.isEmpty
+                  ? pending.text
+                  : (pending.text ?? '') + deltaText;
+          var nextSegments = _mergeSegments(pending.segments, incomingSegments);
+          if (isProcessDelta && deltaText != null && deltaText.isNotEmpty) {
+            nextSegments = _appendProcessTextSegment(
+              nextSegments,
+              processStepId,
+              deltaText,
+            );
+          }
           current[lastAssistantIndex] = pending.copyWith(
             text: accumulated,
-            segments: _mergeSegments(pending.segments, incomingSegments),
+            segments: nextSegments,
           );
         } else if ((deltaText ?? '').isNotEmpty ||
             incomingSegments.isNotEmpty) {
+          if (isProcessDelta && deltaText != null && deltaText.isNotEmpty) {
+            incomingSegments = _appendProcessTextSegment(
+              incomingSegments,
+              processStepId,
+              deltaText,
+            );
+          }
           current.add(ChatMessage(
             role: ChatRole.assistant,
             pending: true,
-            text: deltaText,
+            text: isProcessDelta ? null : deltaText,
             segments: incomingSegments,
           ));
         }
