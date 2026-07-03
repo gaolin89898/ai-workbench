@@ -62,7 +62,10 @@ class ApiClient {
     if (!value.contains('://')) value = 'http://$value';
     final uri = Uri.parse(value);
     if (!uri.hasPort && (uri.scheme == 'http' || uri.scheme == 'https')) {
-      return uri.replace(port: 3000).toString().replaceFirst(RegExp(r'/+$'), '');
+      return uri
+          .replace(port: 3000)
+          .toString()
+          .replaceFirst(RegExp(r'/+$'), '');
     }
     return value;
   }
@@ -260,7 +263,8 @@ class ApiClient {
     try {
       final data = jsonDecode(response.body);
       if (data is Map<String, dynamic>) {
-        message = (data['error'] ?? data['message'] ?? response.body).toString();
+        message =
+            (data['error'] ?? data['message'] ?? response.body).toString();
       }
     } catch (_) {
       // Keep the raw body. Some proxies return plain text instead of JSON.

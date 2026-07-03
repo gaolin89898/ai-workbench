@@ -1,9 +1,10 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import ChatMessageRow from "./ChatMessageRow.vue";
+import ApprovalSegment from "./ChatSegment.vue";
 import TerminalView from "./TerminalView.vue";
 import { useWorkspace } from "../composables/useWorkspace";
-import { desktopApi, type AiProvider, type ChatImageAttachment, type ChatMessage } from "../services/desktop";
+import { desktopApi, type AiProvider, type ChatImageAttachment, type ChatMessage, type ChatSegment } from "../services/desktop";
 
 const providerClaudeIcon = new URL("../assets/icons/provider-claude.svg", import.meta.url).href;
 const providerCodexIcon = new URL("../assets/icons/provider-codex.svg", import.meta.url).href;
@@ -61,6 +62,16 @@ const activeProviderName = computed(() => {
   return providerChoices.value.find((provider) => provider.id === providerId)?.name
     ?? builtInProviders.find((provider) => provider.id === providerId)?.name
     ?? "AI";
+});
+const pendingApprovalSegment = computed<Extract<ChatSegment, { type: "approval" }> | null>(() => {
+  for (let messageIndex = ws.chatMessages.value.length - 1; messageIndex >= 0; messageIndex -= 1) {
+    const segments = ws.chatMessages.value[messageIndex].segments ?? [];
+    for (let segmentIndex = segments.length - 1; segmentIndex >= 0; segmentIndex -= 1) {
+      const segment = segments[segmentIndex];
+      if (segment.type === "approval" && segment.status === "pending") return segment;
+    }
+  }
+  return null;
 });
 
 function logEventLevel(event: string): "info" | "success" | "error" {
@@ -781,7 +792,17 @@ function onPromptKeydown(event: KeyboardEvent) {
           </div>
         </div>
         <div v-if="showCreateHint" class="chat-toast" :class="{ error: ws.createAiError.value }">{{ ws.createAiResult.value }}</div>
-        <div v-if="activeTab === 'chat'" class="chat-composer">
+        <div
+          v-if="activeTab === 'chat'"
+          class="chat-composer"
+          :class="{ 'has-approval-cover': pendingApprovalSegment }"
+        >
+          <div v-if="pendingApprovalSegment" class="chat-composer-approval-cover">
+            <ApprovalSegment
+              :segment="pendingApprovalSegment"
+              :ai-session-id="ws.activeAiSession.value?.id"
+            />
+          </div>
           <div v-if="imageAttachments.length" class="chat-image-attachments">
             <div
               v-for="image in imageAttachments"

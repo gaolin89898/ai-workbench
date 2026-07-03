@@ -333,7 +333,7 @@ function buildItemStartedSegment(params: unknown): ChatSegment {
   }
 }
 
-function buildItemCompletedSegment(params: unknown, fallbackOutput?: string): ChatSegment {
+function buildItemCompletedSegment(params: unknown, fallbackOutput?: string): ChatSegment | null {
   const p = (params ?? {}) as Record<string, unknown>;
   const item = (p["item"] ?? p) as Record<string, unknown>;
   const itemType = strOrUndef(item["type"]) ?? "unknown";
@@ -374,14 +374,7 @@ function buildItemCompletedSegment(params: unknown, fallbackOutput?: string): Ch
         deletions,
       };
     default:
-      return {
-        type: "status",
-        stepId,
-        label: "完成",
-        icon: "check",
-        additions,
-        deletions,
-      };
+      return null;
   }
 }
 
@@ -598,7 +591,7 @@ function handleNotification(
         aiSessionId,
         kind: "status",
         text: "running",
-        segment: { type: "status", label: "Codex 正在执行", icon: "think" },
+        segment: { type: "status", stepId: "runtime-status", label: "Codex 正在执行", icon: "think" },
       });
       break;
     }
@@ -644,11 +637,13 @@ function handleNotification(
       const completedStepId = extractItemId(params);
       const completedOutput = completedStepId ? session.commandOutputBuffers.get(completedStepId) : undefined;
       if (completedStepId) session.commandOutputBuffers.delete(completedStepId);
+      const segment = buildItemCompletedSegment(params, completedOutput);
+      if (!segment) break;
       emit(sender, {
         aiSessionId,
         kind: "step-update",
         stepId: completedStepId ?? null,
-        segment: buildItemCompletedSegment(params, completedOutput),
+        segment,
       });
       break;
     }

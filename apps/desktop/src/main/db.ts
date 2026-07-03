@@ -29,6 +29,8 @@ fs.mkdirSync(path.dirname(dbPath), { recursive: true });
 const db = new Database(dbPath);
 db.pragma("journal_mode = WAL");
 
+const STRUCTURED_MESSAGE_PREFIX = "__AI_WORKBENCH_MESSAGE_V1__";
+
 db.exec(`
   CREATE TABLE IF NOT EXISTS local_projects (
     id TEXT PRIMARY KEY,
@@ -354,9 +356,20 @@ export function appendLocalAiMessage(
 ): void {
   if (role === "assistant") {
     const previous = db
-      .prepare("SELECT role, content FROM local_ai_messages WHERE ai_session_id = ? ORDER BY id DESC LIMIT 1")
-      .get(aiSessionId) as { role: string; content: string } | undefined;
-    if (previous?.role === role && previous.content === content) return;
+      .prepare("SELECT rowid AS id, role, content FROM local_ai_messages WHERE ai_session_id = ? ORDER BY rowid DESC LIMIT 1")
+      .get(aiSessionId) as { id: number; role: string; content: string } | undefined;
+    if (previous?.role === role) {
+      if (previous.content === content) return;
+      const previousText = assistantDisplayText(previous.content);
+      const nextText = assistantDisplayText(content);
+      if (areDuplicateAssistantDisplays(previousText, nextText)) {
+        if (historyContentScore(content) > historyContentScore(previous.content)) {
+          db.prepare("UPDATE local_ai_messages SET content = ?, created_at = ? WHERE rowid = ?")
+            .run(content, new Date().toISOString(), previous.id);
+        }
+        return;
+      }
+    }
   }
   const now = new Date().toISOString();
   db.prepare(
@@ -387,7 +400,7 @@ export function mergeLocalAiHistory(
   messages: Array<{ role: ChatMessage["role"]; content: string; createdAt?: string }>
 ): boolean {
   const existingRows = db
-    .prepare("SELECT id, role, content, created_at FROM local_ai_messages WHERE ai_session_id = ? ORDER BY id ASC")
+    .prepare("SELECT rowid AS id, role, content, created_at FROM local_ai_messages WHERE ai_session_id = ? ORDER BY rowid ASC")
     .all(aiSessionId) as Array<{ id: number; role: string; content: string; created_at: string }>;
   const exactSeen = new Set(existingRows.map((message) =>
     `${message.role}\u0000${message.created_at}\u0000${message.content}`
@@ -401,8 +414,8 @@ export function mergeLocalAiHistory(
     `INSERT INTO local_ai_messages (ai_session_id, role, content, created_at)
      VALUES (?, ?, ?, ?)`
   );
-  const update = db.prepare("UPDATE local_ai_messages SET content = ? WHERE id = ?");
-  const removeDuplicate = db.prepare("DELETE FROM local_ai_messages WHERE id = ?");
+  const update = db.prepare("UPDATE local_ai_messages SET content = ? WHERE rowid = ?");
+  const removeDuplicate = db.prepare("DELETE FROM local_ai_messages WHERE rowid = ?");
   let changed = 0;
   const merge = db.transaction(() => {
     for (const message of messages) {
@@ -439,30 +452,126 @@ export function mergeLocalAiHistory(
 
 function compactLocalAiHistory(aiSessionId: string): void {
   const rows = db
-    .prepare("SELECT id, role, content, created_at FROM local_ai_messages WHERE ai_session_id = ? ORDER BY id ASC")
+    .prepare("SELECT rowid AS id, role, content, created_at FROM local_ai_messages WHERE ai_session_id = ? ORDER BY rowid ASC")
     .all(aiSessionId) as Array<{ id: number; role: string; content: string; created_at: string }>;
   const bestByTurn = new Map<string, { id: number; content: string }>();
   const idsToDelete: number[] = [];
+  const compactedRows: Array<{ id: number; role: string; content: string; created_at: string }> = [];
   for (const row of rows) {
     const key = `${row.role}\u0000${row.created_at}`;
     const current = bestByTurn.get(key);
     if (!current) {
       bestByTurn.set(key, { id: row.id, content: row.content });
-      continue;
-    }
-    if (row.content.length > current.content.length) {
+    } else if (row.content.length > current.content.length) {
       idsToDelete.push(current.id);
       bestByTurn.set(key, { id: row.id, content: row.content });
+      const currentIndex = compactedRows.findIndex((item) => item.id === current.id);
+      if (currentIndex >= 0) compactedRows.splice(currentIndex, 1);
     } else {
       idsToDelete.push(row.id);
+      continue;
     }
+    const previous = compactedRows[compactedRows.length - 1];
+    if (previous?.role === "assistant" && row.role === "assistant") {
+      const previousText = assistantDisplayText(previous.content);
+      const rowText = assistantDisplayText(row.content);
+      if (areDuplicateAssistantDisplays(previousText, rowText)) {
+        if (historyContentScore(row.content) > historyContentScore(previous.content)) {
+          idsToDelete.push(previous.id);
+          compactedRows[compactedRows.length - 1] = row;
+        } else {
+          idsToDelete.push(row.id);
+        }
+        continue;
+      }
+    }
+    compactedRows.push(row);
   }
   if (!idsToDelete.length) return;
-  const remove = db.prepare("DELETE FROM local_ai_messages WHERE id = ?");
+  const remove = db.prepare("DELETE FROM local_ai_messages WHERE rowid = ?");
   const compact = db.transaction(() => {
-    for (const id of idsToDelete) remove.run(id);
+    for (const id of [...new Set(idsToDelete)]) remove.run(id);
   });
   compact();
+}
+
+function areDuplicateAssistantDisplays(left: string, right: string): boolean {
+  const a = normalizeAssistantDisplayText(left);
+  const b = normalizeAssistantDisplayText(right);
+  if (!a || !b) return false;
+  if (a === b) return true;
+  const shorter = a.length <= b.length ? a : b;
+  const longer = a.length <= b.length ? b : a;
+  if (shorter.length >= 80 && longer.startsWith(shorter)) return true;
+  if (shorter.length < 160) return false;
+  return commonPrefixLength(shorter, longer) / shorter.length >= 0.86;
+}
+
+function normalizeAssistantDisplayText(text: string): string {
+  return text.replace(/\s+/g, " ").trim();
+}
+
+function commonPrefixLength(left: string, right: string): number {
+  const limit = Math.min(left.length, right.length);
+  let index = 0;
+  while (index < limit && left[index] === right[index]) index += 1;
+  return index;
+}
+
+function assistantDisplayText(content: string): string {
+  if (!content.startsWith(STRUCTURED_MESSAGE_PREFIX)) return content.trim();
+  try {
+    const parsed = JSON.parse(content.slice(STRUCTURED_MESSAGE_PREFIX.length));
+    if (parsed && typeof parsed === "object" && typeof parsed.text === "string") {
+      const record = parsed as { text: string; segments?: unknown };
+      const segments = Array.isArray(record.segments)
+        ? record.segments as Array<{ type?: string; stepId?: string; text?: string }>
+        : [];
+      return stripProcessTextFromFinalText(record.text, segments);
+    }
+  } catch {
+    return content.trim();
+  }
+  return content.trim();
+}
+
+function stripProcessTextFromFinalText(
+  text: string,
+  sourceSegments: Array<{ type?: string; stepId?: string; text?: string }>
+): string {
+  let cleaned = text.trim();
+  if (!cleaned) return cleaned;
+  for (const segment of sourceSegments) {
+    if (!isProcessTextSegment(segment)) continue;
+    cleaned = removeTextBlock(cleaned, segment.text ?? "");
+    if (!cleaned) break;
+  }
+  return cleaned.trim();
+}
+
+function isProcessTextSegment(segment: { type?: string; stepId?: string }) {
+  return segment.type === "text" && Boolean(segment.stepId && /^(?:process-text|thought|commentary)-/.test(segment.stepId));
+}
+
+function removeTextBlock(text: string, block: string) {
+  const target = block.trim();
+  let source = text.trim();
+  if (!target || !source) return source;
+  if (source === target) return "";
+  if (source.startsWith(target)) return source.slice(target.length).trimStart();
+  const surrounded = `\n\n${target}\n\n`;
+  const index = source.indexOf(surrounded);
+  if (index >= 0) {
+    source = `${source.slice(0, index)}\n\n${source.slice(index + surrounded.length)}`;
+  }
+  return source.trim();
+}
+
+function historyContentScore(content: string): number {
+  let score = content.length;
+  if (content.includes("\"stepId\":\"final-summary\"")) score += 10_000;
+  if (content.includes("\"stepId\":\"mobile-run-started\"")) score -= 1_000;
+  return score;
 }
 
 export function listLocalAiHistory(aiSessionId: string): AiHistoryMessage[] {

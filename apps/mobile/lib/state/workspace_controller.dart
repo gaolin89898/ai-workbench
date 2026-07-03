@@ -25,6 +25,8 @@ class WorkspaceController extends ChangeNotifier {
   DateTime? _lastDevicesLoadedAt;
   final Map<String, Future<AiSessionMeta?>> _createSessionInFlight = {};
   static const _selectedDeviceIdKey = 'selectedDeviceId';
+  static const _accountDisplayNameKey = 'accountDisplayName';
+  static const _accountAvatarIndexKey = 'accountAvatarIndex';
 
   bool loading = false;
   String? error;
@@ -42,6 +44,8 @@ class WorkspaceController extends ChangeNotifier {
   final Map<String, String> _lastCommittedAssistantTexts = {};
   bool _notifyQueued = false;
   String? _lastSelectedDeviceId;
+  String accountDisplayName = 'AI 工作台用户';
+  int accountAvatarIndex = 0;
 
   // Client-side session state (matching desktop's localStorage pattern)
   final Set<String> _pinnedSessionIds = {};
@@ -58,13 +62,21 @@ class WorkspaceController extends ChangeNotifier {
   List<AiSessionMeta> get visibleSessions {
     final filtered =
         sessions.where((s) => showArchived ? s.archived : !s.archived).toList();
-    // Sort: pinned first, then by updatedAt desc
-    filtered.sort((a, b) {
-      final aPinned = _pinnedSessionIds.contains(a.id) ? 0 : 1;
-      final bPinned = _pinnedSessionIds.contains(b.id) ? 0 : 1;
-      if (aPinned != bPinned) return aPinned.compareTo(bPinned);
-      return b.updatedAt.compareTo(a.updatedAt);
-    });
+    _sortSessions(filtered);
+    return filtered;
+  }
+
+  List<AiSessionMeta> get dashboardRecentSessions {
+    final projectIds = projects.map((project) => project.id).toSet();
+    final projectPaths = projects.map((project) => project.path).toSet();
+    final filtered = sessions
+        .where((session) =>
+            !session.archived &&
+            _isVisibleAiSession(session) &&
+            _belongsToCurrentProject(session, projectIds, projectPaths) &&
+            _isNormalSessionStatus(session.status))
+        .toList();
+    _sortSessions(filtered);
     return filtered;
   }
 
@@ -247,20 +259,6 @@ class WorkspaceController extends ChangeNotifier {
           const ChatMessage(role: ChatRole.error, text: '这个会话已归档。请先恢复后再发送。'));
       return;
     }
-    _appendMessage(session.id, ChatMessage(role: ChatRole.user, text: trimmed));
-    messagesBySession[session.id] = [
-      ...(messagesBySession[session.id] ?? const []),
-      ChatMessage(
-        role: ChatRole.assistant,
-        pending: true,
-        segments: [
-          ChatSegment(
-              type: 'status',
-              label: '等待 ${session.providerId} 返回...',
-              icon: 'think')
-        ],
-      ),
-    ];
     runStatusBySession[session.id] = '正在发送给 ${session.providerId}';
     _notifySafely();
     realtime.sendPrompt(device.id, session.id, trimmed);
@@ -343,11 +341,26 @@ class WorkspaceController extends ChangeNotifier {
     _notifySafely();
   }
 
+  void updateAccountProfile({
+    required String displayName,
+    required int avatarIndex,
+  }) {
+    final trimmed = displayName.trim();
+    accountDisplayName = trimmed.isEmpty ? 'AI 工作台用户' : trimmed;
+    accountAvatarIndex = avatarIndex < 0 ? 0 : avatarIndex;
+    _saveAccountProfile();
+    _notifySafely();
+  }
+
   // --- Persistence ---
 
   Future<void> _loadPersistence() async {
     final prefs = await SharedPreferences.getInstance();
     _lastSelectedDeviceId = prefs.getString(_selectedDeviceIdKey);
+    accountDisplayName =
+        prefs.getString(_accountDisplayNameKey) ?? accountDisplayName;
+    accountAvatarIndex =
+        prefs.getInt(_accountAvatarIndexKey) ?? accountAvatarIndex;
     _pinnedSessionIds.addAll(prefs.getStringList('pinnedSessions') ?? []);
     _unreadSessionIds.addAll(prefs.getStringList('unreadSessions') ?? []);
     for (final entry in (prefs.getStringList('titleOverrides') ?? const [])) {
@@ -389,6 +402,15 @@ class WorkspaceController extends ChangeNotifier {
     });
   }
 
+  void _saveAccountProfile() {
+    final displayName = accountDisplayName;
+    final avatarIndex = accountAvatarIndex;
+    SharedPreferences.getInstance().then((prefs) {
+      prefs.setString(_accountDisplayNameKey, displayName);
+      prefs.setInt(_accountAvatarIndexKey, avatarIndex);
+    });
+  }
+
   Future<void> _run(Future<void> Function() action) async {
     loading = true;
     error = null;
@@ -416,6 +438,11 @@ class WorkspaceController extends ChangeNotifier {
       loading = false;
       _notifySafely();
     }
+  }
+
+  @visibleForTesting
+  void handleRealtimeForTesting(Map<String, dynamic> json) {
+    _handleRealtime(json);
   }
 
   void _handleRealtime(Map<String, dynamic> json) {
@@ -467,9 +494,11 @@ class WorkspaceController extends ChangeNotifier {
             segments: history.segments,
           );
         }).toList();
-        messagesBySession[sessionId] = hasPendingAssistant
-            ? _mergeHistoryWithPending(current, historyMessages)
-            : historyMessages;
+        messagesBySession[sessionId] = _normalizeSessionMessages(
+          hasPendingAssistant
+              ? _mergeHistoryWithPending(current, historyMessages)
+              : historyMessages,
+        );
         break;
       case 'ai.chat.output':
         _handleChatOutput(json);
@@ -479,7 +508,15 @@ class WorkspaceController extends ChangeNotifier {
         break;
       case 'ai.message.done':
         final sessionId = json['aiSessionId'] as String;
-        runStatusBySession[sessionId] = json['status'] as String? ?? 'idle';
+        final status = json['status'] as String? ?? 'idle';
+        runStatusBySession[sessionId] = status;
+        _handleMessageDone(sessionId, status, json['summary'] as String?);
+        if (_isCompletedStatus(status)) {
+          final device = selectedDevice;
+          if (device != null) {
+            realtime.requestHistory(device.id, sessionId);
+          }
+        }
         break;
       case 'terminal.error':
         final sessionId = json['aiSessionId'] as String?;
@@ -509,10 +546,225 @@ class WorkspaceController extends ChangeNotifier {
     );
     if (historyHasPending) return history;
     final currentPrefix = current.take(pendingIndex).toList();
-    if (history.length >= currentPrefix.length) {
+    final comparableCurrentPrefix = currentPrefix
+        .where((message) => message.role != ChatRole.system)
+        .toList();
+    if (_historyMatchesPrefix(history, comparableCurrentPrefix)) {
+      final historyHasAssistantAfterCurrentPrefix =
+          history.skip(comparableCurrentPrefix.length).any(
+                (message) => message.role == ChatRole.assistant,
+              );
+      if (historyHasAssistantAfterCurrentPrefix) return history;
+    }
+    if (history.length >= comparableCurrentPrefix.length) {
       return [...history, pending];
     }
     return [...currentPrefix, pending];
+  }
+
+  bool _historyMatchesPrefix(
+    List<ChatMessage> history,
+    List<ChatMessage> prefix,
+  ) {
+    if (history.length < prefix.length) return false;
+    for (var index = 0; index < prefix.length; index += 1) {
+      if (!_areDuplicateChatMessages(history[index], prefix[index])) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  List<ChatMessage> _normalizeSessionMessages(List<ChatMessage> messages) {
+    return _dedupeAdjacentMessages(
+      _mergeAdjacentAssistantTurnMessages(
+        _mergePendingAssistantMessages(messages),
+      ),
+    );
+  }
+
+  List<ChatMessage> _mergePendingAssistantMessages(List<ChatMessage> messages) {
+    final merged = <ChatMessage>[];
+    var pendingAssistantIndex = -1;
+
+    for (final message in messages) {
+      if (message.role != ChatRole.assistant || !message.pending) {
+        merged.add(message);
+        continue;
+      }
+
+      if (pendingAssistantIndex < 0) {
+        pendingAssistantIndex = merged.length;
+        merged.add(message);
+        continue;
+      }
+
+      final previous = merged[pendingAssistantIndex];
+      merged[pendingAssistantIndex] = ChatMessage(
+        role: ChatRole.assistant,
+        pending: true,
+        text: _mergeAssistantText(previous.text, message.text),
+        segments: _mergeSegments(previous.segments, message.segments),
+      );
+    }
+
+    return merged;
+  }
+
+  List<ChatMessage> _mergeAdjacentAssistantTurnMessages(
+    List<ChatMessage> messages,
+  ) {
+    final merged = <ChatMessage>[];
+    for (final message in messages) {
+      final previous = merged.isEmpty ? null : merged.last;
+      if (previous != null &&
+          previous.role == ChatRole.assistant &&
+          message.role == ChatRole.assistant) {
+        merged[merged.length - 1] =
+            _mergeAssistantTurnMessage(previous, message);
+        continue;
+      }
+      merged.add(message);
+    }
+    return merged;
+  }
+
+  ChatMessage _mergeAssistantTurnMessage(ChatMessage left, ChatMessage right) {
+    return ChatMessage(
+      role: ChatRole.assistant,
+      pending: _mergedAssistantPending(left, right),
+      text: _mergeAssistantText(left.text, right.text),
+      segments: _mergeSegments(left.segments, right.segments),
+    );
+  }
+
+  bool _mergedAssistantPending(ChatMessage left, ChatMessage right) {
+    if (right.pending) return true;
+    if (_assistantVisibleText(right).isNotEmpty) return false;
+    return left.pending;
+  }
+
+  String? _mergeAssistantText(String? left, String? right) {
+    final a = left ?? '';
+    final b = right ?? '';
+    if (a.isEmpty) return b.isEmpty ? null : b;
+    if (b.isEmpty) return a;
+
+    final normalizedA = _normalizeAssistantDisplayText(a);
+    final normalizedB = _normalizeAssistantDisplayText(b);
+    if (normalizedA == normalizedB) return a.length >= b.length ? a : b;
+    if (b.startsWith(a)) return b;
+    if (a.startsWith(b)) return a;
+    return '$a$b';
+  }
+
+  List<ChatMessage> _dedupeAdjacentMessages(List<ChatMessage> messages) {
+    final deduped = <ChatMessage>[];
+    for (final message in messages) {
+      final previous = deduped.isEmpty ? null : deduped.last;
+      if (previous != null && _areDuplicateChatMessages(previous, message)) {
+        if (_chatMessageScore(message) > _chatMessageScore(previous)) {
+          deduped[deduped.length - 1] = message;
+        }
+        continue;
+      }
+      deduped.add(message);
+    }
+    return deduped;
+  }
+
+  bool _areDuplicateChatMessages(ChatMessage left, ChatMessage right) {
+    if (left.role != right.role) return false;
+    if (left.role != ChatRole.assistant) {
+      return _chatMessageFingerprint(left) == _chatMessageFingerprint(right);
+    }
+    return _areDuplicateAssistantDisplays(
+      _assistantVisibleText(left),
+      _assistantVisibleText(right),
+    );
+  }
+
+  String _assistantVisibleText(ChatMessage message) {
+    return _stripProcessTextFromFinalText(message.text ?? '', message.segments);
+  }
+
+  bool _areDuplicateAssistantDisplays(String left, String right) {
+    final a = _normalizeAssistantDisplayText(left);
+    final b = _normalizeAssistantDisplayText(right);
+    if (a.isEmpty || b.isEmpty) return false;
+    if (a == b) return true;
+    final shorter = a.length <= b.length ? a : b;
+    final longer = a.length <= b.length ? b : a;
+    if (shorter.length >= 80 && longer.startsWith(shorter)) return true;
+    if (shorter.length < 160) return false;
+    return _commonPrefixLength(shorter, longer) / shorter.length >= 0.86;
+  }
+
+  String _normalizeAssistantDisplayText(String text) {
+    return text.replaceAll(RegExp(r'\s+'), ' ').trim();
+  }
+
+  int _commonPrefixLength(String left, String right) {
+    final limit = left.length < right.length ? left.length : right.length;
+    var index = 0;
+    while (index < limit && left[index] == right[index]) {
+      index += 1;
+    }
+    return index;
+  }
+
+  String _chatMessageFingerprint(ChatMessage message) {
+    final text = message.role == ChatRole.assistant
+        ? _assistantVisibleText(message)
+        : (message.text ?? '').trim();
+    return '${message.role.name}\u0000$text';
+  }
+
+  int _chatMessageScore(ChatMessage message) {
+    var score = (message.text ?? '').length + message.segments.length * 100;
+    if (message.segments.any((segment) => segment.stepId == 'final-summary')) {
+      score += 10000;
+    }
+    return score;
+  }
+
+  String _stripProcessTextFromFinalText(
+    String text,
+    List<ChatSegment> sourceSegments,
+  ) {
+    var cleaned = text.trim();
+    if (cleaned.isEmpty) return cleaned;
+    for (final segment in sourceSegments) {
+      if (!_isProcessTextSegment(segment)) continue;
+      cleaned = _removeTextBlock(cleaned, segment.text ?? '');
+      if (cleaned.isEmpty) break;
+    }
+    return cleaned.trim();
+  }
+
+  bool _isProcessTextSegment(ChatSegment segment) {
+    final stepId = segment.stepId ?? '';
+    return segment.type == 'text' &&
+        (stepId.startsWith('process-text-') ||
+            stepId.startsWith('thought-') ||
+            stepId.startsWith('commentary-'));
+  }
+
+  String _removeTextBlock(String text, String block) {
+    final target = block.trim();
+    var source = text.trim();
+    if (target.isEmpty || source.isEmpty) return source;
+    if (source == target) return '';
+    if (source.startsWith(target)) {
+      return source.substring(target.length).trimLeft();
+    }
+    final surrounded = '\n\n$target\n\n';
+    final index = source.indexOf(surrounded);
+    if (index >= 0) {
+      source =
+          '${source.substring(0, index)}\n\n${source.substring(index + surrounded.length)}';
+    }
+    return source.trim();
   }
 
   void _handleChatOutput(Map<String, dynamic> json) {
@@ -520,11 +772,13 @@ class WorkspaceController extends ChangeNotifier {
     final kind = json['kind'] as String? ?? 'status';
     final text = json['text'] as String?;
     final segmentJson = json['segment'] as Map<String, dynamic>?;
-    final segment =
-        segmentJson == null ? null : ChatSegment.fromJson(segmentJson);
+    final segment = segmentJson == null
+        ? null
+        : _normalizeIncomingSegment(ChatSegment.fromJson(segmentJson));
     final segments = ((json['segments'] as List<dynamic>?) ?? const [])
         .whereType<Map<String, dynamic>>()
         .map(ChatSegment.fromJson)
+        .map(_normalizeIncomingSegment)
         .toList();
     final current = [
       ...(messagesBySession[sessionId] ?? const <ChatMessage>[])
@@ -552,8 +806,14 @@ class WorkspaceController extends ChangeNotifier {
         final lastAssistantIndex = current.lastIndexWhere(
           (message) => message.role == ChatRole.assistant,
         );
-        if (lastAssistantIndex >= 0 && current[lastAssistantIndex].pending) {
-          current[lastAssistantIndex] = done;
+        if (lastAssistantIndex >= 0 &&
+            _shouldMergeDoneIntoAssistant(current[lastAssistantIndex])) {
+          final previous = current[lastAssistantIndex];
+          current[lastAssistantIndex] = ChatMessage(
+            role: ChatRole.assistant,
+            text: doneText ?? previous.text,
+            segments: _mergeSegments(previous.segments, doneSegments),
+          );
         } else {
           current.add(done);
         }
@@ -626,7 +886,13 @@ class WorkspaceController extends ChangeNotifier {
         ...segments,
         if (segment != null) segment,
         if (segment == null && segments.isEmpty)
-          ChatSegment(type: 'status', label: text ?? 'AI 正在执行', icon: 'think'),
+          _normalizeIncomingSegment(
+            ChatSegment(
+              type: 'status',
+              label: text ?? 'AI 正在执行',
+              icon: 'think',
+            ),
+          ),
       ];
       final hasProcessSegment = incomingSegments.any(_isProcessChatSegment);
       if (pendingIndex >= 0) {
@@ -670,7 +936,115 @@ class WorkspaceController extends ChangeNotifier {
           (incomingSegments.isEmpty ? null : incomingSegments.last.label) ??
           'AI 正在执行';
     }
-    messagesBySession[sessionId] = current;
+    messagesBySession[sessionId] = _normalizeSessionMessages(current);
+  }
+
+  ChatSegment _normalizeIncomingSegment(ChatSegment segment) {
+    if (segment.stepId != null && segment.stepId!.isNotEmpty) return segment;
+    if (segment.type != 'status') return segment;
+    final label = (segment.label ?? segment.text ?? '').trim();
+    if (_isRuntimeStatusLabel(label)) {
+      return _copySegmentWithStepId(segment, 'runtime-status');
+    }
+    if (_isThinkingStatusLabel(label)) {
+      return _copySegmentWithStepId(segment, 'thinking-status');
+    }
+    return segment;
+  }
+
+  ChatSegment _copySegmentWithStepId(ChatSegment segment, String stepId) {
+    return ChatSegment(
+      type: segment.type,
+      stepId: stepId,
+      text: segment.text,
+      label: segment.label,
+      detail: segment.detail,
+      icon: segment.icon,
+      title: segment.title,
+      toolName: segment.toolName,
+      command: segment.command,
+      status: segment.status,
+      summary: segment.summary,
+      input: segment.input,
+      output: segment.output,
+      diff: segment.diff,
+      message: segment.message,
+      approvalId: segment.approvalId,
+      approvalKind: segment.approvalKind,
+      reason: segment.reason,
+      cwd: segment.cwd,
+      grantRoot: segment.grantRoot,
+      fileChanges: segment.fileChanges,
+      collapsed: segment.collapsed,
+      durationMs: segment.durationMs,
+      additions: segment.additions,
+      deletions: segment.deletions,
+    );
+  }
+
+  bool _isRuntimeStatusLabel(String label) {
+    return label == 'running' ||
+        label == '正在处理' ||
+        label == 'AI 正在执行' ||
+        label == 'Codex 正在执行' ||
+        label == 'Claude 正在执行';
+  }
+
+  bool _isThinkingStatusLabel(String label) {
+    return label == '正在思考' ||
+        label == '思考中' ||
+        label == 'Codex 正在思考' ||
+        label == 'Claude 正在思考';
+  }
+
+  void _handleMessageDone(String sessionId, String status, String? summary) {
+    final current = [
+      ...(messagesBySession[sessionId] ?? const <ChatMessage>[])
+    ];
+    final pendingIndex = current.lastIndexWhere(
+      (message) => message.pending && message.role == ChatRole.assistant,
+    );
+    if (pendingIndex < 0) return;
+
+    final pending = current[pendingIndex];
+    if (_isFailureStatus(status)) {
+      current[pendingIndex] = ChatMessage(
+        role: ChatRole.error,
+        text: summary == null || summary.isEmpty ? 'AI 执行失败' : summary,
+        segments: pending.segments,
+      );
+      _currentAgentMessageStepIds.remove(sessionId);
+      _lastCommittedAssistantTexts.remove(sessionId);
+    } else if (_isCompletedStatus(status)) {
+      // The completion event means the desktop run ended, but the final
+      // assistant text may still arrive through ai.chat.output or history.
+      // Keep the pending message open so the final answer can merge into it.
+      _currentAgentMessageStepIds.remove(sessionId);
+    }
+    messagesBySession[sessionId] = _normalizeSessionMessages(current);
+  }
+
+  bool _shouldMergeDoneIntoAssistant(ChatMessage message) {
+    if (message.pending) return true;
+    if (message.role != ChatRole.assistant) return false;
+    if (_assistantVisibleText(message).isNotEmpty) return false;
+    return message.segments.any(_isProcessChatSegment);
+  }
+
+  bool _isCompletedStatus(String status) {
+    final normalized = status.trim().toLowerCase();
+    return normalized == 'completed' ||
+        normalized == 'complete' ||
+        normalized == 'done' ||
+        normalized == 'success' ||
+        normalized == 'idle';
+  }
+
+  bool _isFailureStatus(String status) {
+    final normalized = status.trim().toLowerCase();
+    return normalized == 'failed' ||
+        normalized == 'failure' ||
+        normalized == 'error';
   }
 
   List<ChatSegment> _mergeSegments(
@@ -816,7 +1190,7 @@ class WorkspaceController extends ChangeNotifier {
         ));
       }
     }
-    messagesBySession[sessionId] = current;
+    messagesBySession[sessionId] = _normalizeSessionMessages(current);
   }
 
   void _upsertSession(AiSessionMeta session) {
@@ -847,6 +1221,38 @@ class WorkspaceController extends ChangeNotifier {
     return session.providerId != 'codex' ||
         providerSessionId == null ||
         providerSessionId.startsWith('app-server:');
+  }
+
+  bool _belongsToCurrentProject(
+    AiSessionMeta session,
+    Set<String> projectIds,
+    Set<String> projectPaths,
+  ) {
+    final projectId = session.projectId;
+    if (projectId != null && projectIds.contains(projectId)) return true;
+    final summary = session.summary;
+    return summary != null && projectPaths.contains(summary);
+  }
+
+  bool _isNormalSessionStatus(String status) {
+    switch (status.trim().toLowerCase()) {
+      case 'failed':
+      case 'failure':
+      case 'error':
+        return false;
+      default:
+        return true;
+    }
+  }
+
+  void _sortSessions(List<AiSessionMeta> items) {
+    // Sort: pinned first, then by updatedAt desc
+    items.sort((a, b) {
+      final aPinned = _pinnedSessionIds.contains(a.id) ? 0 : 1;
+      final bPinned = _pinnedSessionIds.contains(b.id) ? 0 : 1;
+      if (aPinned != bPinned) return aPinned.compareTo(bPinned);
+      return b.updatedAt.compareTo(a.updatedAt);
+    });
   }
 
   @override

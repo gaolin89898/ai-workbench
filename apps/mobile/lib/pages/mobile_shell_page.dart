@@ -130,7 +130,7 @@ class _DashboardTab extends StatelessWidget {
 
   // 最近会话区：空状态或会话列表卡
   Widget _buildRecentSessions(BuildContext context, WorkspaceController ws) {
-    final recent = ws.visibleSessions.take(5).toList();
+    final recent = ws.dashboardRecentSessions.take(5).toList();
     if (recent.isEmpty) {
       return const SizedBox(
         height: 220,
@@ -146,7 +146,8 @@ class _DashboardTab extends StatelessWidget {
           children: [
             for (int i = 0; i < recent.length; i++) ...[
               if (i > 0)
-                const Divider(height: 1, thickness: 1, color: AppColors.divider),
+                const Divider(
+                    height: 1, thickness: 1, color: AppColors.divider),
               _GroupedSessionTile(sessionId: recent[i].id),
             ],
           ],
@@ -165,7 +166,7 @@ class _DashboardHeader extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context).textTheme;
-    final activeSessions = ws.sessions.where((s) => !s.archived).length;
+    final activeSessions = ws.dashboardRecentSessions.length;
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 14, 16, 12),
       child: Row(
@@ -272,8 +273,9 @@ class _DashboardDeviceRowState extends State<_DashboardDeviceRow> {
               size: widget.compact ? 34 : 40,
               iconSize: widget.compact ? 17 : 20,
               borderRadius: 10,
-              background:
-                  device.online ? AppColors.successSoft : AppColors.surfaceMuted,
+              background: device.online
+                  ? AppColors.successSoft
+                  : AppColors.surfaceMuted,
               foreground:
                   device.online ? AppColors.successDeep : AppColors.secondary,
             ),
@@ -297,7 +299,8 @@ class _DashboardDeviceRowState extends State<_DashboardDeviceRow> {
                     '${device.os} · ${device.online ? '在线' : '离线'}',
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(fontSize: 12, color: AppColors.muted),
+                    style:
+                        const TextStyle(fontSize: 12, color: AppColors.muted),
                   ),
                 ],
               ),
@@ -318,7 +321,8 @@ class _DashboardDeviceRowState extends State<_DashboardDeviceRow> {
     );
   }
 
-  Future<void> _selectDevice(BuildContext context, WorkspaceController ws) async {
+  Future<void> _selectDevice(
+      BuildContext context, WorkspaceController ws) async {
     if (ws.selectedDevice?.id == widget.device.id) {
       Navigator.of(context).maybePop();
       return;
@@ -404,7 +408,7 @@ class _HeroCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final project = ws.projects.isNotEmpty ? ws.projects.first : null;
-    final activeSessions = ws.sessions.where((s) => !s.archived).length;
+    final activeSessions = ws.dashboardRecentSessions.length;
     final installedProviders =
         ws.providerStatuses.where((p) => p.installed).length;
     // 注意：背景用纯色 AppColors.primary，不要用 heroGradient
@@ -963,7 +967,8 @@ class _ProjectCard extends StatelessWidget {
                   ),
                   // 新建 AI 会话
                   IconButton(
-                    onPressed: () => _showProviderSelector(context, ws, project),
+                    onPressed: () =>
+                        _showProviderSelector(context, ws, project),
                     icon: const Icon(Icons.add, color: AppColors.primary),
                     visualDensity: VisualDensity.compact,
                     tooltip: '新建 AI 会话',
@@ -1052,7 +1057,8 @@ class _ProjectSessionRow extends StatelessWidget {
                     '${session.providerId} · ${_sessionStatusLabel(session.status)}',
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(fontSize: 12, color: AppColors.muted),
+                    style:
+                        const TextStyle(fontSize: 12, color: AppColors.muted),
                   ),
                 ],
               ),
@@ -1079,10 +1085,12 @@ const _builtInProviders = [
   ('mimo', 'MiMo Code', Icons.auto_fix_high_outlined),
 ];
 
-Future<void> _showProviderSelector(
-    BuildContext context, WorkspaceController ws, WorkspaceProject project) async {
-  final installed =
-      ws.providerStatuses.where((s) => s.installed).map((s) => s.providerId).toSet();
+Future<void> _showProviderSelector(BuildContext context, WorkspaceController ws,
+    WorkspaceProject project) async {
+  final installed = ws.providerStatuses
+      .where((s) => s.installed)
+      .map((s) => s.providerId)
+      .toSet();
   final choice = await showDialog<(String, String)>(
     context: context,
     builder: (ctx) => SimpleDialog(
@@ -1352,8 +1360,9 @@ void _showSessionMenuById(
             },
           ),
           ListTile(
-            leading: Icon(
-                session.archived ? Icons.unarchive_outlined : Icons.archive_outlined),
+            leading: Icon(session.archived
+                ? Icons.unarchive_outlined
+                : Icons.archive_outlined),
             title: Text(session.archived ? '恢复' : '归档'),
             onTap: () {
               Navigator.of(ctx).pop();

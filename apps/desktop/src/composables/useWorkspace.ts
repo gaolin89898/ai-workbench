@@ -634,23 +634,72 @@ function dedupeAdjacentChatMessages(messages: ChatMessage[]) {
   const deduped: ChatMessage[] = [];
   for (const message of messages) {
     const previous = deduped[deduped.length - 1];
-    if (previous && chatMessageFingerprint(previous) === chatMessageFingerprint(message)) continue;
+    if (previous && areDuplicateChatMessages(previous, message)) {
+      if (chatMessageScore(message) > chatMessageScore(previous)) {
+        deduped[deduped.length - 1] = message;
+      }
+      continue;
+    }
     deduped.push(message);
   }
   return deduped;
 }
 
+function areDuplicateChatMessages(left: ChatMessage, right: ChatMessage) {
+  if (left.role !== right.role) return false;
+  if (left.role !== "assistant") return chatMessageFingerprint(left) === chatMessageFingerprint(right);
+  return areDuplicateAssistantDisplays(
+    assistantVisibleText(left),
+    assistantVisibleText(right),
+  );
+}
+
+function assistantVisibleText(message: ChatMessage) {
+  return stripProcessTextFromFinalText(message.text ?? "", message.segments ?? []);
+}
+
+function areDuplicateAssistantDisplays(left: string, right: string) {
+  const a = normalizeAssistantDisplayText(left);
+  const b = normalizeAssistantDisplayText(right);
+  if (!a || !b) return false;
+  if (a === b) return true;
+  const shorter = a.length <= b.length ? a : b;
+  const longer = a.length <= b.length ? b : a;
+  if (shorter.length >= 80 && longer.startsWith(shorter)) return true;
+  if (shorter.length < 160) return false;
+  return commonPrefixLength(shorter, longer) / shorter.length >= 0.86;
+}
+
+function normalizeAssistantDisplayText(text: string) {
+  return text.replace(/\s+/g, " ").trim();
+}
+
+function commonPrefixLength(left: string, right: string) {
+  const limit = Math.min(left.length, right.length);
+  let index = 0;
+  while (index < limit && left[index] === right[index]) index += 1;
+  return index;
+}
+
 function chatMessageFingerprint(message: ChatMessage) {
+  const text = message.role === "assistant"
+    ? assistantVisibleText(message)
+    : (message.text ?? "").trim();
   return JSON.stringify({
     role: message.role,
-    text: (message.text ?? "").trim(),
+    text,
     images: (message.images ?? []).map((image) => ({
       name: image.name,
       mimeType: image.mimeType,
       dataUrl: image.dataUrl,
     })),
-    segments: message.segments ?? [],
   });
+}
+
+function chatMessageScore(message: ChatMessage) {
+  let score = (message.text ?? "").length + (message.segments?.length ?? 0) * 100;
+  if (message.segments?.some((segment) => segment.stepId === "final-summary")) score += 10_000;
+  return score;
 }
 
 async function loadAiSessionHistory(sessionId: string, options: { force?: boolean } = {}) {
@@ -1008,6 +1057,35 @@ function looksLikeProcessCommentary(text: string) {
     || /(?:接下来我|我先看|我会先|我将先|先确认|先检查|先读取|先看一下)/.test(normalized);
 }
 
+function stripProcessTextFromFinalText(text: string, sourceSegments: ChatSegment[]) {
+  let cleaned = text.trim();
+  if (!cleaned) return cleaned;
+  for (const segment of sourceSegments) {
+    if (!isProcessTextSegment(segment)) continue;
+    cleaned = removeTextBlock(cleaned, segment.text);
+    if (!cleaned) break;
+  }
+  return cleaned.trim();
+}
+
+function isProcessTextSegment(segment: ChatSegment) {
+  return segment.type === "text" && Boolean(segment.stepId && /^(?:process-text|thought|commentary)-/.test(segment.stepId));
+}
+
+function removeTextBlock(text: string, block: string) {
+  const target = block.trim();
+  let source = text.trim();
+  if (!target || !source) return source;
+  if (source === target) return "";
+  if (source.startsWith(target)) return source.slice(target.length).trimStart();
+  const surrounded = `\n\n${target}\n\n`;
+  const index = source.indexOf(surrounded);
+  if (index >= 0) {
+    source = `${source.slice(0, index)}\n\n${source.slice(index + surrounded.length)}`;
+  }
+  return source.trim();
+}
+
 function appendPendingAssistantText(sessionId: string, text: string, stepId?: string | null) {
   const pending = pendingAssistants.get(sessionId);
   if (!pending || !text) return;
@@ -1022,8 +1100,9 @@ function appendPendingAssistantText(sessionId: string, text: string, stepId?: st
 function completePendingAssistantFromExec(sessionId: string) {
   const pending = pendingAssistants.get(sessionId);
   if (!pending) return;
+  commitCurrentAssistantTextAsThought(pending);
   const text = extractAssistantText((pending.finalText || pending.message.text || "").trim());
-  pending.finalText = text;
+  pending.finalText = stripProcessTextFromFinalText(text, [...pending.steps.values()]);
   upsertCompletionSummary(sessionId);
   syncPendingAssistantSegments(sessionId, true);
   const finalText = extractAssistantText(pending.finalText.trim());

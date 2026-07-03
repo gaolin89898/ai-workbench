@@ -232,8 +232,8 @@ function flushAssistantDraft(messages: AiHistoryMessage[], draft: ImportedAssist
 }
 
 function promoteFinalTextFromProcessSegments(draft: ImportedAssistantDraft): { text: string; segments: ChatSegment[] } {
-  const explicitFinalText = draft.finalTextParts.join("\n\n").trim();
   const segments = [...draft.segments];
+  const explicitFinalText = stripProcessTextFromFinalText(draft.finalTextParts.join("\n\n"), segments);
   if (explicitFinalText || !segments.length) return { text: explicitFinalText, segments };
 
   for (let index = segments.length - 1; index >= 0; index -= 1) {
@@ -249,9 +249,33 @@ function promoteFinalTextFromProcessSegments(draft: ImportedAssistantDraft): { t
 function looksLikeFinalAssistantText(text: string): boolean {
   const normalized = text.trim();
   if (!normalized) return false;
-  if (normalized.length >= 160) return true;
   return /^(?:已按|我已|我会|结论|总结|这里|现在|可以|如果|这次|这样)/.test(normalized)
     || /(?:已完成|已处理|已修复|已实现|构建通过|验证通过|不会|可以|需要|建议)/.test(normalized);
+}
+
+function stripProcessTextFromFinalText(text: string, sourceSegments: ChatSegment[]) {
+  let cleaned = text.trim();
+  if (!cleaned) return cleaned;
+  for (const segment of sourceSegments) {
+    if (!isProcessTextSegment(segment)) continue;
+    cleaned = removeTextBlock(cleaned, segment.text);
+    if (!cleaned) break;
+  }
+  return cleaned.trim();
+}
+
+function removeTextBlock(text: string, block: string) {
+  const target = block.trim();
+  let source = text.trim();
+  if (!target || !source) return source;
+  if (source === target) return "";
+  if (source.startsWith(target)) return source.slice(target.length).trimStart();
+  const surrounded = `\n\n${target}\n\n`;
+  const index = source.indexOf(surrounded);
+  if (index >= 0) {
+    source = `${source.slice(0, index)}\n\n${source.slice(index + surrounded.length)}`;
+  }
+  return source.trim();
 }
 
 function ensureAssistantDraft(draft: ImportedAssistantDraft | null, timestamp?: string): ImportedAssistantDraft {

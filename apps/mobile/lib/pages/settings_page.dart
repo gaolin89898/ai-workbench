@@ -4,6 +4,7 @@ import '../models/workbench_models.dart';
 import '../services/api_client.dart';
 import '../state/workspace_scope.dart';
 import '../widgets/app_theme.dart';
+import 'account_management_page.dart';
 import 'archived_sessions_page.dart';
 import 'login_page.dart';
 import 'update_page.dart';
@@ -77,9 +78,17 @@ class _SettingsPageState extends State<SettingsPage> {
               child: Column(
                 children: [
                   _AccountRow(
-                    name: 'AI 工作台用户',
-                    email: '未绑定邮箱',
-                    onTap: () {},
+                    title: '账户管理',
+                    subtitle: ws.accountDisplayName,
+                    avatarIndex: ws.accountAvatarIndex,
+                    onTap: () => Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (_) => WorkspaceScope(
+                          controller: ws,
+                          child: const AccountManagementPage(),
+                        ),
+                      ),
+                    ),
                   ),
                 ],
               ),
@@ -97,15 +106,6 @@ class _SettingsPageState extends State<SettingsPage> {
               padding: EdgeInsets.zero,
               child: Column(
                 children: [
-                  _Row(
-                    icon: Icons.shield_outlined,
-                    background: AppColors.successSoft,
-                    foreground: AppColors.successDeep,
-                    title: '安全与历史',
-                    onTap: () {},
-                    trailing: const _Chevron(),
-                  ),
-                  const Divider(height: 1, color: AppColors.divider),
                   _Row(
                     icon: Icons.warning_amber_outlined,
                     background: AppColors.warningSoft,
@@ -368,13 +368,15 @@ class _Row extends StatelessWidget {
 /// AppIconBox 不支持渐变，此处用 Container 实现（与 providers_page 一致）。
 class _AccountRow extends StatelessWidget {
   const _AccountRow({
-    required this.name,
-    required this.email,
+    required this.title,
+    required this.subtitle,
+    required this.avatarIndex,
     this.onTap,
   });
 
-  final String name;
-  final String email;
+  final String title;
+  final String subtitle;
+  final int avatarIndex;
   final VoidCallback? onTap;
 
   @override
@@ -387,16 +389,7 @@ class _AccountRow extends StatelessWidget {
         padding: const EdgeInsets.symmetric(horizontal: 14),
         child: Row(
           children: [
-            // 渐变头像方框
-            Container(
-              width: 34,
-              height: 34,
-              decoration: BoxDecoration(
-                gradient: AppColors.primaryGradient,
-                borderRadius: BorderRadius.circular(14),
-              ),
-              child: const Icon(Icons.person, size: 18, color: AppColors.inverse),
-            ),
+            AccountAvatar(index: avatarIndex, size: 34, iconSize: 18),
             const SizedBox(width: 12),
             Expanded(
               child: Column(
@@ -404,7 +397,7 @@ class _AccountRow extends StatelessWidget {
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
                   Text(
-                    name,
+                    title,
                     style: theme.titleMedium?.copyWith(
                       fontSize: 15,
                       fontWeight: FontWeight.w700,
@@ -412,7 +405,7 @@ class _AccountRow extends StatelessWidget {
                   ),
                   const SizedBox(height: 3),
                   Text(
-                    email,
+                    subtitle,
                     style: theme.bodyMedium?.copyWith(fontSize: 13),
                   ),
                 ],

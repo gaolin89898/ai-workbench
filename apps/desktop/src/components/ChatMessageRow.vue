@@ -11,9 +11,17 @@ const props = defineProps<{
 const activeMobileProcessGroupIndex = ref<number | null>(null);
 
 const rawSegments = computed<ChatSegmentType[]>(() => {
-  const storedText = extractAssistantText(props.message.text ?? "").trim();
+  const sourceSegments = props.message.segments ?? [];
+  const cleanedText = stripProcessTextFromFinalText(
+    extractAssistantText(props.message.text ?? ""),
+    sourceSegments,
+  ).trim();
+  const splitText = props.message.role === "assistant"
+    ? splitHistoricalProcessPrefix(cleanedText, sourceSegments)
+    : { processText: "", finalText: cleanedText };
+  const storedText = splitText.finalText;
   const promoted = props.message.role === "assistant"
-    ? promoteFinalTextFromSegments(props.message.segments ?? [], storedText)
+    ? promoteFinalTextFromSegments(sourceSegments, storedText)
     : { text: storedText, promotedIndex: -1 };
   const messageText = promoted.text;
   if (props.message.segments?.length) {
@@ -23,6 +31,9 @@ const rawSegments = computed<ChatSegmentType[]>(() => {
         index !== promoted.promotedIndex
         && (isProcessTextSegment(segment) || segment.type !== "text")
       )),
+      ...(splitText.processText
+        ? [{ type: "text" as const, stepId: "process-text-historical-prefix", text: splitText.processText }]
+        : []),
       { type: "text", stepId: "final-answer", text: messageText },
     ];
   }
@@ -45,9 +56,79 @@ function promoteFinalTextFromSegments(sourceSegments: ChatSegmentType[], fallbac
 function looksLikeFinalAssistantText(text: string) {
   const normalized = text.trim();
   if (!normalized) return false;
-  if (normalized.length >= 160) return true;
   return /^(?:已按|我已|我会|结论|总结|这里|现在|可以|如果|这次|这样)/.test(normalized)
     || /(?:已完成|已处理|已修复|已实现|构建通过|验证通过|不会|可以|需要|建议)/.test(normalized);
+}
+
+function stripProcessTextFromFinalText(text: string, sourceSegments: ChatSegmentType[]) {
+  let cleaned = text.trim();
+  if (!cleaned) return cleaned;
+  for (const segment of sourceSegments) {
+    if (!isProcessTextSegment(segment)) continue;
+    cleaned = removeTextBlock(cleaned, segment.text);
+    if (!cleaned) break;
+  }
+  return cleaned.trim();
+}
+
+function removeTextBlock(text: string, block: string) {
+  const target = block.trim();
+  let source = text.trim();
+  if (!target || !source) return source;
+  if (source === target) return "";
+  if (source.startsWith(target)) return source.slice(target.length).trimStart();
+  const surrounded = `\n\n${target}\n\n`;
+  const index = source.indexOf(surrounded);
+  if (index >= 0) {
+    source = `${source.slice(0, index)}\n\n${source.slice(index + surrounded.length)}`;
+  }
+  return source.trim();
+}
+
+function splitHistoricalProcessPrefix(text: string, sourceSegments: ChatSegmentType[]) {
+  const finalText = text.trim();
+  if (!finalText || !hasProcessHistory(sourceSegments) || !looksLikeProcessNarrative(finalText)) {
+    return { processText: "", finalText };
+  }
+  const splitIndex = firstInstructionSectionIndex(finalText);
+  if (splitIndex <= 0) return { processText: "", finalText };
+  const processText = finalText.slice(0, splitIndex).trim();
+  const remainingText = finalText.slice(splitIndex).trim();
+  if (processText.length < 80 || remainingText.length < 80) return { processText: "", finalText };
+  return { processText, finalText: remainingText };
+}
+
+function hasProcessHistory(sourceSegments: ChatSegmentType[]) {
+  return sourceSegments.some((segment) => (
+    segment.type === "tool"
+    || segment.type === "status"
+    || segment.type === "thought"
+    || segment.type === "approval"
+    || segment.type === "error"
+    || isProcessTextSegment(segment)
+  ));
+}
+
+function looksLikeProcessNarrative(text: string) {
+  return /^(?:项目看起来|我先|我继续|现在我|我会|我准备|我需要|我将|我来|先看|先检查|正在)/.test(text.trim());
+}
+
+function firstInstructionSectionIndex(text: string) {
+  const markers = [
+    "\n**后端启动**",
+    "\n## 后端启动",
+    "\n### 后端启动",
+    "\n后端启动",
+    "\n**桌面端启动**",
+    "\n## 桌面端启动",
+    "\n**最常用启动顺序**",
+    "\n## 最常用启动顺序",
+  ];
+  return markers.reduce((best, marker) => {
+    const index = text.indexOf(marker);
+    if (index < 0) return best;
+    return best < 0 ? index : Math.min(best, index);
+  }, -1);
 }
 
 const segments = computed<ChatSegmentType[]>(() => {
@@ -72,9 +153,12 @@ const visibleSegments = computed<ChatSegmentType[]>(() => {
     && props.message.images?.length
     && isImageOnlyPromptText(props.message.text ?? "");
   return segments.value.filter((segment) => {
-    if (!props.message.pending && (segment.stepId === "runtime-status" || segment.stepId === "initial-thinking")) return false;
+    if (segment.type === "approval") return false;
+    if (segment.type === "text" && !segment.text?.trim()) return false;
+    if (!props.message.pending && segment.stepId === "initial-thinking") return false;
     if (segment === processSummary.value) return false;
     if (isUserImageOnly && segment.type === "text" && isImageOnlyPromptText(segment.text)) return false;
+    if (isProcessGroupSegment(segment) && !shouldShowProcessSegment(segment)) return false;
     return true;
   });
 });
@@ -129,6 +213,18 @@ function isProcessGroupSegment(segment: ChatSegmentType) {
 
 function isProcessTextSegment(segment: ChatSegmentType) {
   return segment.type === "text" && isProcessTextStepId(segment.stepId);
+}
+
+function shouldShowProcessSegment(segment: ChatSegmentType) {
+  if (segment.stepId === "initial-thinking") return false;
+  if (segment.type !== "status") return true;
+  if (segment.stepId === "final-summary") return false;
+  const label = (segment.label ?? segment.text ?? "").trim();
+  if (!label) return false;
+  return !new Set([
+    "完成",
+    "已完成",
+  ]).has(label);
 }
 
 function isProcessTextStepId(stepId?: string) {

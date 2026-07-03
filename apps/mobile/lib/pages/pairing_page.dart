@@ -281,17 +281,18 @@ class _PairingPageState extends State<PairingPage> {
     required String serverUrl,
     required String code,
   }) async {
+    final ws = WorkspaceScope.of(context);
     setState(() {
       _approving = true;
       _scanResult = null;
       _error = null;
     });
     try {
-      await WorkspaceScope.of(context).api.approveDesktopPairing(
-            serverUrl: serverUrl,
-            code: code,
-          );
-      await WorkspaceScope.of(context).loadDevices();
+      await ws.api.approveDesktopPairing(
+        serverUrl: serverUrl,
+        code: code,
+      );
+      await ws.loadDevices();
       if (!mounted) return;
       setState(() => _scanResult = '已确认配对，桌面端会自动完成保存。');
     } catch (error) {

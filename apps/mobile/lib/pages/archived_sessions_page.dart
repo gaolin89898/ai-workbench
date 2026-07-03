@@ -1,9 +1,8 @@
 import 'package:flutter/material.dart';
 
-import '../state/workspace_controller.dart';
+import '../models/workbench_models.dart';
 import '../state/workspace_scope.dart';
 import '../widgets/app_theme.dart';
-import 'mobile_shell_page.dart';
 
 class ArchivedSessionsPage extends StatelessWidget {
   const ArchivedSessionsPage({super.key});
@@ -14,11 +13,21 @@ class ArchivedSessionsPage extends StatelessWidget {
     return AnimatedBuilder(
       animation: ws,
       builder: (context, _) {
-        final archivedSessions =
-            ws.sessions.where((s) => s.archived).toList();
+        final archivedSessions = ws.sessions.where((s) => s.archived).toList();
         return Scaffold(
           appBar: AppBar(
             title: const Text('已归档对话'),
+            actions: [
+              Padding(
+                padding: const EdgeInsets.only(right: AppSpacing.lg),
+                child: Center(
+                  child: AppStatusBadge(
+                    '${archivedSessions.length} 个',
+                    style: AppStatusStyle.primary,
+                  ),
+                ),
+              ),
+            ],
           ),
           body: archivedSessions.isEmpty
               ? const Center(
@@ -29,6 +38,10 @@ class ArchivedSessionsPage extends StatelessWidget {
                 )
               : ListView.builder(
                   padding: const EdgeInsets.fromLTRB(16, 8, 16, 86),
+                  prototypeItem:
+                      _ArchivedSessionTile(session: archivedSessions.first),
+                  addAutomaticKeepAlives: false,
+                  addSemanticIndexes: false,
                   itemCount: archivedSessions.length,
                   itemBuilder: (context, index) {
                     final session = archivedSessions[index];
@@ -44,7 +57,7 @@ class ArchivedSessionsPage extends StatelessWidget {
 class _ArchivedSessionTile extends StatelessWidget {
   const _ArchivedSessionTile({required this.session});
 
-  final dynamic session;
+  final AiSessionMeta session;
 
   @override
   Widget build(BuildContext context) {
@@ -59,36 +72,37 @@ class _ArchivedSessionTile extends StatelessWidget {
         borderRadius: AppRadius.lg,
         padding: EdgeInsets.zero,
         child: ListTile(
-        contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-        leading: AppIconBox(
-          icon: Icons.chat_outlined,
-          size: 40,
-          iconSize: 20,
-          borderRadius: AppRadius.full,
-          background: AppColors.surfaceMuted,
-          foreground: AppColors.primary,
-        ),
-        title: Text(
-          title,
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-          style: const TextStyle(
-            fontSize: 14,
-            fontWeight: FontWeight.w600,
-            color: AppColors.ink,
+          contentPadding:
+              const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+          leading: AppIconBox(
+            icon: Icons.chat_outlined,
+            size: 40,
+            iconSize: 20,
+            borderRadius: AppRadius.full,
+            background: AppColors.surfaceMuted,
+            foreground: AppColors.primary,
+          ),
+          title: Text(
+            title,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(
+              fontSize: 14,
+              fontWeight: FontWeight.w600,
+              color: AppColors.ink,
+            ),
+          ),
+          subtitle: Text(
+            project?.name ?? session.summary ?? '未绑定项目',
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(fontSize: 12, color: AppColors.muted),
+          ),
+          trailing: TextButton(
+            onPressed: () => ws.archiveSession(session, false),
+            child: const Text('恢复'),
           ),
         ),
-        subtitle: Text(
-          project?.name ?? session.summary ?? '未绑定项目',
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-          style: const TextStyle(fontSize: 12, color: AppColors.muted),
-        ),
-        trailing: TextButton(
-          onPressed: () => ws.archiveSession(session, false),
-          child: const Text('恢复'),
-        ),
-      ),
       ),
     );
   }
