@@ -39,7 +39,7 @@ android {
             val storeFilePath = keystoreProperties["storeFile"] as String?
             keyAlias = keystoreProperties["keyAlias"] as String?
             keyPassword = keystoreProperties["keyPassword"] as String?
-            storeFile = storeFilePath?.let { file(it) }
+            storeFile = storeFilePath?.let { rootProject.file(it) }
             storePassword = keystoreProperties["storePassword"] as String?
         }
     }
