@@ -20,6 +20,7 @@ backend/.gocache/
 .uploads/
 # 本地 SDK 安装（Flutter/Android SDK）
 .sdk/
+.tools/
 
 # 本地验证截图/临时文件
 mobile-*.png

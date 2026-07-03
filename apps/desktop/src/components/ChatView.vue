@@ -161,10 +161,9 @@ const virtualMessages = computed(() => {
 const userMessageAnchors = computed<UserMessageAnchor[]>(() => {
   const anchors = allUserMessageAnchors();
   const visibleAnchors = compactUserAnchors(anchors, activeUserAnchorIndex.value);
-  const lastIndex = Math.max(1, visibleAnchors.length - 1);
-  return visibleAnchors.map((anchor, index) => ({
+  return visibleAnchors.map((anchor) => ({
     ...anchor,
-    topPercent: visibleAnchors.length === 1 ? 50 : 8 + (index / lastIndex) * 84,
+    topPercent: userAnchorTopPercent(anchor.index),
   }));
 });
 
@@ -194,6 +193,14 @@ function allUserMessageAnchors(): UserMessageAnchor[] {
       topPercent: 50,
     }];
   });
+}
+
+function userAnchorTopPercent(index: number) {
+  const totalHeight = virtualMessages.value.totalHeight;
+  if (totalHeight <= 0) return 50;
+  const messageTop = virtualMessageTop(index);
+  const rawPercent = (messageTop / totalHeight) * 100;
+  return Math.min(96, Math.max(4, rawPercent));
 }
 
 function clearUserAnchorPreviewCloseTimer() {

@@ -2,7 +2,7 @@
 import { computed, onMounted, ref, watch } from "vue";
 import { useRouter } from "vue-router";
 import { useWorkspace } from "../composables/useWorkspace";
-import { desktopApi, type AiProvider, type ProviderStatus } from "../services/desktop";
+import { desktopApi, type AiProvider, type DesktopRuntimeInfo, type ProviderStatus } from "../services/desktop";
 
 const settingsIcon = new URL("../assets/icons/settings.svg", import.meta.url).href;
 const riskGuardIcon = new URL("../assets/icons/risk-guard.svg", import.meta.url).href;
@@ -10,6 +10,10 @@ const aiProvidersIcon = new URL("../assets/icons/ai-providers.svg", import.meta.
 const archiveBoxIcon = new URL("../assets/icons/archive-box.svg", import.meta.url).href;
 const fingerprintIcon = new URL("../assets/icons/fingerprint.svg", import.meta.url).href;
 const clipboardIcon = new URL("../assets/icons/clipboard.svg", import.meta.url).href;
+const providerCodexIcon = new URL("../assets/icons/provider-codex.svg", import.meta.url).href;
+const providerClaudeIcon = new URL("../assets/icons/provider-claude.svg", import.meta.url).href;
+const providerOpencodeIcon = new URL("../assets/icons/provider-opencode.svg", import.meta.url).href;
+const providerMimoIcon = new URL("../assets/icons/provider-mimo.svg", import.meta.url).href;
 
 type SettingsPanel = "connection" | "security" | "about" | "archive";
 type ProviderRow = {
@@ -35,6 +39,7 @@ const localHistory = ref(true);
 const autoReconnect = ref(true);
 const cloudDeviceId = ref<string>("");
 const cloudPaired = ref<boolean>(false);
+const desktopRuntimeInfo = ref<DesktopRuntimeInfo | null>(null);
 
 const settingsPanels: SettingsPanelItem[] = [
   {
@@ -128,6 +133,15 @@ const enabledGuardCount = computed(() => {
   return [riskGuard.value, commandLog.value, localHistory.value].filter(Boolean).length;
 });
 
+const desktopPlatformLabel = computed(() => {
+  const platform = desktopRuntimeInfo.value?.platform;
+  if (platform === "win32") return "Win";
+  if (platform === "darwin") return "macOS";
+  if (platform === "linux") return "Linux";
+  if (platform) return platform;
+  return "系统";
+});
+
 function installedLabel(status?: ProviderStatus) {
   if (!status) return "待检测";
   return status.installed ? "已安装" : "未安装";
@@ -156,6 +170,14 @@ function providerDetail(row: ProviderRow) {
   if (!row.status) return `等待检测 ${row.provider.command}`;
   if (!row.status.installed) return `未找到命令：${row.provider.command}`;
   return row.status.version ?? `${row.provider.command} 可执行`;
+}
+
+function providerIcon(providerId: string) {
+  if (providerId === "codex") return providerCodexIcon;
+  if (providerId === "claude") return providerClaudeIcon;
+  if (providerId === "opencode") return providerOpencodeIcon;
+  if (providerId === "mimo") return providerMimoIcon;
+  return aiProvidersIcon;
 }
 
 function checkedAt(status?: ProviderStatus) {
@@ -190,6 +212,14 @@ async function refreshCloudConfig() {
   }
 }
 
+async function refreshDesktopRuntimeInfo() {
+  try {
+    desktopRuntimeInfo.value = await desktopApi.getDesktopRuntimeInfo();
+  } catch {
+    desktopRuntimeInfo.value = null;
+  }
+}
+
 const deviceIdDisplay = computed(() => {
   if (!cloudDeviceId.value) return "未登录";
   const id = cloudDeviceId.value;
@@ -199,6 +229,7 @@ const deviceIdDisplay = computed(() => {
 
 onMounted(() => {
   void refreshCloudConfig();
+  void refreshDesktopRuntimeInfo();
 });
 
 function archivedAtLabel(value?: string | null) {
@@ -394,10 +425,10 @@ async function restoreSession(sessionId: string) {
                 <article v-for="row in providerRows" :key="row.provider.id" class="settings-provider-card">
                   <div class="settings-provider-card-head">
                     <div class="settings-provider-card-id">
-                      <span class="settings-provider-card-icon" :class="installedTone(row.status)" aria-hidden="true"></span>
+                      <img class="settings-provider-card-icon" :src="providerIcon(row.provider.id)" alt="" aria-hidden="true" />
                       <strong>{{ row.provider.name }}</strong>
                     </div>
-                    <span class="settings-provider-card-platform">Win</span>
+                    <span class="settings-provider-card-platform">{{ desktopPlatformLabel }}</span>
                   </div>
                   <div class="settings-provider-card-rows">
                     <div class="settings-provider-card-row">

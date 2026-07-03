@@ -408,6 +408,13 @@ export function registerIpcHandlers(win?: BrowserWindow): void {
     /* no-op */
   });
 
+  // ---------- desktop runtime ----------
+
+  handle("get_desktop_runtime_info", async () => ({
+    platform: process.platform,
+    arch: process.arch,
+  }));
+
   // ---------- app update ----------
 
   handle("get_app_version", async () => app.getVersion());

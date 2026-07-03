@@ -2584,23 +2584,12 @@ h2 {
 }
 
 .provider-dot {
-  width: 9px;
-  height: 9px;
+  display: block;
+  width: 20px;
+  height: 20px;
   flex: 0 0 auto;
-  margin-top: 5px;
-  border-radius: 999px;
-  background: var(--color-text-muted);
-  box-shadow: 0 0 0 4px var(--color-bg-elevated);
-}
-
-.provider-dot.success {
-  background: var(--state-success);
-  box-shadow: 0 0 0 4px #dcfce7;
-}
-
-.provider-dot.warning {
-  background: var(--state-warning);
-  box-shadow: 0 0 0 4px #fef3c7;
+  margin-top: 1px;
+  object-fit: contain;
 }
 
 .provider-status-main code {
@@ -2983,25 +2972,25 @@ dd {
 
 .chat-user-anchor-rail {
   position: absolute;
-  top: 50%;
-  right: 34px;
+  top: 72px;
+  right: 22px;
+  bottom: 150px;
   z-index: 4;
-  width: 18px;
-  height: min(220px, calc(100% - 220px));
+  width: 22px;
+  min-height: 180px;
   pointer-events: none;
-  transform: translateY(-50%);
 }
 
 .chat-user-anchor {
   position: absolute;
-  right: 3px;
+  right: 7px;
   display: block;
-  width: 8px;
-  height: 2px;
+  width: 4px;
+  height: 14px;
   border: 0;
   border-radius: 999px;
   background: var(--color-text-muted);
-  opacity: 0.42;
+  opacity: 0.32;
   padding: 0;
   pointer-events: auto;
   transform: translateY(-50%);
@@ -3011,19 +3000,19 @@ dd {
 
 .chat-user-anchor:hover,
 .chat-user-anchor:focus-visible {
-  width: 12px;
-  height: 3px;
+  width: 5px;
+  height: 20px;
   background: var(--color-text-secondary);
   opacity: 0.9;
   outline: none;
 }
 
 .chat-user-anchor.active {
-  width: 12px;
-  height: 3px;
+  width: 5px;
+  height: 24px;
   background: var(--color-primary);
   opacity: 1;
-  box-shadow: 0 0 0 3px var(--color-primary-muted);
+  box-shadow: 0 0 0 4px var(--color-primary-muted);
 }
 
 .chat-user-anchor-preview {
@@ -5709,20 +5698,11 @@ textarea:focus {
 }
 
 .settings-provider-card-icon {
-  display: inline-block;
-  width: 10px;
-  height: 10px;
+  display: block;
+  width: 20px;
+  height: 20px;
   flex: 0 0 auto;
-  border-radius: var(--radius-full);
-  background: var(--color-border-active);
-}
-
-.settings-provider-card-icon.success {
-  background: var(--state-success);
-}
-
-.settings-provider-card-icon.warning {
-  background: var(--state-warning);
+  object-fit: contain;
 }
 
 .settings-provider-card-id strong {

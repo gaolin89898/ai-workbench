@@ -269,6 +269,11 @@ export type AppUpdateInfo = {
   installable?: boolean;
 };
 
+export type DesktopRuntimeInfo = {
+  platform: NodeJS.Platform;
+  arch: string;
+};
+
 function requireDesktopApi() {
   if (!window.desktop?.invoke) {
     throw new Error("当前不是 Electron 桌面端窗口，无法打开本地文件夹选择器。请使用 pnpm dev 启动桌面端，不要只在浏览器里打开 Vite 页面。");
@@ -411,6 +416,8 @@ export const desktopApi = {
     ipc<void>("rename_ai_session", aiSessionId, title),
   openSessionInNewWindow: (aiSessionId: string): Promise<void> =>
     ipc<void>("open_session_in_new_window", aiSessionId),
+  getDesktopRuntimeInfo: (): Promise<DesktopRuntimeInfo> =>
+    ipc<DesktopRuntimeInfo>("get_desktop_runtime_info"),
   getAppVersion: (): Promise<string> =>
     ipc<string>("get_app_version"),
   checkAppUpdate: (): Promise<AppUpdateInfo> =>

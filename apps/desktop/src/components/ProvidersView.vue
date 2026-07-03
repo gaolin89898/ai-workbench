@@ -3,6 +3,12 @@ import { computed } from "vue";
 import { useWorkspace } from "../composables/useWorkspace";
 import type { AiProvider, ProviderStatus } from "../services/desktop";
 
+const aiProvidersIcon = new URL("../assets/icons/ai-providers.svg", import.meta.url).href;
+const providerCodexIcon = new URL("../assets/icons/provider-codex.svg", import.meta.url).href;
+const providerClaudeIcon = new URL("../assets/icons/provider-claude.svg", import.meta.url).href;
+const providerOpencodeIcon = new URL("../assets/icons/provider-opencode.svg", import.meta.url).href;
+const providerMimoIcon = new URL("../assets/icons/provider-mimo.svg", import.meta.url).href;
+
 const ws = useWorkspace();
 
 type ProviderRow = {
@@ -79,6 +85,14 @@ function detailText(row: ProviderRow) {
   return row.status.version ?? `${row.provider.command} 可执行`;
 }
 
+function providerIcon(providerId: string) {
+  if (providerId === "codex") return providerCodexIcon;
+  if (providerId === "claude") return providerClaudeIcon;
+  if (providerId === "opencode") return providerOpencodeIcon;
+  if (providerId === "mimo") return providerMimoIcon;
+  return aiProvidersIcon;
+}
+
 function nextStep(row: ProviderRow) {
   if (!row.status) return "点击重新检测获取状态";
   if (!row.status.installed) return `安装或加入 PATH：${row.provider.command}`;
@@ -124,7 +138,7 @@ function nextStep(row: ProviderRow) {
         <article v-for="row in providerRows" :key="row.provider.id" class="provider-status-row">
           <div class="provider-status-main">
             <div class="provider-status-name">
-              <span class="provider-dot" :class="installedTone(row.status)" aria-hidden="true"></span>
+              <img class="provider-dot provider-icon" :src="providerIcon(row.provider.id)" alt="" aria-hidden="true" />
               <div>
                 <strong>{{ row.provider.name }}</strong>
                 <p>{{ detailText(row) }}</p>
