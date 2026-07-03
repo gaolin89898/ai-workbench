@@ -34,6 +34,7 @@ import { runAiChat } from "./claude";
 
 const STRUCTURED_MESSAGE_PREFIX = "__AI_WORKBENCH_MESSAGE_V1__";
 const CODEX_APP_SERVER_SESSION_PREFIX = "app-server:";
+const DEFAULT_CLOUD_SERVER_URL = "http://8.162.12.148:3000";
 const configPath = path.join(app.getPath("userData"), "cloud-config.json");
 const machineIdPath = path.join(app.getPath("userData"), "machine-id");
 
@@ -175,9 +176,27 @@ function loadStoredConfig(): StoredCloudConfig | null {
   try {
     if (!fs.existsSync(configPath)) return null;
     const raw = fs.readFileSync(configPath, "utf-8");
-    return JSON.parse(raw) as StoredCloudConfig;
+    const config = JSON.parse(raw) as StoredCloudConfig;
+    if (isLocalServerUrl(config.serverUrl)) {
+      console.info(`Ignoring local cloud config ${config.serverUrl}; default server is ${DEFAULT_CLOUD_SERVER_URL}.`);
+      return null;
+    }
+    return config;
   } catch {
     return null;
+  }
+}
+
+function isLocalServerUrl(serverUrl: string | undefined): boolean {
+  if (!serverUrl) return false;
+  try {
+    const parsed = new URL(/^https?:\/\//i.test(serverUrl) ? serverUrl : `http://${serverUrl}`);
+    return parsed.hostname === "localhost"
+      || parsed.hostname === "127.0.0.1"
+      || parsed.hostname === "::1"
+      || parsed.hostname === "10.0.2.2";
+  } catch {
+    return false;
   }
 }
 
