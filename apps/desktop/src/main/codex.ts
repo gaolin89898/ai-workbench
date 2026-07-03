@@ -6,8 +6,9 @@
 import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
 import { createInterface, type Interface } from "node:readline";
 import * as os from "node:os";
-import type { RunCodexChatRequest, AiChatOutputEvent, ChatImageAttachment, ChatSegment, CodexApprovalDecision } from "../services/desktop";
-import { getLocalAiSession } from "./db";
+import type { RunCodexChatRequest, AiChatOutputEvent, ChatImageAttachment, ChatSegment, CodexApprovalDecision, CodexTraceSnapshot } from "../services/desktop";
+import { getLocalAiSession, resetLocalAiTrace, upsertLocalAiTrace } from "./db";
+import { codexTraceSnapshotToSegments, reduceCodexTraceSnapshot, type CodexRawTraceEvent } from "./codex_trace";
 
 // Structural sender — WebContents / BrowserWindow satisfy this, and test
 // stubs can be passed too.
@@ -51,6 +52,8 @@ interface CodexSession {
   commandOutputBuffers: Map<string, string>;
   agentMessageBuffer: string;
   pendingApprovals: Map<string, PendingApproval>;
+  traceEnabled: boolean;
+  traceSnapshot: CodexTraceSnapshot | null;
   turnResolver: { resolve: () => void; reject: (error: Error) => void } | null;
   errorEmitted: boolean;
   cancelled: boolean;
@@ -85,6 +88,35 @@ function spawnCodex(args: string[], cwd: string): ChildProcessWithoutNullStreams
 
 function emit(sender: Sender, event: AiChatOutputEvent): void {
   sender.send("ai-chat-output", event);
+}
+
+function emitTrace(session: CodexSession, rawEvent: CodexRawTraceEvent): void {
+  if (!session.traceEnabled) return;
+  session.traceSnapshot = reduceCodexTraceSnapshot(session.traceSnapshot, rawEvent);
+  const trace = upsertLocalAiTrace({
+    aiSessionId: session.aiSessionId,
+    providerId: "codex",
+    traceKind: "codex",
+    status: session.traceSnapshot.status,
+    rawEvent,
+    snapshot: session.traceSnapshot,
+    finalText: session.traceSnapshot.finalText,
+  });
+  session.sender.send("ai-trace-update", {
+    aiSessionId: session.aiSessionId,
+    trace: {
+      ...trace,
+      segments: codexTraceSnapshotToSegments(session.traceSnapshot),
+    },
+  });
+}
+
+function emitTraceMethod(session: CodexSession, method: string, params: unknown): void {
+  emitTrace(session, {
+    method,
+    params,
+    receivedAt: new Date().toISOString(),
+  });
 }
 
 function emitSessionError(session: CodexSession, message: string, detail?: string): void {
@@ -131,7 +163,7 @@ function firstString(...values: unknown[]): string | undefined {
 }
 
 function extractFileEditPath(item: Record<string, unknown>, parent: Record<string, unknown>): string | undefined {
-  return firstString(
+  const direct = firstString(
     item["path"],
     item["filePath"],
     item["file_path"],
@@ -141,6 +173,11 @@ function extractFileEditPath(item: Record<string, unknown>, parent: Record<strin
     parent["file_path"],
     parent["filename"],
   );
+  if (direct) return direct;
+
+  const fileChanges = fileChangesRecord(item["fileChanges"] ?? parent["fileChanges"] ?? item["changes"] ?? parent["changes"]);
+  const firstPath = fileChanges ? Object.keys(fileChanges).find((path) => path.trim().length > 0) : "";
+  return firstPath || undefined;
 }
 
 function extractFileEditDiff(item: Record<string, unknown>, parent: Record<string, unknown>): string | undefined {
@@ -156,8 +193,40 @@ function extractFileEditDiff(item: Record<string, unknown>, parent: Record<strin
     parent["changes"],
     parent["change"],
   );
-  if (!candidate) return undefined;
-  return looksLikeDiff(candidate) ? candidate : undefined;
+  if (candidate && looksLikeDiff(candidate)) return candidate;
+  return extractFileChangesDiff(item, parent);
+}
+
+function fileChangesRecord(value: unknown): Record<string, unknown> | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  return value as Record<string, unknown>;
+}
+
+function diffFromFileChangeValue(path: string, value: unknown): string {
+  if (typeof value === "string") {
+    return looksLikeDiff(value) ? value : "";
+  }
+  if (!value || typeof value !== "object") return "";
+  const change = value as Record<string, unknown>;
+  const diff = firstString(
+    change["diff"],
+    change["patch"],
+    change["changes"],
+    change["change"],
+    change["content"],
+  );
+  if (!diff || !looksLikeDiff(diff)) return "";
+  if (/^(diff --git|\*\*\* (?:Add|Update|Delete) File: |\+\+\+ |--- )/m.test(diff)) return diff;
+  return `*** Update File: ${path}\n${diff}`;
+}
+
+function extractFileChangesDiff(item: Record<string, unknown>, parent: Record<string, unknown>): string | undefined {
+  const fileChanges = fileChangesRecord(item["fileChanges"] ?? parent["fileChanges"] ?? item["changes"] ?? parent["changes"]);
+  if (!fileChanges) return undefined;
+  const diffs = Object.entries(fileChanges)
+    .map(([path, value]) => diffFromFileChangeValue(path, value))
+    .filter(Boolean);
+  return diffs.length ? diffs.join("\n") : undefined;
 }
 
 function looksLikeDiff(value: string): boolean {
@@ -337,6 +406,8 @@ function buildItemStartedSegment(params: unknown): ChatSegment {
       };
     case "fileEdit":
     case "file_edit":
+    case "fileChange":
+    case "file_change":
       return {
         type: "tool",
         stepId,
@@ -383,6 +454,8 @@ function buildItemCompletedSegment(params: unknown, fallbackOutput?: string): Ch
       };
     case "fileEdit":
     case "file_edit":
+    case "fileChange":
+    case "file_change":
       return {
         type: "tool",
         stepId,
@@ -467,6 +540,11 @@ function updateApprovalSegment(
     stepId: approval.stepId,
     segment: approval.segment,
   });
+  emitTraceMethod(session, "approval/resolved", {
+    approvalId: approval.approvalId,
+    status,
+    detail,
+  });
 }
 
 function handleApprovalRequest(
@@ -489,6 +567,14 @@ function handleApprovalRequest(
     resolved: false,
   };
   session.pendingApprovals.set(segment.approvalId, approval);
+  emitTraceMethod(session, "approval/requested", {
+    approvalId: segment.approvalId,
+    approvalKind: segment.approvalKind,
+    command: segment.command,
+    cwd: segment.cwd,
+    fileChanges: segment.fileChanges,
+    reason: segment.reason,
+  });
   emit(session.sender, {
     aiSessionId: session.aiSessionId,
     kind: "step-start",
@@ -600,6 +686,13 @@ function handleNotification(
   params: unknown
 ): void {
   const { aiSessionId, sender } = session;
+  emitTraceMethod(
+    session,
+    method,
+    method === "turn/completed"
+      ? { ...((params && typeof params === "object") ? params as Record<string, unknown> : {}), finalText: extractTurnFinalText(params) ?? session.agentMessageBuffer }
+      : params,
+  );
 
   switch (method) {
     case "thread/started": {
@@ -719,7 +812,8 @@ function handleNotification(
 function createSession(
   aiSessionId: string,
   cwd: string,
-  sender: Sender
+  sender: Sender,
+  traceEnabled = false,
 ): CodexSession {
   const child = spawnCodex(["app-server", "--stdio"], cwd);
 
@@ -736,6 +830,8 @@ function createSession(
     commandOutputBuffers: new Map(),
     agentMessageBuffer: "",
     pendingApprovals: new Map(),
+    traceEnabled,
+    traceSnapshot: null,
     turnResolver: null,
     errorEmitted: false,
     cancelled: false,
@@ -927,7 +1023,34 @@ export async function runCodexChat(
   sender: Sender
 ): Promise<string> {
   const { aiSessionId, projectPath, prompt, images = [] } = req;
-  const session = createSession(aiSessionId, projectPath, sender);
+  const session = createSession(aiSessionId, projectPath, sender, true);
+  const initialTrace = resetLocalAiTrace({
+    aiSessionId,
+    providerId: "codex",
+    traceKind: "codex",
+    status: "running",
+    snapshot: {
+      provider: "codex",
+      status: "running",
+      threadId: null,
+      turnId: null,
+      startedAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      completedAt: null,
+      items: [],
+      approvals: [],
+      errors: [],
+      finalText: "",
+    },
+  });
+  session.traceSnapshot = initialTrace.snapshot as CodexTraceSnapshot;
+  sender.send("ai-trace-update", {
+    aiSessionId,
+    trace: {
+      ...initialTrace,
+      segments: codexTraceSnapshotToSegments(session.traceSnapshot),
+    },
+  });
   activeCodexSessions.set(aiSessionId, session);
 
   const timeout = setTimeout(() => {
@@ -991,6 +1114,29 @@ export function stopCodexChat(aiSessionId: string): boolean {
   const session = activeCodexSessions.get(aiSessionId);
   if (!session) return false;
   session.cancelled = true;
+  if (session.traceSnapshot) {
+    session.traceSnapshot = {
+      ...session.traceSnapshot,
+      status: "canceled",
+      updatedAt: new Date().toISOString(),
+      completedAt: new Date().toISOString(),
+    };
+    const trace = upsertLocalAiTrace({
+      aiSessionId,
+      providerId: "codex",
+      traceKind: "codex",
+      status: "canceled",
+      snapshot: session.traceSnapshot,
+      finalText: session.traceSnapshot.finalText,
+    });
+    session.sender.send("ai-trace-update", {
+      aiSessionId,
+      trace: {
+        ...trace,
+        segments: codexTraceSnapshotToSegments(session.traceSnapshot),
+      },
+    });
+  }
   emit(session.sender, {
     aiSessionId,
     kind: "done",

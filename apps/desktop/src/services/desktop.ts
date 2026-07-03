@@ -174,6 +174,71 @@ export type ChatMessage = {
   images?: ChatImageAttachment[];
 };
 
+export type CodexTraceItem = {
+  id: string;
+  type: "thinking" | "agent_message" | "command" | "tool" | "approval" | "status" | "error";
+  title: string;
+  status: "running" | "completed" | "failed" | "canceled";
+  text: string;
+  startedAt?: string | null;
+  completedAt?: string | null;
+  rawItemType?: string | null;
+  command?: string | null;
+  output?: string | null;
+  diff?: string | null;
+  additions?: number | null;
+  deletions?: number | null;
+};
+
+export type CodexTraceApproval = {
+  id: string;
+  kind: "command" | "fileChange";
+  status: "pending" | "approved" | "denied" | "expired" | "failed";
+  title: string;
+  command?: string | null;
+  cwd?: string | null;
+  fileChanges?: string[];
+  detail?: string | null;
+};
+
+export type CodexTraceError = {
+  message: string;
+  detail?: string | null;
+  at: string;
+};
+
+export type CodexTraceSnapshot = {
+  provider: "codex";
+  status: "idle" | "running" | "completed" | "failed" | "canceled";
+  threadId?: string | null;
+  turnId?: string | null;
+  startedAt?: string | null;
+  updatedAt: string;
+  completedAt?: string | null;
+  items: CodexTraceItem[];
+  approvals: CodexTraceApproval[];
+  errors: CodexTraceError[];
+  finalText: string;
+};
+
+export type AiProviderTrace = {
+  aiSessionId: string;
+  providerId: string;
+  traceKind: "codex" | string;
+  status: string;
+  rawEvents?: unknown[];
+  snapshot: CodexTraceSnapshot | Record<string, unknown>;
+  segments?: ChatSegment[];
+  finalText?: string | null;
+  createdAt?: string;
+  updatedAt?: string;
+};
+
+export type AiTraceUpdateEvent = {
+  aiSessionId: string;
+  trace: AiProviderTrace;
+};
+
 export type AiHistoryMessage = {
   role: "user" | "assistant" | "system" | "error";
   content: string;
@@ -268,6 +333,22 @@ export type AppUpdateInfo = {
   date?: string | null;
   body?: string | null;
   installable?: boolean;
+};
+
+export type AppUpdateDownloadProgress = {
+  total?: number;
+  delta?: number;
+  transferred?: number;
+  percent?: number;
+  bytesPerSecond?: number;
+};
+
+export type AppUpdateDownloadedInfo = {
+  version?: string;
+};
+
+export type AppUpdateError = {
+  message?: string;
 };
 
 export type DesktopRuntimeInfo = {
@@ -407,6 +488,8 @@ export const desktopApi = {
     ipc<boolean>("is_shell_live", aiSessionId),
   listLocalAiHistory: (aiSessionId: string): Promise<AiHistoryMessage[]> =>
     ipc<AiHistoryMessage[]>("list_local_ai_history", aiSessionId),
+  getLocalAiTrace: (aiSessionId: string, traceKind = "codex"): Promise<AiProviderTrace | null> =>
+    ipc<AiProviderTrace | null>("get_local_ai_trace", aiSessionId, traceKind),
   listLocalAiSessions: (): Promise<AiSession[]> =>
     ipc<AiSession[]>("list_local_ai_sessions"),
   archiveLocalAiSession: (aiSessionId: string, archived: boolean): Promise<AiSession> =>
@@ -425,12 +508,20 @@ export const desktopApi = {
     ipc<AppUpdateInfo>("check_app_update"),
   installAppUpdate: (): Promise<boolean> =>
     ipc<boolean>("install_app_update"),
+  onAppUpdateDownloadProgress: (handler: (event: AppUpdateDownloadProgress) => void): Promise<() => void> =>
+    Promise.resolve(on("download-progress", handler as (event: unknown) => void)),
+  onAppUpdateDownloaded: (handler: (event: AppUpdateDownloadedInfo) => void): Promise<() => void> =>
+    Promise.resolve(on("update-downloaded", handler as (event: unknown) => void)),
+  onAppUpdateError: (handler: (event: AppUpdateError) => void): Promise<() => void> =>
+    Promise.resolve(on("update-error", handler as (event: unknown) => void)),
   onShellTerminalOutput: (handler: (event: ShellTerminalEvent) => void): Promise<() => void> =>
     Promise.resolve(on("shell-terminal-output", handler as (event: unknown) => void)),
   onShellSessionStatus: (handler: (event: ShellSessionStatusEvent) => void): Promise<() => void> =>
     Promise.resolve(on("shell-session-status", handler as (event: unknown) => void)),
   onAiChatOutput: (handler: (event: AiChatOutputEvent) => void): Promise<() => void> =>
     Promise.resolve(on("ai-chat-output", handler as (event: unknown) => void)),
+  onAiTraceUpdate: (handler: (event: AiTraceUpdateEvent) => void): Promise<() => void> =>
+    Promise.resolve(on("ai-trace-update", handler as (event: unknown) => void)),
   onWorkspaceChanged: (handler: () => void): Promise<() => void> =>
     Promise.resolve(on("workspace-changed", handler as (...args: unknown[]) => void)),
   onAiHistoryChanged: (handler: (event: AiHistoryChangedEvent) => void): Promise<() => void> =>

@@ -1,6 +1,6 @@
 import { computed, ref, watch } from "vue";
 import router from "../router";
-import { desktopApi, type AiChatOutputEvent, type AiProvider, type AiSession, type ChatImageAttachment, type ChatMessage, type ChatSegment, type DesktopPairingStatus, type ProviderStatus, type TerminalSession, type ViewName, type WorkspaceProject } from "../services/desktop";
+import { desktopApi, type AiChatOutputEvent, type AiProvider, type AiProviderTrace, type AiSession, type AiTraceUpdateEvent, type AppUpdateDownloadProgress, type ChatImageAttachment, type ChatMessage, type ChatSegment, type DesktopPairingStatus, type ProviderStatus, type TerminalSession, type ViewName, type WorkspaceProject } from "../services/desktop";
 import { decodeAssistantMessageFromStorage, encodeAssistantMessageForStorage, extractAssistantText } from "../utils/chat";
 
 const providers = ref<AiProvider[]>([]);
@@ -34,6 +34,7 @@ const updateInstalling = ref(false);
 const updateCurrentVersion = ref("—");
 const updateAvailableVersion = ref("");
 const updateInstallable = ref(false);
+const updateDownloadProgress = ref<AppUpdateDownloadProgress | null>(null);
 const chatMessages = ref<ChatMessage[]>([
   { role: "system", text: "创建 AI 会话后，这里会变成聊天界面。" },
 ]);
@@ -132,9 +133,59 @@ let aiEventsInitialized = false;
 let aiEventsInitPromise: Promise<void> | null = null;
 let workspaceEventsInitialized = false;
 let workspaceEventsInitPromise: Promise<void> | null = null;
+let updateEventsInitialized = false;
+let updateEventsInitPromise: Promise<void> | null = null;
 let qrPairingTimer: number | null = null;
 let runningElapsedTimer: number | null = null;
 const supportedChatProviders = new Set(["codex", "claude", "mimo"]);
+
+function updateProgressPercentFrom(progress: AppUpdateDownloadProgress | null) {
+  if (!progress) return null;
+  if (Number.isFinite(progress.percent)) {
+    return Math.min(100, Math.max(0, progress.percent ?? 0));
+  }
+  if (
+    Number.isFinite(progress.transferred)
+    && Number.isFinite(progress.total)
+    && (progress.total ?? 0) > 0
+  ) {
+    return Math.min(100, Math.max(0, ((progress.transferred ?? 0) / (progress.total ?? 1)) * 100));
+  }
+  return null;
+}
+
+function formatUpdateBytes(value?: number) {
+  if (!Number.isFinite(value) || !value || value <= 0) return "";
+  const units = ["B", "KB", "MB", "GB"];
+  let amount = value;
+  let unitIndex = 0;
+  while (amount >= 1024 && unitIndex < units.length - 1) {
+    amount /= 1024;
+    unitIndex += 1;
+  }
+  const precision = amount >= 10 || unitIndex === 0 ? 0 : 1;
+  return `${amount.toFixed(precision)} ${units[unitIndex]}`;
+}
+
+const updateDownloadPercent = computed(() => updateProgressPercentFrom(updateDownloadProgress.value));
+const updateDownloadProgressLabel = computed(() => {
+  const percent = updateDownloadPercent.value;
+  if (percent !== null) return `下载进度 ${percent.toFixed(0)}%`;
+  if (updateInstalling.value) return "正在下载更新...";
+  return "";
+});
+const updateDownloadSizeLabel = computed(() => {
+  const progress = updateDownloadProgress.value;
+  if (!progress) return "";
+  const transferred = formatUpdateBytes(progress.transferred);
+  const total = formatUpdateBytes(progress.total);
+  const speed = formatUpdateBytes(progress.bytesPerSecond);
+  const sizeLabel = transferred && total ? `${transferred} / ${total}` : transferred || total;
+  if (sizeLabel && speed) return `${sizeLabel}，${speed}/s`;
+  if (sizeLabel) return sizeLabel;
+  if (speed) return `${speed}/s`;
+  return "";
+});
 
 function pushChatDebugEvent(message: string) {
   const time = new Date().toLocaleTimeString();
@@ -286,6 +337,7 @@ watch(selectedProjectPath, () => {
 async function refreshWorkspace() {
   await initAiEventListeners();
   await initWorkspaceEventListeners();
+  await initUpdateEventListeners();
   await Promise.all([loadCloudConfig(), loadProviders(), loadLocalWorkspace(), detectProviders(), refreshTerminalSessions(), loadAppVersion()]);
   ensureSelectedProject();
 }
@@ -615,7 +667,7 @@ function selectAiSessionFromDropdown(sessionId: string) {
 
 async function loadAiSessionHistorySnapshot(sessionId: string) {
   const history = await desktopApi.listLocalAiHistory(sessionId);
-  return dedupeAdjacentChatMessages(history.map((message) => {
+  const messages = dedupeAdjacentChatMessages(history.map((message) => {
     if (message.role !== "assistant") {
       const decoded = decodeAssistantMessageFromStorage(message.content);
       return { role: message.role, text: decoded.text, images: decoded.images };
@@ -627,6 +679,56 @@ async function loadAiSessionHistorySnapshot(sessionId: string) {
       segments: decoded.segments,
     };
   }));
+  const session = aiSessions.value.find((item) => item.id === sessionId) ?? activeAiSession.value;
+  if (session?.id !== sessionId || session.providerId !== "codex") return messages;
+  const trace = await desktopApi.getLocalAiTrace(sessionId).catch(() => null);
+  return mergeCodexTraceIntoMessages(messages, trace);
+}
+
+function codexTraceFinalText(trace: AiProviderTrace | null | undefined) {
+  if (!trace) return "";
+  const snapshot = trace.snapshot as { finalText?: unknown };
+  return (typeof trace.finalText === "string" && trace.finalText.trim())
+    ? trace.finalText.trim()
+    : (typeof snapshot.finalText === "string" ? snapshot.finalText.trim() : "");
+}
+
+function codexTraceSegments(trace: AiProviderTrace | null | undefined) {
+  return Array.isArray(trace?.segments) ? trace.segments : [];
+}
+
+function codexTracePending(trace: AiProviderTrace | null | undefined) {
+  return trace?.status === "running";
+}
+
+function codexTraceToChatMessage(trace: AiProviderTrace): ChatMessage | null {
+  const segments = codexTraceSegments(trace);
+  const text = codexTraceFinalText(trace);
+  if (!segments.length && !text) return null;
+  return {
+    role: "assistant",
+    pending: codexTracePending(trace),
+    text,
+    segments,
+  };
+}
+
+function mergeCodexTraceIntoMessages(messages: ChatMessage[], trace: AiProviderTrace | null) {
+  if (!trace || trace.providerId !== "codex") return messages;
+  const traceMessage = codexTraceToChatMessage(trace);
+  if (!traceMessage) return messages;
+  const next = [...messages];
+  const lastAssistantIndex = next.map((message) => message.role).lastIndexOf("assistant");
+  if (lastAssistantIndex >= 0) {
+    next[lastAssistantIndex] = {
+      ...next[lastAssistantIndex],
+      pending: traceMessage.pending,
+      text: traceMessage.text || next[lastAssistantIndex].text,
+      segments: traceMessage.segments,
+    };
+    return dedupeAdjacentChatMessages(next);
+  }
+  return dedupeAdjacentChatMessages([...next, traceMessage]);
 }
 
 function dedupeAdjacentChatMessages(messages: ChatMessage[]) {
@@ -863,6 +965,21 @@ async function sendPrompt(prompt: string, images: ChatImageAttachment[] = []) {
         return;
       }
       pushChatDebugEvent(`${providerName} 进程已退出：用时 ${formatElapsedMs(elapsedMs)}`);
+      if (providerId === "codex") {
+        void desktopApi.getLocalAiTrace(sessionId).then((trace) => {
+          if (trace) void handleAiTraceUpdateEvent({ aiSessionId: sessionId, trace });
+        });
+        window.setTimeout(() => {
+          void loadAiSessionHistory(sessionId, { force: true });
+        }, 600);
+        setChatRunState(sessionId, {
+          active: false,
+          phase: "done",
+          title: `${providerName} 已完成`,
+          detail: `执行已结束，用时 ${formatElapsedMs(elapsedMs)}。正在等待下一条消息。`,
+        });
+        return;
+      }
       replacePendingAssistantText(sessionId, pending.finalText, true);
       completePendingAssistantFromExec(sessionId);
       window.setTimeout(() => {
@@ -1304,13 +1421,82 @@ async function initAiEventListeners() {
     desktopApi.onAiChatOutput((event) => {
       void handleAiChatOutputEvent(event);
     }),
+    desktopApi.onAiTraceUpdate((event) => {
+      void handleAiTraceUpdateEvent(event);
+    }),
   ]).then(() => {
     aiEventsInitialized = true;
   });
   return aiEventsInitPromise;
 }
 
+function isCodexSessionId(sessionId: string) {
+  const session = activeAiSession.value?.id === sessionId
+    ? activeAiSession.value
+    : aiSessions.value.find((item) => item.id === sessionId);
+  return session?.providerId === "codex";
+}
+
+async function handleAiTraceUpdateEvent(event: AiTraceUpdateEvent) {
+  if (event.trace.providerId !== "codex" || event.trace.traceKind !== "codex") return;
+  let pending = pendingAssistants.get(event.aiSessionId);
+  if (!pending && codexTracePending(event.trace)) {
+    pending = ensureIncomingPendingAssistant(event.aiSessionId) ?? await ensureIncomingPendingAssistantAfterRefresh(event.aiSessionId) ?? undefined;
+  }
+  const traceMessage = codexTraceToChatMessage(event.trace);
+  if (!traceMessage) return;
+  if (pending) {
+    pending.finalText = traceMessage.text ?? "";
+    pending.steps = new Map((traceMessage.segments ?? []).map((segment, index) => [
+      segment.stepId ?? `codex-trace-${index}`,
+      segment,
+    ]));
+    patchPendingAssistant(event.aiSessionId, {
+      role: "assistant",
+      pending: traceMessage.pending,
+      text: traceMessage.text,
+      segments: traceMessage.segments,
+    });
+  } else if (activeAiSession.value?.id === event.aiSessionId) {
+    chatMessages.value = mergeCodexTraceIntoMessages(chatMessages.value, event.trace);
+  }
+
+  thinkingSessionIds.value = {
+    ...thinkingSessionIds.value,
+    [event.aiSessionId]: codexTracePending(event.trace),
+  };
+  setChatRunState(event.aiSessionId, {
+    active: codexTracePending(event.trace),
+    phase: codexTracePending(event.trace) ? "running" : "done",
+    title: codexTracePending(event.trace) ? "Codex 正在执行" : "Codex 已完成",
+    detail: codexTracePending(event.trace) ? "正在同步 Codex 执行记录。" : "执行记录和最终回答已同步。",
+  });
+
+  if (!codexTracePending(event.trace) && pending) {
+    const finalText = codexTraceFinalText(event.trace);
+    if (finalText) {
+      const draft = assistantDrafts.get(event.aiSessionId);
+      if (!draft || finalText !== draft.savedText) {
+        assistantDrafts.set(event.aiSessionId, { message: pending.message, savedText: finalText });
+        await desktopApi.appendLocalAiMessage(event.aiSessionId, "assistant", encodeAssistantMessageForStorage({
+          text: finalText,
+          segments: traceMessage.segments,
+        })).catch((error) => {
+          pushChatDebugEvent(`保存 Codex 回答失败：${String(error)}`);
+        });
+      }
+    }
+    pendingAssistants.delete(event.aiSessionId);
+    assistantDrafts.delete(event.aiSessionId);
+    stopRunningElapsedTimerIfIdle();
+    window.setTimeout(() => {
+      void loadAiSessionHistory(event.aiSessionId, { force: true });
+    }, 300);
+  }
+}
+
 async function handleAiChatOutputEvent(event: AiChatOutputEvent) {
+  if (isCodexSessionId(event.aiSessionId) && event.kind !== "error") return;
   if (event.kind === "status" && shouldHideBackendStatus(event.text ?? "")) return;
   let pending = pendingAssistants.get(event.aiSessionId);
   if (!pending && event.kind !== "done" && event.kind !== "error") {
@@ -1442,6 +1628,35 @@ async function initWorkspaceEventListeners() {
     workspaceEventsInitialized = true;
   });
   return workspaceEventsInitPromise;
+}
+
+async function initUpdateEventListeners() {
+  if (updateEventsInitialized) return;
+  if (updateEventsInitPromise) return updateEventsInitPromise;
+  updateEventsInitPromise = Promise.all([
+    desktopApi.onAppUpdateDownloadProgress((progress) => {
+      updateDownloadProgress.value = progress;
+      updateResultError.value = false;
+      const percent = updateProgressPercentFrom(progress);
+      updateResult.value = percent === null
+        ? "正在下载更新..."
+        : `正在下载更新：${percent.toFixed(0)}%`;
+    }),
+    desktopApi.onAppUpdateDownloaded(() => {
+      updateDownloadProgress.value = null;
+      updateResultError.value = false;
+      updateResult.value = "更新已下载，应用将退出并安装。";
+    }),
+    desktopApi.onAppUpdateError((event) => {
+      updateDownloadProgress.value = null;
+      updateInstalling.value = false;
+      updateResultError.value = true;
+      updateResult.value = `安装更新失败：${event.message ?? "未知错误"}`;
+    }),
+  ]).then(() => {
+    updateEventsInitialized = true;
+  });
+  return updateEventsInitPromise;
 }
 
 async function refreshShellLiveState(sessionId: string) {
@@ -1697,8 +1912,10 @@ function saveSettings() {
 }
 
 async function checkAppUpdate() {
+  await initUpdateEventListeners();
   updateChecking.value = true;
   updateResultError.value = false;
+  updateDownloadProgress.value = null;
   updateResult.value = "正在检查 GitHub Releases...";
   try {
     const update = await desktopApi.checkAppUpdate();
@@ -1706,6 +1923,7 @@ async function checkAppUpdate() {
     if (!update.available) {
       updateAvailableVersion.value = "";
       updateInstallable.value = false;
+      updateDownloadProgress.value = null;
       updateResult.value = `当前已经是最新版本${update.currentVersion ? `（当前 ${update.currentVersion}` : ""}${update.version ? `，最新 ${update.version}` : ""}${update.currentVersion ? "）" : ""}${update.body ? `。${update.body}` : "。"}`;
       return;
     }
@@ -1714,6 +1932,7 @@ async function checkAppUpdate() {
     updateResult.value = `发现新版本 ${update.version ?? ""}${update.currentVersion ? `（当前 ${update.currentVersion}）` : ""}${update.body ? `。${update.body}` : "。"}`;
   } catch (error) {
     updateInstallable.value = false;
+    updateDownloadProgress.value = null;
     updateResultError.value = true;
     updateResult.value = `检查更新失败：${String(error)}`;
   } finally {
@@ -1722,8 +1941,10 @@ async function checkAppUpdate() {
 }
 
 async function installAppUpdate() {
+  await initUpdateEventListeners();
   updateInstalling.value = true;
   updateResultError.value = false;
+  updateDownloadProgress.value = null;
   if (!updateInstallable.value) {
     updateResultError.value = true;
     updateResult.value = "当前只检测到版本信息，自动更新通道没有返回可安装文件。请重新检查更新，或手动下载安装最新版。";
@@ -1741,6 +1962,7 @@ async function installAppUpdate() {
       updateResult.value = "更新已下载，应用将退出并安装。";
     }
   } catch (error) {
+    updateDownloadProgress.value = null;
     updateResultError.value = true;
     updateResult.value = `安装更新失败：${String(error)}`;
   } finally {
@@ -1786,6 +2008,10 @@ export function useWorkspace() {
     updateCurrentVersion,
     updateAvailableVersion,
     updateInstallable,
+    updateDownloadProgress,
+    updateDownloadPercent,
+    updateDownloadProgressLabel,
+    updateDownloadSizeLabel,
     chatMessages,
     chatDebugEvents,
     activeChatRunState,

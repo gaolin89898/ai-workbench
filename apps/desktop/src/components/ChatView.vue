@@ -24,6 +24,7 @@ const startMenuOpen = ref(false);
 const AUTO_SCROLL_BOTTOM_THRESHOLD = 96;
 const VIRTUAL_MESSAGE_ESTIMATE = 156;
 const VIRTUAL_SCROLL_OVERSCAN = 900;
+const USER_ANCHOR_MIN_VISIBLE = 4;
 const USER_ANCHOR_LIMIT = 18;
 const builtInProviders: AiProvider[] = [
   { id: "codex", name: "Codex", command: "codex", builtIn: true, enabled: true },
@@ -724,7 +725,7 @@ function onPromptKeydown(event: KeyboardEvent) {
           </div>
         </div>
         <div
-          v-if="activeTab === 'chat' && userMessageAnchors.length > 1"
+          v-if="activeTab === 'chat' && userMessageAnchors.length >= USER_ANCHOR_MIN_VISIBLE"
           class="chat-user-anchor-rail"
           aria-label="用户消息快速跳转"
           @mouseenter="clearUserAnchorPreviewCloseTimer"

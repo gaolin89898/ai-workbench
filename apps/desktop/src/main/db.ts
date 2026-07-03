@@ -13,6 +13,7 @@ import type {
   WorkspaceProject,
   AiHistoryMessage,
   ChatMessage,
+  AiProviderTrace,
 } from "../services/desktop";
 
 // ---------- DB path resolution & initialization ----------
@@ -62,6 +63,21 @@ db.exec(`
   );
 
   CREATE INDEX IF NOT EXISTS idx_local_ai_messages_session ON local_ai_messages(ai_session_id);
+
+  CREATE TABLE IF NOT EXISTS local_ai_traces (
+    ai_session_id TEXT NOT NULL,
+    provider_id TEXT NOT NULL,
+    trace_kind TEXT NOT NULL,
+    status TEXT NOT NULL,
+    raw_events TEXT NOT NULL DEFAULT '[]',
+    snapshot TEXT NOT NULL DEFAULT '{}',
+    final_text TEXT,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    PRIMARY KEY (ai_session_id, trace_kind)
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_local_ai_traces_session ON local_ai_traces(ai_session_id);
 `);
 
 process.on("exit", () => {
@@ -103,6 +119,18 @@ interface MessageRow {
   created_at: string;
 }
 
+interface TraceRow {
+  ai_session_id: string;
+  provider_id: string;
+  trace_kind: string;
+  status: string;
+  raw_events: string;
+  snapshot: string;
+  final_text: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
 // ---------- Mappers ----------
 
 function rowToProject(row: ProjectRow): WorkspaceProject {
@@ -134,6 +162,28 @@ function rowToMessage(row: MessageRow): AiHistoryMessage {
     role: row.role as AiHistoryMessage["role"],
     content: row.content,
     createdAt: row.created_at,
+  };
+}
+
+function safeJsonParse<T>(value: string, fallback: T): T {
+  try {
+    return JSON.parse(value) as T;
+  } catch {
+    return fallback;
+  }
+}
+
+function rowToTrace(row: TraceRow, includeRawEvents = false): AiProviderTrace {
+  return {
+    aiSessionId: row.ai_session_id,
+    providerId: row.provider_id,
+    traceKind: row.trace_kind,
+    status: row.status,
+    rawEvents: includeRawEvents ? safeJsonParse<unknown[]>(row.raw_events, []) : undefined,
+    snapshot: safeJsonParse<Record<string, unknown>>(row.snapshot, {}),
+    finalText: row.final_text,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
   };
 }
 
@@ -345,6 +395,98 @@ export function archiveLocalAiSession(
     .prepare("SELECT * FROM local_ai_sessions WHERE id = ?")
     .get(aiSessionId) as SessionRow;
   return rowToSession(row);
+}
+
+// ---------- AI provider traces ----------
+
+export function resetLocalAiTrace(params: {
+  aiSessionId: string;
+  providerId: string;
+  traceKind: string;
+  status?: string;
+  snapshot?: unknown;
+}): AiProviderTrace {
+  const now = new Date().toISOString();
+  const snapshot = JSON.stringify(params.snapshot ?? {});
+  db.prepare(
+    `INSERT INTO local_ai_traces
+      (ai_session_id, provider_id, trace_kind, status, raw_events, snapshot, final_text, created_at, updated_at)
+     VALUES (?, ?, ?, ?, '[]', ?, NULL, ?, ?)
+     ON CONFLICT(ai_session_id, trace_kind) DO UPDATE SET
+       provider_id = excluded.provider_id,
+       status = excluded.status,
+       raw_events = excluded.raw_events,
+       snapshot = excluded.snapshot,
+       final_text = excluded.final_text,
+       updated_at = excluded.updated_at`
+  ).run(
+    params.aiSessionId,
+    params.providerId,
+    params.traceKind,
+    params.status ?? "running",
+    snapshot,
+    now,
+    now,
+  );
+  const row = db.prepare(
+    "SELECT * FROM local_ai_traces WHERE ai_session_id = ? AND trace_kind = ?"
+  ).get(params.aiSessionId, params.traceKind) as TraceRow;
+  return rowToTrace(row, true);
+}
+
+export function upsertLocalAiTrace(params: {
+  aiSessionId: string;
+  providerId: string;
+  traceKind: string;
+  status: string;
+  rawEvent?: unknown;
+  snapshot: unknown;
+  finalText?: string | null;
+}): AiProviderTrace {
+  const now = new Date().toISOString();
+  const existing = db.prepare(
+    "SELECT * FROM local_ai_traces WHERE ai_session_id = ? AND trace_kind = ?"
+  ).get(params.aiSessionId, params.traceKind) as TraceRow | undefined;
+  const rawEvents = existing ? safeJsonParse<unknown[]>(existing.raw_events, []) : [];
+  if (params.rawEvent !== undefined) rawEvents.push(params.rawEvent);
+  const createdAt = existing?.created_at ?? now;
+  db.prepare(
+    `INSERT INTO local_ai_traces
+      (ai_session_id, provider_id, trace_kind, status, raw_events, snapshot, final_text, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+     ON CONFLICT(ai_session_id, trace_kind) DO UPDATE SET
+       provider_id = excluded.provider_id,
+       status = excluded.status,
+       raw_events = excluded.raw_events,
+       snapshot = excluded.snapshot,
+       final_text = excluded.final_text,
+       updated_at = excluded.updated_at`
+  ).run(
+    params.aiSessionId,
+    params.providerId,
+    params.traceKind,
+    params.status,
+    JSON.stringify(rawEvents),
+    JSON.stringify(params.snapshot ?? {}),
+    params.finalText ?? null,
+    createdAt,
+    now,
+  );
+  const row = db.prepare(
+    "SELECT * FROM local_ai_traces WHERE ai_session_id = ? AND trace_kind = ?"
+  ).get(params.aiSessionId, params.traceKind) as TraceRow;
+  return rowToTrace(row, false);
+}
+
+export function getLocalAiTrace(
+  aiSessionId: string,
+  traceKind = "codex",
+  includeRawEvents = false,
+): AiProviderTrace | null {
+  const row = db.prepare(
+    "SELECT * FROM local_ai_traces WHERE ai_session_id = ? AND trace_kind = ?"
+  ).get(aiSessionId, traceKind) as TraceRow | undefined;
+  return row ? rowToTrace(row, includeRawEvents) : null;
 }
 
 // ---------- AI messages ----------

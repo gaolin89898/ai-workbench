@@ -10,6 +10,7 @@
 //   - AiSessionsSnapshot: ensure_device_owner + upsert_ai_sessions +
 //     notify_mobiles(message).
 //   - AiMessageDelta / AiMessageDone / AiHistoryResponse / AiChatOutput /
+//     AiTraceUpdate /
 //     GitStatusSnapshot: pure forward to mobiles, no DB writes.
 //
 // The desktop is registered in AppState at upgrade time (see ws.go), so
@@ -47,7 +48,7 @@ func (h *Handler) handleDesktopMessage(msg protocol.Message, userID, deviceID uu
 	case protocol.AiSessionsSnapshot:
 		h.handleAiSessionsSnapshot(userID, m)
 		return true
-	case protocol.AiMessageDelta, protocol.AiMessageDone, protocol.AiHistoryResponse, protocol.AiChatOutput, protocol.GitStatusSnapshotMessage:
+	case protocol.AiMessageDelta, protocol.AiMessageDone, protocol.AiHistoryResponse, protocol.AiChatOutput, protocol.AiTraceUpdate, protocol.GitStatusSnapshotMessage:
 		// Pure forward to mobiles; no DB side effects.
 		h.notifyMobiles(userID, msg)
 		return true

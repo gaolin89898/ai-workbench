@@ -468,6 +468,26 @@ async function restoreSession(sessionId: string) {
                     {{ ws.updateInstalling.value ? "安装中" : "下载并安装" }}
                   </button>
                 </div>
+                <div v-if="ws.updateInstalling.value || ws.updateDownloadProgress.value" class="settings-about-update-progress">
+                  <div
+                    class="settings-about-update-progress-track"
+                    :class="{ indeterminate: ws.updateDownloadPercent.value === null }"
+                    role="progressbar"
+                    aria-label="下载进度"
+                    aria-valuemin="0"
+                    aria-valuemax="100"
+                    :aria-valuenow="ws.updateDownloadPercent.value ?? undefined"
+                  >
+                    <span
+                      class="settings-about-update-progress-fill"
+                      :style="{ width: `${ws.updateDownloadPercent.value ?? 100}%` }"
+                    ></span>
+                  </div>
+                  <p class="settings-about-update-progress-meta">
+                    <span>{{ ws.updateDownloadProgressLabel.value }}</span>
+                    <small v-if="ws.updateDownloadSizeLabel.value">{{ ws.updateDownloadSizeLabel.value }}</small>
+                  </p>
+                </div>
                 <p v-if="ws.updateResult.value" class="settings-about-update-result" :class="{ error: ws.updateResultError.value }">{{ ws.updateResult.value }}</p>
               </div>
             </div>

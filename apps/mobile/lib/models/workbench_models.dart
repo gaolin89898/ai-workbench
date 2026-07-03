@@ -333,6 +333,51 @@ class ChatSegment {
       );
 }
 
+class AiProviderTrace {
+  const AiProviderTrace({
+    required this.aiSessionId,
+    required this.providerId,
+    required this.traceKind,
+    required this.status,
+    required this.snapshot,
+    this.finalText,
+    this.segments = const [],
+  });
+
+  final String aiSessionId;
+  final String providerId;
+  final String traceKind;
+  final String status;
+  final Map<String, dynamic> snapshot;
+  final String? finalText;
+  final List<ChatSegment> segments;
+
+  bool get isCodex => providerId == 'codex' && traceKind == 'codex';
+  bool get pending => status == 'running';
+
+  String get displayText {
+    final explicit = finalText?.trim() ?? '';
+    if (explicit.isNotEmpty) return explicit;
+    final snapshotText = snapshot['finalText'];
+    return snapshotText is String ? snapshotText.trim() : '';
+  }
+
+  factory AiProviderTrace.fromJson(Map<String, dynamic> json) =>
+      AiProviderTrace(
+        aiSessionId: json['aiSessionId'] as String? ?? '',
+        providerId: json['providerId'] as String? ?? '',
+        traceKind: json['traceKind'] as String? ?? '',
+        status: json['status'] as String? ?? 'idle',
+        snapshot: (json['snapshot'] as Map?)?.cast<String, dynamic>() ??
+            const <String, dynamic>{},
+        finalText: json['finalText'] as String?,
+        segments: ((json['segments'] as List<dynamic>?) ?? const [])
+            .whereType<Map<String, dynamic>>()
+            .map(ChatSegment.fromJson)
+            .toList(),
+      );
+}
+
 class ChatMessage {
   const ChatMessage({
     required this.role,

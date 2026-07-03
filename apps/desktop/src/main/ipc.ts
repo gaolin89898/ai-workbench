@@ -379,6 +379,10 @@ export function registerIpcHandlers(win?: BrowserWindow): void {
     return db.listLocalAiHistory(args[0]);
   });
 
+  handle("get_local_ai_trace", async (_event, args: [string, string | undefined]) =>
+    db.getLocalAiTrace(args[0], args[1] ?? "codex")
+  );
+
   handle("list_local_ai_sessions", async () => db.listLocalAiSessions());
 
   handle("archive_local_ai_session", async (_event, args: [string, boolean]) =>

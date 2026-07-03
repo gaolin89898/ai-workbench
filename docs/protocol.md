@@ -153,7 +153,7 @@
 
 ### 结构化 AI 输出
 
-桌面端可以用 `ai.chat.output` 推送结构化执行过程。移动端和桌面端本地 UI 都会把 `segment` / `segments` 渲染为状态、工具调用、审批卡片、错误或最终文本。
+桌面端可以用 `ai.chat.output` 推送结构化执行过程。这个消息仍用于非 Codex provider 和旧历史兼容。Codex 新会话优先使用下面的 `ai.trace.update`，避免移动端和桌面端各自重新合并 `process/final/delta`。
 
 ```json
 {
@@ -190,6 +190,118 @@
 - `tool`
 - `approval`
 - `error`
+
+### Provider 执行记录
+
+Codex 执行过程按 provider trace 单独同步。统一会话外壳仍由 `ai.sessions.snapshot`、`ai.history.response.messages` 和本地消息历史负责；Codex 的执行过程由 `ai.trace.update` 和 `ai.history.response.trace` 负责。
+
+产品展示固定为：
+
+```text
+用户问题
+
+执行过程
+  trace.segments / trace.snapshot.items
+
+最终回答
+  trace.finalText / trace.snapshot.finalText
+```
+
+运行中桌面端推送：
+
+```json
+{
+  "type": "ai.trace.update",
+  "deviceId": "00000000-0000-0000-0000-000000000000",
+  "aiSessionId": "22222222-2222-2222-2222-222222222222",
+  "trace": {
+    "aiSessionId": "22222222-2222-2222-2222-222222222222",
+    "providerId": "codex",
+    "traceKind": "codex",
+    "status": "running",
+    "finalText": "",
+    "snapshot": {
+      "provider": "codex",
+      "status": "running",
+      "threadId": "thread_abc",
+      "turnId": "turn_abc",
+      "startedAt": "2026-07-03T06:00:00Z",
+      "updatedAt": "2026-07-03T06:00:02Z",
+      "completedAt": null,
+      "items": [
+        {
+          "id": "reasoning-1",
+          "type": "thinking",
+          "title": "正在思考",
+          "status": "running",
+          "text": "",
+          "startedAt": "2026-07-03T06:00:01Z",
+          "completedAt": null,
+          "rawItemType": "reasoning"
+        }
+      ],
+      "approvals": [],
+      "errors": [],
+      "finalText": ""
+    },
+    "segments": [
+      {
+        "type": "status",
+        "stepId": "runtime-status",
+        "label": "Codex 正在执行",
+        "icon": "think"
+      },
+      {
+        "type": "status",
+        "stepId": "reasoning-1",
+        "label": "正在思考",
+        "icon": "think"
+      }
+    ]
+  }
+}
+```
+
+完成后同一条 trace 更新为：
+
+```json
+{
+  "type": "ai.trace.update",
+  "deviceId": "00000000-0000-0000-0000-000000000000",
+  "aiSessionId": "22222222-2222-2222-2222-222222222222",
+  "trace": {
+    "aiSessionId": "22222222-2222-2222-2222-222222222222",
+    "providerId": "codex",
+    "traceKind": "codex",
+    "status": "completed",
+    "finalText": "已完成修改。",
+    "snapshot": {
+      "provider": "codex",
+      "status": "completed",
+      "items": [],
+      "approvals": [],
+      "errors": [],
+      "finalText": "已完成修改。",
+      "updatedAt": "2026-07-03T06:00:10Z",
+      "completedAt": "2026-07-03T06:00:10Z"
+    },
+    "segments": [
+      {
+        "type": "status",
+        "stepId": "final-summary",
+        "label": "已处理"
+      }
+    ]
+  }
+}
+```
+
+移动端处理规则：
+
+- `ai.trace.update` 不追加第二条 assistant 消息，只替换当前会话最后一个 assistant 外壳。
+- `status: "running"` 时 assistant 保持 pending。
+- `status: "completed" | "failed" | "canceled"` 时 assistant 结束 pending。
+- 如果没有 trace，继续使用 `ai.chat.output` / 旧 `segments` 兼容路径。
 
 ### 审批响应
 
@@ -282,9 +394,34 @@ HTTP `PATCH /ai-sessions/:sessionId` 持久化云端标题后，会向桌面端�
       "content": "我先查看项目结构...",
       "createdAt": "2026-05-26T00:00:02Z"
     }
-  ]
+  ],
+  "trace": {
+    "aiSessionId": "22222222-2222-2222-2222-222222222222",
+    "providerId": "codex",
+    "traceKind": "codex",
+    "status": "completed",
+    "finalText": "登录流程检查完成。",
+    "snapshot": {
+      "provider": "codex",
+      "status": "completed",
+      "items": [],
+      "approvals": [],
+      "errors": [],
+      "finalText": "登录流程检查完成。",
+      "updatedAt": "2026-05-26T00:00:10Z"
+    },
+    "segments": [
+      {
+        "type": "status",
+        "stepId": "final-summary",
+        "label": "已处理"
+      }
+    ]
+  }
 }
 ```
+
+`trace` 是可选字段。只有桌面端本地存在 provider trace 时返回；没有 trace 的旧会话或非 Codex 会话继续只返回 `messages`。
 
 ### Git 状态快照
 

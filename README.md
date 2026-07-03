@@ -1,129 +1,151 @@
 # AI 工作台
 
-AI 工作台是一个多 AI Agent 桌面工作台原型，目标体验类似 Codex Desktop，但可以同时集成 `Codex`、`Claude Code`、`OpenCode`、`DeepSeek` 和后续自定义 CLI。
+AI 工作台是一个面向本地项目的多 AI Agent 工作台。它把真正的 AI CLI 运行留在你的电脑上，同时提供桌面端主工作区、移动端远程控制和一个轻量的云端中转服务。
 
-它的核心思路是：**桌面端负责真正运行本机 AI CLI，后端负责账号、配对和消息转发，移动端负责远程查看和控制桌面上的项目与 AI 会话。**
+目标体验很直接：在桌面端选择一个本地项目，创建 AI 会话，让 Codex、Claude Code、OpenCode、DeepSeek 或后续自定义 CLI 在你的项目目录里工作；你也可以在移动端查看项目、发起任务、响应审批，并跟随桌面端看到同一轮会话状态。
 
-项目当前包含四个主要部分：
+## 为什么做这个
 
-- `backend`：Go 云端中转服务（`net/http` + `pgx`），负责账号、配对、设备、Provider 状态、项目元信息、AI 会话元信息、WebSocket 转发和高危内容检查。
-- `apps/desktop`：Electron 桌面主应用，负责本机 AI 工具检测、项目登记、Git 状态读取、本地 SQLite 历史能力、本地 AI 会话、独立项目 shell 和配对入口。
-- `apps/mobile`：Flutter 移动端，负责登录、设备列表、项目、AI 工具状态、AI 会话、聊天式控制、日志和设置。
-- `user-admin-system`：Vue 3 + Arco Design 管理后台，用于查看用户、桌面端/移动端在线状态、修改账号信息和重置密码。
+很多 AI 编码工具都运行在本机，但跨设备查看、远程发起任务、保留完整项目上下文和同步会话状态并不顺手。AI 工作台希望把这些能力组合到一个清晰的产品里：
 
-## 项目速览
+- **本机执行**：AI CLI 在桌面端运行，能访问你的本地项目、Git 状态和 shell 环境。
+- **跨端控制**：移动端通过云端中转连接桌面端，可以查看项目、创建会话、发送消息和处理审批。
+- **隐私优先**：完整聊天历史默认保存在桌面端本机，云端只保存账号、设备、项目和会话元信息。
+- **多 Provider**：Codex 是当前重点体验，Claude Code、OpenCode、DeepSeek 和后续自定义 CLI 可以逐步接入。
+- **过程可见**：AI 回复不是只有最终文本，还会展示思考、命令执行、文件修改、审批和错误等过程。
 
-```text
-.
-├── apps/
-│   ├── desktop/              # Vue 3 + Electron 桌面端
-│   │   ├── src/              # 桌面端前端页面、路由和渲染进程逻辑
-│   │   ├── src/main/         # Electron 主进程（本地 SQLite、项目 shell、AI 会话、自动更新）
-│   │   └── src/preload/      # Electron preload 脚本
-│   └── mobile/               # Flutter 移动端
-├── backend/                  # Go 后端服务和数据库迁移
-├── user-admin-system/        # Web 用户管理后台
-├── docs/protocol.md          # WebSocket 协议说明
-├── docker-compose.yml        # 本地 PostgreSQL
-└── docker-compose.prod.yml   # 生产 PostgreSQL + Go 后端编排
-```
+## 当前状态
 
-主要入口：
+项目仍处于原型和快速迭代阶段，适合试用、二次开发和参与设计讨论。当前已经具备桌面端、移动端、后端中转服务和用户管理后台，但安装流程、发版流程和多 Provider 体验还在持续完善。
 
-- 后端入口：[backend/cmd/server/main.go](backend/cmd/server/main.go)
-- 后端路由：[backend/internal/routes/router.go](backend/internal/routes/router.go)
-- 桌面前端入口：[apps/desktop/src/main.ts](apps/desktop/src/main.ts)
-- 桌面路由：[apps/desktop/src/router.ts](apps/desktop/src/router.ts)
-- 桌面主进程：[apps/desktop/src/main/index.ts](apps/desktop/src/main/index.ts)
-- 移动端入口：[apps/mobile/lib/main.dart](apps/mobile/lib/main.dart)
-- 用户管理后台入口：[user-admin-system/src/main.ts](user-admin-system/src/main.ts)
+当前重点体验是 Codex：
 
-## 当前定位
+- 桌面端运行 Codex。
+- 移动端同步桌面端的 Codex 会话状态。
+- 一轮回复稳定展示为“用户问题 / 执行过程 / 最终回答”。
+- 执行过程和最终回答不会在移动端拆成两条 assistant 消息。
 
-项目当前定位为 **AI 工作台**。
+## 产品体验
 
-核心使用路径是：用户先选择一个本地项目，然后在聊天页创建新的 AI 会话；终端页提供这个项目目录下的普通 shell，不会为了打开终端而创建 AI 会话。
+### 桌面端
 
-桌面端负责承载主要工作流，包括独立项目 shell、本地 AI 会话、本地项目管理和完整 AI 聊天历史。`tmux` / `screen` 仍然保留，用于兼容已有工作环境、接管历史会话和调试。
+桌面端是主要工作区，负责真正运行 AI 工具。
 
-云端只作为账号、设备配对、状态同步和消息转发层使用。它保存设备、项目、会话元信息、摘要、状态和活动日志，不保存完整聊天内容。
+你可以：
 
-完整 AI 聊天历史默认保存在桌面端本机 SQLite 数据库：
+- 添加本机项目目录。
+- 查看项目 Git 分支和未提交状态。
+- 创建 AI 会话并选择 Provider。
+- 在项目目录中使用独立 shell。
+- 查看完整聊天历史。
+- 响应 Codex 的命令执行和文件修改审批。
+- 检查应用更新并安装新版本。
+
+完整聊天历史默认保存在：
 
 ```text
 ~/.ai-workbench/history.db
 ```
 
-也可以通过环境变量覆盖：
+也可以通过环境变量指定其他位置：
 
 ```text
 AI_WORKBENCH_DB
 ```
 
-移动端查看完整历史时，需要对应桌面端在线。移动端会通过云端发送 `ai.history.request`，由桌面端读取本机 SQLite 后再通过云端转发返回。这样可以让完整聊天内容留在用户本机，同时移动端仍然能在桌面在线时查看和接续会话。
+### 移动端
 
-## 已实现能力
+移动端用于远程查看和控制桌面端。
 
-后端云端：
+你可以：
 
-- 账号注册和登录。
-- 桌面设备配对。
-- 桌面端账号密码登录和 OAuth 设备绑定。
-- 设备列表、设备详情、活动日志、用户设置。
-- Provider 定义和每台桌面的 Provider 状态。
-- 每台桌面的项目列表和 AI 会话元信息。
-- AI 会话创建请求转发给在线桌面。
-- `ai.message.send`、`ai.approval.respond`、`ai.session.archive`、`ai.history.request` 等 AI 协议的 WebSocket 转发。
-- 用户管理接口：列出用户、修改账号资料、重置密码。
-- 继续保留 `terminal.*` 协议作为底层兼容层。
+- 登录账号。
+- 查看在线桌面设备。
+- 查看桌面端登记的项目。
+- 创建或进入 AI 会话。
+- 发送消息给桌面端运行的 AI。
+- 查看执行过程和最终回答。
+- 响应 Codex 审批。
+- 查看活动日志和基础设置。
 
-桌面端：
+移动端查看完整历史时，需要对应桌面端在线。移动端不会直接读取桌面数据库，而是通过云端请求桌面端读取本机历史后返回。
 
-- AI 工作台中文界面。
-- 检测本机 `codex --version`、`claude --version`、`opencode --version`、`deepseek --version`。
-- 添加本机项目目录并读取 `git branch --show-current`、`git status --short`。
-- 创建本地 AI 会话记录，并保存 provider、项目路径、标题、状态、摘要、归档状态和更新时间。
-- 本地 AI 会话可预热会话、记录 provider thread id，并在后续消息中 resume。
-- 支持独立项目 shell：按项目路径启动 PTY、输入、resize、读取缓冲、停止，并通过主进程事件推送输出；该 shell 与 AI 会话解耦。
-- 接管已有 tmux/screen 会话的界面入口。
-- 本地 SQLite 表：`local_ai_sessions`、`local_ai_messages`。
-- 支持本地 AI 会话归档 / 取消归档。
-- 支持 Codex 审批卡片，移动端和桌面端都可以响应本次命令或文件修改审批。
-- 桌面配对入口。
+### 云端中转
 
-移动端：
+云端服务负责账号、配对、设备在线状态、项目元信息、会话元信息和 WebSocket 消息转发。
 
-- 登录 / 自动注册。
-- 桌面设备列表和设备详情。
-- 项目列表、项目详情，并从项目入口创建或接管 AI 会话。
-- AI 工具状态页。
-- AI 会话列表、新建 AI 会话、聊天页。
-- 通过 WebSocket 发送 `ai.message.send`、`ai.approval.respond`、`ai.session.archive`，接收 `ai.chat.output`、`ai.message.delta` 和 `ai.history.response`。
-- 日志页和设置页。
-- 底层终端调试页仍可打开 tmux/screen 会话。
+云端不保存完整聊天内容。完整对话和 AI 执行记录默认保存在桌面端本机。
 
-## 启动后端
+### 用户管理后台
 
-后端基于 Go 1.22+，使用标准库 `net/http` 路由和 `pgx` 连接 PostgreSQL。需要先准备：
+用户管理后台用于管理账号和设备状态，适合自托管部署时查看用户、在线设备和重置密码。
 
-- Go 1.22+
-- PostgreSQL（通过 docker-compose 启动）
+## 跨端会话模型
 
-先启动 PostgreSQL：
+AI 工作台把会话显示拆成两个层次：
+
+- **会话外壳**：用户问题、Provider、标题、状态、最终回答。
+- **执行过程**：不同 Provider 自己的运行记录，例如 Codex 的思考、命令、文件修改、审批和错误。
+
+这样做是为了保证桌面端和移动端看到的是同一轮对话，而不是两端各自把日志重新拼成聊天消息。
+
+以 Codex 为例，一轮回复会稳定展示为：
+
+```text
+用户问题
+
+执行过程
+  思考、命令执行、文件修改、审批、错误等过程
+
+最终回答
+  本轮 Codex 给出的最终回复
+```
+
+移动端不会重新猜测哪些内容是“执行过程”、哪些内容是“最终回答”。桌面端负责整理本机 Codex 的真实运行状态，移动端只同步并展示同一份结果。
+
+## 项目结构
+
+```text
+.
+├── apps/
+│   ├── desktop/              # Electron + Vue 桌面端
+│   └── mobile/               # Flutter 移动端
+├── backend/                  # Go 云端中转服务和数据库迁移
+├── user-admin-system/        # Web 用户管理后台
+├── docs/                     # 协议、更新和运维文档
+├── docker-compose.yml        # 本地 PostgreSQL
+└── docker-compose.prod.yml   # 生产 PostgreSQL + 后端编排
+```
+
+主要技术栈：
+
+- 桌面端：Electron、Vue 3、electron-vite、SQLite。
+- 移动端：Flutter。
+- 后端：Go、PostgreSQL、WebSocket。
+- 管理后台：Vue 3、Vite、Arco Design。
+
+## 快速开始
+
+### 1. 启动后端
+
+准备 Go 1.22+ 和 Docker。
+
+启动 PostgreSQL：
 
 ```bash
 docker compose up -d postgres
 ```
 
-运行云端中转服务：
+启动后端服务：
 
 ```bash
 export DATABASE_URL=postgres://remote_term:remote_term@127.0.0.1:5432/remote_term
 export JWT_SECRET=change-this-in-production
-cd backend && go run ./cmd/server
+cd backend
+go run ./cmd/server
 ```
 
-默认监听：
+默认地址：
 
 ```text
 http://127.0.0.1:3000
@@ -131,31 +153,9 @@ http://127.0.0.1:3000
 
 服务启动时会自动执行 `backend/migrations` 里的数据库迁移。
 
-如果要启用钉钉登录，还需要在钉钉开放平台创建应用，并把回调地址配置为：
+### 2. 启动桌面端
 
-```text
-https://你的服务域名/oauth/dingtalk/callback
-```
-
-后端启动时注入这 3 个环境变量：
-
-```bash
-export DINGTALK_CLIENT_ID=你的钉钉应用ClientID
-export DINGTALK_CLIENT_SECRET=你的钉钉应用ClientSecret
-export DINGTALK_REDIRECT_URL=https://你的服务域名/oauth/dingtalk/callback
-```
-
-产品流程是：桌面端或移动端请求 `/oauth/dingtalk/start`，后端返回钉钉授权地址；用户在浏览器里扫码确认后，钉钉回调 `/oauth/dingtalk/callback`；后端用回调里的 `code` 换取钉钉用户身份，查找或创建本地账号，再返回本系统登录 token；客户端通过 `/oauth/dingtalk/poll` 轮询拿到结果。
-
-## 启动桌面端
-
-桌面端基于 Electron + Vue 3，使用 electron-vite 构建。需要先准备：
-
-- Node.js 22
-- pnpm 10
-- Electron 42（首次 `pnpm install` 时自动拉取）
-
-依赖装好后运行：
+准备 Node.js 22 和 pnpm 10。
 
 ```bash
 cd apps/desktop
@@ -163,24 +163,15 @@ pnpm install
 pnpm dev
 ```
 
-`pnpm dev` 等价于 `electron-vite dev`，会同时启动渲染进程的 Vite dev server 和 Electron 主进程。渲染进程默认固定使用 `127.0.0.1:1420`；如果端口被占用，需要先停止旧的 dev 进程，或修改 [apps/desktop/electron.vite.config.ts](apps/desktop/electron.vite.config.ts) 中的配置。默认窗口为 1440×900，最小 1024×640，可在主进程中调整。
-
-桌面端本机历史数据库默认在：
-
-```text
-~/.ai-workbench/history.db
-```
-
-也可以这样指定：
+桌面端会启动 Electron 应用，并在本机运行 AI CLI。使用 Codex 前，请先确认本机可以正常运行：
 
 ```bash
-export AI_WORKBENCH_DB=/path/to/history.db
-pnpm dev
+codex --version
 ```
 
-## 启动移动端
+### 3. 启动移动端
 
-Flutter SDK 安装后运行：
+准备 Flutter SDK。
 
 ```bash
 cd apps/mobile
@@ -188,17 +179,15 @@ flutter pub get
 flutter run
 ```
 
-移动端登录页默认服务器地址可以填：
+模拟器访问本机后端可以使用：
 
 ```text
 http://127.0.0.1:3000
 ```
 
-如果手机真机访问本机服务，需要把 `127.0.0.1` 换成电脑在局域网里的 IP，并确保防火墙允许访问。
+真机访问时，请把 `127.0.0.1` 换成电脑在局域网里的 IP，并确保防火墙允许访问。
 
-## 启动用户管理后台
-
-用户管理后台位于 `user-admin-system`，基于 Vue 3、Vite 和 Arco Design。开发服务器默认把 `/api` 代理到当前生产后端 `http://8.162.12.148:3000`，可在 [user-admin-system/vite.config.ts](user-admin-system/vite.config.ts) 中调整。
+### 4. 启动用户管理后台
 
 ```bash
 cd user-admin-system
@@ -206,92 +195,18 @@ pnpm install
 pnpm dev
 ```
 
-页面会使用 `/auth/login` 或 `/auth/register` 获取 token，再访问 `/admin/users`、`/admin/users/:userId` 和 `/admin/users/:userId/reset-password`。
+开发服务器默认把 `/api` 代理到当前配置的后端地址，可在 [user-admin-system/vite.config.ts](user-admin-system/vite.config.ts) 中调整。
 
-## 配对桌面
+## 配对桌面和移动端
 
-1. 先在移动端登录，进入配对页生成一次性配对码。
-2. 在桌面端“配对”页填写服务器地址和配对码。
-3. 配对成功后，云端会返回 `deviceId` 和桌面访问 token。
+1. 在移动端登录账号。
+2. 进入配对页生成一次性配对码。
+3. 在桌面端打开配对页，填写服务器地址和配对码。
+4. 配对成功后，移动端就可以看到这台桌面设备、项目和 AI 会话。
 
-## 核心 HTTP API
+## 开发命令
 
-账号和设备：
-
-- `POST /auth/register`
-- `POST /auth/login`
-- `POST /desktop/login`
-- `POST /desktop/pairing-requests`
-- `GET /desktop/pairing-requests/:code`
-- `POST /desktop/pairing-requests/:code/approve`
-- `GET /oauth/dingtalk/start`
-- `GET /oauth/dingtalk/callback`
-- `GET /oauth/dingtalk/poll`
-- `POST /pairing/codes`
-- `POST /desktop/pair`
-- `POST /desktop/register-device`
-- `GET /devices`
-- `GET /devices/:deviceId`
-
-AI 工作台元信息：
-
-- `GET /providers`：获取云端内置 Provider 定义。
-- `GET /devices/:deviceId/providers`：获取某台桌面的 Provider 检测状态。
-- `GET /devices/:deviceId/projects`：获取某台桌面登记的项目。
-- `POST /devices/:deviceId/projects`：登记或更新项目路径。
-- `GET /devices/:deviceId/ai-sessions`：获取某台桌面的 AI 会话元信息。
-- `POST /devices/:deviceId/ai-sessions`：创建 AI 会话元信息，并向在线桌面转发创建请求。
-- `GET /ai-sessions/:sessionId`：获取单个 AI 会话元信息。
-- `PATCH /ai-sessions/:sessionId`：重命名 AI 会话，并转发给在线桌面同步本地 SQLite。
-
-管理后台：
-
-- `GET /admin/users`：列出系统用户及桌面端 / 移动端在线状态。
-- `PATCH /admin/users/:userId`：修改用户账号或显示名。
-- `POST /admin/users/:userId/reset-password`：重置用户密码。
-
-兼容 / 调试：
-
-- `GET /devices/:deviceId/sessions`：查看底层 tmux/screen 会话。
-- `GET /activity-logs`
-- `GET /settings`
-- `PUT /settings`
-
-## 核心 WebSocket
-
-移动端连接：
-
-```text
-/ws/mobile?token=<accessToken>
-```
-
-桌面端连接：
-
-```text
-/ws/desktop?token=<desktopAccessToken>
-```
-
-AI 主协议包括：
-
-- `providers.snapshot`
-- `projects.snapshot`
-- `ai.sessions.snapshot`
-- `ai.session.create`
-- `ai.message.send`
-- `ai.approval.respond`
-- `ai.session.archive`
-- `ai.chat.output`
-- `ai.message.delta`
-- `ai.message.done`
-- `ai.history.request`
-- `ai.history.response`
-- `git.status.snapshot`
-
-更完整的消息示例见 [docs/protocol.md](docs/protocol.md)。
-
-## 验证
-
-Go 后端：
+后端测试：
 
 ```bash
 cd backend
@@ -305,7 +220,7 @@ cd apps/desktop
 pnpm run build
 ```
 
-打包 Linux 安装包：
+桌面端打包 Linux 安装包：
 
 ```bash
 cd apps/desktop
@@ -319,7 +234,12 @@ cd apps/mobile
 flutter analyze
 ```
 
-当前环境如果没有 Flutter SDK，会看到 `flutter: command not found`，需要先安装 Flutter 后再执行。
+移动端测试：
+
+```bash
+cd apps/mobile
+flutter test
+```
 
 用户管理后台构建：
 
@@ -328,27 +248,27 @@ cd user-admin-system
 pnpm run build
 ```
 
-## 桌面端自动更新
+## 文档
 
-桌面端使用 electron-updater 从 GitHub Releases 拉取更新。发布 `v*` 标签后，GitHub Actions 会构建 Electron 安装包并上传 `latest.yml`，桌面端可在“设置 -> 应用更新”里检查、下载并重启安装。
+- WebSocket 和消息协议：[docs/protocol.md](docs/protocol.md)
+- 桌面端自动更新：[docs/desktop-auto-update.md](docs/desktop-auto-update.md)
+- 服务器部署和运维：[docs/server-ops.md](docs/server-ops.md)
 
-发版流程和配置细节见 [docs/desktop-auto-update.md](docs/desktop-auto-update.md)。
+## 自动更新
 
-## 设计稿
+桌面端使用 electron-updater 从 GitHub Releases 拉取更新。发布 `v*` 标签后，GitHub Actions 会构建 Electron 安装包并上传更新元信息，桌面端可在“设置 -> 应用更新”里检查、下载并重启安装。
 
-设计稿和导出的 HTML 预览位于以下目录：
+配置细节见 [docs/desktop-auto-update.md](docs/desktop-auto-update.md)。
 
-- `ai-workbench-desktop-light-design/`：桌面端浅色工作台设计稿和页面预览。
-- `ai-workbench-mobile-design/`：移动端设计稿和页面预览。
-- `ai-workbench-mobile-redesign-draft/`：移动端重设计草稿。
+## 适合参与的方向
 
-设计稿导出的临时资源可能不会全部保留在仓库中，实际应用图标以 `apps/desktop/src/assets/icons/` 为准。
+这个项目后续可以继续扩展：
 
-## v1 边界
+- 更完整的 Codex 桌面体验。
+- Claude Code、OpenCode、DeepSeek 等 Provider 的专属执行记录。
+- 更稳定的移动端远程控制体验。
+- 更简单的自托管部署流程。
+- 更完善的权限、审批和风险提示。
+- 面向插件或自定义 CLI 的 Provider 接入机制。
 
-- v1 不直接接管任意图形终端窗口。主路径优先走桌面端本地 AI 会话；终端页只是当前项目目录下的普通 shell，不会自动创建 AI 会话；`tmux` / `screen` 作为兼容和调试路径保留。
-- “接管已有会话”指接管已有 `tmux` / `screen` 的 window/pane；Codex、Claude Code 等工具内部自己的项目/对话历史不属于系统会话列表，只有当它们运行在某个 tmux/screen pane 里时才能被接管。
-- Windows v1 优先走 WSL + tmux。
-- 云端不保存完整聊天内容，只保存元信息和摘要。
-- Git 能力先展示 branch、dirty 状态和文件列表，不做完整 diff 和内置编辑器。
-- 自定义 Provider 后续会做成配置能力；当前内置 Provider 为 Codex、Claude Code、OpenCode、DeepSeek。
+欢迎围绕产品体验、跨端同步、Provider 接入和本地优先架构继续改进。

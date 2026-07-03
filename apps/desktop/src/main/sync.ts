@@ -20,6 +20,7 @@ import {
   createLocalAiSession,
   appendLocalAiMessage,
   getLocalAiSession,
+  getLocalAiTrace,
   updateLocalAiSession,
   resolveWorkspaceProjectPath,
 } from "./db";
@@ -29,6 +30,7 @@ import { respondCodexApproval, runCodexChat, warmupCodexSession } from "./codex"
 import { clearCredentials } from "./credentials";
 import { syncCodexHistoryMirror } from "./codex_sessions";
 import { runAiChat } from "./claude";
+import { codexTraceSnapshotToSegments } from "./codex_trace";
 
 // ---------- Cloud config persistence ----------
 
@@ -89,6 +91,10 @@ function isCodexExternalMirrorSession(session: { providerId: string; providerSes
 
 function listSyncableAiSessions() {
   return listLocalAiSessions().filter((session) => !isCodexExternalMirrorSession(session));
+}
+
+function isCodexSession(aiSessionId: string) {
+  return getLocalAiSession(aiSessionId)?.providerId === "codex";
 }
 
 function mergeChatSegment(segments: unknown[], segment: unknown): unknown[] {
@@ -561,6 +567,7 @@ class DesktopCloudSync {
       aiSessionId,
       requestId: `push-${Date.now()}`,
       messages: this.buildHistoryMessages(aiSessionId),
+      trace: this.buildHistoryTrace(aiSessionId),
     });
   }
 
@@ -754,15 +761,40 @@ class DesktopCloudSync {
     return messages;
   }
 
+  private buildHistoryTrace(aiSessionId: string): Record<string, unknown> | null {
+    const trace = getLocalAiTrace(aiSessionId, "codex");
+    if (!trace || trace.providerId !== "codex") return null;
+    const snapshot = trace.snapshot as Record<string, unknown>;
+    return {
+      ...trace,
+      segments: codexTraceSnapshotToSegments(snapshot as any),
+    };
+  }
+
   createRendererAndMobileAiChatSender(rendererSender: { send: (channel: string, ...args: unknown[]) => void }) {
     const config = loadStoredConfig();
     const deviceId = config?.deviceId;
     return {
       send: (channel: string, ...args: unknown[]) => {
         rendererSender.send(channel, ...args);
+        if (channel === "ai-trace-update") {
+          const event = args[0] as { aiSessionId?: string; trace?: unknown } | undefined;
+          if (!deviceId || !event?.aiSessionId || !event.trace) return;
+          this.send({
+            type: "ai.trace.update",
+            deviceId,
+            aiSessionId: event.aiSessionId,
+            trace: {
+              ...(event.trace as Record<string, unknown>),
+              segments: codexTraceSnapshotToSegments((event.trace as Record<string, unknown>).snapshot as any),
+            },
+          });
+          return;
+        }
         if (!deviceId || channel !== "ai-chat-output") return;
         const event = args[0] as AiChatOutputEvent | undefined;
         if (!event?.aiSessionId) return;
+        if (isCodexSession(event.aiSessionId)) return;
         if (event.kind === "status" && event.text === "mobile sent message") return;
         const draft = this.mobileAssistantDrafts.get(event.aiSessionId) ?? { text: "", segments: [], savedText: "" };
         if (event.kind === "delta" && event.text) {
@@ -820,9 +852,24 @@ class DesktopCloudSync {
     return {
       send: (channel: string, ...args: unknown[]) => {
         this.notify(channel, ...args);
+        if (channel === "ai-trace-update") {
+          const event = args[0] as { aiSessionId?: string; trace?: unknown } | undefined;
+          if (!event?.aiSessionId || !event.trace) return;
+          this.send({
+            type: "ai.trace.update",
+            deviceId,
+            aiSessionId: event.aiSessionId,
+            trace: {
+              ...(event.trace as Record<string, unknown>),
+              segments: codexTraceSnapshotToSegments((event.trace as Record<string, unknown>).snapshot as any),
+            },
+          });
+          return;
+        }
         if (channel !== "ai-chat-output") return;
         const event = args[0] as AiChatOutputEvent | undefined;
         if (!event?.aiSessionId) return;
+        if (isCodexSession(event.aiSessionId)) return;
         if (event.kind === "status" && event.text === "mobile sent message") return;
         const draft = this.mobileAssistantDrafts.get(event.aiSessionId) ?? { text: "", segments: [], savedText: "" };
         if (event.kind === "delta" && event.text) {
@@ -923,17 +970,19 @@ class DesktopCloudSync {
 
       const projectPath = this.sessionProjectPaths.get(aiSessionId) ?? session.summary ?? os.homedir();
       const aiChatSender = this.createAiChatSender(deviceId);
-      aiChatSender.send("ai-chat-output", {
-        aiSessionId,
-        kind: "status",
-        text: "running",
-        segment: {
-          type: "status",
-          stepId: "mobile-run-started",
-          label: "正在处理",
-          icon: "think",
-        },
-      });
+      if (session.providerId !== "codex") {
+        aiChatSender.send("ai-chat-output", {
+          aiSessionId,
+          kind: "status",
+          text: "running",
+          segment: {
+            type: "status",
+            stepId: "mobile-run-started",
+            label: "正在处理",
+            icon: "think",
+          },
+        });
+      }
 
       try {
         let providerSessionId: string | null = null;
@@ -1018,6 +1067,7 @@ class DesktopCloudSync {
       aiSessionId,
       requestId,
       messages: this.buildHistoryMessages(aiSessionId),
+      trace: this.buildHistoryTrace(aiSessionId),
     });
   }
 

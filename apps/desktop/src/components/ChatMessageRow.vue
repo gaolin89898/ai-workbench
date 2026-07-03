@@ -224,6 +224,10 @@ function shouldShowProcessSegment(segment: ChatSegmentType) {
   return !new Set([
     "完成",
     "已完成",
+    "执行 fileChange",
+    "执行 file_change",
+    "执行 fileEdit",
+    "执行 file_edit",
   ]).has(label);
 }
 
@@ -315,6 +319,7 @@ function processBodyItems(group: Extract<RenderGroup, { type: "process" }>): Pro
 
   for (const segment of group.segments) {
     if (isProcessConclusionSegment(segment)) {
+      if (!props.message.pending) continue;
       conclusion = segment;
       flushStageRun();
       continue;
@@ -343,20 +348,33 @@ function processStageTitle(segments: ChatSegmentType[]) {
   if (runningTool?.type === "tool") return toolStageTitle(runningTool);
   const pendingApproval = segments.find((segment) => segment.type === "approval" && segment.status === "pending");
   if (pendingApproval?.type === "approval") return pendingApproval.approvalKind === "fileChange" ? "正在修改文件" : "正在等待命令确认";
+  const erroredTool = segments.find((segment) => segment.type === "tool" && segment.status === "error");
+  if (erroredTool?.type === "tool") return toolStageTitle(erroredTool);
+  const latestTool = [...segments].reverse().find((segment) => segment.type === "tool");
+  if (latestTool?.type === "tool") return toolStageTitle(latestTool);
   const latestStatus = [...segments].reverse().find((segment) => segment.type === "status");
   if (latestStatus?.type === "status") return latestStatus.label;
   const hasThought = segments.some((segment) => segment.type === "thought");
   if (hasThought) return props.message.pending ? "正在思考" : "已思考";
-  const erroredTool = segments.find((segment) => segment.type === "tool" && segment.status === "error");
-  if (erroredTool?.type === "tool") return "处理失败";
   return props.message.pending ? "正在处理" : "已处理";
 }
 
 function toolStageTitle(segment: Extract<ChatSegmentType, { type: "tool" }>) {
-  if (segment.toolName.includes("修改") || segment.toolName.includes("文件")) return "正在修改文件";
-  if (segment.toolName.includes("扫描")) return "正在扫描项目";
-  if (segment.toolName.includes("命令") || segment.command) return "正在运行命令";
-  return segment.summary || `正在处理 ${segment.toolName}`;
+  const verb = segment.status === "running" ? "正在" : "已";
+  if (segment.toolName.includes("修改") || segment.toolName.includes("文件")) {
+    if (segment.status === "error") return "修改文件失败";
+    return `${verb}修改文件`;
+  }
+  if (segment.toolName.includes("扫描")) {
+    if (segment.status === "error") return "扫描项目失败";
+    return `${verb}扫描项目`;
+  }
+  if (segment.toolName.includes("命令") || segment.command) {
+    if (segment.status === "error") return "运行命令失败";
+    return `${verb}运行命令`;
+  }
+  if (segment.status === "error") return segment.summary || `处理失败 ${segment.toolName}`;
+  return segment.summary || `${verb}处理 ${segment.toolName}`;
 }
 
 function processStageDurationMs(segments: ChatSegmentType[]) {

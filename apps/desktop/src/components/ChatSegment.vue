@@ -157,14 +157,33 @@ function cleanToolOutput(output: string) {
 function patchFileList(diff: string) {
   const files: string[] = [];
   const seen = new Set<string>();
-  for (const line of diff.replace(/\r\n/g, "\n").split("\n")) {
-    const match = line.match(/^\*\*\* (?:Add|Update|Delete) File: (.+)$/);
-    const file = match?.[1]?.trim();
-    if (!file || seen.has(file)) continue;
+  const pushFile = (value?: string) => {
+    const file = cleanDiffFilePath(value ?? "");
+    if (!file || seen.has(file)) return;
     seen.add(file);
     files.push(file);
+  };
+  for (const line of diff.replace(/\r\n/g, "\n").split("\n")) {
+    const patchFile = line.match(/^\*\*\* (?:Add|Update|Delete) File: (.+)$/);
+    if (patchFile) {
+      pushFile(patchFile[1]);
+      continue;
+    }
+    const gitFile = line.match(/^diff --git\s+a\/(.+?)\s+b\/(.+)$/);
+    if (gitFile) {
+      pushFile(gitFile[2] || gitFile[1]);
+      continue;
+    }
+    const newFile = line.match(/^\+\+\+\s+(?:b\/)?(.+)$/);
+    if (newFile) pushFile(newFile[1]);
   }
   return files;
+}
+
+function cleanDiffFilePath(path: string) {
+  const cleaned = path.trim().replace(/^"|"$/g, "");
+  if (!cleaned || cleaned === "/dev/null") return "";
+  return cleaned.replace(/^[ab]\//, "");
 }
 
 function shortFileList(files: string[]) {

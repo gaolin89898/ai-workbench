@@ -95,6 +95,129 @@ void main() {
     controller.dispose();
   });
 
+  test('codex history trace replaces pending assistant shell', () async {
+    final controller =
+        WorkspaceController(api: ApiClient(baseUrl: 'http://127.0.0.1:3000'));
+    controller.messagesBySession['session-1'] = const [
+      ChatMessage(role: ChatRole.user, text: '改一下移动端展示'),
+      ChatMessage(
+        role: ChatRole.assistant,
+        pending: true,
+        segments: [
+          ChatSegment(type: 'status', label: '正在处理', icon: 'think'),
+        ],
+      ),
+    ];
+
+    controller.handleRealtimeForTesting({
+      'type': 'ai.history.response',
+      'deviceId': 'device-1',
+      'aiSessionId': 'session-1',
+      'requestId': 'request-1',
+      'messages': [
+        {
+          'role': 'user',
+          'content': '改一下移动端展示',
+          'createdAt': '2026-07-03T00:00:00Z',
+        },
+      ],
+      'trace': {
+        'aiSessionId': 'session-1',
+        'providerId': 'codex',
+        'traceKind': 'codex',
+        'status': 'running',
+        'finalText': '',
+        'snapshot': {
+          'provider': 'codex',
+          'status': 'running',
+          'items': [],
+          'approvals': [],
+          'errors': [],
+          'finalText': '',
+          'updatedAt': '2026-07-03T00:00:01Z',
+        },
+        'segments': [
+          {
+            'type': 'status',
+            'stepId': 'runtime-status',
+            'label': 'Codex 正在执行',
+            'icon': 'think',
+          },
+        ],
+      },
+    });
+
+    final messages = controller.messagesBySession['session-1']!;
+    expect(messages, hasLength(2));
+    expect(messages.last.role, ChatRole.assistant);
+    expect(messages.last.pending, isTrue);
+    expect(messages.last.segments, hasLength(1));
+    expect(messages.last.segments.single.stepId, 'runtime-status');
+
+    await Future<void>.delayed(Duration.zero);
+    controller.dispose();
+  });
+
+  test('codex trace update completes without creating second assistant',
+      () async {
+    final controller =
+        WorkspaceController(api: ApiClient(baseUrl: 'http://127.0.0.1:3000'));
+    controller.messagesBySession['session-1'] = const [
+      ChatMessage(role: ChatRole.user, text: '改一下移动端展示'),
+      ChatMessage(
+        role: ChatRole.assistant,
+        pending: true,
+        segments: [
+          ChatSegment(
+            type: 'status',
+            stepId: 'runtime-status',
+            label: 'Codex 正在执行',
+            icon: 'think',
+          ),
+        ],
+      ),
+    ];
+
+    controller.handleRealtimeForTesting({
+      'type': 'ai.trace.update',
+      'deviceId': 'device-1',
+      'aiSessionId': 'session-1',
+      'trace': {
+        'aiSessionId': 'session-1',
+        'providerId': 'codex',
+        'traceKind': 'codex',
+        'status': 'completed',
+        'finalText': '已经改成统一会话外壳。',
+        'snapshot': {
+          'provider': 'codex',
+          'status': 'completed',
+          'items': [],
+          'approvals': [],
+          'errors': [],
+          'finalText': '已经改成统一会话外壳。',
+          'updatedAt': '2026-07-03T00:00:02Z',
+        },
+        'segments': [
+          {
+            'type': 'status',
+            'stepId': 'final-summary',
+            'label': '已处理',
+          },
+        ],
+      },
+    });
+
+    final messages = controller.messagesBySession['session-1']!;
+    expect(messages, hasLength(2));
+    expect(messages.last.role, ChatRole.assistant);
+    expect(messages.last.pending, isFalse);
+    expect(messages.last.text, '已经改成统一会话外壳。');
+    expect(messages.last.segments.single.stepId, 'final-summary');
+
+    await Future<void>.delayed(Duration.zero);
+    controller.dispose();
+  });
+
   test('message done keeps realtime pending open for final output', () async {
     final controller =
         WorkspaceController(api: ApiClient(baseUrl: 'http://127.0.0.1:3000'));

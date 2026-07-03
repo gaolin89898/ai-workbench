@@ -491,14 +491,37 @@ class WorkspaceController extends ChangeNotifier {
             role: history.role,
             text: history.content,
             pending: item['pending'] == true,
-            segments: history.segments,
+                segments: history.segments,
           );
         }).toList();
+        final traceJson = json['trace'];
+        final trace = traceJson is Map<String, dynamic>
+            ? AiProviderTrace.fromJson(traceJson)
+            : null;
+        final mergedHistory = hasPendingAssistant
+            ? _mergeHistoryWithPending(current, historyMessages)
+            : historyMessages;
         messagesBySession[sessionId] = _normalizeSessionMessages(
-          hasPendingAssistant
-              ? _mergeHistoryWithPending(current, historyMessages)
-              : historyMessages,
+          trace == null || !trace.isCodex
+              ? mergedHistory
+              : _applyProviderTraceToMessages(sessionId, mergedHistory, trace),
         );
+        break;
+      case 'ai.trace.update':
+        final sessionId = json['aiSessionId'] as String;
+        final traceJson = json['trace'];
+        if (traceJson is Map<String, dynamic>) {
+          final trace = AiProviderTrace.fromJson(traceJson);
+          if (trace.isCodex) {
+            final current =
+                messagesBySession[sessionId] ?? const <ChatMessage>[];
+            messagesBySession[sessionId] = _normalizeSessionMessages(
+              _applyProviderTraceToMessages(sessionId, current, trace),
+            );
+            runStatusBySession[sessionId] =
+                trace.pending ? 'Codex 正在执行' : '已完成';
+          }
+        }
         break;
       case 'ai.chat.output':
         _handleChatOutput(json);
@@ -560,6 +583,49 @@ class WorkspaceController extends ChangeNotifier {
       return [...history, pending];
     }
     return [...currentPrefix, pending];
+  }
+
+  List<ChatMessage> _applyProviderTraceToMessages(
+    String sessionId,
+    List<ChatMessage> messages,
+    AiProviderTrace trace,
+  ) {
+    final text = trace.displayText;
+    final segments = trace.segments;
+    if (text.isEmpty && segments.isEmpty) return messages;
+    final traceMessage = ChatMessage(
+      role: ChatRole.assistant,
+      pending: trace.pending,
+      text: text.isEmpty ? null : text,
+      segments: segments,
+    );
+    final next = [...messages];
+    final pendingIndex = next.lastIndexWhere(
+      (message) => message.role == ChatRole.assistant && message.pending,
+    );
+    if (pendingIndex >= 0) {
+      next[pendingIndex] = traceMessage;
+      if (!trace.pending) {
+        _currentAgentMessageStepIds.remove(sessionId);
+        _lastCommittedAssistantTexts.remove(sessionId);
+      }
+      return next;
+    }
+    final assistantIndex = next.lastIndexWhere(
+      (message) => message.role == ChatRole.assistant,
+    );
+    if (assistantIndex >= 0) {
+      final previous = next[assistantIndex];
+      next[assistantIndex] = ChatMessage(
+        role: ChatRole.assistant,
+        pending: trace.pending,
+        text: text.isEmpty ? previous.text : text,
+        segments: segments.isEmpty ? previous.segments : segments,
+      );
+      return next;
+    }
+    next.add(traceMessage);
+    return next;
   }
 
   bool _historyMatchesPrefix(

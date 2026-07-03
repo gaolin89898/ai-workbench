@@ -238,6 +238,7 @@ type AiHistoryResponse struct {
 	AiSessionId string             `json:"aiSessionId"`
 	RequestId   string             `json:"requestId"`
 	Messages    []AiHistoryMessage `json:"messages"`
+	Trace       json.RawMessage    `json:"trace,omitempty"`
 }
 
 // AiChatOutput: "ai.chat.output".
@@ -250,6 +251,14 @@ type AiChatOutput struct {
 	StepId      *string       `json:"stepId"`
 	Segment     *ChatSegment  `json:"segment"`
 	Segments    []ChatSegment `json:"segments"`
+}
+
+// AiTraceUpdate: "ai.trace.update".
+type AiTraceUpdate struct {
+	BaseMessage
+	DeviceId    string          `json:"deviceId"`
+	AiSessionId string          `json:"aiSessionId"`
+	Trace       json.RawMessage `json:"trace"`
 }
 
 // AiSessionArchive: "ai.session.archive".
@@ -340,6 +349,10 @@ func ParseMessage(data []byte) (Message, error) {
 		var m AiChatOutput
 		err := json.Unmarshal(data, &m)
 		return m, err
+	case "ai.trace.update":
+		var m AiTraceUpdate
+		err := json.Unmarshal(data, &m)
+		return m, err
 	case "ai.session.archive":
 		var m AiSessionArchive
 		err := json.Unmarshal(data, &m)
@@ -376,6 +389,7 @@ var (
 	_ Message = AiHistoryRequest{}
 	_ Message = AiHistoryResponse{}
 	_ Message = AiChatOutput{}
+	_ Message = AiTraceUpdate{}
 	_ Message = AiSessionArchive{}
 	_ Message = AiSessionRename{}
 	_ Message = GitStatusSnapshotMessage{}
