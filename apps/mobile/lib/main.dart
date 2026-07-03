@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 
-import 'models/workbench_models.dart';
 import 'pages/login_page.dart';
 import 'pages/mobile_shell_page.dart';
 import 'services/api_client.dart';
@@ -63,7 +62,7 @@ class _BootstrapPageState extends State<BootstrapPage> {
       _goLogin();
       return;
     }
-    final device = _pickInitialDevice(controller.devices);
+    final device = controller.preferredInitialDevice();
     if (device != null) {
       await controller.selectDevice(device);
     }
@@ -74,13 +73,6 @@ class _BootstrapPageState extends State<BootstrapPage> {
         child: const MobileShellPage(),
       ),
     ));
-  }
-
-  DesktopDevice? _pickInitialDevice(List<DesktopDevice> devices) {
-    for (final device in devices) {
-      if (device.online) return device;
-    }
-    return devices.isEmpty ? null : devices.first;
   }
 
   void _goLogin() {

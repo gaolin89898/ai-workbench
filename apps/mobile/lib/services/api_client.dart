@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -10,6 +11,9 @@ class ApiClient {
 
   static const defaultBaseUrl = 'http://8.162.12.148:3000';
   static const _tokenKey = 'auth_token';
+  static const _emailKey = 'saved_email';
+  static const _passwordKey = 'saved_password';
+  static const _secureStorage = FlutterSecureStorage();
 
   final String baseUrl;
   String? token;
@@ -27,6 +31,29 @@ class ApiClient {
   static Future<void> clearStoredToken() async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove(_tokenKey);
+  }
+
+  static Future<void> saveCredentials(String email, String password) async {
+    await _secureStorage.write(key: _emailKey, value: email);
+    await _secureStorage.write(key: _passwordKey, value: password);
+  }
+
+  static Future<String?> loadSavedEmail() async {
+    return _secureStorage.read(key: _emailKey);
+  }
+
+  static Future<String?> loadSavedPassword() async {
+    return _secureStorage.read(key: _passwordKey);
+  }
+
+  static Future<bool> hasSavedCredentials() async {
+    final email = await _secureStorage.read(key: _emailKey);
+    return email != null && email.isNotEmpty;
+  }
+
+  static Future<void> clearCredentials() async {
+    await _secureStorage.delete(key: _emailKey);
+    await _secureStorage.delete(key: _passwordKey);
   }
 
   static String normalizeBaseUrl(String input) {

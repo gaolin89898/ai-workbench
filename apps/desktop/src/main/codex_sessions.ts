@@ -2,7 +2,7 @@ import * as fs from "node:fs/promises";
 import * as os from "node:os";
 import * as path from "node:path";
 import * as db from "./db";
-import type { AiHistoryMessage, AiSession, ChatSegment, CodexProjectSession } from "../services/desktop";
+import type { AiHistoryMessage, AiSession, ChatSegment } from "../services/desktop";
 import type { Dirent } from "node:fs";
 
 type SessionIndexEntry = {
@@ -25,6 +25,19 @@ type CodexSessionMetaPayload = {
   cli_version?: string;
   source?: string;
   model_provider?: string;
+};
+
+type CodexProjectSession = {
+  id: string;
+  title: string;
+  updatedAt: string;
+  cwd: string;
+  source?: string;
+  originator?: string;
+  cliVersion?: string;
+  modelProvider?: string;
+  filePath: string;
+  imported: boolean;
 };
 
 type CodexResponseItemPayload = {
@@ -55,6 +68,7 @@ type ImportedAssistantDraft = {
 };
 
 const STRUCTURED_MESSAGE_PREFIX = "__AI_WORKBENCH_MESSAGE_V1__";
+const CODEX_APP_SERVER_SESSION_PREFIX = "app-server:";
 
 const CODEX_DIR = path.join(os.homedir(), ".codex");
 const CODEX_SESSIONS_DIR = path.join(CODEX_DIR, "sessions");
@@ -514,9 +528,9 @@ function looksSensitiveTitle(value: string): boolean {
   return false;
 }
 
-function fallbackTitle(sessionId: string, source?: string) {
+function fallbackTitle(sessionId: string) {
   const shortId = sessionId.slice(0, 8);
-  return source ? `${source} 会话 ${shortId}` : `Codex 会话 ${shortId}`;
+  return `Codex 会话 ${shortId}`;
 }
 
 function sortByUpdatedAt(left: CodexProjectSession, right: CodexProjectSession) {
@@ -525,7 +539,7 @@ function sortByUpdatedAt(left: CodexProjectSession, right: CodexProjectSession) 
   return (Number.isNaN(rightTime) ? 0 : rightTime) - (Number.isNaN(leftTime) ? 0 : leftTime);
 }
 
-export async function listCodexProjectSessions(
+async function listCodexProjectSessions(
   projectPath: string,
   localSessions: AiSession[] = []
 ): Promise<CodexProjectSession[]> {
@@ -536,6 +550,7 @@ export async function listCodexProjectSessions(
     localSessions
       .map((session) => session.providerSessionId)
       .filter((value): value is string => Boolean(value))
+      .map(normalizeProviderSessionId)
   );
   const [indexEntries, historyTitles, rolloutFiles] = await Promise.all([
     readSessionIndex(),
@@ -560,7 +575,7 @@ export async function listCodexProjectSessions(
     const updatedAt = indexed?.updated_at ?? meta.timestamp ?? new Date(0).toISOString();
     sessions.push({
       id: sessionId,
-      title: indexed?.thread_name?.trim() || historyTitles.get(sessionId) || fallbackTitle(sessionId, meta.source),
+      title: indexed?.thread_name?.trim() || historyTitles.get(sessionId) || fallbackTitle(sessionId),
       updatedAt,
       cwd: meta.cwd,
       source: meta.source,
@@ -582,6 +597,20 @@ function hasImportedCodexHistory(messages: Array<{ role: string; content: string
     && message.content.includes(STRUCTURED_MESSAGE_PREFIX)
     && /"codexHistoryImportVersion":(?:2|3)/.test(message.content)
   );
+}
+
+function isAppServerProviderSession(providerSessionId: string): boolean {
+  return providerSessionId.startsWith(CODEX_APP_SERVER_SESSION_PREFIX);
+}
+
+function normalizeProviderSessionId(providerSessionId: string): string {
+  return isAppServerProviderSession(providerSessionId)
+    ? providerSessionId.slice(CODEX_APP_SERVER_SESSION_PREFIX.length)
+    : providerSessionId;
+}
+
+function hasLocalWorkbenchHistory(messages: Array<{ role: string; content: string }>): boolean {
+  return messages.some((message) => message.role === "user" || message.content.startsWith(STRUCTURED_MESSAGE_PREFIX));
 }
 
 function hasToolCodexHistory(messages: Array<{ role: string; content: string }>): boolean {
@@ -609,8 +638,10 @@ function historiesEqual(
 export async function syncCodexHistoryMirror(sessionId: string): Promise<boolean> {
   const session = db.getLocalAiSession(sessionId);
   if (!session?.providerSessionId || session.providerId !== "codex" || !session.summary) return false;
+  if (isAppServerProviderSession(session.providerSessionId)) return false;
   const existingHistory = db.listLocalAiHistory(sessionId);
   const isImportedMirror = hasImportedCodexHistory(existingHistory);
+  if (!isImportedMirror && hasLocalWorkbenchHistory(existingHistory)) return false;
   const needsUpgrade = !hasToolCodexHistory(existingHistory);
   const codexSession = (await listCodexProjectSessions(session.summary, db.listLocalAiSessions()))
     .find((item) => item.id === session.providerSessionId);

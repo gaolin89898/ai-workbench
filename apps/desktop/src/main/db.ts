@@ -352,6 +352,12 @@ export function appendLocalAiMessage(
   role: ChatMessage["role"],
   content: string
 ): void {
+  if (role === "assistant") {
+    const previous = db
+      .prepare("SELECT role, content FROM local_ai_messages WHERE ai_session_id = ? ORDER BY id DESC LIMIT 1")
+      .get(aiSessionId) as { role: string; content: string } | undefined;
+    if (previous?.role === role && previous.content === content) return;
+  }
   const now = new Date().toISOString();
   db.prepare(
     `INSERT INTO local_ai_messages (ai_session_id, role, content, created_at)

@@ -279,6 +279,22 @@ body.theme-dark {
   color: var(--color-primary);
 }
 
+.desktop-login-remember {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  color: var(--color-text-secondary, #666);
+  cursor: pointer;
+  margin-top: 4px;
+}
+
+.desktop-login-remember input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--color-primary, #4f46e5);
+}
+
 .desktop-login-error {
   margin: -6px 0 0;
   border: 1px solid var(--state-error-bg);

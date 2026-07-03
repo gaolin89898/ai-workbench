@@ -1,13 +1,12 @@
 import { computed, ref, watch } from "vue";
 import router from "../router";
-import { desktopApi, type AiChatOutputEvent, type AiProvider, type AiSession, type ChatImageAttachment, type ChatMessage, type ChatSegment, type CodexProjectSession, type DesktopPairingStatus, type ProviderStatus, type TerminalSession, type ViewName, type WorkspaceProject } from "../services/desktop";
+import { desktopApi, type AiChatOutputEvent, type AiProvider, type AiSession, type ChatImageAttachment, type ChatMessage, type ChatSegment, type DesktopPairingStatus, type ProviderStatus, type TerminalSession, type ViewName, type WorkspaceProject } from "../services/desktop";
 import { decodeAssistantMessageFromStorage, encodeAssistantMessageForStorage, extractAssistantText } from "../utils/chat";
 
 const providers = ref<AiProvider[]>([]);
 const providerStatuses = ref<ProviderStatus[]>([]);
 const projects = ref<WorkspaceProject[]>([]);
 const aiSessions = ref<AiSession[]>([]);
-const codexProjectSessions = ref<Record<string, CodexProjectSession[]>>({});
 const terminalSessions = ref<TerminalSession[]>([]);
 const activeAiSession = ref<AiSession | null>(null);
 const showArchivedSessions = ref(false);
@@ -81,7 +80,7 @@ watch(
 );
 
 const activeSessions = computed(() => {
-  const list = aiSessions.value.filter((session) => !session.archivedAt);
+  const list = aiSessions.value.filter((session) => !session.archivedAt && !isCodexExternalMirrorSession(session));
   return list
     .map((session) => ({
       session,
@@ -95,7 +94,7 @@ const activeSessions = computed(() => {
     })
     .map((entry) => entry.session);
 });
-const archivedSessions = computed(() => aiSessions.value.filter((session) => !!session.archivedAt));
+const archivedSessions = computed(() => aiSessions.value.filter((session) => !!session.archivedAt && !isCodexExternalMirrorSession(session)));
 const activeChatRunState = computed(() => {
   const sessionId = activeAiSession.value?.id;
   return sessionId ? chatRunStates.value[sessionId] : undefined;
@@ -328,23 +327,7 @@ async function loadLocalWorkspace() {
   ]);
   projects.value = storedProjects;
   aiSessions.value = storedSessions;
-  await refreshCodexProjectSessions(storedProjects);
   ensureSelectedProject();
-}
-
-async function refreshCodexProjectSessions(projectList = projects.value) {
-  if (!projectList.length) {
-    codexProjectSessions.value = {};
-    return;
-  }
-  const entries = await Promise.all(projectList.map(async (project) => {
-    try {
-      return [project.path, await desktopApi.listCodexProjectSessions(project.path)] as const;
-    } catch {
-      return [project.path, []] as const;
-    }
-  }));
-  codexProjectSessions.value = Object.fromEntries(entries);
 }
 
 function ensureSelectedProject() {
@@ -534,25 +517,6 @@ async function createAiSession(): Promise<AiSession | null> {
   }
 }
 
-async function importCodexProjectSession(session: CodexProjectSession): Promise<AiSession | null> {
-  try {
-    const imported = await desktopApi.importCodexProjectSession({
-      projectPath: session.cwd,
-      providerSessionId: session.id,
-      title: session.title,
-      updatedAt: session.updatedAt,
-    });
-    aiSessions.value = [imported, ...aiSessions.value.filter((item) => item.id !== imported.id)].sort(sortSessionsByUpdatedAt);
-    await setActiveAiSession(imported);
-    await refreshCodexProjectSessions();
-    return imported;
-  } catch (error) {
-    chatMessages.value = [{ role: "error", text: `打开 Codex 会话失败：${String(error)}` }];
-    switchView("aiSessions");
-    return null;
-  }
-}
-
 function warmupAiForSession(sessionId: string) {
   const providerName = providerNameForSession(sessionId);
   pushChatDebugEvent(`warmup ${providerName}: ${sessionId.slice(0, 8)}`);
@@ -652,7 +616,7 @@ function selectAiSessionFromDropdown(sessionId: string) {
 
 async function loadAiSessionHistorySnapshot(sessionId: string) {
   const history = await desktopApi.listLocalAiHistory(sessionId);
-  return history.map((message) => {
+  return dedupeAdjacentChatMessages(history.map((message) => {
     if (message.role !== "assistant") {
       const decoded = decodeAssistantMessageFromStorage(message.content);
       return { role: message.role, text: decoded.text, images: decoded.images };
@@ -663,6 +627,29 @@ async function loadAiSessionHistorySnapshot(sessionId: string) {
       text: decoded.text,
       segments: decoded.segments,
     };
+  }));
+}
+
+function dedupeAdjacentChatMessages(messages: ChatMessage[]) {
+  const deduped: ChatMessage[] = [];
+  for (const message of messages) {
+    const previous = deduped[deduped.length - 1];
+    if (previous && chatMessageFingerprint(previous) === chatMessageFingerprint(message)) continue;
+    deduped.push(message);
+  }
+  return deduped;
+}
+
+function chatMessageFingerprint(message: ChatMessage) {
+  return JSON.stringify({
+    role: message.role,
+    text: (message.text ?? "").trim(),
+    images: (message.images ?? []).map((image) => ({
+      name: image.name,
+      mimeType: image.mimeType,
+      dataUrl: image.dataUrl,
+    })),
+    segments: message.segments ?? [],
   });
 }
 
@@ -671,10 +658,39 @@ async function loadAiSessionHistory(sessionId: string, options: { force?: boolea
     if (!options.force && pendingAssistants.has(sessionId)) return;
     const history = await loadAiSessionHistorySnapshot(sessionId);
     if (activeAiSession.value?.id !== sessionId || (!options.force && pendingAssistants.has(sessionId))) return;
+    void repairGeneratedCodexSessionTitleFromHistory(sessionId, history);
     chatMessages.value = history;
   } catch (error) {
     if (options.force || !pendingAssistants.has(sessionId)) chatMessages.value = [{ role: "error", text: `读取历史失败：${String(error)}` }];
   }
+}
+
+async function repairGeneratedCodexSessionTitleFromHistory(sessionId: string, history: ChatMessage[]) {
+  const session = activeAiSession.value?.id === sessionId
+    ? activeAiSession.value
+    : aiSessions.value.find((item) => item.id === sessionId);
+  if (!session || session.providerId !== "codex" || !isGeneratedCodexSessionTitle(session.title)) return;
+  const firstUserText = history.find((message) => message.role === "user" && message.text?.trim())?.text?.trim();
+  if (!firstUserText) return;
+  const title = sessionTitleFromPrompt(firstUserText);
+  if (!title || title === session.title || isGeneratedCodexSessionTitle(title)) return;
+  const updatedAt = new Date().toISOString();
+  aiSessions.value = aiSessions.value.map((item) =>
+    item.id === sessionId ? { ...item, title, updatedAt } : item
+  ).sort(sortSessionsByUpdatedAt);
+  if (activeAiSession.value?.id === sessionId) {
+    activeAiSession.value = { ...activeAiSession.value, title, updatedAt };
+    aiSessionTitle.value = title;
+  }
+  try {
+    await desktopApi.renameAiSession(sessionId, title);
+  } catch (error) {
+    pushChatDebugEvent(`修复会话标题失败：${String(error)}`);
+  }
+}
+
+function isGeneratedCodexSessionTitle(title: string) {
+  return /^(?:[\w.-]+|Codex)\s+会话\s+[0-9a-f]{8}$/i.test(title.trim());
 }
 
 function isCodexExternalMirrorSession(session: AiSession | null) {
@@ -955,7 +971,15 @@ function replacePendingAssistantText(sessionId: string, text: string, done = fal
 function commitCurrentAssistantTextAsThought(pending: PendingAssistant) {
   const currentStepId = pending.currentAgentMessageStepId;
   const previousFinalText = extractAssistantText(pending.finalText.trim());
-  if (!currentStepId || !previousFinalText || previousFinalText === pending.lastCommittedText) return;
+  if (
+    !currentStepId
+    || !previousFinalText
+    || !looksLikeProcessCommentary(previousFinalText)
+  ) return false;
+  if (previousFinalText === pending.lastCommittedText) {
+    pending.finalText = removeCommittedProcessText(pending.finalText, previousFinalText);
+    return true;
+  }
   const thoughtStepId = `process-text-${currentStepId}`;
   pending.steps.set(thoughtStepId, {
     type: "text",
@@ -963,18 +987,34 @@ function commitCurrentAssistantTextAsThought(pending: PendingAssistant) {
     text: previousFinalText,
   });
   pending.lastCommittedText = previousFinalText;
+  pending.finalText = removeCommittedProcessText(pending.finalText, previousFinalText);
+  return true;
+}
+
+function removeCommittedProcessText(currentText: string, committedText: string) {
+  const current = extractAssistantText(currentText);
+  const committed = extractAssistantText(committedText).trim();
+  if (!committed) return current;
+  if (current.trim() === committed) return "";
+  if (current.startsWith(committed)) return current.slice(committed.length).trimStart();
+  return current;
+}
+
+function looksLikeProcessCommentary(text: string) {
+  const normalized = text.trim();
+  if (normalized.length < 8) return false;
+  return /^(?:我先|先|接下来|现在我|我会|我准备|我需要|我将|我来|先看|先检查|正在)/.test(normalized)
+    || /^(?:Let me|I(?:'|’)ll|I am going to|I'm going to)\b/i.test(normalized)
+    || /(?:接下来我|我先看|我会先|我将先|先确认|先检查|先读取|先看一下)/.test(normalized);
 }
 
 function appendPendingAssistantText(sessionId: string, text: string, stepId?: string | null) {
   const pending = pendingAssistants.get(sessionId);
   if (!pending || !text) return;
   if (stepId && stepId !== pending.currentAgentMessageStepId) {
-    commitCurrentAssistantTextAsThought(pending);
-    pending.finalText = text;
     pending.currentAgentMessageStepId = stepId;
-  } else {
-    pending.finalText = extractAssistantText(`${pending.finalText}${text}`);
   }
+  pending.finalText = extractAssistantText(`${pending.finalText}${text}`);
   syncPendingAssistantSegments(sessionId, false);
   thinkingSessionIds.value = { ...thinkingSessionIds.value, [sessionId]: true };
 }
@@ -1051,7 +1091,11 @@ function upsertPendingSegment(sessionId: string, segment: ChatSegment) {
   const stepId = segment.stepId;
   if (!pending || !stepId) return;
   if (segment.type === "status") {
-    if (shouldHideBackendStatus(segment.label)) return;
+    const committedProcessText = commitCurrentAssistantTextAsThought(pending);
+    if (shouldHideBackendStatus(segment.label)) {
+      if (committedProcessText) syncPendingAssistantSegments(sessionId, pending.message.pending === false);
+      return;
+    }
     pending.lastStatusText = segment.label;
     pending.hasBackendStatus = true;
     const providerName = providerNameForSession(sessionId);
@@ -1124,7 +1168,7 @@ function isPersistentStatusSegment(segment: ChatSegment) {
 }
 
 function shouldHideBackendStatus(text: string) {
-  return text.includes("已生成一段回复") || text.includes("继续等待最终完成信号") || text === "mobile sent message";
+  return text.includes("已生成一段回复") || text.includes("继续等待最终完成信号") || text === "mobile sent message" || text === "created";
 }
 
 function patchPendingAssistant(sessionId: string, patch: Partial<ChatMessage>) {
@@ -1200,6 +1244,7 @@ async function initAiEventListeners() {
 }
 
 async function handleAiChatOutputEvent(event: AiChatOutputEvent) {
+  if (event.kind === "status" && shouldHideBackendStatus(event.text ?? "")) return;
   let pending = pendingAssistants.get(event.aiSessionId);
   if (!pending && event.kind !== "done" && event.kind !== "error") {
     const created = shouldHideBackendStatus(event.text ?? "")
@@ -1647,7 +1692,6 @@ export function useWorkspace() {
     providerStatuses,
     projects,
     aiSessions,
-    codexProjectSessions,
     terminalSessions,
     activeAiSession,
     showArchivedSessions,
@@ -1690,7 +1734,6 @@ export function useWorkspace() {
     refreshWorkspace,
     loadProviders,
     loadLocalWorkspace,
-    refreshCodexProjectSessions,
     detectProviders,
     refreshTerminalSessions,
     chooseProject,
@@ -1702,7 +1745,6 @@ export function useWorkspace() {
     resetChatControlsForNewSession,
     createAiSessionForProject,
     attachAiSessionForProject,
-    importCodexProjectSession,
     prepareProjectSession,
     createAiSession,
     startShellForActiveSession,

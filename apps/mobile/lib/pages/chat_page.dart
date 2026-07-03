@@ -58,10 +58,24 @@ class _ChatPageState extends State<ChatPage> {
     return AnimatedBuilder(
       animation: ws,
       builder: (context, _) {
-        final session = ws.sessions
-                .where((item) => item.id == widget.session.id)
-                .firstOrNull ??
-            widget.session;
+        final matchedSession = ws.sessions
+            .where((item) => item.id == widget.session.id)
+            .firstOrNull;
+        if (matchedSession == null && !ws.loading) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (context.mounted) Navigator.of(context).maybePop();
+          });
+          return const Scaffold(
+            backgroundColor: AppColors.background,
+            body: Center(
+              child: Text(
+                '会话已不再可用',
+                style: TextStyle(color: AppColors.muted, fontSize: 13),
+              ),
+            ),
+          );
+        }
+        final session = matchedSession ?? widget.session;
         final messages =
             ws.messagesBySession[session.id] ?? const <ChatMessage>[];
         final title = ws.getEffectiveTitle(session);

@@ -63,6 +63,7 @@ const CODEX_RECONNECT_RETRY_MS = 1200;
 const CODEX_RECONNECT_MAX_RETRIES = 5;
 const CLI_INTERRUPT_FALLBACK_MS = 1500;
 const CODEX_CLIENT_INFO = { name: "AI Workbench", version: "0.1.0" };
+const CODEX_APP_SERVER_SESSION_PREFIX = "app-server:";
 const activeCodexSessions = new Map<string, CodexSession>();
 
 function spawnCodex(args: string[], cwd: string): ChildProcessWithoutNullStreams {
@@ -77,23 +78,6 @@ function spawnCodex(args: string[], cwd: string): ChildProcessWithoutNullStreams
     cwd,
     stdio: ["pipe", "pipe", "pipe"],
   });
-}
-
-// ---------- System instructions ----------
-
-function codexDesktopDeveloperInstructions(): string {
-  return [
-    "你是 AI Workbench 桌面端的编程助手。",
-    "请严格遵守以下规则：",
-    "1. 必须使用中文回复用户。",
-    "2. 必须实际执行读取命令（如 ls / cat / grep / find）来了解项目结构和文件内容，不能仅凭推测回答。",
-    "3. 在执行任何修改性命令前，先告知用户你打算做什么。",
-    "4. 命令执行结果要如实地反馈给用户。",
-  ].join("\n");
-}
-
-function buildTurnMessage(prompt: string): string {
-  return `${codexDesktopDeveloperInstructions()}\n\n---\n\n用户请求：${prompt}`;
 }
 
 // ---------- Helpers ----------
@@ -214,7 +198,7 @@ function extractItemId(params: unknown): string | undefined {
 function extractDelta(params: unknown): string | undefined {
   if (!params || typeof params !== "object") return undefined;
   const p = params as Record<string, unknown>;
-  const delta = p["delta"] ?? p["text"] ?? p["content"];
+  const delta = p["delta"] ?? p["text"] ?? p["content"] ?? p["output"] ?? p["chunk"];
   return typeof delta === "string" ? delta : undefined;
 }
 
@@ -349,7 +333,7 @@ function buildItemStartedSegment(params: unknown): ChatSegment {
   }
 }
 
-function buildItemCompletedSegment(params: unknown): ChatSegment {
+function buildItemCompletedSegment(params: unknown, fallbackOutput?: string): ChatSegment {
   const p = (params ?? {}) as Record<string, unknown>;
   const item = (p["item"] ?? p) as Record<string, unknown>;
   const itemType = strOrUndef(item["type"]) ?? "unknown";
@@ -372,7 +356,7 @@ function buildItemCompletedSegment(params: unknown): ChatSegment {
         toolName: strOrUndef(item["toolName"]) ?? "command",
         command: strOrUndef(item["command"]) ?? strOrUndef(item["commandText"]),
         status: "success",
-        output: strOrUndef(item["output"]) ?? strOrUndef(item["result"]),
+        output: strOrUndef(item["output"]) ?? strOrUndef(item["result"]) ?? fallbackOutput,
         additions,
         deletions,
       };
@@ -658,12 +642,13 @@ function handleNotification(
     }
     case "item/completed": {
       const completedStepId = extractItemId(params);
+      const completedOutput = completedStepId ? session.commandOutputBuffers.get(completedStepId) : undefined;
       if (completedStepId) session.commandOutputBuffers.delete(completedStepId);
       emit(sender, {
         aiSessionId,
         kind: "step-update",
         stepId: completedStepId ?? null,
-        segment: buildItemCompletedSegment(params),
+        segment: buildItemCompletedSegment(params, completedOutput),
       });
       break;
     }
@@ -853,10 +838,24 @@ function interruptSession(session: CodexSession): void {
 
 function lookupExistingProviderSessionId(aiSessionId: string): string | null {
   try {
-    return getLocalAiSession(aiSessionId)?.providerSessionId ?? null;
+    const providerSessionId = getLocalAiSession(aiSessionId)?.providerSessionId ?? null;
+    return decodeAppServerProviderSessionId(providerSessionId);
   } catch {
     return null;
   }
+}
+
+function encodeAppServerProviderSessionId(threadId: string): string {
+  return threadId.startsWith(CODEX_APP_SERVER_SESSION_PREFIX)
+    ? threadId
+    : `${CODEX_APP_SERVER_SESSION_PREFIX}${threadId}`;
+}
+
+function decodeAppServerProviderSessionId(providerSessionId: string | null): string | null {
+  if (!providerSessionId) return null;
+  return providerSessionId.startsWith(CODEX_APP_SERVER_SESSION_PREFIX)
+    ? providerSessionId.slice(CODEX_APP_SERVER_SESSION_PREFIX.length)
+    : providerSessionId;
 }
 
 async function ensureThread(
@@ -896,7 +895,7 @@ async function ensureThread(
  * JSON-RPC connection, starts (or resumes) a thread, sends turn/start, and
  * streams AiChatOutputEvent to the sender until the turn completes.
  *
- * Returns the threadId (providerSessionId).
+ * Returns the app-server tagged threadId (providerSessionId).
  */
 export async function runCodexChat(
   req: RunCodexChatRequest,
@@ -933,11 +932,10 @@ export async function runCodexChat(
       session.turnResolver = { resolve, reject };
     });
 
-    // 4. send turn/start with system instructions + prompt
-    const fullPrompt = buildTurnMessage(prompt);
+    // 4. send turn/start with the user's prompt exactly as entered.
     await sendRequestWithReconnectRetry(session, "turn/start", {
       threadId,
-      input: buildUserInput(fullPrompt, images),
+      input: buildUserInput(prompt, images),
     });
 
     // 5. wait for turn/completed or error
@@ -945,12 +943,12 @@ export async function runCodexChat(
 
     clearTimeout(timeout);
     killSession(session);
-    return threadId;
+    return encodeAppServerProviderSessionId(threadId);
   } catch (err) {
     clearTimeout(timeout);
     if (session.cancelled) {
       killSession(session);
-      return session.threadId ?? "";
+      return session.threadId ? encodeAppServerProviderSessionId(session.threadId) : "";
     }
     if (!session.cancelled) {
       emitSessionError(session, errorMessage(err));
@@ -1023,7 +1021,7 @@ export function respondCodexApproval(
 
 /**
  * Pre-warm a Codex session by performing initialize + thread/start without
- * sending a turn. Returns the threadId for later reuse via thread/resume.
+ * sending a turn. Returns the app-server tagged threadId for later reuse via thread/resume.
  *
  * Best-effort: on any failure returns an empty string.
  */
@@ -1049,7 +1047,7 @@ export async function warmupCodexSession(
     const threadId = await ensureThread(session, aiSessionId);
     clearTimeout(timeout);
     killSession(session);
-    return { providerSessionId: threadId };
+    return { providerSessionId: encodeAppServerProviderSessionId(threadId) };
   } catch {
     clearTimeout(timeout);
     killSession(session);

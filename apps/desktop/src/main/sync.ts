@@ -25,13 +25,15 @@ import {
 } from "./db";
 import { detectAiProviders } from "./providers";
 import { assessCommandRisk } from "./risk";
-import { respondCodexApproval, runCodexChat } from "./codex";
+import { respondCodexApproval, runCodexChat, warmupCodexSession } from "./codex";
+import { clearCredentials } from "./credentials";
 import { syncCodexHistoryMirror } from "./codex_sessions";
 import { runAiChat } from "./claude";
 
 // ---------- Cloud config persistence ----------
 
 const STRUCTURED_MESSAGE_PREFIX = "__AI_WORKBENCH_MESSAGE_V1__";
+const CODEX_APP_SERVER_SESSION_PREFIX = "app-server:";
 const configPath = path.join(app.getPath("userData"), "cloud-config.json");
 const machineIdPath = path.join(app.getPath("userData"), "machine-id");
 
@@ -78,6 +80,16 @@ function encodeStructuredHistoryContent(content: string, segments: unknown[]): s
   })}`;
 }
 
+function isCodexExternalMirrorSession(session: { providerId: string; providerSessionId?: string | null }): boolean {
+  return session.providerId === "codex"
+    && Boolean(session.providerSessionId)
+    && !session.providerSessionId!.startsWith(CODEX_APP_SERVER_SESSION_PREFIX);
+}
+
+function listSyncableAiSessions() {
+  return listLocalAiSessions().filter((session) => !isCodexExternalMirrorSession(session));
+}
+
 function mergeChatSegment(segments: unknown[], segment: unknown): unknown[] {
   if (!segment || typeof segment !== "object") return segments;
   const record = segment as Record<string, unknown>;
@@ -95,6 +107,68 @@ function mergeChatSegment(segments: unknown[], segment: unknown): unknown[] {
 function mergeChatSegments(segments: unknown[], incoming: unknown): unknown[] {
   if (!Array.isArray(incoming)) return segments;
   return incoming.reduce((next, segment) => mergeChatSegment(next, segment), segments);
+}
+
+function looksLikeProcessCommentary(text: string) {
+  const normalized = text.trim();
+  if (normalized.length < 8) return false;
+  return /^(?:我先|先|接下来|现在我|我会|我准备|我需要|我将|我来|先看|先检查|正在)/.test(normalized)
+    || /^(?:Let me|I(?:'|’)ll|I am going to|I'm going to)\b/i.test(normalized)
+    || /(?:接下来我|我先看|我会先|我将先|先确认|先检查|先读取|先看一下)/.test(normalized);
+}
+
+function removeCommittedProcessText(currentText: string, committedText: string) {
+  const current = currentText;
+  const committed = committedText.trim();
+  if (!committed) return current;
+  if (current.trim() === committed) return "";
+  if (current.startsWith(committed)) return current.slice(committed.length).trimStart();
+  return current;
+}
+
+function segmentStepId(segment: unknown): string | null {
+  if (!segment || typeof segment !== "object") return null;
+  const stepId = (segment as Record<string, unknown>).stepId;
+  return typeof stepId === "string" && stepId ? stepId : null;
+}
+
+function firstSegmentStepId(segments: unknown): string | null {
+  if (!Array.isArray(segments)) return null;
+  for (const segment of segments) {
+    const stepId = segmentStepId(segment);
+    if (stepId) return stepId;
+  }
+  return null;
+}
+
+interface MobileAssistantDraft {
+  text: string;
+  segments: unknown[];
+  savedText: string;
+  currentStepId?: string | null;
+  lastCommittedText?: string;
+}
+
+function commitDraftProcessText(draft: MobileAssistantDraft, event: AiChatOutputEvent): void {
+  const stepId = event.stepId
+    || segmentStepId(event.segment)
+    || firstSegmentStepId(event.segments)
+    || draft.currentStepId;
+  if (stepId) draft.currentStepId = stepId;
+
+  const processText = draft.text.trim();
+  if (!stepId || !processText || !looksLikeProcessCommentary(processText)) return;
+  if (processText !== draft.lastCommittedText) {
+    draft.segments = mergeChatSegment(draft.segments, {
+      type: "thought",
+      stepId: `thought-${stepId}`,
+      title: "中间结论",
+      text: processText,
+      collapsed: true,
+    });
+    draft.lastCommittedText = processText;
+  }
+  draft.text = removeCommittedProcessText(draft.text, processText);
 }
 
 function loadStoredConfig(): StoredCloudConfig | null {
@@ -225,6 +299,7 @@ export function logoutDesktop(): void {
   } catch (e) {
     console.error("Failed to remove cloud config on logout:", e);
   }
+  clearCredentials();
 }
 
 // saveOAuthLogin OAuth 登录后桌面端调用 /desktop/register-device 拿真实
@@ -353,7 +428,7 @@ class DesktopCloudSync {
   // Tracks projectPath per session for mobile-originated sessions, since the
   // local DB schema does not store project_path on local_ai_sessions.
   private sessionProjectPaths = new Map<string, string>();
-  private mobileAssistantDrafts = new Map<string, { text: string; segments: unknown[]; savedText: string }>();
+  private mobileAssistantDrafts = new Map<string, MobileAssistantDraft>();
   private mobileDeltaBuffers = new Map<string, { text: string; segments: unknown[]; timer: ReturnType<typeof setTimeout> | null; deviceId: string }>();
 
   constructor(mainWindow: BrowserWindow) {
@@ -426,7 +501,7 @@ class DesktopCloudSync {
 
   private pushSnapshots(deviceId: string): void {
     const projects = listWorkspaceProjects();
-    const sessions = listLocalAiSessions();
+    const sessions = listSyncableAiSessions();
     this.send({ type: "projects.snapshot", deviceId, projects });
     this.send({ type: "ai.sessions.snapshot", deviceId, sessions });
     // Provider detection is async (spawns CLI processes); send when ready.
@@ -447,7 +522,7 @@ class DesktopCloudSync {
   pushSessionSnapshot(): void {
     const config = loadStoredConfig();
     if (!config) return;
-    const sessions = listLocalAiSessions();
+    const sessions = listSyncableAiSessions();
     this.send({ type: "ai.sessions.snapshot", deviceId: config.deviceId, sessions });
   }
 
@@ -461,6 +536,28 @@ class DesktopCloudSync {
     if (!config) return;
     const projects = listWorkspaceProjects();
     this.send({ type: "projects.snapshot", deviceId: config.deviceId, projects });
+  }
+
+  /**
+   * Push the latest local history for one AI session to mobile clients.
+   * Desktop-originated user messages are written to SQLite before provider
+   * output starts, so mobile needs this explicit history push to see them.
+   */
+  async pushAiHistory(aiSessionId: string): Promise<void> {
+    const config = loadStoredConfig();
+    if (!config) return;
+    try {
+      await syncCodexHistoryMirror(aiSessionId);
+    } catch (e) {
+      console.error("pushAiHistory: codex history sync failed:", e);
+    }
+    this.send({
+      type: "ai.history.response",
+      deviceId: config.deviceId,
+      aiSessionId,
+      requestId: `push-${Date.now()}`,
+      messages: this.buildHistoryMessages(aiSessionId),
+    });
   }
 
   /**
@@ -570,11 +667,26 @@ class DesktopCloudSync {
         });
       }
 
-      this.notify("ai-chat-output", { aiSessionId, kind: "status", text: "created" });
       this.notify("workspace-changed");
       this.notify("ai-history-changed", { aiSessionId });
+      if ((providerId || "claude") === "codex") {
+        void this.warmupCreatedCodexSession(aiSessionId);
+      }
     } catch (e) {
       console.error("handleAiSessionCreate failed:", e);
+    }
+  }
+
+  private async warmupCreatedCodexSession(aiSessionId: string): Promise<void> {
+    try {
+      const warmed = await warmupCodexSession(aiSessionId, { send: () => undefined });
+      if (!warmed.providerSessionId) return;
+      updateLocalAiSession(aiSessionId, { providerSessionId: warmed.providerSessionId });
+      this.notify("workspace-changed");
+      this.notify("ai-history-changed", { aiSessionId });
+      this.pushSessionSnapshot();
+    } catch (e) {
+      console.error("warmupCreatedCodexSession failed:", e);
     }
   }
 
@@ -618,6 +730,26 @@ class DesktopCloudSync {
     }
   }
 
+  private buildHistoryMessages(aiSessionId: string): Array<Record<string, unknown>> {
+    const messages: Array<Record<string, unknown>> = listLocalAiHistory(aiSessionId).map((message) => ({
+      ...message,
+      content: decodeHistoryContent(message.content),
+    }));
+    const draft = this.mobileAssistantDrafts.get(aiSessionId);
+    if (draft && (draft.text.trim() || draft.segments.length)) {
+      messages.push({
+        role: "assistant",
+        content: {
+          text: draft.text,
+          segments: draft.segments,
+        },
+        createdAt: new Date().toISOString(),
+        pending: true,
+      });
+    }
+    return messages;
+  }
+
   createRendererAndMobileAiChatSender(rendererSender: { send: (channel: string, ...args: unknown[]) => void }) {
     const config = loadStoredConfig();
     const deviceId = config?.deviceId;
@@ -629,15 +761,17 @@ class DesktopCloudSync {
         if (!event?.aiSessionId) return;
         if (event.kind === "status" && event.text === "mobile sent message") return;
         const draft = this.mobileAssistantDrafts.get(event.aiSessionId) ?? { text: "", segments: [], savedText: "" };
-        draft.segments = mergeChatSegments(draft.segments, event.segments);
-        if (event.segment) {
-          draft.segments = mergeChatSegment(draft.segments, event.segment);
-        }
         if (event.kind === "delta" && event.text) {
+          if (event.stepId) draft.currentStepId = event.stepId;
           draft.text += event.text;
           this.mobileAssistantDrafts.set(event.aiSessionId, draft);
           this.scheduleMobileDeltaFlush(deviceId, event.aiSessionId, event.text, draft.segments);
           return;
+        }
+        if (event.kind !== "done") commitDraftProcessText(draft, event);
+        draft.segments = mergeChatSegments(draft.segments, event.segments);
+        if (event.segment) {
+          draft.segments = mergeChatSegment(draft.segments, event.segment);
         }
         if (event.kind === "done") {
           this.flushMobileDelta(event.aiSessionId);
@@ -650,6 +784,8 @@ class DesktopCloudSync {
             text: finalText,
             segments: draft.segments,
           });
+          this.mobileAssistantDrafts.delete(event.aiSessionId);
+          void this.pushAiHistory(event.aiSessionId);
           return;
         }
         this.flushMobileDelta(event.aiSessionId);
@@ -673,15 +809,17 @@ class DesktopCloudSync {
         if (!event?.aiSessionId) return;
         if (event.kind === "status" && event.text === "mobile sent message") return;
         const draft = this.mobileAssistantDrafts.get(event.aiSessionId) ?? { text: "", segments: [], savedText: "" };
-        draft.segments = mergeChatSegments(draft.segments, event.segments);
-        if (event.segment) {
-          draft.segments = mergeChatSegment(draft.segments, event.segment);
-        }
         if (event.kind === "delta" && event.text) {
+          if (event.stepId) draft.currentStepId = event.stepId;
           draft.text += event.text;
           this.mobileAssistantDrafts.set(event.aiSessionId, draft);
           this.scheduleMobileDeltaFlush(deviceId, event.aiSessionId, event.text, draft.segments);
           return;
+        }
+        if (event.kind !== "done") commitDraftProcessText(draft, event);
+        draft.segments = mergeChatSegments(draft.segments, event.segments);
+        if (event.segment) {
+          draft.segments = mergeChatSegment(draft.segments, event.segment);
         }
         if (event.kind === "done") {
           this.flushMobileDelta(event.aiSessionId);
@@ -698,6 +836,9 @@ class DesktopCloudSync {
             text: finalText,
             segments: draft.segments,
           });
+          this.mobileAssistantDrafts.delete(event.aiSessionId);
+          this.notify("ai-history-changed", { aiSessionId: event.aiSessionId });
+          void this.pushAiHistory(event.aiSessionId);
           return;
         }
         this.flushMobileDelta(event.aiSessionId);
@@ -737,6 +878,8 @@ class DesktopCloudSync {
       }
 
       appendLocalAiMessage(aiSessionId, "user", content);
+      this.notify("ai-history-changed", { aiSessionId });
+      void this.pushAiHistory(aiSessionId);
 
       const session = getLocalAiSession(aiSessionId);
       if (!session) {
@@ -755,7 +898,13 @@ class DesktopCloudSync {
       aiChatSender.send("ai-chat-output", {
         aiSessionId,
         kind: "status",
-        text: "mobile sent message",
+        text: "running",
+        segment: {
+          type: "status",
+          stepId: "mobile-run-started",
+          label: "正在处理",
+          icon: "think",
+        },
       });
 
       try {
@@ -835,16 +984,12 @@ class DesktopCloudSync {
     } catch (e) {
       console.error("handleAiHistoryRequest: codex history sync failed:", e);
     }
-    const messages = listLocalAiHistory(aiSessionId).map((message) => ({
-      ...message,
-      content: decodeHistoryContent(message.content),
-    }));
     this.send({
       type: "ai.history.response",
       deviceId,
       aiSessionId,
       requestId,
-      messages,
+      messages: this.buildHistoryMessages(aiSessionId),
     });
   }
 

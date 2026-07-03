@@ -61,26 +61,6 @@ export type AiSession = {
   updatedAt?: string;
 };
 
-export type CodexProjectSession = {
-  id: string;
-  title: string;
-  updatedAt: string;
-  cwd: string;
-  source?: string;
-  originator?: string;
-  cliVersion?: string;
-  modelProvider?: string;
-  filePath: string;
-  imported: boolean;
-};
-
-export type ImportCodexProjectSessionRequest = {
-  projectPath: string;
-  providerSessionId: string;
-  title: string;
-  updatedAt?: string;
-};
-
 export type PairResponse = {
   deviceId?: string;
   device_id?: string;
@@ -349,6 +329,12 @@ export const desktopApi = {
     ipc<PairResponse>("login_desktop", server, email, password),
   logoutDesktop: (): Promise<void> =>
     ipc<void>("logout_desktop"),
+  saveCredentials: (email: string, password: string): Promise<void> =>
+    ipc<void>("save_credentials", email, password),
+  loadCredentials: (): Promise<{ email: string; password: string } | null> =>
+    ipc<{ email: string; password: string } | null>("load_credentials"),
+  clearCredentials: (): Promise<void> =>
+    ipc<void>("clear_credentials"),
   saveOAuthLogin: (serverUrl: string, accessToken: string, userId: string, displayName: string): Promise<void> =>
     ipc<void>("save_oauth_login", serverUrl, accessToken, userId, displayName),
   openExternalUrl: (url: string): Promise<void> =>
@@ -417,10 +403,6 @@ export const desktopApi = {
     ipc<AiHistoryMessage[]>("list_local_ai_history", aiSessionId),
   listLocalAiSessions: (): Promise<AiSession[]> =>
     ipc<AiSession[]>("list_local_ai_sessions"),
-  listCodexProjectSessions: (projectPath: string): Promise<CodexProjectSession[]> =>
-    ipc<CodexProjectSession[]>("list_codex_project_sessions", projectPath),
-  importCodexProjectSession: (req: ImportCodexProjectSessionRequest): Promise<AiSession> =>
-    ipc<AiSession>("import_codex_project_session", req),
   archiveLocalAiSession: (aiSessionId: string, archived: boolean): Promise<AiSession> =>
     ipc<AiSession>("archive_local_ai_session", aiSessionId, archived),
   renameLocalAiSession: (aiSessionId: string, title: string): Promise<AiSession> =>

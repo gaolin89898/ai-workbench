@@ -85,7 +85,7 @@ function toolLineMeta(segment: Extract<ChatSegmentType, { type: "tool" }>) {
 }
 
 function toolHasDetails(segment: Extract<ChatSegmentType, { type: "tool" }>) {
-  return Boolean(toolVisibleInput(segment) || toolVisibleOutput(segment) || toolDiffText(segment));
+  return Boolean(segment.command || segment.summary || toolVisibleInput(segment) || toolVisibleOutput(segment) || toolDiffText(segment));
 }
 
 function toolDetailText(segment: Extract<ChatSegmentType, { type: "tool" }>, value?: string) {
@@ -114,12 +114,17 @@ function extractUserRequest(text: string) {
 
 function shortenCommand(command?: string) {
   if (!command) return "";
-  const cleaned = command
+  const cleaned = unquoteCommand(command
     .replace(/^\/usr\/bin\/(?:bash|sh)\s+-lc\s+/, "")
     .replace(/^bash\s+-lc\s+/, "")
-    .trim();
-  const unquoted = cleaned.replace(/^['"](.+)['"]$/, "$1");
+    .trim());
+  const powershell = cleaned.match(/^(?:"?[^"]*\\powershell(?:\.exe)?"?\s+)?-Command\s+([\s\S]+)$/i);
+  const unquoted = powershell ? `PowerShell: ${unquoteCommand(powershell[1].trim())}` : cleaned;
   return unquoted.length > 88 ? `${unquoted.slice(0, 85)}...` : unquoted;
+}
+
+function unquoteCommand(command: string) {
+  return command.replace(/^['"](.+)['"]$/, "$1");
 }
 
 function toolDiffText(segment: Extract<ChatSegmentType, { type: "tool" }>) {
@@ -475,6 +480,14 @@ async function respondApproval(decision: "approved" | "denied") {
         </svg>
       </summary>
       <div class="chat-segment-tool-details">
+        <section v-if="segment.command" class="chat-segment-output-block">
+          <strong>命令</strong>
+          <pre>{{ segment.command }}</pre>
+        </section>
+        <section v-if="segment.summary" class="chat-segment-output-block">
+          <strong>摘要</strong>
+          <pre>{{ segment.summary }}</pre>
+        </section>
         <section v-if="toolDiffLines.length" class="chat-segment-diff-section">
           <div class="chat-segment-diff">
             <div
