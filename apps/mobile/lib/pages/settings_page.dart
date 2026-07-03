@@ -4,6 +4,7 @@ import '../models/workbench_models.dart';
 import '../services/api_client.dart';
 import '../state/workspace_scope.dart';
 import '../widgets/app_theme.dart';
+import 'archived_sessions_page.dart';
 import 'login_page.dart';
 import 'update_page.dart';
 
@@ -134,7 +135,14 @@ class _SettingsPageState extends State<SettingsPage> {
                     background: AppColors.dangerSoft,
                     foreground: AppColors.dangerDeep,
                     title: '已归档对话',
-                    onTap: () {},
+                    onTap: () => Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (_) => WorkspaceScope(
+                          controller: ws,
+                          child: const ArchivedSessionsPage(),
+                        ),
+                      ),
+                    ),
                     trailing: const _Chevron(),
                   ),
                 ],

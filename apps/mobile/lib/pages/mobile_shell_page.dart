@@ -130,13 +130,13 @@ class _DashboardTab extends StatelessWidget {
 
   // 最近会话区：空状态或会话列表卡
   Widget _buildRecentSessions(BuildContext context, WorkspaceController ws) {
-    if (ws.sessions.isEmpty) {
+    final recent = ws.visibleSessions.take(5).toList();
+    if (recent.isEmpty) {
       return const SizedBox(
         height: 220,
         child: EmptyState('还没有 AI 会话。先从项目页创建一个。'),
       );
     }
-    final recent = ws.sessions.take(5).toList();
     return AppCard(
       borderRadius: AppRadius.lg,
       padding: EdgeInsets.zero,
