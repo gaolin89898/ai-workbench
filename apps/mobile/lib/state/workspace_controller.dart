@@ -1170,6 +1170,8 @@ class WorkspaceController extends ChangeNotifier {
       durationMs: segment.durationMs,
       additions: segment.additions,
       deletions: segment.deletions,
+      rawItemType: segment.rawItemType,
+      startedAt: segment.startedAt,
     );
   }
 
@@ -1350,6 +1352,8 @@ class WorkspaceController extends ChangeNotifier {
         durationMs: next.durationMs ?? previous.durationMs,
         additions: next.additions ?? previous.additions,
         deletions: next.deletions ?? previous.deletions,
+        rawItemType: next.rawItemType ?? previous.rawItemType,
+        startedAt: next.startedAt ?? previous.startedAt,
       );
 
   void _handleMessageDelta(Map<String, dynamic> json) {

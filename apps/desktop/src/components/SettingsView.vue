@@ -345,7 +345,7 @@ async function restoreSession(sessionId: string) {
             <div class="settings-card settings-connection-card">
               <label class="settings-field">
                 <span>服务器地址</span>
-                <input v-model="localServer" class="settings-field-input" placeholder="http://118.196.78.91" />
+                <input v-model="localServer" class="settings-field-input" placeholder="http://8.162.12.148:3000" />
                 <small>桌面端和移动端转发使用的云端地址。</small>
               </label>
               <label class="settings-row settings-toggle-row settings-toggle-divider">

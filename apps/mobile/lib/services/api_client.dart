@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
@@ -9,8 +10,12 @@ import '../models/workbench_models.dart';
 class ApiClient {
   ApiClient({required String baseUrl}) : baseUrl = normalizeBaseUrl(baseUrl);
 
-  static const defaultBaseUrl = 'http://8.162.12.148:3000';
+  static String get defaultBaseUrl =>
+      defaultTargetPlatform == TargetPlatform.android
+          ? 'http://8.162.12.148:3000'
+          : 'http://8.162.12.148:3000';
   static const _tokenKey = 'auth_token';
+  static const _tokenServerKey = 'auth_token_server_url';
   static const _emailKey = 'saved_email';
   static const _passwordKey = 'saved_password';
   static const _secureStorage = FlutterSecureStorage();
@@ -18,19 +23,33 @@ class ApiClient {
   final String baseUrl;
   String? token;
 
-  static Future<String?> loadStoredToken() async {
+  static Future<String?> loadStoredToken({String? baseUrl}) async {
     final prefs = await SharedPreferences.getInstance();
-    return prefs.getString(_tokenKey);
+    final token = prefs.getString(_tokenKey);
+    if (token == null || token.isEmpty) return token;
+    if (baseUrl == null || baseUrl.trim().isEmpty) return token;
+
+    final expectedServer = normalizeBaseUrl(baseUrl);
+    final savedServer = prefs.getString(_tokenServerKey);
+    if (savedServer != expectedServer) {
+      await clearStoredToken();
+      return null;
+    }
+    return token;
   }
 
-  static Future<void> saveStoredToken(String token) async {
+  static Future<void> saveStoredToken(String token, {String? baseUrl}) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_tokenKey, token);
+    if (baseUrl != null && baseUrl.trim().isNotEmpty) {
+      await prefs.setString(_tokenServerKey, normalizeBaseUrl(baseUrl));
+    }
   }
 
   static Future<void> clearStoredToken() async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove(_tokenKey);
+    await prefs.remove(_tokenServerKey);
   }
 
   static Future<void> saveCredentials(String email, String password) async {
@@ -60,14 +79,15 @@ class ApiClient {
     var value = input.trim().replaceFirst(RegExp(r'/+$'), '');
     if (value.isEmpty) return value;
     if (!value.contains('://')) value = 'http://$value';
-    final uri = Uri.parse(value);
-    if (!uri.hasPort && (uri.scheme == 'http' || uri.scheme == 'https')) {
-      return uri
-          .replace(port: 3000)
-          .toString()
-          .replaceFirst(RegExp(r'/+$'), '');
+    var uri = Uri.parse(value);
+    if (defaultTargetPlatform == TargetPlatform.android &&
+        (uri.host == '127.0.0.1' || uri.host == 'localhost')) {
+      uri = uri.replace(host: '10.0.2.2');
     }
-    return value;
+    if (!uri.hasPort && (uri.scheme == 'http' || uri.scheme == 'https')) {
+      uri = uri.replace(port: 3000);
+    }
+    return uri.toString().replaceFirst(RegExp(r'/+$'), '');
   }
 
   Map<String, String> get headers => {
@@ -103,7 +123,7 @@ class ApiClient {
     }
     _throwIfBad(response);
     token = jsonDecode(response.body)['accessToken'] as String;
-    await saveStoredToken(token!);
+    await saveStoredToken(token!, baseUrl: baseUrl);
   }
 
   Future<void> register(String email, String password) async {
@@ -114,7 +134,7 @@ class ApiClient {
     );
     _throwIfBad(response);
     token = jsonDecode(response.body)['accessToken'] as String;
-    await saveStoredToken(token!);
+    await saveStoredToken(token!, baseUrl: baseUrl);
   }
 
   Future<List<DesktopDevice>> devices() =>

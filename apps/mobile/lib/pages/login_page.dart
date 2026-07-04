@@ -421,7 +421,7 @@ class _LoginPageState extends State<LoginPage> {
       if (result == null) throw Exception('授权超时');
 
       api.token = result.accessToken;
-      await ApiClient.saveStoredToken(result.accessToken!);
+      await ApiClient.saveStoredToken(result.accessToken!, baseUrl: api.baseUrl);
       final controller = WorkspaceController(api: api);
       await controller.loadDevices();
       if (!mounted) return;

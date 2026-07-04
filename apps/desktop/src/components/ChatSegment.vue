@@ -44,8 +44,9 @@ function formatDuration(durationMs?: number) {
 
 function toolLineTitle(segment: Extract<ChatSegmentType, { type: "tool" }>) {
   const patchFiles = patchFileList(toolDiffText(segment));
-  const command = patchFiles.length ? shortFileList(patchFiles) : shortenCommand(segment.command);
-  const verb = segment.status === "running" ? "正在" : "已";
+  const command = normalizeCommand(segment.command);
+  const displayCommand = patchFiles.length ? shortFileList(patchFiles) : shortenCommand(segment.command);
+  const statusVerb = segment.status === "running" ? "正在" : "已";
   if (isStdinContinuationSegment(segment)) {
     if (segment.status === "error") return "读取命令输出失败";
     return segment.status === "running" ? "正在读取命令输出" : "已读取命令输出";
@@ -59,28 +60,29 @@ function toolLineTitle(segment: Extract<ChatSegmentType, { type: "tool" }>) {
     return segment.status === "running" ? "正在扫描项目" : "已扫描项目";
   }
   if (segment.toolName.includes("修改") || segment.toolName.includes("文件")) {
-    if (segment.status === "error") return command ? `修改 ${command} 文件失败` : "修改文件失败";
-    return command
-      ? `${segment.status === "running" ? "正在修改" : "已修改"} ${command} 文件`
+    if (segment.status === "error") return displayCommand ? `修改 ${displayCommand} 失败` : "修改文件失败";
+    return displayCommand
+      ? `${segment.status === "running" ? "正在修改" : "已修改"} ${displayCommand}`
       : (segment.status === "running" ? "正在处理文件修改" : "已处理文件修改");
   }
   if (segment.toolName.includes("命令") || segment.command) {
-    if (segment.status === "error") return command ? `运行失败 ${command}` : "运行命令失败";
-    return command ? `${verb}运行 ${command}` : `${verb}运行命令`;
+    const operation = commandOperationTitle(command, segment.status);
+    if (operation) return operation;
+    if (segment.status === "error") return displayCommand ? `运行失败 ${displayCommand}` : "运行命令失败";
+    return displayCommand ? `${statusVerb}运行 ${displayCommand}` : `${statusVerb}运行命令`;
   }
   if (segment.status === "error") return segment.summary || `处理失败 ${segment.toolName}`;
-  return segment.summary || `${verb}处理 ${segment.toolName}`;
+  return segment.summary || `${statusVerb}处理 ${segment.toolName}`;
 }
 
 function toolLineMeta(segment: Extract<ChatSegmentType, { type: "tool" }>) {
-  const parts: Array<{ kind: "add" | "delete" | "error" | "duration"; text: string }> = [];
+  const parts: Array<{ kind: "add" | "delete" | "error"; text: string }> = [];
   const stats = diffStats(toolDiffText(segment));
   const additions = segment.additions ?? stats.additions;
   const deletions = segment.deletions ?? stats.deletions;
   if (additions !== undefined) parts.push({ kind: "add", text: `+${additions}` });
   if (deletions !== undefined) parts.push({ kind: "delete", text: `-${deletions}` });
   if (segment.status === "error") parts.push({ kind: "error", text: "失败" });
-  if (segment.durationMs) parts.push({ kind: "duration", text: formatDuration(segment.durationMs) });
   return parts;
 }
 
@@ -114,17 +116,71 @@ function extractUserRequest(text: string) {
 
 function shortenCommand(command?: string) {
   if (!command) return "";
+  const unquoted = normalizeCommand(command);
+  const display = isPowerShellCommand(command) ? `PowerShell: ${unquoted}` : unquoted;
+  return display.length > 88 ? `${display.slice(0, 85)}...` : display;
+}
+
+function normalizeCommand(command?: string) {
+  if (!command) return "";
   const cleaned = unquoteCommand(command
     .replace(/^\/usr\/bin\/(?:bash|sh)\s+-lc\s+/, "")
     .replace(/^bash\s+-lc\s+/, "")
     .trim());
   const powershell = cleaned.match(/^(?:"?[^"]*\\powershell(?:\.exe)?"?\s+)?-Command\s+([\s\S]+)$/i);
-  const unquoted = powershell ? `PowerShell: ${unquoteCommand(powershell[1].trim())}` : cleaned;
-  return unquoted.length > 88 ? `${unquoted.slice(0, 85)}...` : unquoted;
+  return unquoteCommand((powershell ? powershell[1] : cleaned).trim());
+}
+
+function isPowerShellCommand(command?: string) {
+  return /(?:^|\\)powershell(?:\.exe)?"?\s+-Command/i.test(command ?? "");
+}
+
+function commandOperationTitle(command: string, status: string) {
+  const verb = status === "running" ? "正在" : "已";
+  const target = commandTarget(command);
+  if (/^(?:Get-Content|cat|type|head|tail|sed\b|Select-String\b)/i.test(command)) {
+    if (status === "error") return target ? `读取 ${target} 失败` : "读取文件失败";
+    return target ? `${verb}读取 ${target}` : `${verb}读取文件`;
+  }
+  if (/^(?:rg|grep|findstr|fd|find\b|Get-ChildItem|ls\b|dir\b)/i.test(command)) {
+    if (status === "error") return "搜索文件失败";
+    return `${verb}搜索文件`;
+  }
+  if (/\b(?:Get-Content|cat|type)\b/i.test(command)) {
+    if (status === "error") return target ? `读取 ${target} 失败` : "读取文件失败";
+    return target ? `${verb}读取 ${target}` : `${verb}读取文件`;
+  }
+  if (/\b(?:rg|grep|findstr|Get-ChildItem)\b/i.test(command)) {
+    if (status === "error") return "搜索文件失败";
+    return `${verb}搜索文件`;
+  }
+  return "";
+}
+
+function commandTarget(command: string) {
+  const tokens = command.match(/(?:"[^"]+"|'[^']+'|\S+)/g)?.map((token) => unquoteCommand(token)) ?? [];
+  const commandNames = /^(?:Get-Content|cat|type|head|tail|sed|Select-String|PowerShell:)$/i;
+  const optionsWithValue = /^(?:-Encoding|-TotalCount|-Tail|-Head|-Filter|-Include|-Exclude|-Context|-Pattern)$/i;
+  let skipNext = false;
+  for (const token of tokens) {
+    if (!token || commandNames.test(token)) continue;
+    if (skipNext) {
+      skipNext = false;
+      continue;
+    }
+    if (optionsWithValue.test(token)) {
+      skipNext = true;
+      continue;
+    }
+    if (token.startsWith("-")) continue;
+    if (/^\d+$/.test(token)) continue;
+    return token.split(/[\\/]/).pop() || token;
+  }
+  return "";
 }
 
 function unquoteCommand(command: string) {
-  return command.replace(/^['"](.+)['"]$/, "$1");
+  return command.replace(/^["'](.+)["']$/, "$1");
 }
 
 function toolDiffText(segment: Extract<ChatSegmentType, { type: "tool" }>) {
@@ -504,7 +560,7 @@ async function respondApproval(decision: "approved" | "denied") {
           <pre>{{ segment.command }}</pre>
         </section>
         <section v-if="segment.summary" class="chat-segment-output-block">
-          <strong>摘要</strong>
+          <strong>说明</strong>
           <pre>{{ segment.summary }}</pre>
         </section>
         <section v-if="toolDiffLines.length" class="chat-segment-diff-section">

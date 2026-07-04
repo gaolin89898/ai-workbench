@@ -216,14 +216,7 @@ function flushAssistantDraft(messages: AiHistoryMessage[], draft: ImportedAssist
   const promoted = promoteFinalTextFromProcessSegments(draft);
   const text = promoted.text;
   const segments = promoted.segments;
-  if (draft.completedDurationMs !== undefined && segments.some(isProcessHistorySegment)) {
-    segments.push({
-      type: "status",
-      stepId: "final-summary",
-      label: `已处理 ${formatCompactDuration(draft.completedDurationMs)}`,
-      durationMs: draft.completedDurationMs,
-    });
-  }
+  // 移除 final-summary，completed 状态已绑定到各个执行步骤
   messages.push({
     role: "assistant",
     content: encodeImportedAssistantMessage(text, segments),
@@ -313,6 +306,10 @@ function appendFinalTextPart(draft: ImportedAssistantDraft, text: string) {
   if (!normalized) return;
   if (draft.finalTextParts[draft.finalTextParts.length - 1] === normalized) return;
   draft.finalTextParts.push(normalized);
+}
+
+function isProcessTextSegment(segment: ChatSegment): segment is Extract<ChatSegment, { type: "text" }> {
+  return segment.type === "text" && isProcessTextStepId(segment.stepId);
 }
 
 function isProcessHistorySegment(segment: ChatSegment) {

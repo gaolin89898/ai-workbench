@@ -117,9 +117,13 @@ export type ChatSegment =
       label: string;
       detail?: string;
       icon?: "check" | "read" | "edit" | "search" | "think" | "warn";
+      status?: "running" | "completed" | "failed" | "canceled";
+      startedAt?: string | null;
+      completedAt?: string | null;
       durationMs?: number;
       additions?: number;
       deletions?: number;
+      rawItemType?: string | null;
     }
   | {
       type: "thought";
@@ -183,6 +187,7 @@ export type CodexTraceItem = {
   startedAt?: string | null;
   completedAt?: string | null;
   rawItemType?: string | null;
+  phase?: string | null;
   command?: string | null;
   output?: string | null;
   diff?: string | null;

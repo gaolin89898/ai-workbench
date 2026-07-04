@@ -51,23 +51,12 @@ function extractDelta(params: unknown): string {
   return firstString(p.delta, p.text, p.content, p.output, p.chunk) ?? "";
 }
 
-function extractTurnFinalText(params: unknown): string {
-  const p = record(params);
-  const turn = record(p.turn);
-  const response = record(p.response);
-  const message = record(p.message);
-  return firstString(
-    p.last_agent_message,
-    p.final_message,
-    p.finalText,
-    p.final_text,
-    p.output_text,
-    turn.last_agent_message,
-    turn.final_message,
-    response.output_text,
-    response.text,
-    message.text,
-  ) ?? "";
+function extractAgentMessagePhase(item: Record<string, unknown>, parent: Record<string, unknown>): string | null {
+  return firstString(item.phase, parent.phase) ?? null;
+}
+
+function isFinalAnswerPhase(phase: string | null | undefined): boolean {
+  return phase === "final_answer" || phase === "finalAnswer" || phase === "final";
 }
 
 function extractErrorMessage(params: unknown): string {
@@ -145,6 +134,9 @@ function traceItemType(rawType: string): CodexTraceItem["type"] {
   }
 }
 
+function isInternalUserMessageRawType(rawType: string | null | undefined): boolean {
+  return /^(?:userMessage|user_message)$/i.test(rawType ?? "");
+}
 function traceItemTitle(rawType: string, item: Record<string, unknown>, parent: Record<string, unknown>) {
   switch (traceItemType(rawType)) {
     case "thinking":
@@ -193,17 +185,20 @@ function itemFromParams(params: unknown, receivedAt: string): CodexTraceItem {
   const rawType = firstString(item.type, p.type) ?? "unknown";
   const id = extractItemId(params);
   const command = firstString(item.command, item.commandText, p.command, p.commandText) ?? extractFilePath(item, p);
+  const text = firstString(item.text, item.summary, item.message, item.detail, p.text, p.summary, p.message, p.detail) ?? "";
   const output = firstString(item.output, item.result, p.output, p.result) ?? null;
+  const phase = extractAgentMessagePhase(item, p);
   const diff = extractDiff(item, p);
   return {
     id,
     type: traceItemType(rawType),
     title: traceItemTitle(rawType, item, p),
     status: "running",
-    text: "",
+    text,
     startedAt: receivedAt,
     completedAt: null,
     rawItemType: rawType,
+    phase,
     command: command ?? null,
     output,
     diff,
@@ -238,12 +233,18 @@ export function reduceCodexTraceSnapshot(
       break;
     }
     case "item/started": {
-      snapshot = upsertItem(snapshot, itemFromParams(event.params, now));
+      const item = itemFromParams(event.params, now);
+      if (!isInternalUserMessageRawType(item.rawItemType)) {
+        snapshot = upsertItem(snapshot, item);
+      }
       break;
     }
     case "item/agentMessage/delta": {
       const id = extractItemId(event.params);
       const delta = extractDelta(event.params);
+      const p = record(event.params);
+      const payloadItem = record(p.item);
+      const phase = extractAgentMessagePhase(payloadItem, p);
       const current = snapshot.items.find((item) => item.id === id);
       const item: CodexTraceItem = {
         ...(current ?? {
@@ -255,7 +256,9 @@ export function reduceCodexTraceSnapshot(
           startedAt: now,
           completedAt: null,
           rawItemType: "agentMessage",
+          phase,
         }),
+        phase: phase ?? current?.phase ?? null,
         text: `${current?.text ?? ""}${delta}`,
       };
       snapshot = upsertItem(snapshot, item);
@@ -283,21 +286,27 @@ export function reduceCodexTraceSnapshot(
     }
     case "item/completed": {
       const completed = itemFromParams(event.params, now);
+      if (isInternalUserMessageRawType(completed.rawItemType)) break;
       const current = snapshot.items.find((item) => item.id === completed.id);
-      snapshot = upsertItem(snapshot, {
+      const completedItem = {
         ...(current ?? completed),
         ...completed,
         text: completed.text || current?.text || "",
         output: completed.output || current?.output || null,
-        status: "completed",
+        phase: completed.phase ?? current?.phase ?? null,
+        status: "completed" as const,
         completedAt: now,
-      });
+      };
+      snapshot = upsertItem(snapshot, completedItem);
+      if (completedItem.type === "agent_message" && isFinalAnswerPhase(completedItem.phase) && completedItem.text.trim()) {
+        snapshot = { ...snapshot, finalText: completedItem.text.trim() };
+      }
       break;
     }
     case "approval/requested": {
       const p = record(event.params);
       const id = firstString(p.approvalId, p.id) ?? `approval-${Date.now()}`;
-      const kind = p.approvalKind === "fileChange" ? "fileChange" : "command";
+      const kind: "fileChange" | "command" = p.approvalKind === "fileChange" ? "fileChange" : "command";
       const title = kind === "fileChange" ? "需要同意后修改文件" : "需要同意后执行命令";
       const approval = {
         id,
@@ -348,12 +357,10 @@ export function reduceCodexTraceSnapshot(
       break;
     }
     case "turn/completed": {
-      const finalText = extractTurnFinalText(event.params);
       snapshot = {
         ...snapshot,
         status: "completed",
         completedAt: now,
-        finalText: finalText || snapshot.finalText,
         items: snapshot.items.map((item) => item.status === "running" ? { ...item, status: "completed", completedAt: item.completedAt ?? now } : item),
       };
       break;
@@ -391,24 +398,60 @@ function traceStatusToToolStatus(status: CodexTraceItem["status"]): Extract<Chat
   return "success";
 }
 
+function itemDurationMs(item: CodexTraceItem, fallbackEndAt: string | null | undefined): number | undefined {
+  if (!item.startedAt) return undefined;
+  const startedAt = Date.parse(item.startedAt);
+  const endAt = Date.parse(item.completedAt ?? fallbackEndAt ?? new Date().toISOString());
+  if (!Number.isFinite(startedAt) || !Number.isFinite(endAt)) return undefined;
+  return Math.max(0, endAt - startedAt);
+}
+
 export function codexTraceSnapshotToSegments(snapshot: CodexTraceSnapshot): ChatSegment[] {
   const segments: ChatSegment[] = [];
   if (snapshot.status === "running") {
+    const durationMs = snapshot.startedAt ? Math.max(0, Date.now() - Date.parse(snapshot.startedAt)) : undefined;
     segments.push({
       type: "status",
       stepId: "runtime-status",
       label: "Codex 正在执行",
       icon: "think",
+      status: "running",
+      startedAt: snapshot.startedAt,
+      completedAt: snapshot.completedAt,
+      rawItemType: "runtime",
+      durationMs: Number.isFinite(durationMs) ? durationMs : undefined,
+    });
+  } else if (snapshot.startedAt && snapshot.completedAt) {
+    // 完成态也生成 runtime-status segment（不显示，仅用于计算总时长）
+    const startedAt = Date.parse(snapshot.startedAt);
+    const completedAt = Date.parse(snapshot.completedAt);
+    const durationMs = Number.isFinite(startedAt) && Number.isFinite(completedAt)
+      ? Math.max(0, completedAt - startedAt)
+      : undefined;
+    segments.push({
+      type: "status",
+      stepId: "runtime-status",
+      label: "Codex 已完成",
+      icon: "check",
+      status: snapshot.status === "failed" ? "failed" : "completed",
+      startedAt: snapshot.startedAt,
+      completedAt: snapshot.completedAt,
+      durationMs,
+      rawItemType: "runtime",
     });
   }
 
   for (const item of snapshot.items) {
+    if (isInternalUserMessageRawType(item.rawItemType)) continue;
     if (item.type === "agent_message") {
-      if (item.text.trim()) {
+      if (item.text.trim() && !isFinalAnswerPhase(item.phase)) {
         segments.push({
-          type: "text",
-          stepId: `process-text-${item.id}`,
+          type: "thought",
+          stepId: `agent-message-${item.id}`,
+          title: "执行结论",
           text: item.text,
+          collapsed: false,
+          durationMs: itemDurationMs(item, snapshot.completedAt),
         });
       }
       continue;
@@ -417,8 +460,12 @@ export function codexTraceSnapshotToSegments(snapshot: CodexTraceSnapshot): Chat
       segments.push({
         type: "status",
         stepId: item.id,
-        label: item.status === "running" ? "正在思考" : "已思考",
+        label: item.status === "running" ? "正在思考" : "思考",
         icon: "think",
+        status: item.status,
+        startedAt: item.startedAt,
+        durationMs: itemDurationMs(item, snapshot.completedAt),
+        rawItemType: item.rawItemType,
       });
       continue;
     }
@@ -429,7 +476,9 @@ export function codexTraceSnapshotToSegments(snapshot: CodexTraceSnapshot): Chat
         toolName: "命令",
         command: item.command ?? undefined,
         status: traceStatusToToolStatus(item.status),
+        summary: item.text || undefined,
         output: item.output ?? undefined,
+        durationMs: itemDurationMs(item, snapshot.completedAt),
       });
       continue;
     }
@@ -443,6 +492,7 @@ export function codexTraceSnapshotToSegments(snapshot: CodexTraceSnapshot): Chat
         summary: item.text || undefined,
         output: item.output ?? undefined,
         diff: item.diff ?? undefined,
+        durationMs: itemDurationMs(item, snapshot.completedAt),
         additions: item.additions ?? undefined,
         deletions: item.deletions ?? undefined,
       });
@@ -478,18 +528,13 @@ export function codexTraceSnapshotToSegments(snapshot: CodexTraceSnapshot): Chat
       stepId: item.id,
       label: item.title,
       icon: item.status === "failed" ? "warn" : "think",
+      status: item.status,
+      startedAt: item.startedAt,
+      durationMs: itemDurationMs(item, snapshot.completedAt),
+      rawItemType: item.rawItemType,
     });
   }
 
-  if (snapshot.status === "completed" && snapshot.startedAt && snapshot.completedAt) {
-    const durationMs = Math.max(0, Date.parse(snapshot.completedAt) - Date.parse(snapshot.startedAt));
-    segments.push({
-      type: "status",
-      stepId: "final-summary",
-      label: "已处理",
-      durationMs: Number.isFinite(durationMs) ? durationMs : undefined,
-    });
-  }
-
+  // 移除统一的 final-summary，completed 状态已绑定到各个执行步骤
   return segments;
 }

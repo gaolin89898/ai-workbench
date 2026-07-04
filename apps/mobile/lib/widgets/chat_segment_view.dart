@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../models/workbench_models.dart';
@@ -27,17 +29,63 @@ class ChatSegmentView extends StatelessWidget {
   }
 }
 
-class ChatMessageContent extends StatelessWidget {
+class ChatMessageContent extends StatefulWidget {
   const ChatMessageContent({super.key, required this.message, this.onApproval});
 
   final ChatMessage message;
   final void Function(ChatSegment segment, String decision)? onApproval;
 
   @override
+  State<ChatMessageContent> createState() => _ChatMessageContentState();
+}
+
+class _ChatMessageContentState extends State<ChatMessageContent> {
+  int _nowTick = DateTime.now().millisecondsSinceEpoch;
+  Timer? _timer;
+
+  @override
+  void initState() {
+    super.initState();
+    _maybeStartTimer();
+  }
+
+  @override
+  void didUpdateWidget(covariant ChatMessageContent oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    _maybeStartTimer();
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    _timer = null;
+    super.dispose();
+  }
+
+  void _maybeStartTimer() {
+    if (widget.message.pending) {
+      if (_timer == null) {
+        _timer = Timer.periodic(const Duration(seconds: 1), (_) {
+          setState(() {
+            _nowTick = DateTime.now().millisecondsSinceEpoch;
+          });
+        });
+      }
+    } else {
+      _timer?.cancel();
+      _timer = null;
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final message = widget.message;
+    final onApproval = widget.onApproval;
     final processSummary = message.segments
         .where((segment) =>
-            segment.type == 'status' && segment.stepId == 'final-summary')
+            segment.type == 'status' &&
+            (segment.stepId == 'final-summary' ||
+                segment.stepId == 'runtime-status'))
         .firstOrNull;
     final visibleSegments = message.segments.where((s) {
       if (s.type == 'text' && (s.text ?? '').trim().isEmpty) return false;
@@ -49,7 +97,7 @@ class ChatMessageContent extends StatelessWidget {
       return true;
     }).toList();
 
-    final groups = _buildContentGroups(visibleSegments, message.pending);
+    var groups = _buildContentGroups(visibleSegments, message.pending);
 
     final hasInlineTextSegment = visibleSegments.any((s) =>
         s.type == 'text' &&
@@ -60,8 +108,11 @@ class ChatMessageContent extends StatelessWidget {
       if (_isProcessSegment(segment)) return true;
       return segment.type != 'text' || (segment.text ?? '').trim().isNotEmpty;
     });
-    final isThinking =
-        message.pending && finalText.isEmpty && !hasVisibleContent;
+    final isThinking = message.pending && finalText.isEmpty && !hasVisibleContent;
+    // pending 且无任何可见内容时，强制创建空 process group 占位（显示"正在思考..."）
+    if (isThinking && groups.where((g) => g.isProcess).isEmpty) {
+      groups = [_SegmentGroup.process(const <ChatSegment>[])];
+    }
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -72,15 +123,14 @@ class ChatMessageContent extends StatelessWidget {
                 segments: groups[index].segments,
                 pending: _processGroupPending(groups, index, message.pending),
                 summarySegment: processSummary,
+                nowTick: _nowTick,
                 onApproval: onApproval)
           else
             ChatSegmentView(
                 segment: groups[index].singleSegment, onApproval: onApproval),
           const SizedBox(height: 8),
         ],
-        if (isThinking)
-          const _TypingText()
-        else if (finalText.trim().isNotEmpty)
+        if (finalText.trim().isNotEmpty)
           _AssistantMarkdownText(text: finalText),
       ],
     );
@@ -92,19 +142,22 @@ class _ProcessGroupCard extends StatelessWidget {
       {required this.segments,
       required this.pending,
       this.summarySegment,
+      this.nowTick,
       this.onApproval});
 
   final List<ChatSegment> segments;
   final bool pending;
   final ChatSegment? summarySegment;
+  final int? nowTick;
   final void Function(ChatSegment segment, String decision)? onApproval;
 
   @override
   Widget build(BuildContext context) {
-    final summary = _summaryLabel(segments, pending, summarySegment);
+    final summary = _summaryLabel(segments, pending, summarySegment, nowTick);
     final detailSegments = segments.where(_shouldRenderProcessDetail).toList();
-    final bodyItems = _buildProcessBodyItems(detailSegments);
-    if (detailSegments.isEmpty) {
+    final bodyItems = _buildProcessBodyItems(detailSegments, pending: pending);
+    // 非 pending 且无内容时，显示纯 summary 卡片
+    if (detailSegments.isEmpty && !pending) {
       return _ProcessSummaryCard(summary: summary, pending: pending);
     }
     return Container(
@@ -117,7 +170,7 @@ class _ProcessGroupCard extends StatelessWidget {
       child: Theme(
         data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
         child: ExpansionTile(
-          initiallyExpanded: false,
+          initiallyExpanded: pending,
           tilePadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 0),
           childrenPadding: const EdgeInsets.fromLTRB(10, 0, 10, 10),
           dense: true,
@@ -148,7 +201,7 @@ class _ProcessGroupCard extends StatelessWidget {
             ],
           ),
           children: [
-            for (final item in bodyItems)
+            for (final item in bodyItems) ...[
               Padding(
                 padding: const EdgeInsets.only(top: 8),
                 child: item.isStage
@@ -163,6 +216,12 @@ class _ProcessGroupCard extends StatelessWidget {
                         onApproval: onApproval,
                       ),
               ),
+              if (item.conclusion != null)
+                Padding(
+                  padding: const EdgeInsets.only(top: 6, left: 16),
+                  child: _StageConclusion(text: _conclusionText(item.conclusion!)),
+                ),
+            ],
           ],
         ),
       ),
@@ -183,80 +242,140 @@ class _ProcessStageView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.fromLTRB(10, 9, 10, 10),
-      decoration: BoxDecoration(
-        color: AppColors.surface,
-        borderRadius: BorderRadius.circular(AppRadius.md),
-        border: Border.all(color: AppColors.border),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Container(
-                width: 6,
-                height: 6,
-                decoration: BoxDecoration(
-                  color: _processStageRunning(item.segments)
-                      ? AppColors.warning
-                      : AppColors.successDeep,
-                  shape: BoxShape.circle,
-                ),
-              ),
-              const SizedBox(width: 6),
-              Expanded(
-                child: Text(
-                  _processStageTitle(item.segments, pending),
-                  style: const TextStyle(
-                    color: AppColors.secondary,
-                    fontSize: 12,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-              ),
-              if (_processStageDurationMs(item.segments) case final duration?)
-                Text(
-                  _formatCompactDuration(duration),
-                  style: const TextStyle(
-                    color: AppColors.muted,
-                    fontSize: 11,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-            ],
-          ),
-          const SizedBox(height: 8),
-          for (final segment in item.segments)
-            Padding(
-              padding: const EdgeInsets.only(bottom: 8),
-              child: ChatSegmentView(
-                segment: segment,
-                compact: true,
-                onApproval: onApproval,
-              ),
-            ),
-          if (item.conclusion != null)
+    return InkWell(
+      borderRadius: BorderRadius.circular(AppRadius.md),
+      onTap: () => _showStageSheet(context),
+      child: Container(
+        padding: const EdgeInsets.fromLTRB(10, 9, 10, 10),
+        decoration: BoxDecoration(
+          color: AppColors.surface,
+          borderRadius: BorderRadius.circular(AppRadius.md),
+          border: Border.all(color: AppColors.border),
+        ),
+        child: Row(
+          children: [
             Container(
-              width: double.infinity,
-              margin: EdgeInsets.only(top: item.segments.isEmpty ? 0 : 2),
-              padding: const EdgeInsets.fromLTRB(8, 7, 8, 7),
+              width: 6,
+              height: 6,
               decoration: BoxDecoration(
-                color: AppColors.surfaceMuted,
-                borderRadius: BorderRadius.circular(AppRadius.sm),
-                border: Border.all(color: AppColors.border),
-              ),
-              child: ChatSegmentView(
-                segment: item.conclusion!,
-                compact: true,
-                onApproval: onApproval,
+                color: _processStageRunning(item.segments)
+                    ? AppColors.warning
+                    : AppColors.successDeep,
+                shape: BoxShape.circle,
               ),
             ),
-        ],
+            const SizedBox(width: 6),
+            Expanded(
+              child: Text(
+                _processStageTitle(item.segments, pending),
+                style: const TextStyle(
+                  color: AppColors.secondary,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ),
+            Icon(Icons.chevron_right, size: 18, color: AppColors.muted),
+          ],
+        ),
       ),
     );
   }
+
+  void _showStageSheet(BuildContext context) {
+    final title = _processStageTitle(item.segments, pending);
+    final visibleSegments = _visibleStageSegments(item.segments);
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      builder: (ctx) => _ProcessStageSheet(
+        title: title,
+        segments: visibleSegments,
+        onApproval: onApproval,
+      ),
+    );
+  }
+}
+
+class _ProcessStageSheet extends StatelessWidget {
+  const _ProcessStageSheet({
+    required this.title,
+    required this.segments,
+    this.onApproval,
+  });
+
+  final String title;
+  final List<ChatSegment> segments;
+  final void Function(ChatSegment segment, String decision)? onApproval;
+
+  @override
+  Widget build(BuildContext context) {
+    return SafeArea(
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(16, 0, 16, 20),
+        child: ConstrainedBox(
+          constraints: BoxConstraints(
+            maxHeight: MediaQuery.sizeOf(context).height * 0.82,
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Padding(
+                padding: const EdgeInsets.only(bottom: 12),
+                child: Text(
+                  title,
+                  style: const TextStyle(
+                    color: AppColors.secondary,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+              Flexible(
+                child: ListView(
+                  shrinkWrap: true,
+                  children: [
+                    for (final segment in segments)
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 8),
+                        child: ChatSegmentView(
+                          segment: segment,
+                          compact: true,
+                          onApproval: onApproval,
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _StageConclusion extends StatelessWidget {
+  const _StageConclusion({required this.text});
+
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    final trimmed = text.trim();
+    if (trimmed.isEmpty) return const SizedBox.shrink();
+    return _AssistantMarkdownText(text: trimmed);
+  }
+}
+
+String _conclusionText(ChatSegment segment) {
+  if (segment.type == 'thought' || segment.type == 'text') {
+    return segment.text ?? '';
+  }
+  if (segment.type == 'error') return segment.message ?? '';
+  return '';
 }
 
 class _ProcessSummaryCard extends StatelessWidget {
@@ -390,31 +509,44 @@ bool _processGroupPending(
   return true;
 }
 
-List<_ProcessBodyItem> _buildProcessBodyItems(List<ChatSegment> segments) {
+List<_ProcessBodyItem> _buildProcessBodyItems(List<ChatSegment> segments, {bool pending = false}) {
   final items = <_ProcessBodyItem>[];
   var stageRun = <ChatSegment>[];
-  ChatSegment? conclusion;
-
+  String? stageKind;
+  final hasExecution = segments.any(_isExecutionStageSegment);
   void flushStageRun() {
-    if (stageRun.isEmpty) {
-      if (conclusion != null) {
-        items.add(_ProcessBodyItem.segment(conclusion!));
-        conclusion = null;
-      }
+    if (stageRun.isEmpty) return;
+    items.add(_ProcessBodyItem.stage(stageRun, null));
+    stageRun = <ChatSegment>[];
+    stageKind = null;
+  }
+
+  void attachConclusion(ChatSegment segment) {
+    final latest = items.isEmpty ? null : items.last;
+    if (latest != null && latest.isStage) {
+      items[items.length - 1] =
+          _ProcessBodyItem.stage(latest.segments, segment);
       return;
     }
-    items.add(_ProcessBodyItem.stage(stageRun, conclusion));
-    stageRun = <ChatSegment>[];
-    conclusion = null;
+    items.add(_ProcessBodyItem.segment(segment));
   }
 
   for (final segment in segments) {
     if (_isProcessConclusionSegment(segment)) {
-      conclusion = segment;
       flushStageRun();
+      attachConclusion(segment);
+      continue;
+    }
+    if (_isExecutionConclusionSegment(segment)) {
+      flushStageRun();
+      attachConclusion(segment);
       continue;
     }
     if (_isProcessStageSegment(segment)) {
+      if (hasExecution && _isThinkingStatusSegment(segment)) continue;
+      final nextKind = _isThinkingStageSegment(segment) ? 'thinking' : 'execution';
+      if (stageKind != null && stageKind != nextKind) flushStageRun();
+      stageKind = nextKind;
       stageRun.add(segment);
       continue;
     }
@@ -422,6 +554,30 @@ List<_ProcessBodyItem> _buildProcessBodyItems(List<ChatSegment> segments) {
     items.add(_ProcessBodyItem.segment(segment));
   }
   flushStageRun();
+  // pending 且最后一个 stage 无 running item 时，追加"正在思考..."占位 stage
+  // 对应 Codex turn/started 后、下一个 item/started 前的空档期
+  if (pending) {
+    final lastItem = items.isEmpty ? null : items.last;
+    final lastStageHasRunning = lastItem != null &&
+        lastItem.isStage &&
+        lastItem.segments.any((s) =>
+            (s.type == 'status' && s.status == 'running') ||
+            (s.type == 'tool' && s.status == 'running') ||
+            (s.type == 'approval' && s.status == 'pending'));
+    if (!lastStageHasRunning) {
+      items.add(_ProcessBodyItem.stage([
+        ChatSegment(
+          type: 'status',
+          stepId: 'pending-thinking-placeholder',
+          label: '正在思考',
+          icon: 'think',
+          status: 'running',
+          startedAt: DateTime.now().toIso8601String(),
+          rawItemType: 'reasoning',
+        ),
+      ], null));
+    }
+  }
   return items;
 }
 
@@ -433,13 +589,41 @@ bool _isProcessStageSegment(ChatSegment segment) {
       segment.type == 'error';
 }
 
+bool _isThinkingStageSegment(ChatSegment segment) {
+  return (segment.type == 'thought' && !_isExecutionConclusionSegment(segment)) ||
+      _isThinkingStatusSegment(segment);
+}
+
+bool _isExecutionConclusionSegment(ChatSegment segment) {
+  return segment.type == 'thought' && segment.title == '执行结论';
+}
+
+bool _isThinkingStatusSegment(ChatSegment segment) {
+  return segment.type == 'status' && _isThinkingRawItemType(segment.rawItemType);
+}
+
+bool _isExecutionStageSegment(ChatSegment segment) {
+  return segment.type == 'tool' ||
+      segment.type == 'approval' ||
+      segment.type == 'error' ||
+      (segment.type == 'status' && !_isThinkingStatusSegment(segment));
+}
+
 bool _isProcessConclusionSegment(ChatSegment segment) {
   return _isProcessTextSegment(segment);
 }
 
 String _processStageTitle(List<ChatSegment> segments, bool pending) {
-  final runningTool = segments
-      .where((segment) => segment.type == 'tool' && segment.status == 'running')
+  final runningThinking = segments
+      .where((segment) =>
+          _isThinkingStatusSegment(segment) && segment.status == 'running')
+      .firstOrNull;
+  if (runningThinking != null) return '正在思考...';
+  final toolSegments = segments.where((segment) => segment.type == 'tool').toList();
+  final aggregateTitle = _aggregateToolStageTitle(toolSegments);
+  if (aggregateTitle.isNotEmpty) return aggregateTitle;
+  final runningTool = toolSegments
+      .where((segment) => segment.status == 'running')
       .firstOrNull;
   if (runningTool != null) return _toolStageTitle(runningTool);
 
@@ -448,44 +632,203 @@ String _processStageTitle(List<ChatSegment> segments, bool pending) {
           segment.type == 'approval' && segment.status == 'pending')
       .firstOrNull;
   if (pendingApproval != null) {
-    return pendingApproval.approvalKind == 'fileChange' ? '正在修改文件' : '正在等待确认';
+    return pendingApproval.approvalKind == 'fileChange' ? '正在修改文件' : '正在等待命令确认';
   }
 
-  final latestStatus =
-      segments.where((segment) => segment.type == 'status').lastOrNull;
+  final erroredTool = toolSegments
+      .where((segment) => segment.status == 'error')
+      .firstOrNull;
+  if (erroredTool != null) return _toolStageTitle(erroredTool);
+
+  final latestTool = toolSegments.toList().reversed.firstOrNull;
+  if (latestTool != null) return _toolStageTitle(latestTool);
+
+  final latestStatus = segments
+      .where((segment) => segment.type == 'status')
+      .toList()
+      .reversed
+      .firstOrNull;
   final statusLabel = latestStatus?.label?.trim();
   if (statusLabel != null && statusLabel.isNotEmpty) return statusLabel;
 
-  if (segments.any((segment) => segment.type == 'thought')) {
-    return pending ? '正在思考' : '已思考';
-  }
-  if (segments
-      .any((segment) => segment.type == 'tool' && segment.status == 'error')) {
-    return '处理失败';
+  if (segments.any((segment) =>
+      segment.type == 'thought' && !_isExecutionConclusionSegment(segment))) {
+    return '正在思考...';
   }
   return pending ? '正在处理' : '已处理';
 }
 
-String _toolStageTitle(ChatSegment segment) {
-  final toolName = segment.toolName ?? '工具调用';
-  if (toolName.contains('修改') || toolName.contains('文件')) return '正在修改文件';
-  if (toolName.contains('扫描')) return '正在扫描项目';
-  if (toolName.contains('命令') || (segment.command ?? '').isNotEmpty) {
-    return '正在运行命令';
+String _aggregateToolStageTitle(List<ChatSegment> segments) {
+  if (segments.isEmpty) return '';
+  var read = 0;
+  var search = 0;
+  var edit = 0;
+  var command = 0;
+  var hasRunning = false;
+  var hasError = false;
+  for (final segment in segments) {
+    if (segment.status == 'running') hasRunning = true;
+    if (segment.status == 'error') hasError = true;
+    switch (_toolOperationKind(segment)) {
+      case 'read':
+        read += 1;
+        break;
+      case 'search':
+        search += 1;
+        break;
+      case 'edit':
+        edit += 1;
+        break;
+      default:
+        command += 1;
+    }
   }
-  return segment.summary ?? '正在处理 $toolName';
+  final parts = <String>[
+    if (read > 0) '读取 $read 个文件',
+    if (search > 0) '搜索 $search 次文件',
+    if (edit > 0) '修改 $edit 个文件',
+    if (command > 0) '运行 $command 条命令',
+  ];
+  if (parts.isEmpty) return '';
+  final prefix = hasError ? '部分失败：' : hasRunning ? '正在' : '已';
+  return '$prefix${parts.join('，')}';
+}
+
+String _toolOperationKind(ChatSegment segment) {
+  final command = _normalizeCommandForTitle(segment.command ?? '');
+  final fileChanges = _extractFileChangePaths(segment.diff);
+  final toolName = segment.toolName ?? '';
+  if (toolName.contains('修改') || (fileChanges?.isNotEmpty ?? false)) return 'edit';
+  if (RegExp(r'^(Get-Content|cat|type|head|tail|sed\b|Select-String\b)', caseSensitive: false).hasMatch(command)) return 'read';
+  if (RegExp(r'^(rg|grep|findstr|fd|find\b|Get-ChildItem|ls\b|dir\b)', caseSensitive: false).hasMatch(command)) return 'search';
+  if (RegExp(r'\b(Get-Content|cat|type)\b', caseSensitive: false).hasMatch(command)) return 'read';
+  if (RegExp(r'\b(rg|grep|findstr|Get-ChildItem)\b', caseSensitive: false).hasMatch(command)) return 'search';
+  return 'command';
+}
+
+String _toolStageTitle(ChatSegment segment) {
+  final status = segment.status ?? 'success';
+  final verb = status == 'running' ? '正在' : '已';
+  final toolName = segment.toolName ?? '工具调用';
+  final commandText = _normalizeCommandForTitle(segment.command ?? '');
+  final fileChanges = _extractFileChangePaths(segment.diff);
+  if (toolName.contains('修改') || toolName.contains('文件') || fileChanges != null) {
+    if (status == 'error') return '修改文件失败';
+    if (fileChanges != null && fileChanges.isNotEmpty) {
+      final fileName = fileChanges.first.split(RegExp(r'[\\/]')).last;
+      return '$verb修改 $fileName';
+    }
+    return '$verb修改文件';
+  }
+  if (toolName.contains('扫描')) {
+    if (status == 'error') return '扫描项目失败';
+    return '$verb扫描项目';
+  }
+  if (toolName.contains('命令') || commandText.isNotEmpty) {
+    if (status == 'error') return '运行命令失败';
+    if (commandText.isNotEmpty) {
+      final shortCommand = commandText.split(RegExp(r'\s+')).take(3).join(' ');
+      return '$verb运行 $shortCommand';
+    }
+    return '$verb运行命令';
+  }
+  if (status == 'error') return segment.summary ?? '处理失败 $toolName';
+  return segment.summary ?? '$verb处理 $toolName';
+}
+
+String _normalizeCommandForTitle(String command) {
+  final trimmed = command
+      .replaceFirst(RegExp(r'^/usr/bin/(bash|sh)\s+-lc\s+'), '')
+      .replaceFirst(RegExp(r'^bash\s+-lc\s+'), '')
+      .trim();
+  final cleaned = _unquoteCommand(trimmed);
+  final powershell = RegExp(r'^(?:"?[^"]*\\powershell(?:\.exe)?"?\s+)?-Command\s+([\s\S]+)$', caseSensitive: false).firstMatch(cleaned);
+  return _unquoteCommand((powershell?.group(1) ?? cleaned).trim());
+}
+
+String _commandOperationTitle(String command, String status) {
+  final verb = status == 'running' ? '正在' : '已';
+  final target = _commandTarget(command);
+  if (RegExp(r'^(Get-Content|cat|type|head|tail|sed\b|Select-String\b)', caseSensitive: false).hasMatch(command)) {
+    if (status == 'error') return target.isNotEmpty ? '读取 $target 失败' : '读取文件失败';
+    return target.isNotEmpty ? '$verb读取 $target' : '$verb读取文件';
+  }
+  if (RegExp(r'^(rg|grep|findstr|fd|find\b|Get-ChildItem|ls\b|dir\b)', caseSensitive: false).hasMatch(command)) {
+    if (status == 'error') return '搜索文件失败';
+    return '$verb搜索文件';
+  }
+  if (RegExp(r'\b(Get-Content|cat|type)\b', caseSensitive: false).hasMatch(command)) {
+    if (status == 'error') return target.isNotEmpty ? '读取 $target 失败' : '读取文件失败';
+    return target.isNotEmpty ? '$verb读取 $target' : '$verb读取文件';
+  }
+  if (RegExp(r'\b(rg|grep|findstr|Get-ChildItem)\b', caseSensitive: false).hasMatch(command)) {
+    if (status == 'error') return '搜索文件失败';
+    return '$verb搜索文件';
+  }
+  return '';
+}
+
+String _commandTarget(String command) {
+  final tokens = RegExp(r'''("[^"]+"|'[^']+'|\S+)''')
+      .allMatches(command)
+      .map((match) => _unquoteCommand(match.group(0) ?? ''))
+      .toList();
+  final commandNames = RegExp(r'^(Get-Content|cat|type|head|tail|sed|Select-String|PowerShell:)$', caseSensitive: false);
+  final optionsWithValue = RegExp(r'^(-Encoding|-TotalCount|-Tail|-Head|-Filter|-Include|-Exclude|-Context|-Pattern)$', caseSensitive: false);
+  var skipNext = false;
+  for (final token in tokens) {
+    if (token.isEmpty || commandNames.hasMatch(token)) continue;
+    if (skipNext) {
+      skipNext = false;
+      continue;
+    }
+    if (optionsWithValue.hasMatch(token)) {
+      skipNext = true;
+      continue;
+    }
+    if (token.startsWith('-')) continue;
+    if (RegExp(r'^\d+$').hasMatch(token)) continue;
+    return token.split(RegExp(r'[\\/]')).last;
+  }
+  return '';
+}
+
+List<String>? _extractFileChangePaths(String? diff) {
+  if (diff == null || diff.isEmpty) return null;
+  final paths = <String>[];
+  for (final line in diff.split('\n')) {
+    final match = RegExp(r'^diff --git a/(.+?) b/(.+)$').firstMatch(line);
+    if (match != null) {
+      paths.add(match.group(2)!);
+      continue;
+    }
+    final patchMatch = RegExp(r'^\+\+\+ b/(.+)$').firstMatch(line);
+    if (patchMatch != null) {
+      paths.add(patchMatch.group(1)!);
+    }
+  }
+  return paths.isEmpty ? null : paths;
 }
 
 bool _processStageRunning(List<ChatSegment> segments) {
   return segments.any((segment) =>
       (segment.type == 'tool' && segment.status == 'running') ||
-      (segment.type == 'approval' && segment.status == 'pending'));
+      (segment.type == 'approval' && segment.status == 'pending') ||
+      (_isThinkingStatusSegment(segment) && segment.status == 'running'));
 }
 
 int? _processStageDurationMs(List<ChatSegment> segments) {
+  if (_isThinkingStage(segments)) return null;
   final duration = segments.fold<int>(
       0, (total, segment) => total + (segment.durationMs ?? 0));
   return duration <= 0 ? null : duration;
+}
+
+bool _isThinkingStage(List<ChatSegment> segments) {
+  return segments.isNotEmpty && segments.every(_isThinkingStageSegment);
+}
+List<ChatSegment> _visibleStageSegments(List<ChatSegment> segments) {
+  return _isThinkingStage(segments) ? const <ChatSegment>[] : segments;
 }
 
 class ChatProcessPanel extends StatelessWidget {
@@ -508,9 +851,11 @@ class ChatProcessPanel extends StatelessWidget {
     if (processSegments.isEmpty) return const SizedBox.shrink();
     final summarySegment = segments
         .where((segment) =>
-            segment.type == 'status' && segment.stepId == 'final-summary')
+            segment.type == 'status' &&
+            (segment.stepId == 'final-summary' ||
+                segment.stepId == 'runtime-status'))
         .firstOrNull;
-    final summary = _summaryLabel(processSegments, pending, summarySegment);
+    final summary = _summaryLabel(processSegments, pending, summarySegment, null);
     return Container(
       margin: const EdgeInsets.only(bottom: 10),
       decoration: BoxDecoration(
@@ -1402,7 +1747,7 @@ class _ToolDetailsSheet extends StatelessWidget {
                 _SheetSection(title: '命令', child: _CodeBlock(segment.command!)),
               if ((segment.summary ?? '').trim().isNotEmpty)
                 _SheetSection(
-                    title: '摘要', child: _DetailBlock(segment.summary!)),
+                    title: '执行结论', child: _DetailBlock(segment.summary!)),
               if (visibleInput.trim().isNotEmpty)
                 _SheetSection(title: '输入', child: _CodeBlock(visibleInput)),
               if (visibleOutput.trim().isNotEmpty)
@@ -1853,11 +2198,27 @@ bool _isProcessTextSegment(ChatSegment segment) {
           stepId.startsWith('commentary-'));
 }
 
+bool _isUserMessageRawItemType(String? rawItemType) {
+  return RegExp(r'^(?:userMessage|user_message)$', caseSensitive: false)
+      .hasMatch(rawItemType ?? '');
+}
+bool _isCompletedThinkingStatusSegment(ChatSegment segment) {
+  return segment.type == 'status' &&
+      _isThinkingRawItemType(segment.rawItemType) &&
+      segment.status != 'running';
+}
+
+bool _isThinkingRawItemType(String? rawItemType) {
+  return RegExp(r'^(?:reasoning|thinking)$', caseSensitive: false)
+      .hasMatch(rawItemType ?? '');
+}
 bool _shouldShowProcessSegment(ChatSegment segment) {
   if (segment.stepId == 'initial-thinking') {
     return false;
   }
   if (segment.type != 'status') return true;
+  if (_isUserMessageRawItemType(segment.rawItemType)) return false;
+  if (_isCompletedThinkingStatusSegment(segment)) return false;
   if (segment.stepId == 'runtime-status') return false;
   if (segment.stepId == 'final-summary') return false;
   final label = (segment.label ?? segment.text ?? '').trim();
@@ -1888,16 +2249,35 @@ bool _shouldRenderProcessDetail(ChatSegment segment) {
 }
 
 String _summaryLabel(
-    List<ChatSegment> segments, bool pending, ChatSegment? finalSummary) {
-  final durationMs = finalSummary?.durationMs ?? _processDurationMs(segments);
+    List<ChatSegment> segments, bool pending, ChatSegment? finalSummary, int? nowTick) {
+  final durationMs = _processGroupDurationMs(segments, pending, finalSummary, nowTick);
   final prefix = pending ? '正在处理' : '已处理';
   if (durationMs == null || durationMs <= 0) return prefix;
   return '$prefix ${_formatCompactDuration(durationMs)}';
 }
 
-int? _processDurationMs(List<ChatSegment> segments) {
+int? _processGroupDurationMs(
+    List<ChatSegment> segments, bool pending, ChatSegment? finalSummary, int? nowTick) {
+  // 进行中：用 summary.startedAt + nowTick 实时计算（同桌面端）
+  if (pending &&
+      finalSummary != null &&
+      (finalSummary.startedAt ?? '').isNotEmpty &&
+      nowTick != null) {
+    final startedAt = DateTime.tryParse(finalSummary.startedAt!);
+    if (startedAt != null) {
+      final diff = nowTick - startedAt.millisecondsSinceEpoch;
+      if (diff > 0) return diff;
+    }
+  }
+  // 完成态：优先用 summary.durationMs
+  final summaryDuration = finalSummary?.durationMs;
+  if (summaryDuration != null && summaryDuration > 0) {
+    return summaryDuration;
+  }
+  // 兜底：取所有 tool/thought segment 的最大 durationMs（同桌面端）
   var maxDuration = 0;
   for (final segment in segments) {
+    if (segment.type != 'tool' && segment.type != 'thought') continue;
     final duration = segment.durationMs ?? 0;
     if (duration > maxDuration) maxDuration = duration;
   }
@@ -1920,7 +2300,8 @@ String _formatCompactDuration(int durationMs) {
 
 String _toolTitle(ChatSegment segment) {
   final patchFiles = _patchFileList(_toolDiffText(segment));
-  final command = patchFiles.isNotEmpty
+  final command = _normalizeCommandForTitle(segment.command ?? '');
+  final displayCommand = patchFiles.isNotEmpty
       ? _shortFileList(patchFiles)
       : _shortenCommand(segment.command);
   final verb = segment.status == 'running' ? '正在' : '已';
@@ -1931,19 +2312,21 @@ String _toolTitle(ChatSegment segment) {
   }
   if (toolName.contains('修改') || toolName.contains('文件')) {
     if (segment.status == 'error') {
-      return command.isNotEmpty ? '修改 $command 文件失败' : '修改文件失败';
+      return displayCommand.isNotEmpty ? '修改 $displayCommand 失败' : '修改文件失败';
     }
-    return command.isNotEmpty
-        ? '${segment.status == 'running' ? '正在修改' : '已修改'} $command 文件'
+    return displayCommand.isNotEmpty
+        ? '${segment.status == 'running' ? '正在修改' : '已修改'} $displayCommand'
         : '${segment.status == 'running' ? '正在处理' : '已处理'}文件修改';
   }
   if (toolName.contains('命令') ||
       toolName.contains('command') ||
       (segment.command ?? '').isNotEmpty) {
+    final operation = _commandOperationTitle(command, segment.status ?? 'success');
+    if (operation.isNotEmpty) return operation;
     if (segment.status == 'error') {
-      return command.isNotEmpty ? '运行失败 $command' : '运行命令失败';
+      return displayCommand.isNotEmpty ? '运行失败 $displayCommand' : '运行命令失败';
     }
-    return command.isNotEmpty ? '$verb运行 $command' : '$verb运行命令';
+    return displayCommand.isNotEmpty ? '$verb运行 $displayCommand' : '$verb运行命令';
   }
   if (segment.status == 'error') return segment.summary ?? '处理失败 $toolName';
   return segment.summary ?? '$verb处理 $toolName';
@@ -1977,9 +2360,6 @@ List<_ToolMetaItem> _toolMeta(ChatSegment segment) {
   if (additions != null) parts.add((kind: 'add', text: '+$additions'));
   if (deletions != null) parts.add((kind: 'delete', text: '-$deletions'));
   if (segment.status == 'error') parts.add((kind: 'error', text: '失败'));
-  if (segment.durationMs != null) {
-    parts.add((kind: 'duration', text: _formatDuration(segment.durationMs!)));
-  }
   return parts;
 }
 

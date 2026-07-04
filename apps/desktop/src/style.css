@@ -3781,6 +3781,24 @@ dd {
   max-width: 100%;
 }
 
+.chat-process-stage[open] summary .chat-process-stage-chevron {
+  transform: rotate(0deg);
+}
+
+.chat-process-stage:not([open]) summary .chat-process-stage-chevron {
+  transform: rotate(-90deg);
+}
+
+.chat-process-stage-chevron {
+  display: block;
+  width: 14px;
+  height: 14px;
+  color: var(--color-text-muted);
+  flex: 0 0 auto;
+  margin-left: auto;
+  transition: transform 160ms ease;
+}
+
 .chat-process-stage-header {
   display: flex;
   align-items: center;
@@ -3789,6 +3807,8 @@ dd {
   color: var(--color-text-secondary);
   font-size: 13px;
   line-height: 1.4;
+  cursor: pointer;
+  user-select: none;
 }
 
 .chat-process-stage-header strong {
@@ -3832,8 +3852,9 @@ dd {
 }
 
 .chat-process-stage-conclusion {
-  border-left: 2px solid var(--color-primary-muted);
-  padding-left: 10px;
+  margin-left: 16px;
+  color: var(--color-text-secondary);
+  line-height: 1.7;
 }
 
 .chat-process-steps-group {

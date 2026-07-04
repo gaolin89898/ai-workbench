@@ -42,12 +42,13 @@ class _BootstrapPageState extends State<BootstrapPage> {
   }
 
   Future<void> _bootstrap() async {
-    final token = await ApiClient.loadStoredToken();
+    final baseUrl = ApiClient.defaultBaseUrl;
+    final token = await ApiClient.loadStoredToken(baseUrl: baseUrl);
     if (token == null || token.isEmpty) {
       _goLogin();
       return;
     }
-    final api = ApiClient(baseUrl: ApiClient.defaultBaseUrl);
+    final api = ApiClient(baseUrl: baseUrl);
     api.token = token;
     final controller = WorkspaceController(api: api);
     try {

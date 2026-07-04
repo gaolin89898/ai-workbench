@@ -1,7 +1,7 @@
 name: remote_term_mobile
 description: Mobile app for AI Workbench desktop devices, projects, providers, and AI sessions.
 publish_to: "none"
-version: 0.1.37+37
+version: 0.1.38+38
 
 environment:
   sdk: ">=3.4.0 <4.0.0"
@@ -11,7 +11,6 @@ dependencies:
     sdk: flutter
   flutter_secure_storage: ^9.2.4
   http: ^1.2.2
-  mobile_scanner: 6.0.10
   shared_preferences: ^2.3.0
   url_launcher: ^6.3.2
   web_socket_channel: ^3.0.1

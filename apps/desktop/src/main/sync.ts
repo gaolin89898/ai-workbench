@@ -183,8 +183,8 @@ function loadStoredConfig(): StoredCloudConfig | null {
     if (!fs.existsSync(configPath)) return null;
     const raw = fs.readFileSync(configPath, "utf-8");
     const config = JSON.parse(raw) as StoredCloudConfig;
-    if (isLocalServerUrl(config.serverUrl)) {
-      console.info(`Ignoring local cloud config ${config.serverUrl}; default server is ${DEFAULT_CLOUD_SERVER_URL}.`);
+    if (!sameServerUrl(config.serverUrl, DEFAULT_CLOUD_SERVER_URL)) {
+      console.info(`Ignoring cloud config for ${config.serverUrl}; expected ${DEFAULT_CLOUD_SERVER_URL}.`);
       return null;
     }
     return config;
@@ -193,14 +193,10 @@ function loadStoredConfig(): StoredCloudConfig | null {
   }
 }
 
-function isLocalServerUrl(serverUrl: string | undefined): boolean {
-  if (!serverUrl) return false;
+function sameServerUrl(left: string | undefined, right: string | undefined): boolean {
+  if (!left || !right) return false;
   try {
-    const parsed = new URL(/^https?:\/\//i.test(serverUrl) ? serverUrl : `http://${serverUrl}`);
-    return parsed.hostname === "localhost"
-      || parsed.hostname === "127.0.0.1"
-      || parsed.hostname === "::1"
-      || parsed.hostname === "10.0.2.2";
+    return normalizeServerUrl(left) === normalizeServerUrl(right);
   } catch {
     return false;
   }
@@ -327,10 +323,8 @@ export function logoutDesktop(): void {
   clearCredentials();
 }
 
-// saveOAuthLogin OAuth 登录后桌面端调用 /desktop/register-device 拿真实
-// deviceId 并写入 cloud-config。不能直接用 userId 当 deviceId——后端
-// ws 的 EnsureDeviceOwner 会校验 deviceId 属于该 user，没有 desktop_devices
-// 行的话所有快照消息会被静默丢弃。
+// OAuth desktop login completes in the renderer, then calls this to register
+// the current desktop device and persist the real device id in cloud-config.
 export async function saveOAuthLogin(
   serverUrl: string,
   accessToken: string,
@@ -350,15 +344,11 @@ export async function saveOAuthLogin(
   const deviceId: string | undefined = resp.deviceId ?? resp.device_id;
   const finalToken: string = resp.accessToken ?? resp.access_token ?? accessToken;
   if (!deviceId) {
-    throw new Error("服务器未返回 deviceId，无法完成设备绑定");
+    throw new Error("server did not return deviceId; cannot complete device binding");
   }
   saveCloudConfig(normalizedServer, deviceId, finalToken, "desktop-login", displayName || userId);
-  // 重启 WS 连接，确保用新的带 deviceId 的 token 注册到 AppState。
-  // 不重启的话桌面端会用旧的随机 deviceId 注册，移动端 forwardToDesktop
-  // 找不到目标，会话创建消息发不过来。
   syncInstance?.restart(normalizedServer, finalToken, deviceId);
 }
-
 export async function pairDesktop(
   server: string,
   code: string
@@ -449,6 +439,7 @@ class DesktopCloudSync {
   private heartbeatTimer: ReturnType<typeof setInterval> | null = null;
   private snapshotTimer: ReturnType<typeof setInterval> | null = null;
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+  private providerSnapshotCache: { providers: Awaited<ReturnType<typeof detectAiProviders>>; checkedAt: number } | null = null;
   private stopped = false;
   // Tracks projectPath per session for mobile-originated sessions, since the
   // local DB schema does not store project_path on local_ai_sessions.
@@ -515,11 +506,11 @@ class DesktopCloudSync {
     }, 30_000);
   }
 
-  // ----- snapshots: push providers/projects/ai-sessions every 10s -----
+  // ----- snapshots: push providers/projects/ai-sessions every 30s -----
   private startSnapshot(deviceId: string): void {
     this.snapshotTimer = setInterval(() => {
       this.pushSnapshots(deviceId);
-    }, 10_000);
+    }, 30_000);
     // Push immediately on connect.
     this.pushSnapshots(deviceId);
   }
@@ -529,13 +520,24 @@ class DesktopCloudSync {
     const sessions = listSyncableAiSessions();
     this.send({ type: "projects.snapshot", deviceId, projects });
     this.send({ type: "ai.sessions.snapshot", deviceId, sessions });
-    // Provider detection is async (spawns CLI processes); send when ready.
+    this.pushProviderSnapshot(deviceId);
+  }
+
+  private pushProviderSnapshot(deviceId: string): void {
+    const now = Date.now();
+    if (this.providerSnapshotCache && now - this.providerSnapshotCache.checkedAt < 5 * 60_000) {
+      this.send({ type: "providers.snapshot", deviceId, providers: this.providerSnapshotCache.providers });
+      return;
+    }
     detectAiProviders()
       .then((providers) => {
+        this.providerSnapshotCache = { providers, checkedAt: Date.now() };
         this.send({ type: "providers.snapshot", deviceId, providers });
       })
       .catch(() => {
-        // best-effort — skip this cycle on failure
+        if (this.providerSnapshotCache) {
+          this.send({ type: "providers.snapshot", deviceId, providers: this.providerSnapshotCache.providers });
+        }
       });
   }
 
@@ -813,11 +815,17 @@ class DesktopCloudSync {
         if (!deviceId || channel !== "ai-chat-output") return;
         const event = args[0] as AiChatOutputEvent | undefined;
         if (!event?.aiSessionId) return;
-        if (isCodexSession(event.aiSessionId)) return;
+        const codexSession = isCodexSession(event.aiSessionId);
         if (event.kind === "status" && event.text === "mobile sent message") return;
         const draft = this.mobileAssistantDrafts.get(event.aiSessionId) ?? { text: "", segments: [], savedText: "" };
         if (event.kind === "delta" && event.text) {
           if (event.stepId) draft.currentStepId = event.stepId;
+          if (codexSession && event.phase === "process") {
+            draft.text += event.text;
+            this.mobileAssistantDrafts.set(event.aiSessionId, draft);
+            this.scheduleMobileDeltaFlush(deviceId, event.aiSessionId, event.text, draft.segments);
+            return;
+          }
           if (event.phase === "process") {
             appendDraftProcessText(draft, event);
             this.flushMobileDelta(event.aiSessionId);
@@ -892,11 +900,17 @@ class DesktopCloudSync {
         if (channel !== "ai-chat-output") return;
         const event = args[0] as AiChatOutputEvent | undefined;
         if (!event?.aiSessionId) return;
-        if (isCodexSession(event.aiSessionId)) return;
+        const codexSession = isCodexSession(event.aiSessionId);
         if (event.kind === "status" && event.text === "mobile sent message") return;
         const draft = this.mobileAssistantDrafts.get(event.aiSessionId) ?? { text: "", segments: [], savedText: "" };
         if (event.kind === "delta" && event.text) {
           if (event.stepId) draft.currentStepId = event.stepId;
+          if (codexSession && event.phase === "process") {
+            draft.text += event.text;
+            this.mobileAssistantDrafts.set(event.aiSessionId, draft);
+            this.scheduleMobileDeltaFlush(deviceId, event.aiSessionId, event.text, draft.segments);
+            return;
+          }
           if (event.phase === "process") {
             appendDraftProcessText(draft, event);
             this.flushMobileDelta(event.aiSessionId);

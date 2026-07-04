@@ -710,8 +710,8 @@ function removeTextBlock(text: string, block: string) {
 }
 
 function historyContentScore(content: string): number {
+  // 移除 final-summary 评分加成，所有状态都绑定到具体步骤
   let score = content.length;
-  if (content.includes("\"stepId\":\"final-summary\"")) score += 10_000;
   if (content.includes("\"stepId\":\"mobile-run-started\"")) score -= 1_000;
   return score;
 }

@@ -1,12 +1,12 @@
 // Codex app-server integration for the Electron main process.
 // Spawns `codex app-server --stdio`, communicates via JSON-RPC 2.0,
-// and streams AiChatOutputEvent to the renderer through the sender.
+// and streams Codex trace updates to the renderer through the sender.
 // Mirrors the original Tauri Rust run_codex_chat implementation.
 
 import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
 import { createInterface, type Interface } from "node:readline";
 import * as os from "node:os";
-import type { RunCodexChatRequest, AiChatOutputEvent, ChatImageAttachment, ChatSegment, CodexApprovalDecision, CodexTraceSnapshot } from "../services/desktop";
+import type { RunCodexChatRequest, ChatImageAttachment, ChatSegment, CodexApprovalDecision, CodexTraceSnapshot } from "../services/desktop";
 import { getLocalAiSession, resetLocalAiTrace, upsertLocalAiTrace } from "./db";
 import { codexTraceSnapshotToSegments, reduceCodexTraceSnapshot, type CodexRawTraceEvent } from "./codex_trace";
 
@@ -49,11 +49,11 @@ interface CodexSession {
   sender: Sender;
   closed: boolean;
   stderrBuffer: string;
-  commandOutputBuffers: Map<string, string>;
-  agentMessageBuffer: string;
   pendingApprovals: Map<string, PendingApproval>;
   traceEnabled: boolean;
   traceSnapshot: CodexTraceSnapshot | null;
+  traceDirty: boolean;
+  traceFlushTimer: ReturnType<typeof setTimeout> | null;
   turnResolver: { resolve: () => void; reject: (error: Error) => void } | null;
   errorEmitted: boolean;
   cancelled: boolean;
@@ -62,6 +62,7 @@ interface CodexSession {
 // ---------- Constants ----------
 
 const CODEX_TURN_TIMEOUT_MS = 30 * 60_000;
+const CODEX_TRACE_FLUSH_MS = 120;
 const CODEX_WARMUP_TIMEOUT_MS = 60_000;
 const CODEX_RECONNECT_RETRY_MS = 1200;
 const CODEX_RECONNECT_MAX_RETRIES = 5;
@@ -86,13 +87,13 @@ function spawnCodex(args: string[], cwd: string): ChildProcessWithoutNullStreams
 
 // ---------- Helpers ----------
 
-function emit(sender: Sender, event: AiChatOutputEvent): void {
-  sender.send("ai-chat-output", event);
-}
-
-function emitTrace(session: CodexSession, rawEvent: CodexRawTraceEvent): void {
-  if (!session.traceEnabled) return;
-  session.traceSnapshot = reduceCodexTraceSnapshot(session.traceSnapshot, rawEvent);
+function flushTrace(session: CodexSession, rawEvent?: CodexRawTraceEvent): void {
+  if (!session.traceEnabled || !session.traceSnapshot || !session.traceDirty) return;
+  if (session.traceFlushTimer) {
+    clearTimeout(session.traceFlushTimer);
+    session.traceFlushTimer = null;
+  }
+  session.traceDirty = false;
   const trace = upsertLocalAiTrace({
     aiSessionId: session.aiSessionId,
     providerId: "codex",
@@ -111,6 +112,26 @@ function emitTrace(session: CodexSession, rawEvent: CodexRawTraceEvent): void {
   });
 }
 
+function scheduleTraceFlush(session: CodexSession, rawEvent: CodexRawTraceEvent): void {
+  session.traceDirty = true;
+  const status = session.traceSnapshot?.status;
+  if (status === "completed" || status === "failed" || status === "canceled") {
+    flushTrace(session, rawEvent);
+    return;
+  }
+  if (session.traceFlushTimer) return;
+  session.traceFlushTimer = setTimeout(() => {
+    session.traceFlushTimer = null;
+    flushTrace(session, rawEvent);
+  }, CODEX_TRACE_FLUSH_MS);
+}
+
+function emitTrace(session: CodexSession, rawEvent: CodexRawTraceEvent): void {
+  if (!session.traceEnabled) return;
+  session.traceSnapshot = reduceCodexTraceSnapshot(session.traceSnapshot, rawEvent);
+  scheduleTraceFlush(session, rawEvent);
+}
+
 function emitTraceMethod(session: CodexSession, method: string, params: unknown): void {
   emitTrace(session, {
     method,
@@ -122,11 +143,8 @@ function emitTraceMethod(session: CodexSession, method: string, params: unknown)
 function emitSessionError(session: CodexSession, message: string, detail?: string): void {
   if (session.errorEmitted) return;
   session.errorEmitted = true;
-  emit(session.sender, {
-    aiSessionId: session.aiSessionId,
-    kind: "error",
-    segment: { type: "error", message, detail },
-  });
+  emitTraceMethod(session, "error", { error: { message, detail } });
+  flushTrace(session);
 }
 
 function errorMessage(err: unknown): string {
@@ -146,91 +164,9 @@ function strOrUndef(v: unknown): string | undefined {
   return typeof v === "string" ? v : undefined;
 }
 
-function numOrUndef(v: unknown): number | undefined {
-  return typeof v === "number" ? v : undefined;
-}
-
 function arrayOfStrings(v: unknown): string[] {
   if (!Array.isArray(v)) return [];
   return v.filter((item): item is string => typeof item === "string" && item.trim().length > 0);
-}
-
-function firstString(...values: unknown[]): string | undefined {
-  for (const value of values) {
-    if (typeof value === "string" && value.trim()) return value;
-  }
-  return undefined;
-}
-
-function extractFileEditPath(item: Record<string, unknown>, parent: Record<string, unknown>): string | undefined {
-  const direct = firstString(
-    item["path"],
-    item["filePath"],
-    item["file_path"],
-    item["filename"],
-    parent["path"],
-    parent["filePath"],
-    parent["file_path"],
-    parent["filename"],
-  );
-  if (direct) return direct;
-
-  const fileChanges = fileChangesRecord(item["fileChanges"] ?? parent["fileChanges"] ?? item["changes"] ?? parent["changes"]);
-  const firstPath = fileChanges ? Object.keys(fileChanges).find((path) => path.trim().length > 0) : "";
-  return firstPath || undefined;
-}
-
-function extractFileEditDiff(item: Record<string, unknown>, parent: Record<string, unknown>): string | undefined {
-  const candidate = firstString(
-    item["diff"],
-    item["patch"],
-    item["changes"],
-    item["change"],
-    item["output"],
-    item["result"],
-    parent["diff"],
-    parent["patch"],
-    parent["changes"],
-    parent["change"],
-  );
-  if (candidate && looksLikeDiff(candidate)) return candidate;
-  return extractFileChangesDiff(item, parent);
-}
-
-function fileChangesRecord(value: unknown): Record<string, unknown> | null {
-  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
-  return value as Record<string, unknown>;
-}
-
-function diffFromFileChangeValue(path: string, value: unknown): string {
-  if (typeof value === "string") {
-    return looksLikeDiff(value) ? value : "";
-  }
-  if (!value || typeof value !== "object") return "";
-  const change = value as Record<string, unknown>;
-  const diff = firstString(
-    change["diff"],
-    change["patch"],
-    change["changes"],
-    change["change"],
-    change["content"],
-  );
-  if (!diff || !looksLikeDiff(diff)) return "";
-  if (/^(diff --git|\*\*\* (?:Add|Update|Delete) File: |\+\+\+ |--- )/m.test(diff)) return diff;
-  return `*** Update File: ${path}\n${diff}`;
-}
-
-function extractFileChangesDiff(item: Record<string, unknown>, parent: Record<string, unknown>): string | undefined {
-  const fileChanges = fileChangesRecord(item["fileChanges"] ?? parent["fileChanges"] ?? item["changes"] ?? parent["changes"]);
-  if (!fileChanges) return undefined;
-  const diffs = Object.entries(fileChanges)
-    .map(([path, value]) => diffFromFileChangeValue(path, value))
-    .filter(Boolean);
-  return diffs.length ? diffs.join("\n") : undefined;
-}
-
-function looksLikeDiff(value: string): boolean {
-  return /(^|\n)(diff --git|@@\s|---\s|\+\+\+\s|[+-][^\n]*)/.test(value);
 }
 
 // ---------- Field extraction (defensive — codex API shapes may vary) ----------
@@ -263,33 +199,6 @@ function extractItemId(params: unknown): string | undefined {
   const item = p["item"] as Record<string, unknown> | undefined;
   const id = p["itemId"] ?? item?.["id"] ?? p["id"];
   return typeof id === "string" ? id : undefined;
-}
-
-function extractDelta(params: unknown): string | undefined {
-  if (!params || typeof params !== "object") return undefined;
-  const p = params as Record<string, unknown>;
-  const delta = p["delta"] ?? p["text"] ?? p["content"] ?? p["output"] ?? p["chunk"];
-  return typeof delta === "string" ? delta : undefined;
-}
-
-function extractTurnFinalText(params: unknown): string | undefined {
-  if (!params || typeof params !== "object") return undefined;
-  const p = params as Record<string, unknown>;
-  const turn = p["turn"] as Record<string, unknown> | undefined;
-  const response = p["response"] as Record<string, unknown> | undefined;
-  const message = p["message"] as Record<string, unknown> | undefined;
-  return firstString(
-    p["last_agent_message"],
-    p["final_message"],
-    p["finalText"],
-    p["final_text"],
-    p["output_text"],
-    turn?.["last_agent_message"],
-    turn?.["final_message"],
-    response?.["output_text"],
-    response?.["text"],
-    message?.["text"],
-  );
 }
 
 function extractErrorMessage(params: unknown): string | undefined {
@@ -378,100 +287,6 @@ function isApprovalRequestMethod(method: string) {
     || method === "applyPatchApproval";
 }
 
-// ---------- ChatSegment builders ----------
-
-function buildItemStartedSegment(params: unknown): ChatSegment {
-  const p = (params ?? {}) as Record<string, unknown>;
-  const item = (p["item"] ?? p) as Record<string, unknown>;
-  const itemType = strOrUndef(item["type"]) ?? "unknown";
-  const stepId = extractItemId(params);
-
-  switch (itemType) {
-    case "reasoning":
-      return {
-        type: "status",
-        stepId,
-        label: "正在思考",
-        icon: "think",
-      };
-    case "agentMessage":
-      return { type: "text", stepId, text: "" };
-    case "commandExecution":
-      return {
-        type: "tool",
-        stepId,
-        toolName: strOrUndef(item["toolName"]) ?? "command",
-        command: strOrUndef(item["command"]) ?? strOrUndef(item["commandText"]),
-        status: "running",
-      };
-    case "fileEdit":
-    case "file_edit":
-    case "fileChange":
-    case "file_change":
-      return {
-        type: "tool",
-        stepId,
-        toolName: "修改文件",
-        command: extractFileEditPath(item, p),
-        status: "running",
-      };
-    default:
-      return {
-        type: "status",
-        stepId,
-        label: `执行 ${itemType}`,
-        icon: "think",
-      };
-  }
-}
-
-function buildItemCompletedSegment(params: unknown, fallbackOutput?: string): ChatSegment | null {
-  const p = (params ?? {}) as Record<string, unknown>;
-  const item = (p["item"] ?? p) as Record<string, unknown>;
-  const itemType = strOrUndef(item["type"]) ?? "unknown";
-  const stepId = extractItemId(params);
-  const additions = numOrUndef(item["additions"] ?? p["additions"]);
-  const deletions = numOrUndef(item["deletions"] ?? p["deletions"]);
-
-  switch (itemType) {
-    case "reasoning":
-      return {
-        type: "status",
-        stepId,
-        label: "正在思考",
-        icon: "think",
-      };
-    case "commandExecution":
-      return {
-        type: "tool",
-        stepId,
-        toolName: strOrUndef(item["toolName"]) ?? "command",
-        command: strOrUndef(item["command"]) ?? strOrUndef(item["commandText"]),
-        status: "success",
-        output: strOrUndef(item["output"]) ?? strOrUndef(item["result"]) ?? fallbackOutput,
-        additions,
-        deletions,
-      };
-    case "fileEdit":
-    case "file_edit":
-    case "fileChange":
-    case "file_change":
-      return {
-        type: "tool",
-        stepId,
-        toolName: "修改文件",
-        command: extractFileEditPath(item, p),
-        status: "success",
-        summary: strOrUndef(item["result"]) ?? strOrUndef(item["summary"]),
-        diff: extractFileEditDiff(item, p),
-        additions,
-        deletions,
-      };
-    default:
-      return null;
-  }
-}
-
 // ---------- JSON-RPC communication ----------
 
 function sendRequest(
@@ -534,12 +349,6 @@ function updateApprovalSegment(
     title: approvalStatusTitle(status, approval.segment.approvalKind),
     detail,
   };
-  emit(session.sender, {
-    aiSessionId: session.aiSessionId,
-    kind: "step-update",
-    stepId: approval.stepId,
-    segment: approval.segment,
-  });
   emitTraceMethod(session, "approval/resolved", {
     approvalId: approval.approvalId,
     status,
@@ -574,12 +383,6 @@ function handleApprovalRequest(
     cwd: segment.cwd,
     fileChanges: segment.fileChanges,
     reason: segment.reason,
-  });
-  emit(session.sender, {
-    aiSessionId: session.aiSessionId,
-    kind: "step-start",
-    stepId: segment.stepId,
-    segment,
   });
 }
 
@@ -662,18 +465,7 @@ async function sendRequestWithReconnectRetry(
       const reconnecting = (error as Error & { reconnecting?: boolean })?.reconnecting
         || isCodexReconnectMessage(message);
       if (!reconnecting || session.closed || attempt >= CODEX_RECONNECT_MAX_RETRIES) break;
-      emit(session.sender, {
-        aiSessionId: session.aiSessionId,
-        kind: "status",
-        text: message,
-        segment: {
-          type: "status",
-          stepId: `codex-reconnect-${attempt}`,
-          label: "Codex 正在重连",
-          detail: message,
-          icon: "warn",
-        },
-      });
+      emitTraceMethod(session, "status", { id: `codex-reconnect-${attempt}`, message });
       await delay(CODEX_RECONNECT_RETRY_MS);
     }
   }
@@ -685,13 +477,10 @@ function handleNotification(
   method: string,
   params: unknown
 ): void {
-  const { aiSessionId, sender } = session;
   emitTraceMethod(
     session,
     method,
-    method === "turn/completed"
-      ? { ...((params && typeof params === "object") ? params as Record<string, unknown> : {}), finalText: extractTurnFinalText(params) ?? session.agentMessageBuffer }
-      : params,
+    params,
   );
 
   switch (method) {
@@ -700,77 +489,7 @@ function handleNotification(
       if (tid) session.threadId = tid;
       break;
     }
-    case "turn/started": {
-      session.agentMessageBuffer = "";
-      emit(sender, {
-        aiSessionId,
-        kind: "status",
-        text: "running",
-        segment: { type: "status", stepId: "runtime-status", label: "Codex 正在执行", icon: "think" },
-      });
-      break;
-    }
-    case "item/started": {
-      emit(sender, {
-        aiSessionId,
-        kind: "step-start",
-        stepId: extractItemId(params) ?? null,
-        segment: buildItemStartedSegment(params),
-      });
-      break;
-    }
-    case "item/agentMessage/delta": {
-      const delta = extractDelta(params);
-      const stepId = extractItemId(params);
-      if (delta) {
-        session.agentMessageBuffer += delta;
-        emit(sender, {
-          aiSessionId,
-          kind: "delta",
-          text: delta,
-          phase: "process",
-          stepId: stepId ?? null,
-        });
-      }
-      break;
-    }
-    case "item/commandExecution/outputDelta": {
-      const delta = extractDelta(params);
-      const stepId = extractItemId(params);
-      if (delta && stepId) {
-        const prev = session.commandOutputBuffers.get(stepId) ?? "";
-        const accumulated = prev + delta;
-        session.commandOutputBuffers.set(stepId, accumulated);
-        emit(sender, {
-          aiSessionId,
-          kind: "step-update",
-          stepId,
-          segment: { type: "tool", stepId, toolName: "command", status: "running", output: accumulated },
-        });
-      }
-      break;
-    }
-    case "item/completed": {
-      const completedStepId = extractItemId(params);
-      const completedOutput = completedStepId ? session.commandOutputBuffers.get(completedStepId) : undefined;
-      if (completedStepId) session.commandOutputBuffers.delete(completedStepId);
-      const segment = buildItemCompletedSegment(params, completedOutput);
-      if (!segment) break;
-      emit(sender, {
-        aiSessionId,
-        kind: "step-update",
-        stepId: completedStepId ?? null,
-        segment,
-      });
-      break;
-    }
     case "turn/completed": {
-      emit(sender, {
-        aiSessionId,
-        kind: "done",
-        text: extractTurnFinalText(params) ?? session.agentMessageBuffer,
-        phase: "final",
-      });
       if (session.turnResolver) {
         session.turnResolver.resolve();
         session.turnResolver = null;
@@ -779,26 +498,7 @@ function handleNotification(
     }
     case "error": {
       const msg = extractErrorMessage(params) ?? "未知错误";
-      if (isCodexReconnectMessage(msg)) {
-        emit(sender, {
-          aiSessionId,
-          kind: "status",
-          text: msg,
-          segment: {
-            type: "status",
-            stepId: "codex-reconnecting",
-            label: "Codex 正在重连",
-            detail: msg,
-            icon: "warn",
-          },
-        });
-        break;
-      }
-      emitSessionError(session, msg);
-      if (session.turnResolver) {
-        session.turnResolver.reject(new Error(msg));
-        session.turnResolver = null;
-      }
+      if (!isCodexReconnectMessage(msg)) emitSessionError(session, msg);
       break;
     }
     default:
@@ -827,11 +527,11 @@ function createSession(
     sender,
     closed: false,
     stderrBuffer: "",
-    commandOutputBuffers: new Map(),
-    agentMessageBuffer: "",
     pendingApprovals: new Map(),
     traceEnabled,
     traceSnapshot: null,
+    traceDirty: false,
+    traceFlushTimer: null,
     turnResolver: null,
     errorEmitted: false,
     cancelled: false,
@@ -878,7 +578,7 @@ function handleExit(
     pending.reject(err);
   }
   session.pendingRequests.clear();
-  resolvePendingApprovals(session, "expired", "Codex 会话已结束，审批请求已失效。");
+  resolvePendingApprovals(session, "expired", "Codex session ended; approval requests expired.");
   if (session.turnResolver) {
     session.turnResolver.reject(err);
     session.turnResolver = null;
@@ -907,7 +607,8 @@ function handleSpawnError(session: CodexSession, err: Error): void {
 
 function killSession(session: CodexSession): void {
   if (session.closed) return;
-  resolvePendingApprovals(session, "expired", "Codex 会话已结束，审批请求已失效。");
+  flushTrace(session);
+  resolvePendingApprovals(session, "expired", "Codex session ended; approval requests expired.");
   session.closed = true;
   try {
     session.rl.close();
@@ -928,6 +629,7 @@ function killSession(session: CodexSession): void {
 
 function interruptSession(session: CodexSession): void {
   if (session.closed) return;
+  flushTrace(session);
   resolvePendingApprovals(session, "expired", "用户已中断当前 AI 会话。");
   session.closed = true;
   try {
@@ -1014,7 +716,7 @@ async function ensureThread(
 /**
  * Run a Codex chat turn. Spawns `codex app-server --stdio`, initializes the
  * JSON-RPC connection, starts (or resumes) a thread, sends turn/start, and
- * streams AiChatOutputEvent to the sender until the turn completes.
+ * streams Codex trace updates to the sender until the turn completes.
  *
  * Returns the app-server tagged threadId (providerSessionId).
  */
@@ -1063,7 +765,7 @@ export async function runCodexChat(
       pending.reject(new Error("timeout"));
     }
     session.pendingRequests.clear();
-    resolvePendingApprovals(session, "expired", "Codex 会话超时，审批请求已失效。");
+    resolvePendingApprovals(session, "expired", "Codex session ended; approval requests expired.");
     killSession(session);
   }, CODEX_TURN_TIMEOUT_MS);
 
@@ -1137,17 +839,6 @@ export function stopCodexChat(aiSessionId: string): boolean {
       },
     });
   }
-  emit(session.sender, {
-    aiSessionId,
-    kind: "done",
-    text: "",
-    segment: {
-      type: "status",
-      stepId: "interrupted",
-      label: "已中断",
-      icon: "warn",
-    },
-  });
   const error = new Error("AI chat stopped by user");
   for (const [, pending] of session.pendingRequests) {
     pending.reject(error);
@@ -1209,7 +900,7 @@ export async function warmupCodexSession(
       pending.reject(new Error("timeout"));
     }
     session.pendingRequests.clear();
-    resolvePendingApprovals(session, "expired", "Codex 预热超时。");
+    resolvePendingApprovals(session, "expired", "Codex session ended; approval requests expired.");
     killSession(session);
   }, CODEX_WARMUP_TIMEOUT_MS);
 

@@ -236,16 +236,25 @@ function providerRuntimeName(providerId?: string | null) {
 
 function setChatRunState(sessionId: string, patch: Partial<ChatRunState>) {
   const previous = chatRunStates.value[sessionId];
+  const next = {
+    active: patch.active ?? previous?.active ?? false,
+    phase: patch.phase ?? previous?.phase ?? "idle",
+    title: patch.title ?? previous?.title ?? "就绪",
+    detail: patch.detail ?? previous?.detail ?? "",
+    startedAt: patch.startedAt ?? previous?.startedAt,
+    updatedAt: Date.now(),
+  };
+  if (previous
+    && previous.active === next.active
+    && previous.phase === next.phase
+    && previous.title === next.title
+    && previous.detail === next.detail
+    && previous.startedAt === next.startedAt) {
+    return;
+  }
   chatRunStates.value = {
     ...chatRunStates.value,
-    [sessionId]: {
-      active: patch.active ?? previous?.active ?? false,
-      phase: patch.phase ?? previous?.phase ?? "idle",
-      title: patch.title ?? previous?.title ?? "就绪",
-      detail: patch.detail ?? previous?.detail ?? "",
-      startedAt: patch.startedAt ?? previous?.startedAt,
-      updatedAt: Date.now(),
-    },
+    [sessionId]: next,
   };
 }
 
@@ -338,8 +347,9 @@ async function refreshWorkspace() {
   await initAiEventListeners();
   await initWorkspaceEventListeners();
   await initUpdateEventListeners();
-  await Promise.all([loadCloudConfig(), loadProviders(), loadLocalWorkspace(), detectProviders(), refreshTerminalSessions(), loadAppVersion()]);
+  await Promise.all([loadCloudConfig(), loadProviders(), loadLocalWorkspace(), refreshTerminalSessions(), loadAppVersion()]);
   ensureSelectedProject();
+  void detectProviders();
 }
 
 async function loadAppVersion() {
@@ -746,6 +756,23 @@ function codexTraceToChatMessage(trace: AiProviderTrace): ChatMessage | null {
   };
 }
 
+function mergeTraceSegments(existing: ChatSegment[] = [], incoming: ChatSegment[] = [], done = false) {
+  const merged = new Map<string, ChatSegment>();
+  const order: string[] = [];
+  const put = (segment: ChatSegment, fallbackKey: string) => {
+    const key = segment.stepId || fallbackKey;
+    if (!merged.has(key)) order.push(key);
+    merged.set(key, { ...(merged.get(key) ?? {}), ...segment } as ChatSegment);
+  };
+  existing.forEach((segment, index) => put(segment, `existing-${index}`));
+  incoming.forEach((segment, index) => put(segment, `incoming-${index}`));
+  return order
+    .map((key) => merged.get(key))
+    .filter((segment): segment is ChatSegment => Boolean(segment))
+    .filter((segment) => !(done && (segment.stepId === "runtime-status" || segment.stepId === "initial-thinking")))
+    .map((segment) => finalizeSegmentForDone(segment, done));
+}
+
 function mergeCodexTraceIntoMessages(messages: ChatMessage[], trace: AiProviderTrace | null) {
   if (!trace || trace.providerId !== "codex") return messages;
   const traceMessage = codexTraceToChatMessage(trace);
@@ -757,7 +784,7 @@ function mergeCodexTraceIntoMessages(messages: ChatMessage[], trace: AiProviderT
       ...next[lastAssistantIndex],
       pending: traceMessage.pending,
       text: traceMessage.text || next[lastAssistantIndex].text,
-      segments: traceMessage.segments,
+      segments: mergeTraceSegments(next[lastAssistantIndex].segments ?? [], traceMessage.segments ?? [], !traceMessage.pending),
     };
     return dedupeAdjacentChatMessages(next);
   }
@@ -831,8 +858,8 @@ function chatMessageFingerprint(message: ChatMessage) {
 }
 
 function chatMessageScore(message: ChatMessage) {
+  // 移除 final-summary 评分加成，所有状态都绑定到具体步骤
   let score = (message.text ?? "").length + (message.segments?.length ?? 0) * 100;
-  if (message.segments?.some((segment) => segment.stepId === "final-summary")) score += 10_000;
   return score;
 }
 
@@ -1175,15 +1202,6 @@ function stripProcessTextFromFinalText(text: string, sourceSegments: ChatSegment
   return cleaned.trim();
 }
 
-function latestProcessText(pending: PendingAssistant) {
-  const entries = [...pending.steps.values()];
-  for (let index = entries.length - 1; index >= 0; index -= 1) {
-    const segment = entries[index];
-    if (isProcessTextSegment(segment) && segment.text.trim()) return segment.text.trim();
-  }
-  return "";
-}
-
 function removeMatchingProcessText(pending: PendingAssistant, text: string) {
   const target = text.trim();
   if (!target) return;
@@ -1196,6 +1214,10 @@ function removeMatchingProcessText(pending: PendingAssistant, text: string) {
 
 function isProcessTextSegment(segment: ChatSegment) {
   return segment.type === "text" && Boolean(segment.stepId && /^(?:process-text|thought|commentary)-/.test(segment.stepId));
+}
+
+function isProcessConclusionTextSegment(segment: ChatSegment) {
+  return segment.type === "text" && Boolean(segment.stepId?.startsWith("process-text-conclusion-"));
 }
 
 function processTextStepId(stepId?: string | null) {
@@ -1243,7 +1265,7 @@ function appendPendingAssistantText(sessionId: string, text: string, stepId?: st
 function completePendingAssistantFromExec(sessionId: string) {
   const pending = pendingAssistants.get(sessionId);
   if (!pending) return;
-  const text = extractAssistantText((pending.finalText || pending.message.text || latestProcessText(pending)).trim());
+  const text = extractAssistantText((pending.finalText || pending.message.text).trim());
   removeMatchingProcessText(pending, text);
   pending.finalText = stripProcessTextFromFinalText(text, [...pending.steps.values()]);
   upsertCompletionSummary(sessionId);
@@ -1367,21 +1389,14 @@ function finalizeSegmentForDone(segment: ChatSegment, done: boolean): ChatSegmen
 function upsertCompletionSummary(sessionId: string) {
   const pending = pendingAssistants.get(sessionId);
   if (!pending) return;
-  const elapsedMs = Math.max(0, Math.round(performance.now() - pending.startedAt));
+  // 移除 final-summary，completed 状态已绑定到各个执行步骤
   pending.steps.delete("runtime-status");
   pending.steps.delete("initial-thinking");
-  pending.steps.set("final-summary", {
-    type: "status",
-    stepId: "final-summary",
-    label: `已处理 ${formatCompactElapsedMs(elapsedMs)}`,
-    durationMs: elapsedMs,
-  });
 }
 
 function isPersistentStatusSegment(segment: ChatSegment) {
-  return segment.type === "status" && (
-    segment.stepId === "final-summary"
-  );
+  // 移除 final-summary，所有状态都绑定到具体步骤
+  return false;
 }
 
 function shouldHideBackendStatus(text: string) {
@@ -1477,27 +1492,31 @@ async function handleAiTraceUpdateEvent(event: AiTraceUpdateEvent) {
     pending = ensureIncomingPendingAssistant(event.aiSessionId) ?? await ensureIncomingPendingAssistantAfterRefresh(event.aiSessionId) ?? undefined;
   }
   const traceMessage = codexTraceToChatMessage(event.trace);
+  const pendingState = codexTracePending(event.trace);
   if (!traceMessage) return;
   if (pending) {
-    pending.finalText = traceMessage.text ?? "";
-    pending.steps = new Map((traceMessage.segments ?? []).map((segment, index) => [
+    pending.finalText = traceMessage.text ?? pending.finalText;
+    const mergedSegments = mergeTraceSegments([...pending.steps.values()], traceMessage.segments ?? [], !traceMessage.pending);
+    pending.steps = new Map(mergedSegments.map((segment, index) => [
       segment.stepId ?? `codex-trace-${index}`,
       segment,
     ]));
     patchPendingAssistant(event.aiSessionId, {
       role: "assistant",
       pending: traceMessage.pending,
-      text: traceMessage.text,
-      segments: traceMessage.segments,
+      text: traceMessage.text || pending.finalText,
+      segments: mergedSegments,
     });
   } else if (activeAiSession.value?.id === event.aiSessionId) {
     chatMessages.value = mergeCodexTraceIntoMessages(chatMessages.value, event.trace);
   }
 
-  thinkingSessionIds.value = {
-    ...thinkingSessionIds.value,
-    [event.aiSessionId]: codexTracePending(event.trace),
-  };
+  if (thinkingSessionIds.value[event.aiSessionId] !== pendingState) {
+    thinkingSessionIds.value = {
+      ...thinkingSessionIds.value,
+      [event.aiSessionId]: pendingState,
+    };
+  }
   setChatRunState(event.aiSessionId, codexTraceRunState(event.trace));
 
   if (!codexTracePending(event.trace) && pending) {
@@ -1508,7 +1527,7 @@ async function handleAiTraceUpdateEvent(event: AiTraceUpdateEvent) {
         assistantDrafts.set(event.aiSessionId, { message: pending.message, savedText: finalText });
         await desktopApi.appendLocalAiMessage(event.aiSessionId, "assistant", encodeAssistantMessageForStorage({
           text: finalText,
-          segments: traceMessage.segments,
+          segments: [...pending.steps.values()],
         })).catch((error) => {
           pushChatDebugEvent(`保存 Codex 回答失败：${String(error)}`);
         });

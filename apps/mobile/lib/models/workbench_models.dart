@@ -274,6 +274,8 @@ class ChatSegment {
     this.durationMs,
     this.additions,
     this.deletions,
+    this.rawItemType,
+    this.startedAt,
   });
 
   final String type;
@@ -301,6 +303,8 @@ class ChatSegment {
   final int? durationMs;
   final int? additions;
   final int? deletions;
+  final String? rawItemType;
+  final String? startedAt;
 
   factory ChatSegment.fromJson(Map<String, dynamic> json) => ChatSegment(
         type: json['type'] as String? ?? 'text',
@@ -330,6 +334,8 @@ class ChatSegment {
         durationMs: json['durationMs'] as int?,
         additions: json['additions'] as int?,
         deletions: json['deletions'] as int?,
+        rawItemType: json['rawItemType'] as String?,
+        startedAt: json['startedAt'] as String?,
       );
 }
 
