@@ -2,20 +2,19 @@
 import { computed, onMounted, ref, watch } from "vue";
 import { useRouter } from "vue-router";
 import { useWorkspace } from "../composables/useWorkspace";
-import { desktopApi, type AiProvider, type DesktopRuntimeInfo, type ProviderStatus } from "../services/desktop";
+import { desktopApi, type AiProvider, type DesktopRuntimeInfo, type ProviderStatus, type TokenUsageSummary, type TokenUsageSummaryItem } from "../services/desktop";
 
 const settingsIcon = new URL("../assets/icons/settings.svg", import.meta.url).href;
 const riskGuardIcon = new URL("../assets/icons/risk-guard.svg", import.meta.url).href;
 const aiProvidersIcon = new URL("../assets/icons/ai-providers.svg", import.meta.url).href;
 const archiveBoxIcon = new URL("../assets/icons/archive-box.svg", import.meta.url).href;
-const tokenUsageIcon = new URL("../assets/icons/ai-providers.svg", import.meta.url).href;
 const clipboardIcon = new URL("../assets/icons/clipboard.svg", import.meta.url).href;
 const providerCodexIcon = new URL("../assets/icons/provider-codex.svg", import.meta.url).href;
 const providerClaudeIcon = new URL("../assets/icons/provider-claude.svg", import.meta.url).href;
 const providerOpencodeIcon = new URL("../assets/icons/provider-opencode.svg", import.meta.url).href;
 const providerMimoIcon = new URL("../assets/icons/provider-mimo.svg", import.meta.url).href;
 
-type SettingsPanel = "connection" | "security" | "about" | "archive";
+type SettingsPanel = "connection" | "security" | "about" | "archive" | "tokenUsage";
 type ProviderRow = {
   provider: AiProvider;
   status?: ProviderStatus;
@@ -30,12 +29,6 @@ type SettingsPanelItem = {
 
 const ws = useWorkspace();
 const router = useRouter();
-
-function goToTokenUsage() {
-  if (router.currentRoute.value.path !== "/token-usage") {
-    void router.push("/token-usage");
-  }
-}
 
 const localServer = ref(ws.settingsServer.value);
 const settingsPanel = ref<SettingsPanel>("connection");
@@ -75,6 +68,13 @@ const settingsPanels: SettingsPanelItem[] = [
     eyebrow: "历史",
     description: "查看和恢复已归档的 AI 会话",
     icon: archiveBoxIcon,
+  },
+  {
+    id: "tokenUsage",
+    label: "用量统计",
+    eyebrow: "用量",
+    description: "按 AI 工具聚合的 Token 用量,数据来自云端",
+    icon: aiProvidersIcon,
   },
 ];
 
@@ -233,9 +233,58 @@ const deviceIdDisplay = computed(() => {
   return `${id.slice(0, 8)}...${id.slice(-4)}`;
 });
 
+const tokenUsageSummary = ref<TokenUsageSummary | null>(null);
+const tokenUsageLoading = ref(false);
+const tokenUsageError = ref<string>("");
+
+const tokenUsageRows = computed<(TokenUsageSummaryItem & { name: string; icon: string })[]>(() => {
+  const rows = tokenUsageSummary.value?.providers ?? [];
+  return rows.map((row) => ({
+    ...row,
+    name: providerNameForId(row.providerId),
+    icon: providerIcon(row.providerId),
+  }));
+});
+
+const tokenUsageTotals = computed<TokenUsageSummaryItem>(() => {
+  return tokenUsageSummary.value?.totals ?? {
+    providerId: "",
+    inputTokens: 0,
+    outputTokens: 0,
+    reasoningTokens: 0,
+    totalTokens: 0,
+    turnCount: 0,
+  };
+});
+
+function providerNameForId(id: string) {
+  const map: Record<string, string> = { codex: "Codex", claude: "Claude Code", opencode: "OpenCode", mimo: "MiMo Code" };
+  return map[id] ?? id;
+}
+
+function formatTokens(n: number): string {
+  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(2)}M`;
+  if (n >= 1_000) return `${(n / 1_000).toFixed(1)}K`;
+  return String(n);
+}
+
+async function refreshTokenUsage() {
+  tokenUsageLoading.value = true;
+  tokenUsageError.value = "";
+  try {
+    tokenUsageSummary.value = await desktopApi.getTokenUsageSummary();
+  } catch (e) {
+    tokenUsageError.value = e instanceof Error ? e.message : "加载失败";
+    tokenUsageSummary.value = null;
+  } finally {
+    tokenUsageLoading.value = false;
+  }
+}
+
 onMounted(() => {
   void refreshCloudConfig();
   void refreshDesktopRuntimeInfo();
+  void refreshTokenUsage();
 });
 
 function archivedAtLabel(value?: string | null) {
@@ -287,20 +336,6 @@ async function restoreSession(sessionId: string) {
               </span>
             </span>
             <span class="settings-nav-eyebrow">{{ panel.eyebrow }}</span>
-          </button>
-          <button
-            class="settings-nav-external"
-            type="button"
-            @click="goToTokenUsage"
-          >
-            <span class="settings-nav-marker" aria-hidden="true"></span>
-            <span class="settings-nav-copy">
-              <span class="settings-nav-title-row">
-                <img :src="tokenUsageIcon" alt="" class="settings-nav-icon" />
-                <strong>用量统计</strong>
-              </span>
-            </span>
-            <span class="settings-nav-eyebrow">用量</span>
           </button>
         </nav>
 
@@ -537,6 +572,71 @@ async function restoreSession(sessionId: string) {
                 </button>
               </article>
             </div>
+          </section>
+
+          <section v-else-if="settingsPanel === 'tokenUsage'" class="settings-section settings-token-usage">
+            <div class="settings-section-heading">
+              <div>
+                <h2 class="settings-section-title">用量统计</h2>
+                <p class="settings-section-description">按 AI 工具聚合的 Token 用量,数据来自云端,桌面端和移动端共用。</p>
+              </div>
+              <button class="button secondary mini" type="button" :disabled="tokenUsageLoading" @click="refreshTokenUsage">
+                {{ tokenUsageLoading ? "刷新中…" : "刷新" }}
+              </button>
+            </div>
+
+            <p v-if="tokenUsageError" class="settings-token-usage-error">{{ tokenUsageError }}</p>
+
+            <div class="settings-token-usage-overview">
+              <article class="settings-token-usage-card">
+                <span>总输入</span>
+                <strong>{{ formatTokens(tokenUsageTotals.inputTokens) }}</strong>
+              </article>
+              <article class="settings-token-usage-card">
+                <span>总输出</span>
+                <strong>{{ formatTokens(tokenUsageTotals.outputTokens) }}</strong>
+              </article>
+              <article class="settings-token-usage-card">
+                <span>推理 Token</span>
+                <strong>{{ formatTokens(tokenUsageTotals.reasoningTokens) }}</strong>
+              </article>
+              <article class="settings-token-usage-card highlight">
+                <span>合计</span>
+                <strong>{{ formatTokens(tokenUsageTotals.totalTokens) }}</strong>
+              </article>
+            </div>
+
+            <div v-if="!tokenUsageLoading && tokenUsageRows.length === 0" class="empty-state">
+              暂无 Token 用量数据。发起一次 AI 会话后会自动统计。
+            </div>
+
+            <table v-else class="settings-token-usage-table">
+              <thead>
+                <tr>
+                  <th>工具</th>
+                  <th>输入 Token</th>
+                  <th>输出 Token</th>
+                  <th>推理 Token</th>
+                  <th>合计</th>
+                  <th>会话次数</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="row in tokenUsageRows" :key="row.providerId">
+                  <td>
+                    <span class="settings-token-usage-tool">
+                      <img :src="row.icon" alt="" />
+                      <span>{{ row.name }}</span>
+                    </span>
+                  </td>
+                  <td>{{ formatTokens(row.inputTokens) }}</td>
+                  <td>{{ formatTokens(row.outputTokens) }}</td>
+                  <td>{{ formatTokens(row.reasoningTokens) }}</td>
+                  <td><strong>{{ formatTokens(row.totalTokens) }}</strong></td>
+                  <td>{{ row.turnCount }}</td>
+                </tr>
+              </tbody>
+            </table>
           </section>
         </div>
       </div>

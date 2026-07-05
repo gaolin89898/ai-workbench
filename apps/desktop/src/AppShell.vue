@@ -15,7 +15,7 @@ const activeView = computed<ViewName>(() => {
   }
   return "aiSessions";
 });
-const isFullscreenRoute = computed(() => route.name === "settings" || route.name === "tokenUsage");
+const isFullscreenRoute = computed(() => route.name === "settings");
 
 const pinnedSessionIdsRecord = computed<Record<string, boolean>>(() => {
   const record: Record<string, boolean> = {};

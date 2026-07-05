@@ -571,11 +571,6 @@ function openAccountSettings() {
   emit("switchView", "settings");
 }
 
-function openTokenUsage() {
-  accountMenuOpen.value = false;
-  emit("switchView", "tokenUsage");
-}
-
 function toggleTheme() {
   applyTheme(themeMode.value === "dark" ? "light" : "dark");
 }
@@ -852,16 +847,6 @@ onBeforeUnmount(() => {
             </svg>
           </span>
           <span>设置</span>
-        </button>
-        <button type="button" role="menuitem" @click="openTokenUsage">
-          <span class="account-menu-icon" aria-hidden="true">
-            <svg viewBox="0 0 24 24">
-              <path d="M4 19V5a2 2 0 0 1 2-2h9l5 5v11a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2Z" />
-              <path d="M14 3v5h5" />
-              <path d="M8 13h8M8 17h5" />
-            </svg>
-          </span>
-          <span>用量统计</span>
         </button>
         <button type="button" role="menuitem" @click="toggleTheme">
           <span class="account-menu-icon" aria-hidden="true">
