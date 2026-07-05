@@ -1284,7 +1284,7 @@ export async function reportTokenUsage(report: TokenUsageReport): Promise<void> 
   if (!config || !config.accessToken || !report.providerId) return;
   const url = `${normalizeServerUrl(config.serverUrl)}/token-usage`;
   try {
-    await fetch(url, {
+    const resp = await fetch(url, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
