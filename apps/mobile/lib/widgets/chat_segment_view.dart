@@ -97,13 +97,22 @@ class _ChatMessageContentState extends State<ChatMessageContent> {
       return true;
     }).toList();
 
-    final groups = _buildContentGroups(visibleSegments, message.pending);
+    var groups = _buildContentGroups(visibleSegments, message.pending);
 
     final hasInlineTextSegment = visibleSegments.any((s) =>
         s.type == 'text' &&
         !_isProcessTextSegment(s) &&
         (s.text ?? '').trim().isNotEmpty);
     final finalText = hasInlineTextSegment ? '' : _finalContentText(message);
+    final hasVisibleContent = visibleSegments.any((segment) {
+      if (_isProcessSegment(segment)) return true;
+      return segment.type != 'text' || (segment.text ?? '').trim().isNotEmpty;
+    });
+    final isThinking =
+        message.pending && finalText.isEmpty && !hasVisibleContent;
+    if (isThinking && groups.where((g) => g.isProcess).isEmpty) {
+      groups = [_SegmentGroup.process(const <ChatSegment>[])];
+    }
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -146,9 +155,7 @@ class _ProcessGroupCard extends StatelessWidget {
     final summary = _summaryLabel(segments, pending, summarySegment, nowTick);
     final detailSegments = segments.where(_shouldRenderProcessDetail).toList();
     final bodyItems = _buildProcessBodyItems(detailSegments, pending: pending);
-    final hasExpandableBody = bodyItems.any(_processBodyItemHasDetails);
-    if (!hasExpandableBody) {
-      if (pending) return const _ThinkingTextLine(text: '正在思考');
+    if (detailSegments.isEmpty && !pending) {
       return _ProcessSummaryCard(summary: summary, pending: pending);
     }
     return Container(
@@ -219,13 +226,6 @@ class _ProcessGroupCard extends StatelessWidget {
       ),
     );
   }
-}
-
-bool _processBodyItemHasDetails(_ProcessBodyItem item) {
-  if (!item.isStage) return true;
-  if (item.conclusion != null) return true;
-  return !_isThinkingStage(item.segments) &&
-      _visibleStageSegments(item.segments).isNotEmpty;
 }
 
 class _ProcessStageView extends StatelessWidget {
@@ -416,114 +416,6 @@ class _ProcessSummaryCard extends StatelessWidget {
             ),
           ),
         ],
-      ),
-    );
-  }
-}
-
-class _ThinkingTextLine extends StatelessWidget {
-  const _ThinkingTextLine({required this.text});
-
-  final String text;
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 8, left: 2),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Text(
-            text,
-            style: const TextStyle(
-              color: AppColors.secondary,
-              fontSize: 13,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-          const SizedBox(width: 5),
-          const _InlineThinkingDots(),
-        ],
-      ),
-    );
-  }
-}
-
-class _InlineThinkingDots extends StatefulWidget {
-  const _InlineThinkingDots();
-
-  @override
-  State<_InlineThinkingDots> createState() => _InlineThinkingDotsState();
-}
-
-class _InlineThinkingDotsState extends State<_InlineThinkingDots>
-    with SingleTickerProviderStateMixin {
-  late final AnimationController _controller;
-
-  @override
-  void initState() {
-    super.initState();
-    _controller = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 1100),
-    )..repeat();
-  }
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return AnimatedBuilder(
-      animation: _controller,
-      builder: (context, child) {
-        return SizedBox(
-          width: 22,
-          height: 12,
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              for (var index = 0; index < 3; index++)
-                _AnimatedThinkingDot(
-                  progress: _dotProgress(_controller.value, index),
-                ),
-            ],
-          ),
-        );
-      },
-    );
-  }
-
-  double _dotProgress(double value, int index) {
-    final shifted = (value + index * 0.14) % 1;
-    if (shifted >= 0.8) return 0;
-    final wave = shifted <= 0.4 ? shifted / 0.4 : (0.8 - shifted) / 0.4;
-    return Curves.easeInOut.transform(wave.clamp(0.0, 1.0).toDouble());
-  }
-}
-
-class _AnimatedThinkingDot extends StatelessWidget {
-  const _AnimatedThinkingDot({required this.progress});
-
-  final double progress;
-
-  @override
-  Widget build(BuildContext context) {
-    return Transform.translate(
-      offset: Offset(0, -3 * progress),
-      child: Opacity(
-        opacity: 0.35 + 0.65 * progress,
-        child: Container(
-          width: 4,
-          height: 4,
-          decoration: const BoxDecoration(
-            color: AppColors.muted,
-            shape: BoxShape.circle,
-          ),
-        ),
       ),
     );
   }
@@ -1083,7 +975,7 @@ class _AssistantMarkdownText extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final blocks = _parseMarkdownBlocks(text);
+    final blocks = _cachedMarkdownBlocks(text);
     if (blocks.isEmpty) return const SizedBox.shrink();
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -1498,11 +1390,30 @@ class _InlineMarkdownText extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return SelectableText.rich(
+    return Text.rich(
       TextSpan(style: style, children: _inlineSpans(text, style)),
       textScaler: MediaQuery.textScalerOf(context),
     );
   }
+}
+
+final _markdownBlockCache = <String, List<_MarkdownBlock>>{};
+const _markdownBlockCacheLimit = 80;
+
+List<_MarkdownBlock> _cachedMarkdownBlocks(String text) {
+  final cached = _markdownBlockCache.remove(text);
+  if (cached != null) {
+    _markdownBlockCache[text] = cached;
+    return cached;
+  }
+  final blocks = _parseMarkdownBlocks(text);
+  if (text.length >= 256) {
+    _markdownBlockCache[text] = blocks;
+    if (_markdownBlockCache.length > _markdownBlockCacheLimit) {
+      _markdownBlockCache.remove(_markdownBlockCache.keys.first);
+    }
+  }
+  return blocks;
 }
 
 enum _MarkdownBlockType { paragraph, heading, list, code, quote, rule, table }

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 
 import '../models/workbench_models.dart';
 import '../state/workspace_controller.dart';
@@ -182,18 +183,27 @@ class _ChatPageState extends State<ChatPage> {
                 child: ListView.builder(
                   controller: _scroll,
                   padding: const EdgeInsets.all(AppSpacing.md),
+                  scrollCacheExtent: const ScrollCacheExtent.pixels(900),
+                  addAutomaticKeepAlives: false,
+                  addRepaintBoundaries: false,
                   itemCount: messages.isEmpty ? 1 : messages.length,
                   itemBuilder: (_, index) => messages.isEmpty
                       ? const _SystemLine('桌面在线时会从本机 SQLite 拉取历史。')
-                      : _MessageItem(
-                          message: messages[index],
-                          onApproval: (segment, decision) {
-                            final approvalId = segment.approvalId;
-                            if (approvalId == null || approvalId.isEmpty) {
-                              return;
-                            }
-                            ws.respondApproval(session, approvalId, decision);
-                          },
+                      : RepaintBoundary(
+                          key: ValueKey(_messageRenderKey(
+                            messages[index],
+                            index,
+                          )),
+                          child: _MessageItem(
+                            message: messages[index],
+                            onApproval: (segment, decision) {
+                              final approvalId = segment.approvalId;
+                              if (approvalId == null || approvalId.isEmpty) {
+                                return;
+                              }
+                              ws.respondApproval(session, approvalId, decision);
+                            },
+                          ),
                         ),
                 ),
               ),
@@ -224,6 +234,11 @@ class _ChatPageState extends State<ChatPage> {
       }
     }
     return null;
+  }
+
+  String _messageRenderKey(ChatMessage message, int index) {
+    final textHash = message.text?.hashCode ?? 0;
+    return '$index:${message.role.name}:${message.pending}:$textHash:${message.segments.length}';
   }
 
   bool _isRunningStatus(String status) {

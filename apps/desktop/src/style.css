@@ -3647,10 +3647,6 @@ dd {
   user-select: none;
 }
 
-.chat-process-group.static .chat-process-group-summary {
-  cursor: default;
-}
-
 .chat-process-group-summary::-webkit-details-marker {
   display: none;
 }
