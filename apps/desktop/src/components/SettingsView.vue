@@ -575,10 +575,11 @@ async function restoreSession(sessionId: string) {
           </section>
 
           <section v-else-if="settingsPanel === 'tokenUsage'" class="settings-section settings-token-usage">
-            <div class="settings-section-heading">
-              <div>
-                <h2 class="settings-section-title">用量统计</h2>
-                <p class="settings-section-description">按 AI 工具聚合的 Token 用量,数据来自云端,桌面端和移动端共用。</p>
+            <div class="settings-token-usage-head">
+              <div class="settings-token-usage-head-copy">
+                <span class="settings-token-usage-kicker">Token</span>
+                <h2>用量统计</h2>
+                <p>按 AI 工具聚合的 Token 用量,数据来自云端,桌面端和移动端共用。</p>
               </div>
               <button class="button secondary mini" type="button" :disabled="tokenUsageLoading" @click="refreshTokenUsage">
                 {{ tokenUsageLoading ? "刷新中…" : "刷新" }}
@@ -589,54 +590,84 @@ async function restoreSession(sessionId: string) {
 
             <div class="settings-token-usage-overview">
               <article class="settings-token-usage-card">
-                <span>总输入</span>
+                <div class="settings-token-usage-card-head">
+                  <span class="settings-token-usage-icon icon-info" aria-hidden="true">
+                    <svg viewBox="0 0 24 24"><path d="M12 3v12m0 4v2" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" fill="none"/><path d="M12 3l-6 8h12L12 3z" fill="currentColor"/></svg>
+                  </span>
+                  <span class="settings-token-usage-card-label">总输入</span>
+                </div>
                 <strong>{{ formatTokens(tokenUsageTotals.inputTokens) }}</strong>
               </article>
               <article class="settings-token-usage-card">
-                <span>总输出</span>
+                <div class="settings-token-usage-card-head">
+                  <span class="settings-token-usage-icon icon-success" aria-hidden="true">
+                    <svg viewBox="0 0 24 24"><path d="M12 21V9m0 0L7 4m5 5l5-5" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" fill="none"/></svg>
+                  </span>
+                  <span class="settings-token-usage-card-label">总输出</span>
+                </div>
                 <strong>{{ formatTokens(tokenUsageTotals.outputTokens) }}</strong>
               </article>
               <article class="settings-token-usage-card">
-                <span>推理 Token</span>
+                <div class="settings-token-usage-card-head">
+                  <span class="settings-token-usage-icon icon-warning" aria-hidden="true">
+                    <svg viewBox="0 0 24 24"><path d="M9 4c0-1.7 1.3-3 3-3s3 1.3 3 3v9c0 1.7-1.3 3-3 3s-3-1.3-3-3V4z" fill="currentColor"/><path d="M12 19v3" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" fill="none"/></svg>
+                  </span>
+                  <span class="settings-token-usage-card-label">推理 Token</span>
+                </div>
                 <strong>{{ formatTokens(tokenUsageTotals.reasoningTokens) }}</strong>
               </article>
               <article class="settings-token-usage-card highlight">
-                <span>合计</span>
+                <div class="settings-token-usage-card-head">
+                  <span class="settings-token-usage-icon icon-primary" aria-hidden="true">
+                    <svg viewBox="0 0 24 24"><path d="M4 4h6v6H4zM14 4h6v6h-6zM4 14h6v6H4zM14 14h6v6h-6z" fill="currentColor"/></svg>
+                  </span>
+                  <span class="settings-token-usage-card-label">合计</span>
+                </div>
                 <strong>{{ formatTokens(tokenUsageTotals.totalTokens) }}</strong>
               </article>
             </div>
 
-            <div v-if="!tokenUsageLoading && tokenUsageRows.length === 0" class="empty-state">
-              暂无 Token 用量数据。发起一次 AI 会话后会自动统计。
+            <div class="settings-token-usage-detail">
+              <h3>工具用量明细</h3>
+              <div v-if="!tokenUsageLoading && tokenUsageRows.length === 0" class="settings-token-usage-empty">
+                <span class="settings-token-usage-empty-icon" aria-hidden="true">
+                  <svg viewBox="0 0 24 24"><path d="M4 4h16v16H4z" stroke="currentColor" stroke-width="1.8" fill="none"/><path d="M8 16l3-4 3 2 4-6" stroke="currentColor" stroke-width="1.8" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                </span>
+                <strong>暂无 Token 用量数据</strong>
+                <span>发起一次 AI 会话后会自动统计。</span>
+              </div>
+              <div v-else class="settings-token-usage-table-wrap">
+                <table class="settings-token-usage-table">
+                  <thead>
+                    <tr>
+                      <th>工具</th>
+                      <th>输入 Token</th>
+                      <th>输出 Token</th>
+                      <th>推理 Token</th>
+                      <th>合计</th>
+                      <th>会话次数</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr v-for="row in tokenUsageRows" :key="row.providerId">
+                      <td>
+                        <span class="settings-token-usage-tool">
+                          <span class="settings-token-usage-tool-icon" aria-hidden="true">
+                            <img :src="row.icon" alt="" />
+                          </span>
+                          <span>{{ row.name }}</span>
+                        </span>
+                      </td>
+                      <td class="num">{{ formatTokens(row.inputTokens) }}</td>
+                      <td class="num">{{ formatTokens(row.outputTokens) }}</td>
+                      <td class="num reasoning">{{ formatTokens(row.reasoningTokens) }}</td>
+                      <td class="num total">{{ formatTokens(row.totalTokens) }}</td>
+                      <td class="num">{{ row.turnCount }}</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
             </div>
-
-            <table v-else class="settings-token-usage-table">
-              <thead>
-                <tr>
-                  <th>工具</th>
-                  <th>输入 Token</th>
-                  <th>输出 Token</th>
-                  <th>推理 Token</th>
-                  <th>合计</th>
-                  <th>会话次数</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr v-for="row in tokenUsageRows" :key="row.providerId">
-                  <td>
-                    <span class="settings-token-usage-tool">
-                      <img :src="row.icon" alt="" />
-                      <span>{{ row.name }}</span>
-                    </span>
-                  </td>
-                  <td>{{ formatTokens(row.inputTokens) }}</td>
-                  <td>{{ formatTokens(row.outputTokens) }}</td>
-                  <td>{{ formatTokens(row.reasoningTokens) }}</td>
-                  <td><strong>{{ formatTokens(row.totalTokens) }}</strong></td>
-                  <td>{{ row.turnCount }}</td>
-                </tr>
-              </tbody>
-            </table>
           </section>
         </div>
       </div>
