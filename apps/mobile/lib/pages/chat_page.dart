@@ -673,8 +673,8 @@ class _AiBubble extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(height: 4),
-                AppCard(
-                  padding: const EdgeInsets.all(12),
+                Padding(
+                  padding: const EdgeInsets.only(top: 2),
                   child: ChatMessageContent(
                       message: message, onApproval: onApproval),
                 ),

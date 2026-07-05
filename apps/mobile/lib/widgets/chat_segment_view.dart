@@ -97,24 +97,13 @@ class _ChatMessageContentState extends State<ChatMessageContent> {
       return true;
     }).toList();
 
-    var groups = _buildContentGroups(visibleSegments, message.pending);
+    final groups = _buildContentGroups(visibleSegments, message.pending);
 
     final hasInlineTextSegment = visibleSegments.any((s) =>
         s.type == 'text' &&
         !_isProcessTextSegment(s) &&
         (s.text ?? '').trim().isNotEmpty);
     final finalText = hasInlineTextSegment ? '' : _finalContentText(message);
-    final hasVisibleContent = visibleSegments.any((segment) {
-      if (_isProcessSegment(segment)) return true;
-      return segment.type != 'text' || (segment.text ?? '').trim().isNotEmpty;
-    });
-    final isThinking =
-        message.pending && finalText.isEmpty && !hasVisibleContent;
-    // pending 且无任何可见内容时，强制创建空 process group 占位（显示"正在思考..."）
-    if (isThinking && groups.where((g) => g.isProcess).isEmpty) {
-      groups = [_SegmentGroup.process(const <ChatSegment>[])];
-    }
-
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -2335,18 +2324,15 @@ class ChatBubble extends StatelessWidget {
       child: Container(
         constraints: const BoxConstraints(maxWidth: 340),
         margin: const EdgeInsets.only(bottom: 12),
-        padding: const EdgeInsets.all(12),
+        padding: isUser || isError ? const EdgeInsets.all(12) : EdgeInsets.zero,
         decoration: BoxDecoration(
           color: isUser
               ? AppColors.primary
               : isError
                   ? AppColors.dangerSoft
-                  : AppColors.surface,
+                  : Colors.transparent,
           borderRadius: BorderRadius.circular(12),
-          border: isUser
-              ? null
-              : Border.all(
-                  color: isError ? const Color(0xffffcdd2) : AppColors.border),
+          border: isError ? Border.all(color: const Color(0xffffcdd2)) : null,
         ),
         child: isUser
             ? SelectableText(message.text ?? '',
