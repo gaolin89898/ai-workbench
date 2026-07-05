@@ -108,7 +108,8 @@ class _ChatMessageContentState extends State<ChatMessageContent> {
       if (_isProcessSegment(segment)) return true;
       return segment.type != 'text' || (segment.text ?? '').trim().isNotEmpty;
     });
-    final isThinking = message.pending && finalText.isEmpty && !hasVisibleContent;
+    final isThinking =
+        message.pending && finalText.isEmpty && !hasVisibleContent;
     // pending 且无任何可见内容时，强制创建空 process group 占位（显示"正在思考..."）
     if (isThinking && groups.where((g) => g.isProcess).isEmpty) {
       groups = [_SegmentGroup.process(const <ChatSegment>[])];
@@ -219,7 +220,8 @@ class _ProcessGroupCard extends StatelessWidget {
               if (item.conclusion != null)
                 Padding(
                   padding: const EdgeInsets.only(top: 6, left: 16),
-                  child: _StageConclusion(text: _conclusionText(item.conclusion!)),
+                  child:
+                      _StageConclusion(text: _conclusionText(item.conclusion!)),
                 ),
             ],
           ],
@@ -509,7 +511,8 @@ bool _processGroupPending(
   return true;
 }
 
-List<_ProcessBodyItem> _buildProcessBodyItems(List<ChatSegment> segments, {bool pending = false}) {
+List<_ProcessBodyItem> _buildProcessBodyItems(List<ChatSegment> segments,
+    {bool pending = false}) {
   final items = <_ProcessBodyItem>[];
   var stageRun = <ChatSegment>[];
   String? stageKind;
@@ -544,7 +547,8 @@ List<_ProcessBodyItem> _buildProcessBodyItems(List<ChatSegment> segments, {bool 
     }
     if (_isProcessStageSegment(segment)) {
       if (hasExecution && _isThinkingStatusSegment(segment)) continue;
-      final nextKind = _isThinkingStageSegment(segment) ? 'thinking' : 'execution';
+      final nextKind =
+          _isThinkingStageSegment(segment) ? 'thinking' : 'execution';
       if (stageKind != null && stageKind != nextKind) flushStageRun();
       stageKind = nextKind;
       stageRun.add(segment);
@@ -590,7 +594,8 @@ bool _isProcessStageSegment(ChatSegment segment) {
 }
 
 bool _isThinkingStageSegment(ChatSegment segment) {
-  return (segment.type == 'thought' && !_isExecutionConclusionSegment(segment)) ||
+  return (segment.type == 'thought' &&
+          !_isExecutionConclusionSegment(segment)) ||
       _isThinkingStatusSegment(segment);
 }
 
@@ -599,7 +604,8 @@ bool _isExecutionConclusionSegment(ChatSegment segment) {
 }
 
 bool _isThinkingStatusSegment(ChatSegment segment) {
-  return segment.type == 'status' && _isThinkingRawItemType(segment.rawItemType);
+  return segment.type == 'status' &&
+      _isThinkingRawItemType(segment.rawItemType);
 }
 
 bool _isExecutionStageSegment(ChatSegment segment) {
@@ -619,12 +625,12 @@ String _processStageTitle(List<ChatSegment> segments, bool pending) {
           _isThinkingStatusSegment(segment) && segment.status == 'running')
       .firstOrNull;
   if (runningThinking != null) return '正在思考...';
-  final toolSegments = segments.where((segment) => segment.type == 'tool').toList();
+  final toolSegments =
+      segments.where((segment) => segment.type == 'tool').toList();
   final aggregateTitle = _aggregateToolStageTitle(toolSegments);
   if (aggregateTitle.isNotEmpty) return aggregateTitle;
-  final runningTool = toolSegments
-      .where((segment) => segment.status == 'running')
-      .firstOrNull;
+  final runningTool =
+      toolSegments.where((segment) => segment.status == 'running').firstOrNull;
   if (runningTool != null) return _toolStageTitle(runningTool);
 
   final pendingApproval = segments
@@ -635,9 +641,8 @@ String _processStageTitle(List<ChatSegment> segments, bool pending) {
     return pendingApproval.approvalKind == 'fileChange' ? '正在修改文件' : '正在等待命令确认';
   }
 
-  final erroredTool = toolSegments
-      .where((segment) => segment.status == 'error')
-      .firstOrNull;
+  final erroredTool =
+      toolSegments.where((segment) => segment.status == 'error').firstOrNull;
   if (erroredTool != null) return _toolStageTitle(erroredTool);
 
   final latestTool = toolSegments.toList().reversed.firstOrNull;
@@ -690,7 +695,11 @@ String _aggregateToolStageTitle(List<ChatSegment> segments) {
     if (command > 0) '运行 $command 条命令',
   ];
   if (parts.isEmpty) return '';
-  final prefix = hasError ? '部分失败：' : hasRunning ? '正在' : '已';
+  final prefix = hasError
+      ? '部分失败：'
+      : hasRunning
+          ? '正在'
+          : '已';
   return '$prefix${parts.join('，')}';
 }
 
@@ -698,11 +707,18 @@ String _toolOperationKind(ChatSegment segment) {
   final command = _normalizeCommandForTitle(segment.command ?? '');
   final fileChanges = _extractFileChangePaths(segment.diff);
   final toolName = segment.toolName ?? '';
-  if (toolName.contains('修改') || (fileChanges?.isNotEmpty ?? false)) return 'edit';
-  if (RegExp(r'^(Get-Content|cat|type|head|tail|sed\b|Select-String\b)', caseSensitive: false).hasMatch(command)) return 'read';
-  if (RegExp(r'^(rg|grep|findstr|fd|find\b|Get-ChildItem|ls\b|dir\b)', caseSensitive: false).hasMatch(command)) return 'search';
-  if (RegExp(r'\b(Get-Content|cat|type)\b', caseSensitive: false).hasMatch(command)) return 'read';
-  if (RegExp(r'\b(rg|grep|findstr|Get-ChildItem)\b', caseSensitive: false).hasMatch(command)) return 'search';
+  if (toolName.contains('修改') || (fileChanges?.isNotEmpty ?? false))
+    return 'edit';
+  if (RegExp(r'^(Get-Content|cat|type|head|tail|sed\b|Select-String\b)',
+          caseSensitive: false)
+      .hasMatch(command)) return 'read';
+  if (RegExp(r'^(rg|grep|findstr|fd|find\b|Get-ChildItem|ls\b|dir\b)',
+          caseSensitive: false)
+      .hasMatch(command)) return 'search';
+  if (RegExp(r'\b(Get-Content|cat|type)\b', caseSensitive: false)
+      .hasMatch(command)) return 'read';
+  if (RegExp(r'\b(rg|grep|findstr|Get-ChildItem)\b', caseSensitive: false)
+      .hasMatch(command)) return 'search';
   return 'command';
 }
 
@@ -712,7 +728,9 @@ String _toolStageTitle(ChatSegment segment) {
   final toolName = segment.toolName ?? '工具调用';
   final commandText = _normalizeCommandForTitle(segment.command ?? '');
   final fileChanges = _extractFileChangePaths(segment.diff);
-  if (toolName.contains('修改') || toolName.contains('文件') || fileChanges != null) {
+  if (toolName.contains('修改') ||
+      toolName.contains('文件') ||
+      fileChanges != null) {
     if (status == 'error') return '修改文件失败';
     if (fileChanges != null && fileChanges.isNotEmpty) {
       final fileName = fileChanges.first.split(RegExp(r'[\\/]')).last;
@@ -742,26 +760,37 @@ String _normalizeCommandForTitle(String command) {
       .replaceFirst(RegExp(r'^bash\s+-lc\s+'), '')
       .trim();
   final cleaned = _unquoteCommand(trimmed);
-  final powershell = RegExp(r'^(?:"?[^"]*\\powershell(?:\.exe)?"?\s+)?-Command\s+([\s\S]+)$', caseSensitive: false).firstMatch(cleaned);
+  final powershell = RegExp(
+          r'^(?:"?[^"]*\\powershell(?:\.exe)?"?\s+)?-Command\s+([\s\S]+)$',
+          caseSensitive: false)
+      .firstMatch(cleaned);
   return _unquoteCommand((powershell?.group(1) ?? cleaned).trim());
 }
 
 String _commandOperationTitle(String command, String status) {
   final verb = status == 'running' ? '正在' : '已';
   final target = _commandTarget(command);
-  if (RegExp(r'^(Get-Content|cat|type|head|tail|sed\b|Select-String\b)', caseSensitive: false).hasMatch(command)) {
-    if (status == 'error') return target.isNotEmpty ? '读取 $target 失败' : '读取文件失败';
+  if (RegExp(r'^(Get-Content|cat|type|head|tail|sed\b|Select-String\b)',
+          caseSensitive: false)
+      .hasMatch(command)) {
+    if (status == 'error')
+      return target.isNotEmpty ? '读取 $target 失败' : '读取文件失败';
     return target.isNotEmpty ? '$verb读取 $target' : '$verb读取文件';
   }
-  if (RegExp(r'^(rg|grep|findstr|fd|find\b|Get-ChildItem|ls\b|dir\b)', caseSensitive: false).hasMatch(command)) {
+  if (RegExp(r'^(rg|grep|findstr|fd|find\b|Get-ChildItem|ls\b|dir\b)',
+          caseSensitive: false)
+      .hasMatch(command)) {
     if (status == 'error') return '搜索文件失败';
     return '$verb搜索文件';
   }
-  if (RegExp(r'\b(Get-Content|cat|type)\b', caseSensitive: false).hasMatch(command)) {
-    if (status == 'error') return target.isNotEmpty ? '读取 $target 失败' : '读取文件失败';
+  if (RegExp(r'\b(Get-Content|cat|type)\b', caseSensitive: false)
+      .hasMatch(command)) {
+    if (status == 'error')
+      return target.isNotEmpty ? '读取 $target 失败' : '读取文件失败';
     return target.isNotEmpty ? '$verb读取 $target' : '$verb读取文件';
   }
-  if (RegExp(r'\b(rg|grep|findstr|Get-ChildItem)\b', caseSensitive: false).hasMatch(command)) {
+  if (RegExp(r'\b(rg|grep|findstr|Get-ChildItem)\b', caseSensitive: false)
+      .hasMatch(command)) {
     if (status == 'error') return '搜索文件失败';
     return '$verb搜索文件';
   }
@@ -773,8 +802,12 @@ String _commandTarget(String command) {
       .allMatches(command)
       .map((match) => _unquoteCommand(match.group(0) ?? ''))
       .toList();
-  final commandNames = RegExp(r'^(Get-Content|cat|type|head|tail|sed|Select-String|PowerShell:)$', caseSensitive: false);
-  final optionsWithValue = RegExp(r'^(-Encoding|-TotalCount|-Tail|-Head|-Filter|-Include|-Exclude|-Context|-Pattern)$', caseSensitive: false);
+  final commandNames = RegExp(
+      r'^(Get-Content|cat|type|head|tail|sed|Select-String|PowerShell:)$',
+      caseSensitive: false);
+  final optionsWithValue = RegExp(
+      r'^(-Encoding|-TotalCount|-Tail|-Head|-Filter|-Include|-Exclude|-Context|-Pattern)$',
+      caseSensitive: false);
   var skipNext = false;
   for (final token in tokens) {
     if (token.isEmpty || commandNames.hasMatch(token)) continue;
@@ -827,6 +860,7 @@ int? _processStageDurationMs(List<ChatSegment> segments) {
 bool _isThinkingStage(List<ChatSegment> segments) {
   return segments.isNotEmpty && segments.every(_isThinkingStageSegment);
 }
+
 List<ChatSegment> _visibleStageSegments(List<ChatSegment> segments) {
   return _isThinkingStage(segments) ? const <ChatSegment>[] : segments;
 }
@@ -855,7 +889,8 @@ class ChatProcessPanel extends StatelessWidget {
             (segment.stepId == 'final-summary' ||
                 segment.stepId == 'runtime-status'))
         .firstOrNull;
-    final summary = _summaryLabel(processSegments, pending, summarySegment, null);
+    final summary =
+        _summaryLabel(processSegments, pending, summarySegment, null);
     return Container(
       margin: const EdgeInsets.only(bottom: 10),
       decoration: BoxDecoration(
@@ -1218,6 +1253,8 @@ class _MarkdownTable extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (rows.isEmpty) return const SizedBox.shrink();
+    final headerCells = header ? rows.first : const <String>[];
+    final dataRows = header && rows.length > 1 ? rows.skip(1).toList() : rows;
     return Container(
       width: double.infinity,
       margin: EdgeInsets.only(top: 2, bottom: isLast ? 0 : 14),
@@ -1228,49 +1265,124 @@ class _MarkdownTable extends StatelessWidget {
       ),
       child: ClipRRect(
         borderRadius: BorderRadius.circular(AppRadius.md),
-        child: SingleChildScrollView(
-          scrollDirection: Axis.horizontal,
-          child: Table(
-            defaultColumnWidth: const IntrinsicColumnWidth(),
-            border: const TableBorder(
-              horizontalInside: BorderSide(color: AppColors.divider),
-              verticalInside: BorderSide(color: AppColors.divider),
-            ),
-            children: [
-              for (var rowIndex = 0; rowIndex < rows.length; rowIndex++)
-                TableRow(
-                  decoration: BoxDecoration(
-                    color: header && rowIndex == 0
-                        ? AppColors.surfaceMuted
-                        : AppColors.surface,
-                  ),
-                  children: [
-                    for (final cell in rows[rowIndex])
-                      Padding(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 10,
-                          vertical: 8,
-                        ),
-                        child: _InlineMarkdownText(
-                          text: cell,
-                          style: TextStyle(
-                            color: AppColors.secondary,
-                            fontSize: 12,
-                            height: 1.55,
-                            fontWeight: header && rowIndex == 0
-                                ? FontWeight.w800
-                                : FontWeight.w400,
-                          ),
-                        ),
-                      ),
-                  ],
-                ),
-            ],
-          ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            for (var rowIndex = 0; rowIndex < dataRows.length; rowIndex++)
+              _MarkdownTableRow(
+                cells: dataRows[rowIndex],
+                headerCells: headerCells,
+                hasHeader: header,
+                isHeaderOnly: header && rows.length == 1,
+                isLast: rowIndex == dataRows.length - 1,
+              ),
+          ],
         ),
       ),
     );
   }
+}
+
+class _MarkdownTableRow extends StatelessWidget {
+  const _MarkdownTableRow({
+    required this.cells,
+    required this.headerCells,
+    required this.hasHeader,
+    required this.isHeaderOnly,
+    required this.isLast,
+  });
+
+  final List<String> cells;
+  final List<String> headerCells;
+  final bool hasHeader;
+  final bool isHeaderOnly;
+  final bool isLast;
+
+  @override
+  Widget build(BuildContext context) {
+    final cellCount =
+        cells.length > headerCells.length ? cells.length : headerCells.length;
+    final pairs = <_MarkdownTableCellPair>[];
+    for (var index = 0; index < cellCount; index++) {
+      final label = hasHeader && !isHeaderOnly && index < headerCells.length
+          ? headerCells[index].trim()
+          : '';
+      final value = index < cells.length ? cells[index].trim() : '';
+      if (label.isEmpty && value.isEmpty) {
+        continue;
+      }
+      pairs.add(_MarkdownTableCellPair(label: label, value: value));
+    }
+
+    if (pairs.isEmpty) {
+      return const SizedBox.shrink();
+    }
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 9),
+      decoration: BoxDecoration(
+        color: isHeaderOnly ? AppColors.surfaceMuted : AppColors.surface,
+        border: Border(
+          bottom: isLast
+              ? BorderSide.none
+              : const BorderSide(color: AppColors.divider),
+        ),
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          for (var index = 0; index < pairs.length; index++)
+            Padding(
+              padding: EdgeInsets.only(top: index == 0 ? 0 : 8),
+              child: hasHeader && !isHeaderOnly
+                  ? Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          pairs[index].label,
+                          style: const TextStyle(
+                            color: AppColors.muted,
+                            fontSize: 11,
+                            height: 1.35,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        _InlineMarkdownText(
+                          text: pairs[index].value,
+                          style: const TextStyle(
+                            color: AppColors.secondary,
+                            fontSize: 12,
+                            height: 1.55,
+                          ),
+                        ),
+                      ],
+                    )
+                  : _InlineMarkdownText(
+                      text: pairs[index].value,
+                      style: TextStyle(
+                        color: AppColors.secondary,
+                        fontSize: 12,
+                        height: 1.55,
+                        fontWeight:
+                            isHeaderOnly ? FontWeight.w800 : FontWeight.w400,
+                      ),
+                    ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+class _MarkdownTableCellPair {
+  const _MarkdownTableCellPair({required this.label, required this.value});
+
+  final String label;
+  final String value;
 }
 
 class _InlineMarkdownText extends StatelessWidget {
@@ -2202,6 +2314,7 @@ bool _isUserMessageRawItemType(String? rawItemType) {
   return RegExp(r'^(?:userMessage|user_message)$', caseSensitive: false)
       .hasMatch(rawItemType ?? '');
 }
+
 bool _isCompletedThinkingStatusSegment(ChatSegment segment) {
   return segment.type == 'status' &&
       _isThinkingRawItemType(segment.rawItemType) &&
@@ -2212,6 +2325,7 @@ bool _isThinkingRawItemType(String? rawItemType) {
   return RegExp(r'^(?:reasoning|thinking)$', caseSensitive: false)
       .hasMatch(rawItemType ?? '');
 }
+
 bool _shouldShowProcessSegment(ChatSegment segment) {
   if (segment.stepId == 'initial-thinking') {
     return false;
@@ -2248,16 +2362,17 @@ bool _shouldRenderProcessDetail(ChatSegment segment) {
   return false;
 }
 
-String _summaryLabel(
-    List<ChatSegment> segments, bool pending, ChatSegment? finalSummary, int? nowTick) {
-  final durationMs = _processGroupDurationMs(segments, pending, finalSummary, nowTick);
+String _summaryLabel(List<ChatSegment> segments, bool pending,
+    ChatSegment? finalSummary, int? nowTick) {
+  final durationMs =
+      _processGroupDurationMs(segments, pending, finalSummary, nowTick);
   final prefix = pending ? '正在处理' : '已处理';
   if (durationMs == null || durationMs <= 0) return prefix;
   return '$prefix ${_formatCompactDuration(durationMs)}';
 }
 
-int? _processGroupDurationMs(
-    List<ChatSegment> segments, bool pending, ChatSegment? finalSummary, int? nowTick) {
+int? _processGroupDurationMs(List<ChatSegment> segments, bool pending,
+    ChatSegment? finalSummary, int? nowTick) {
   // 进行中：用 summary.startedAt + nowTick 实时计算（同桌面端）
   if (pending &&
       finalSummary != null &&
@@ -2321,7 +2436,8 @@ String _toolTitle(ChatSegment segment) {
   if (toolName.contains('命令') ||
       toolName.contains('command') ||
       (segment.command ?? '').isNotEmpty) {
-    final operation = _commandOperationTitle(command, segment.status ?? 'success');
+    final operation =
+        _commandOperationTitle(command, segment.status ?? 'success');
     if (operation.isNotEmpty) return operation;
     if (segment.status == 'error') {
       return displayCommand.isNotEmpty ? '运行失败 $displayCommand' : '运行命令失败';

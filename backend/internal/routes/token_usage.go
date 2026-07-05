@@ -17,6 +17,7 @@ import (
 // tokenUsageReportRequest 桌面端上报 body。
 type tokenUsageReportRequest struct {
 	AiSessionId     string `json:"aiSessionId"`
+	DeviceId        string `json:"deviceId"`
 	ProviderId      string `json:"providerId"`
 	InputTokens     int32  `json:"inputTokens"`
 	OutputTokens    int32  `json:"outputTokens"`
@@ -32,11 +33,6 @@ func (h *Handler) reportTokenUsage(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusUnauthorized, "unauthorized")
 		return
 	}
-	deviceID := auth.DeviceIDFromContext(r.Context())
-	if deviceID == "" {
-		writeError(w, http.StatusUnauthorized, "unauthorized")
-		return
-	}
 
 	var req tokenUsageReportRequest
 	if err := decodeJSON(r, &req); err != nil {
@@ -47,10 +43,31 @@ func (h *Handler) reportTokenUsage(w http.ResponseWriter, r *http.Request) {
 		writeBadRequest(w, "providerId is required")
 		return
 	}
+	deviceID := auth.DeviceIDFromContext(r.Context())
+	if deviceID == "" {
+		deviceID = req.DeviceId
+	}
+	if deviceID == "" {
+		writeBadRequest(w, "deviceId is required")
+		return
+	}
+	if err := h.DB.EnsureDeviceOwner(r.Context(), userID, deviceID); err != nil {
+		if errors.Is(err, db.ErrForbidden) {
+			writeForbidden(w)
+			return
+		}
+		writeInternal(w)
+		return
+	}
 
 	var aiSessionID *string
 	if req.AiSessionId != "" {
-		aiSessionID = &req.AiSessionId
+		if err := h.DB.EnsureAiSessionOwner(r.Context(), userID, req.AiSessionId, deviceID); err == nil {
+			aiSessionID = &req.AiSessionId
+		} else if !errors.Is(err, db.ErrForbidden) {
+			writeInternal(w)
+			return
+		}
 	}
 
 	err := h.DB.InsertTokenUsage(r.Context(), models.TokenUsageInsert{

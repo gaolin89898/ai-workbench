@@ -123,11 +123,9 @@ const virtualViewportHeight = ref(0);
 const virtualMessageHeights = ref<number[]>([]);
 const virtualRowElements = new Map<number, Element>();
 const virtualRowObservers = new Map<number, ResizeObserver>();
-const hoveredUserAnchorIndex = ref<number | null>(null);
 let chatScrollResizeObserver: ResizeObserver | null = null;
 let pendingPromptAnchorKey: string | null = null;
 let anchorScrollVersion = 0;
-let userAnchorPreviewCloseTimer: ReturnType<typeof window.setTimeout> | null = null;
 
 type UserMessageAnchor = {
   index: number;
@@ -202,10 +200,6 @@ const activeUserAnchorIndex = computed(() => {
   return activeIndex;
 });
 
-const anchorPreviewItems = computed(() => {
-  return allUserMessageAnchors();
-});
-
 function allUserMessageAnchors(): UserMessageAnchor[] {
   return ws.chatMessages.value.flatMap((message, index) => {
     if (message.role !== "user") return [];
@@ -224,25 +218,6 @@ function userAnchorTopPercent(index: number) {
   const messageTop = virtualMessageTop(index);
   const rawPercent = (messageTop / totalHeight) * 100;
   return Math.min(96, Math.max(4, rawPercent));
-}
-
-function clearUserAnchorPreviewCloseTimer() {
-  if (userAnchorPreviewCloseTimer === null) return;
-  window.clearTimeout(userAnchorPreviewCloseTimer);
-  userAnchorPreviewCloseTimer = null;
-}
-
-function showUserAnchorPreview(index: number) {
-  clearUserAnchorPreviewCloseTimer();
-  hoveredUserAnchorIndex.value = index;
-}
-
-function scheduleUserAnchorPreviewClose() {
-  clearUserAnchorPreviewCloseTimer();
-  userAnchorPreviewCloseTimer = window.setTimeout(() => {
-    hoveredUserAnchorIndex.value = null;
-    userAnchorPreviewCloseTimer = null;
-  }, 220);
 }
 
 function compactUserAnchors(anchors: UserMessageAnchor[], activeIndex: number) {
@@ -584,7 +559,6 @@ onBeforeUnmount(() => {
   window.removeEventListener("keydown", onWindowKeydown);
   window.removeEventListener("resize", updateVirtualViewport);
   chatScrollResizeObserver?.disconnect();
-  clearUserAnchorPreviewCloseTimer();
   for (const observer of virtualRowObservers.values()) observer.disconnect();
   virtualRowObservers.clear();
   virtualRowElements.clear();
@@ -819,8 +793,6 @@ function onPromptKeydown(event: KeyboardEvent) {
           v-if="activeTab === 'chat' && userMessageAnchors.length >= USER_ANCHOR_MIN_VISIBLE"
           class="chat-user-anchor-rail"
           aria-label="用户消息快速跳转"
-          @mouseenter="clearUserAnchorPreviewCloseTimer"
-          @mouseleave="scheduleUserAnchorPreviewClose"
         >
           <button
             v-for="anchor in userMessageAnchors"
@@ -831,28 +803,11 @@ function onPromptKeydown(event: KeyboardEvent) {
             type="button"
             :title="anchor.label"
             :aria-label="`跳转到${anchor.label}`"
-            @mouseenter="showUserAnchorPreview(anchor.index)"
-            @focus="showUserAnchorPreview(anchor.index)"
             @click="scrollToUserMessage(anchor.index)"
-          ></button>
-          <div
-            v-if="hoveredUserAnchorIndex !== null && anchorPreviewItems.length"
-            class="chat-user-anchor-preview"
-            @mouseenter="clearUserAnchorPreviewCloseTimer"
-            @mouseleave="scheduleUserAnchorPreviewClose"
           >
-            <button
-              v-for="item in anchorPreviewItems"
-              :key="`preview-${item.key}`"
-              type="button"
-              :class="{ active: item.index === (hoveredUserAnchorIndex ?? activeUserAnchorIndex) }"
-              :title="item.label"
-              @click="scrollToUserMessage(item.index)"
-            >
-              <span>{{ item.label }}</span>
-              <i aria-hidden="true"></i>
-            </button>
-          </div>
+            <span class="chat-user-anchor-dot" aria-hidden="true"></span>
+            <span class="chat-user-anchor-tooltip">{{ anchor.label }}</span>
+          </button>
         </div>
         <div v-if="activeTab === 'terminal'" class="terminal-shell">
           <TerminalView />

@@ -484,15 +484,26 @@ async function sendRequestWithReconnectRetry(
 // 形如 { input_tokens, output_tokens, reasoning_tokens }。提取并上报。
 function reportTurnTokenUsage(session: CodexSession, params: unknown): void {
   try {
-    if (!params || typeof params !== "object") return;
-    const p = params as Record<string, unknown>;
-    const usage = p["output_token_usage"] ?? p["token_usage"] ?? p["usage"];
-    if (!usage || typeof usage !== "object") return;
-    const u = usage as Record<string, unknown>;
-    const inputTokens = numOrUndef(u["input_tokens"]) ?? numOrUndef(u["inputTokens"]) ?? 0;
-    const outputTokens = numOrUndef(u["output_tokens"]) ?? numOrUndef(u["outputTokens"]) ?? 0;
-    const reasoningTokens = numOrUndef(u["reasoning_tokens"]) ?? numOrUndef(u["reasoningTokens"]) ?? 0;
-    const total = inputTokens + outputTokens + reasoningTokens;
+    const u = findTokenUsageRecord(params);
+    if (!u) return;
+    const inputTokens =
+      numOrUndef(u["input_tokens"]) ??
+      numOrUndef(u["inputTokens"]) ??
+      numOrUndef(u["input"]) ??
+      0;
+    const outputTokens =
+      numOrUndef(u["output_tokens"]) ??
+      numOrUndef(u["outputTokens"]) ??
+      numOrUndef(u["output"]) ??
+      0;
+    const reasoningTokens =
+      numOrUndef(u["reasoning_tokens"]) ??
+      numOrUndef(u["reasoningTokens"]) ??
+      numOrUndef(u["reasoning"]) ??
+      0;
+    const total = numOrUndef(u["total_tokens"]) ??
+      numOrUndef(u["totalTokens"]) ??
+      (inputTokens + outputTokens + reasoningTokens);
     if (total <= 0) return;
     void reportTokenUsage({
       aiSessionId: session.aiSessionId,
@@ -505,6 +516,45 @@ function reportTurnTokenUsage(session: CodexSession, params: unknown): void {
   } catch {
     // best-effort，不影响主流程
   }
+}
+
+function findTokenUsageRecord(value: unknown, depth = 0): Record<string, unknown> | null {
+  if (!value || typeof value !== "object" || depth > 4) return null;
+  const record = value as Record<string, unknown>;
+  if (hasTokenUsageShape(record)) return record;
+
+  const directKeys = [
+    "output_token_usage",
+    "outputTokenUsage",
+    "token_usage",
+    "tokenUsage",
+    "usage",
+  ];
+  for (const key of directKeys) {
+    const nested = findTokenUsageRecord(record[key], depth + 1);
+    if (nested) return nested;
+  }
+
+  for (const nested of Object.values(record)) {
+    const found = findTokenUsageRecord(nested, depth + 1);
+    if (found) return found;
+  }
+  return null;
+}
+
+function hasTokenUsageShape(record: Record<string, unknown>): boolean {
+  return tokenNumber(record["input_tokens"]) ||
+    tokenNumber(record["inputTokens"]) ||
+    tokenNumber(record["output_tokens"]) ||
+    tokenNumber(record["outputTokens"]) ||
+    tokenNumber(record["reasoning_tokens"]) ||
+    tokenNumber(record["reasoningTokens"]) ||
+    tokenNumber(record["total_tokens"]) ||
+    tokenNumber(record["totalTokens"]);
+}
+
+function tokenNumber(value: unknown): boolean {
+  return numOrUndef(value) !== undefined;
 }
 
 function numOrUndef(v: unknown): number | undefined {

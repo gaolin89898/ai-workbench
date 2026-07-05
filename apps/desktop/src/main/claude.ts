@@ -98,7 +98,9 @@ function reportClaudeTokenUsage(aiSessionId: string, message: Record<string, unk
     const usage = message["usage"];
     if (!usage || typeof usage !== "object") return;
     const u = usage as Record<string, unknown>;
-    const inputTokens = numOrZero(u["input_tokens"]) + numOrZero(u["cache_read_input_tokens"]);
+    const inputTokens = numOrZero(u["input_tokens"])
+      + numOrZero(u["cache_creation_input_tokens"])
+      + numOrZero(u["cache_read_input_tokens"]);
     const outputTokens = numOrZero(u["output_tokens"]);
     const total = inputTokens + outputTokens;
     if (total <= 0) return;

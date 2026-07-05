@@ -1241,6 +1241,7 @@ export function getDesktopCloudSync(): DesktopCloudSync | null {
 export interface TokenUsageReport {
   aiSessionId: string;
   providerId: string;
+  deviceId?: string;
   inputTokens: number;
   outputTokens: number;
   reasoningTokens: number;
@@ -1277,6 +1278,7 @@ export async function reportTokenUsage(report: TokenUsageReport): Promise<void> 
       },
       body: JSON.stringify({
         aiSessionId: report.aiSessionId || undefined,
+        deviceId: report.deviceId || config.deviceId || undefined,
         providerId: report.providerId,
         inputTokens: report.inputTokens,
         outputTokens: report.outputTokens,
@@ -1284,6 +1286,16 @@ export async function reportTokenUsage(report: TokenUsageReport): Promise<void> 
         totalTokens: report.totalTokens,
       }),
     });
+    if (!resp.ok) {
+      let detail = resp.statusText;
+      try {
+        const text = await resp.text();
+        if (text) detail = text;
+      } catch {
+        // ignore body read error
+      }
+      throw new Error(`HTTP ${resp.status}: ${detail}`);
+    }
   } catch (e) {
     console.error("reportTokenUsage failed:", e);
   }

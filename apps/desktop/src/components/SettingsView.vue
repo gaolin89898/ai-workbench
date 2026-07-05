@@ -135,10 +135,6 @@ const signedInProviderCount = computed(() => {
   return providerRows.value.filter((row) => row.status?.authStatus === "signedIn").length;
 });
 
-const enabledGuardCount = computed(() => {
-  return [riskGuard.value, commandLog.value, localHistory.value].filter(Boolean).length;
-});
-
 const desktopPlatformLabel = computed(() => {
   const platform = desktopRuntimeInfo.value?.platform;
   if (platform === "win32") return "Win";
@@ -354,6 +350,9 @@ async function restoreSession(sessionId: string) {
               <p>{{ activePanelMeta.description }}。</p>
             </div>
             <button v-if="settingsPanel === 'connection'" class="button primary narrow" type="button" @click="ws.saveSettings">保存设置</button>
+            <button v-else-if="settingsPanel === 'tokenUsage'" class="button secondary narrow" type="button" :disabled="tokenUsageLoading" @click="refreshTokenUsage">
+              {{ tokenUsageLoading ? "刷新中…" : "刷新" }}
+            </button>
           </header>
 
           <div v-if="settingsPanel === 'connection'" class="settings-overview settings-overview-status" aria-label="连接概览">
@@ -414,13 +413,6 @@ async function restoreSession(sessionId: string) {
           </section>
 
           <section v-if="settingsPanel === 'security'" class="settings-section">
-            <div class="settings-section-heading">
-              <div>
-                <h2 class="settings-section-title">安全与历史</h2>
-                <p class="settings-section-description">高危命令会先经过确认，命令日志只记录摘要和风险结果，完整内容仍默认留在本机。</p>
-              </div>
-              <span class="settings-section-chip">{{ enabledGuardCount }} 项开启</span>
-            </div>
             <div class="settings-card">
               <label class="settings-row settings-toggle-row">
                 <span class="settings-row-copy">
@@ -549,13 +541,6 @@ async function restoreSession(sessionId: string) {
           </section>
 
           <section v-else-if="settingsPanel === 'archive'" class="settings-section">
-            <div class="settings-section-heading">
-              <div>
-                <h2 class="settings-section-title">已归档对话</h2>
-                <p class="settings-section-description">查看已归档的 AI 会话,选择恢复后会回到侧边栏最近会话列表。</p>
-              </div>
-              <span class="settings-section-chip">{{ ws.archivedSessions.value.length }} 条</span>
-            </div>
             <div class="settings-archive-list">
               <div v-if="!ws.archivedSessions.value.length" class="empty-state">暂无已归档的 AI 会话。</div>
               <article
@@ -575,17 +560,6 @@ async function restoreSession(sessionId: string) {
           </section>
 
           <section v-else-if="settingsPanel === 'tokenUsage'" class="settings-section settings-token-usage">
-            <div class="settings-token-usage-head">
-              <div class="settings-token-usage-head-copy">
-                <span class="settings-token-usage-kicker">Token</span>
-                <h2>用量统计</h2>
-                <p>按 AI 工具聚合的 Token 用量,数据来自云端,桌面端和移动端共用。</p>
-              </div>
-              <button class="button secondary mini" type="button" :disabled="tokenUsageLoading" @click="refreshTokenUsage">
-                {{ tokenUsageLoading ? "刷新中…" : "刷新" }}
-              </button>
-            </div>
-
             <p v-if="tokenUsageError" class="settings-token-usage-error">{{ tokenUsageError }}</p>
 
             <div class="settings-token-usage-overview">
