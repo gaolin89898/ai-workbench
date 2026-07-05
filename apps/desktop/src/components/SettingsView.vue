@@ -8,7 +8,7 @@ const settingsIcon = new URL("../assets/icons/settings.svg", import.meta.url).hr
 const riskGuardIcon = new URL("../assets/icons/risk-guard.svg", import.meta.url).href;
 const aiProvidersIcon = new URL("../assets/icons/ai-providers.svg", import.meta.url).href;
 const archiveBoxIcon = new URL("../assets/icons/archive-box.svg", import.meta.url).href;
-const fingerprintIcon = new URL("../assets/icons/fingerprint.svg", import.meta.url).href;
+const tokenUsageIcon = new URL("../assets/icons/ai-providers.svg", import.meta.url).href;
 const clipboardIcon = new URL("../assets/icons/clipboard.svg", import.meta.url).href;
 const providerCodexIcon = new URL("../assets/icons/provider-codex.svg", import.meta.url).href;
 const providerClaudeIcon = new URL("../assets/icons/provider-claude.svg", import.meta.url).href;
@@ -30,6 +30,12 @@ type SettingsPanelItem = {
 
 const ws = useWorkspace();
 const router = useRouter();
+
+function goToTokenUsage() {
+  if (router.currentRoute.value.path !== "/token-usage") {
+    void router.push("/token-usage");
+  }
+}
 
 const localServer = ref(ws.settingsServer.value);
 const settingsPanel = ref<SettingsPanel>("connection");
@@ -281,6 +287,20 @@ async function restoreSession(sessionId: string) {
               </span>
             </span>
             <span class="settings-nav-eyebrow">{{ panel.eyebrow }}</span>
+          </button>
+          <button
+            class="settings-nav-external"
+            type="button"
+            @click="goToTokenUsage"
+          >
+            <span class="settings-nav-marker" aria-hidden="true"></span>
+            <span class="settings-nav-copy">
+              <span class="settings-nav-title-row">
+                <img :src="tokenUsageIcon" alt="" class="settings-nav-icon" />
+                <strong>用量统计</strong>
+              </span>
+            </span>
+            <span class="settings-nav-eyebrow">用量</span>
           </button>
         </nav>
 
