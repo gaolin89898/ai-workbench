@@ -1081,7 +1081,6 @@ const _builtInProviders = [
   ('codex', 'Codex', Icons.smart_toy_outlined),
   ('claude', 'Claude Code', Icons.auto_awesome_outlined),
   ('opencode', 'OpenCode', Icons.code_outlined),
-  ('deepseek', 'DeepSeek', Icons.psychology_outlined),
   ('mimo', 'MiMo Code', Icons.auto_fix_high_outlined),
 ];
 

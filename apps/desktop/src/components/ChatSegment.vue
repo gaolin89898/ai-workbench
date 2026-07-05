@@ -35,6 +35,26 @@ const toolDiffLines = computed<DiffLine[]>(() => {
 });
 
 const approvalBusy = computed(() => props.segment.type === "approval" && props.segment.status !== "pending");
+const statusDisplay = computed(() => {
+  if (props.segment.type !== "status") return null;
+  if (isContextCompactionStatus(props.segment.rawItemType, props.segment.label)) {
+    return {
+      label: props.segment.status === "completed" ? "已压缩上下文" : "正在压缩上下文",
+      detail: props.segment.detail || "正在整理较长会话内容，保留关键上下文。",
+      icon: "compact",
+    };
+  }
+  return {
+    label: props.segment.label,
+    detail: props.segment.detail,
+    icon: props.segment.icon,
+  };
+});
+
+function isContextCompactionStatus(rawItemType?: string | null, label?: string) {
+  return /^(?:contextCompaction|context_compaction)$/i.test(rawItemType ?? "")
+    || /contextCompaction|context_compaction/i.test(label ?? "");
+}
 
 function formatDuration(durationMs?: number) {
   if (!durationMs) return "";
@@ -424,6 +444,20 @@ function approvalMeta(segment: Extract<ChatSegmentType, { type: "approval" }>) {
   return parts.join(" · ");
 }
 
+function approvalStatusLabel(segment: Extract<ChatSegmentType, { type: "approval" }>) {
+  if (segment.status === "approved") return "已同意";
+  if (segment.status === "denied") return "已拒绝";
+  if (segment.status === "expired") return "已过期";
+  if (segment.status === "failed") return "审批失败";
+  return "待审批";
+}
+
+function approvalKindLabel(segment: Extract<ChatSegmentType, { type: "approval" }>) {
+  if (segment.approvalKind === "fileChange") return "文件修改";
+  if (segment.approvalKind === "command") return "命令执行";
+  return "工具操作";
+}
+
 async function respondApproval(decision: "approved" | "denied") {
   if (props.segment.type !== "approval" || !props.aiSessionId || props.segment.status !== "pending") return;
   await desktopApi.respondCodexApproval({
@@ -514,9 +548,9 @@ async function respondApproval(decision: "approved" | "denied") {
     </template>
   </article>
 
-  <div v-else-if="segment.type === 'status'" class="chat-segment-status" :class="segment.icon">
-    <span>{{ segment.label }}</span>
-    <strong v-if="segment.detail">{{ segment.detail }}</strong>
+  <div v-else-if="segment.type === 'status'" class="chat-segment-status" :class="statusDisplay?.icon">
+    <span>{{ statusDisplay?.label }}</span>
+    <strong v-if="statusDisplay?.detail">{{ statusDisplay.detail }}</strong>
     <span v-if="segment.additions !== undefined" class="chat-segment-additions">+{{ segment.additions }}</span>
     <span v-if="segment.deletions !== undefined" class="chat-segment-deletions">-{{ segment.deletions }}</span>
   </div>
@@ -611,27 +645,52 @@ async function respondApproval(decision: "approved" | "denied") {
   </article>
 
   <article v-else-if="segment.type === 'approval'" class="chat-segment-approval" :class="segment.status">
+    <div class="chat-segment-approval-accent" aria-hidden="true"></div>
     <div class="chat-segment-approval-header">
-      <span class="chat-segment-approval-icon" aria-hidden="true">
-        <svg viewBox="0 0 16 16" fill="none">
-          <path d="M8 1.8 13.2 4v3.8c0 3.1-2.1 5.4-5.2 6.4-3.1-1-5.2-3.3-5.2-6.4V4L8 1.8Z" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round" />
-          <path d="m5.8 8.1 1.4 1.4 3-3.2" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" />
-        </svg>
-      </span>
-      <span>
-        <strong>{{ segment.title }}</strong>
-        <small v-if="approvalMeta(segment)">{{ approvalMeta(segment) }}</small>
-      </span>
+      <div class="chat-segment-approval-title-row">
+        <span class="chat-segment-approval-icon" aria-hidden="true">
+          <svg viewBox="0 0 16 16" fill="none">
+            <path d="M8 1.8 13.2 4v3.8c0 3.1-2.1 5.4-5.2 6.4-3.1-1-5.2-3.3-5.2-6.4V4L8 1.8Z" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round" />
+            <path d="M5.6 8.3 7.1 9.8 10.5 6.2" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" />
+          </svg>
+        </span>
+        <div class="chat-segment-approval-copy">
+          <div class="chat-segment-approval-meta-row">
+            <span class="chat-segment-approval-badge">{{ approvalStatusLabel(segment) }}</span>
+            <small>审批期间输入框已锁定，处理后恢复发送。</small>
+          </div>
+          <strong>{{ segment.title || "需要确认 AI 工具操作" }}</strong>
+          <span class="chat-segment-approval-subtitle">Codex · {{ approvalKindLabel(segment) }} · 本次会话</span>
+        </div>
+      </div>
+      <svg class="chat-segment-approval-corner" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+        <path d="M8 1.8 13.2 4v3.8c0 3.1-2.1 5.4-5.2 6.4-3.1-1-5.2-3.3-5.2-6.4V4L8 1.8Z" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round" />
+        <path d="M8 5.1v3.4" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" />
+        <path d="M8 11.1h.01" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" />
+      </svg>
     </div>
     <p v-if="segment.reason" class="chat-segment-approval-reason">{{ segment.reason }}</p>
-    <pre v-if="segment.command" class="chat-segment-approval-code">{{ segment.command }}</pre>
-    <ul v-if="segment.fileChanges?.length" class="chat-segment-approval-files">
-      <li v-for="file in segment.fileChanges.slice(0, 6)" :key="file">{{ file }}</li>
-    </ul>
+    <p v-else class="chat-segment-approval-reason">AI 工具准备执行可能影响项目的操作，请确认是否允许本次操作。</p>
+    <div class="chat-segment-approval-body">
+      <div v-if="segment.command" class="chat-segment-approval-panel command">
+        <div class="chat-segment-approval-panel-head">
+          <span>command</span>
+        </div>
+        <code>{{ segment.command }}</code>
+      </div>
+      <div v-if="segment.fileChanges?.length" class="chat-segment-approval-panel files">
+        <div class="chat-segment-approval-panel-head">
+          <span>可能影响文件</span>
+        </div>
+        <ul>
+          <li v-for="file in segment.fileChanges.slice(0, 6)" :key="file">{{ file }}</li>
+        </ul>
+      </div>
+    </div>
     <p v-if="segment.detail" class="chat-segment-approval-detail">{{ segment.detail }}</p>
     <div class="chat-segment-approval-actions">
       <button type="button" class="button secondary" :disabled="approvalBusy || !aiSessionId" @click="respondApproval('denied')">拒绝</button>
-      <button type="button" class="button primary" :disabled="approvalBusy || !aiSessionId" @click="respondApproval('approved')">同意本次</button>
+      <button type="button" class="button primary" :disabled="approvalBusy || !aiSessionId" @click="respondApproval('approved')">允许执行</button>
     </div>
   </article>
 </template>

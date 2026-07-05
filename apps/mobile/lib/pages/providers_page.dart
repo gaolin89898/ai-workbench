@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../models/workbench_models.dart';
+import '../services/update_service.dart';
 import '../state/workspace_scope.dart';
 import '../widgets/app_theme.dart';
 
@@ -12,6 +14,9 @@ class ProvidersPage extends StatelessWidget {
     return AnimatedBuilder(
       animation: ws,
       builder: (context, _) {
+        final statusById = {
+          for (final status in ws.providerStatuses) status.providerId: status,
+        };
         return Scaffold(
           backgroundColor: AppColors.background,
           appBar: AppBar(title: const Text('AI 工具')),
@@ -44,7 +49,10 @@ class ProvidersPage extends StatelessWidget {
                   // ---- Provider 卡列表（单列） ----
                   for (int i = 0; i < _providers.length; i++) ...[
                     if (i > 0) const SizedBox(height: AppSpacing.md),
-                    _ProviderCard(provider: _providers[i]),
+                    _ProviderCard(
+                      provider: _providers[i],
+                      status: statusById[_providers[i].id],
+                    ),
                   ],
                   const SizedBox(height: AppSpacing.xl),
                   // ---- 说明卡 ----
@@ -59,93 +67,46 @@ class ProvidersPage extends StatelessWidget {
   }
 }
 
-// =============================================================================
-// Provider 静态数据
-// =============================================================================
-
-/// Provider 状态三态
-enum _ProviderStatus { signedIn, needLogin, notDetected }
-
-/// 单个 Provider 的展示数据
 class _ProviderInfo {
   const _ProviderInfo({
     required this.id,
     required this.name,
     required this.command,
     required this.icon,
-    required this.status,
-    required this.installed,
-    required this.version,
-    required this.path,
   });
 
   final String id;
   final String name;
   final String command;
   final IconData icon;
-  final _ProviderStatus status;
-  final bool installed;
-  final String version;
-  final String path;
 }
 
-/// 4 个硬编码 Provider（按设计稿）
 const _providers = <_ProviderInfo>[
   _ProviderInfo(
     id: 'codex',
     name: 'Codex',
     command: 'codex',
     icon: Icons.terminal,
-    status: _ProviderStatus.signedIn,
-    installed: true,
-    version: 'v0.9.7',
-    path: '/usr/local/bin/codex',
   ),
   _ProviderInfo(
     id: 'claude',
     name: 'Claude Code',
     command: 'claude',
     icon: Icons.smart_toy,
-    status: _ProviderStatus.needLogin,
-    installed: true,
-    version: 'v1.8.4',
-    path: '登录后启用远程模型',
   ),
   _ProviderInfo(
     id: 'opencode',
     name: 'OpenCode',
     command: 'opencode',
     icon: Icons.code,
-    status: _ProviderStatus.signedIn,
-    installed: true,
-    version: 'v0.6.2',
-    path: '/usr/local/bin/opencode',
-  ),
-  _ProviderInfo(
-    id: 'deepseek',
-    name: 'DeepSeek',
-    command: 'deepseek',
-    icon: Icons.memory,
-    status: _ProviderStatus.notDetected,
-    installed: false,
-    version: '—',
-    path: '未发现 deepseek-cli',
   ),
   _ProviderInfo(
     id: 'mimo',
     name: 'MiMo Code',
     command: 'mimo',
     icon: Icons.auto_fix_high,
-    status: _ProviderStatus.signedIn,
-    installed: true,
-    version: 'v0.1.0',
-    path: '/home/gl/.mimocode/bin/mimo',
   ),
 ];
-
-// =============================================================================
-// 应用信息卡
-// =============================================================================
 
 class _AppInfoCard extends StatelessWidget {
   @override
@@ -189,7 +150,7 @@ class _AppInfoCard extends StatelessWidget {
                     ),
                     const SizedBox(height: AppSpacing.xs),
                     const AppStatusBadge(
-                      'v0.3.2',
+                      'v${MobileUpdateService.currentVersion}',
                       style: AppStatusStyle.primary,
                     ),
                   ],
@@ -242,13 +203,18 @@ class _AppInfoCard extends StatelessWidget {
 // =============================================================================
 
 class _ProviderCard extends StatelessWidget {
-  const _ProviderCard({required this.provider});
+  const _ProviderCard({required this.provider, required this.status});
 
   final _ProviderInfo provider;
+  final ProviderStatus? status;
 
   @override
   Widget build(BuildContext context) {
     final textTheme = Theme.of(context).textTheme;
+    final installed = status?.installed ?? false;
+    final version = status?.version?.trim().isNotEmpty == true ? status!.version! : '—';
+    final authLabel = _authLabel(status);
+    final authColor = _authColor(status);
     return AppCard(
       borderRadius: AppRadius.xl, // 16
       padding: const EdgeInsets.all(14),
@@ -288,7 +254,7 @@ class _ProviderCard extends StatelessWidget {
                   ],
                 ),
               ),
-              _buildStatusBadge(),
+              _buildStatusBadge(status),
             ],
           ),
           const SizedBox(height: AppSpacing.md),
@@ -300,9 +266,9 @@ class _ProviderCard extends StatelessWidget {
               Text('安装', style: textTheme.bodySmall),
               const Spacer(),
               Text(
-                provider.installed ? '已安装' : '未安装',
+                installed ? '已安装' : '未安装',
                 style: textTheme.bodyMedium?.copyWith(
-                  color: provider.installed
+                  color: installed
                       ? AppColors.successDeep
                       : AppColors.warningDeep,
                   fontWeight: FontWeight.w600,
@@ -316,10 +282,10 @@ class _ProviderCard extends StatelessWidget {
               Text('版本', style: textTheme.bodySmall),
               const Spacer(),
               Text(
-                provider.version,
+                version,
                 style: textTheme.bodyMedium?.copyWith(
                   fontFamily: 'monospace',
-                  color: provider.installed
+                  color: installed
                       ? AppColors.secondary
                       : AppColors.muted,
                 ),
@@ -329,12 +295,15 @@ class _ProviderCard extends StatelessWidget {
           const SizedBox(height: 6),
           Row(
             children: [
-              Text('路径/账号', style: textTheme.bodySmall),
+              Text('登录状态', style: textTheme.bodySmall),
               const SizedBox(width: AppSpacing.md),
               Expanded(
                 child: Text(
-                  provider.path,
-                  style: textTheme.bodySmall,
+                  authLabel,
+                  style: textTheme.bodySmall?.copyWith(
+                    color: authColor,
+                    fontWeight: FontWeight.w600,
+                  ),
                   textAlign: TextAlign.end,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
@@ -347,16 +316,27 @@ class _ProviderCard extends StatelessWidget {
     );
   }
 
-  /// 状态徽章三态映射
-  AppStatusBadge _buildStatusBadge() {
-    switch (provider.status) {
-      case _ProviderStatus.signedIn:
-        return const AppStatusBadge('已登录', style: AppStatusStyle.primary);
-      case _ProviderStatus.needLogin:
-        return const AppStatusBadge('需登录', style: AppStatusStyle.neutral);
-      case _ProviderStatus.notDetected:
-        return const AppStatusBadge('未检测到', style: AppStatusStyle.neutral);
-    }
+  AppStatusBadge _buildStatusBadge(ProviderStatus? status) {
+    if (status == null) return const AppStatusBadge('未检测', style: AppStatusStyle.neutral);
+    if (!status.installed) return const AppStatusBadge('未安装', style: AppStatusStyle.neutral);
+    if (status.authStatus == 'signedIn') return const AppStatusBadge('已登录', style: AppStatusStyle.primary);
+    if (status.authStatus == 'signedOut') return const AppStatusBadge('未登录', style: AppStatusStyle.neutral);
+    return const AppStatusBadge('未知', style: AppStatusStyle.neutral);
+  }
+
+  String _authLabel(ProviderStatus? status) {
+    if (status == null) return '未检测';
+    if (!status.installed) return '未安装';
+    if (status.authStatus == 'signedIn') return '已登录';
+    if (status.authStatus == 'signedOut') return '未登录';
+    return '未知';
+  }
+
+  Color _authColor(ProviderStatus? status) {
+    if (status == null || !status.installed) return AppColors.muted;
+    if (status.authStatus == 'signedIn') return AppColors.successDeep;
+    if (status.authStatus == 'signedOut') return AppColors.warningDeep;
+    return AppColors.muted;
   }
 }
 

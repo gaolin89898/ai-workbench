@@ -130,7 +130,7 @@ export type ChatSegment =
       stepId?: string;
       label: string;
       detail?: string;
-      icon?: "check" | "read" | "edit" | "search" | "think" | "warn";
+      icon?: "check" | "read" | "edit" | "search" | "think" | "warn" | "compact";
       status?: "running" | "completed" | "failed" | "canceled";
       startedAt?: string | null;
       completedAt?: string | null;

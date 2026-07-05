@@ -138,6 +138,7 @@ function isInternalUserMessageRawType(rawType: string | null | undefined): boole
   return /^(?:userMessage|user_message)$/i.test(rawType ?? "");
 }
 function traceItemTitle(rawType: string, item: Record<string, unknown>, parent: Record<string, unknown>) {
+  if (/^(?:contextCompaction|context_compaction)$/i.test(rawType)) return "正在压缩上下文";
   switch (traceItemType(rawType)) {
     case "thinking":
       return "正在思考";

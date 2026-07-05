@@ -84,6 +84,7 @@ class _ChatPageState extends State<ChatPage> {
             (messages.isNotEmpty &&
                 messages.last.role == ChatRole.assistant &&
                 messages.last.pending);
+        final pendingApproval = _findPendingApproval(messages);
         final shouldStickToBottom = _isNearBottom;
         WidgetsBinding.instance.addPostFrameCallback((_) {
           if (shouldStickToBottom) _scrollToBottom();
@@ -196,63 +197,33 @@ class _ChatPageState extends State<ChatPage> {
                         ),
                 ),
               ),
-              SafeArea(
-                top: false,
-                child: Container(
-                  padding: const EdgeInsets.fromLTRB(
-                    AppSpacing.md,
-                    AppSpacing.sm,
-                    AppSpacing.md,
-                    AppSpacing.lg,
-                  ),
-                  decoration: const BoxDecoration(
-                    color: AppColors.surface,
-                    border: Border(top: BorderSide(color: AppColors.border)),
-                  ),
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.end,
-                    children: [
-                      Expanded(
-                        child: TextField(
-                          controller: _prompt,
-                          enabled: !session.archived,
-                          minLines: 1,
-                          maxLines: 5,
-                          style: const TextStyle(fontSize: 14, height: 1.4),
-                          decoration: const InputDecoration(
-                            hintText: '输入消息...',
-                            border: InputBorder.none,
-                            fillColor: AppColors.surfaceMuted,
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: AppSpacing.sm),
-                      SizedBox(
-                        width: 36,
-                        height: 36,
-                        child: FilledButton(
-                          onPressed: !session.archived ? _send : null,
-                          style: FilledButton.styleFrom(
-                            padding: EdgeInsets.zero,
-                            minimumSize: const Size(36, 36),
-                            maximumSize: const Size(36, 36),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(AppRadius.lg),
-                            ),
-                          ),
-                          child: const Icon(Icons.arrow_upward,
-                              size: 17, color: AppColors.inverse),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
+              _ChatComposer(
+                controller: _prompt,
+                archived: session.archived,
+                pendingApproval: pendingApproval,
+                onSend: _send,
+                onApproval: (segment, decision) {
+                  final approvalId = segment.approvalId;
+                  if (approvalId == null || approvalId.isEmpty) return;
+                  ws.respondApproval(session, approvalId, decision);
+                },
               ),
             ],
           ),
         );
       },
     );
+  }
+
+  ChatSegment? _findPendingApproval(List<ChatMessage> messages) {
+    for (final message in messages.reversed) {
+      for (final segment in message.segments.reversed) {
+        if (segment.type == 'approval' && segment.status == 'pending') {
+          return segment;
+        }
+      }
+    }
+    return null;
   }
 
   bool _isRunningStatus(String status) {
@@ -305,6 +276,302 @@ extension _FirstOrNull<T> on Iterable<T> {
       return item;
     }
     return null;
+  }
+}
+
+class _ChatComposer extends StatelessWidget {
+  const _ChatComposer({
+    required this.controller,
+    required this.archived,
+    required this.pendingApproval,
+    required this.onSend,
+    required this.onApproval,
+  });
+
+  final TextEditingController controller;
+  final bool archived;
+  final ChatSegment? pendingApproval;
+  final VoidCallback onSend;
+  final void Function(ChatSegment segment, String decision) onApproval;
+
+  @override
+  Widget build(BuildContext context) {
+    final approval = pendingApproval;
+    return SafeArea(
+      top: false,
+      child: Container(
+        padding: const EdgeInsets.fromLTRB(
+          AppSpacing.md,
+          AppSpacing.sm,
+          AppSpacing.md,
+          AppSpacing.lg,
+        ),
+        decoration: const BoxDecoration(
+          color: AppColors.surface,
+          border: Border(top: BorderSide(color: AppColors.border)),
+        ),
+        child: approval == null
+            ? _ComposerInput(
+                controller: controller,
+                archived: archived,
+                onSend: onSend,
+              )
+            : Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const _LockedComposerHint(),
+                  const SizedBox(height: AppSpacing.sm),
+                  _ApprovalCoverCard(
+                    segment: approval,
+                    onApproval: onApproval,
+                  ),
+                ],
+              ),
+      ),
+    );
+  }
+}
+
+class _ComposerInput extends StatelessWidget {
+  const _ComposerInput({
+    required this.controller,
+    required this.archived,
+    required this.onSend,
+  });
+
+  final TextEditingController controller;
+  final bool archived;
+  final VoidCallback onSend;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.end,
+      children: [
+        Expanded(
+          child: TextField(
+            controller: controller,
+            enabled: !archived,
+            minLines: 1,
+            maxLines: 5,
+            style: const TextStyle(fontSize: 14, height: 1.4),
+            decoration: const InputDecoration(
+              hintText: '输入消息...',
+              border: InputBorder.none,
+              fillColor: AppColors.surfaceMuted,
+            ),
+          ),
+        ),
+        const SizedBox(width: AppSpacing.sm),
+        SizedBox(
+          width: 36,
+          height: 36,
+          child: FilledButton(
+            onPressed: !archived ? onSend : null,
+            style: FilledButton.styleFrom(
+              padding: EdgeInsets.zero,
+              minimumSize: const Size(36, 36),
+              maximumSize: const Size(36, 36),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(AppRadius.lg),
+              ),
+            ),
+            child: const Icon(Icons.arrow_upward,
+                size: 17, color: AppColors.inverse),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _LockedComposerHint extends StatelessWidget {
+  const _LockedComposerHint();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      height: 44,
+      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md),
+      decoration: BoxDecoration(
+        color: AppColors.surfaceMuted,
+        border: Border.all(color: AppColors.border),
+        borderRadius: BorderRadius.circular(AppRadius.lg),
+      ),
+      child: Row(
+        children: const [
+          Icon(Icons.lock_outline, size: 16, color: AppColors.muted),
+          SizedBox(width: AppSpacing.sm),
+          Expanded(
+            child: Text(
+              '等待你处理审批后继续输入',
+              style: TextStyle(color: AppColors.muted, fontSize: 13),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ApprovalCoverCard extends StatelessWidget {
+  const _ApprovalCoverCard({required this.segment, required this.onApproval});
+
+  final ChatSegment segment;
+  final void Function(ChatSegment segment, String decision) onApproval;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context).textTheme;
+    final command = segment.command?.trim();
+    return Container(
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        border: Border.all(color: AppColors.warning.withValues(alpha: 0.24)),
+        borderRadius: BorderRadius.circular(AppRadius.xl),
+        boxShadow: AppShadows.card,
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(AppRadius.xl),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Container(height: 3, color: AppColors.warning),
+            Padding(
+              padding: const EdgeInsets.all(AppSpacing.md),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      AppIconBox(
+                        icon: Icons.verified_user_outlined,
+                        size: 34,
+                        iconSize: 18,
+                        background: AppColors.warningSoft,
+                        foreground: AppColors.warning,
+                        borderRadius: AppRadius.lg,
+                      ),
+                      const SizedBox(width: AppSpacing.md),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              children: const [
+                                AppStatusBadge(
+                                  '待审批',
+                                  style: AppStatusStyle.warning,
+                                  dot: true,
+                                ),
+                                SizedBox(width: AppSpacing.sm),
+                                Expanded(
+                                  child: Text(
+                                    '输入框已锁定',
+                                    style: TextStyle(
+                                      color: AppColors.muted,
+                                      fontSize: 12,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 6),
+                            Text(
+                              segment.title ?? '需要确认 AI 工具操作',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: theme.titleSmall?.copyWith(
+                                color: AppColors.ink,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              _approvalKindLabel(segment),
+                              style: theme.bodySmall?.copyWith(
+                                color: AppColors.secondary,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: AppSpacing.md),
+                  Text(
+                    segment.reason?.isNotEmpty == true
+                        ? segment.reason!
+                        : 'AI 工具准备执行可能影响项目的操作，请确认是否允许本次操作。',
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: theme.bodySmall?.copyWith(
+                      color: AppColors.secondary,
+                      height: 1.5,
+                    ),
+                  ),
+                  if (command != null && command.isNotEmpty) ...[
+                    const SizedBox(height: AppSpacing.md),
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.all(AppSpacing.sm),
+                      decoration: BoxDecoration(
+                        color: AppColors.surfaceMuted,
+                        borderRadius: BorderRadius.circular(AppRadius.md),
+                      ),
+                      child: Text(
+                        command,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          color: AppColors.ink,
+                          fontSize: 12,
+                          fontFamily: 'monospace',
+                        ),
+                      ),
+                    ),
+                  ],
+                  const SizedBox(height: AppSpacing.md),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: OutlinedButton(
+                          onPressed: () => onApproval(segment, 'denied'),
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor: AppColors.ink,
+                            side: const BorderSide(color: AppColors.border),
+                            minimumSize: const Size(0, 42),
+                          ),
+                          child: const Text('拒绝'),
+                        ),
+                      ),
+                      const SizedBox(width: AppSpacing.sm),
+                      Expanded(
+                        child: FilledButton(
+                          onPressed: () => onApproval(segment, 'approved'),
+                          style: FilledButton.styleFrom(
+                            minimumSize: const Size(0, 42),
+                          ),
+                          child: const Text('允许执行'),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  String _approvalKindLabel(ChatSegment segment) {
+    if (segment.approvalKind == 'fileChange') return '文件修改 · 本次会话';
+    if (segment.approvalKind == 'command') return '命令执行 · 本次会话';
+    return '工具操作 · 本次会话';
   }
 }
 
