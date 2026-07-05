@@ -56,6 +56,44 @@ void main() {
     controller.dispose();
   });
 
+  test('loadDevices hides duplicate desktop device rows', () async {
+    final controller = WorkspaceController(
+      api: _FakeDeviceApiClient([
+        const DesktopDevice(
+          id: 'old-offline',
+          name: 'dev-machine',
+          os: 'windows',
+          online: false,
+          lastSeenAt: '2026-07-03T00:00:00Z',
+        ),
+        const DesktopDevice(
+          id: 'current-online',
+          name: 'dev-machine',
+          os: 'windows',
+          online: true,
+          lastSeenAt: '2026-07-04T00:00:00Z',
+        ),
+        const DesktopDevice(
+          id: 'other-device',
+          name: 'other-machine',
+          os: 'windows',
+          online: false,
+          lastSeenAt: '2026-07-02T00:00:00Z',
+        ),
+      ]),
+    );
+
+    await controller.loadDevices();
+
+    expect(controller.devices.map((device) => device.id), [
+      'current-online',
+      'other-device',
+    ]);
+
+    await Future<void>.delayed(Duration.zero);
+    controller.dispose();
+  });
+
   test('history response preserves realtime pending before history catches up',
       () async {
     final controller =
@@ -608,4 +646,13 @@ void main() {
     await Future<void>.delayed(Duration.zero);
     controller.dispose();
   });
+}
+
+class _FakeDeviceApiClient extends ApiClient {
+  _FakeDeviceApiClient(this._devices) : super(baseUrl: 'http://127.0.0.1:3000');
+
+  final List<DesktopDevice> _devices;
+
+  @override
+  Future<List<DesktopDevice>> devices() async => _devices;
 }

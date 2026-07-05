@@ -904,7 +904,7 @@ function isGeneratedCodexSessionTitle(title: string) {
 }
 
 function isCodexExternalMirrorSession(session: AiSession | null) {
-  if (!session || session.providerId !== "codex" || !session.providerSessionId || !session.summary) return false;
+  if (!session || session.providerId !== "codex" || !session.providerSessionId) return false;
   return !session.providerSessionId.startsWith("app-server:");
 }
 
