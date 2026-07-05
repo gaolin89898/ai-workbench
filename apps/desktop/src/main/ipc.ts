@@ -292,7 +292,7 @@ export function registerIpcHandlers(win?: BrowserWindow): void {
       const [aiSessionId, role, content] = args;
       db.appendLocalAiMessage(aiSessionId, role, content);
       getSender().send("ai-history-changed", { aiSessionId });
-      void getDesktopCloudSync()?.pushAiHistory(aiSessionId);
+      await getDesktopCloudSync()?.pushAiHistory(aiSessionId);
     }
   );
 
@@ -326,7 +326,9 @@ export function registerIpcHandlers(win?: BrowserWindow): void {
 
   handle("run_ai_chat", async (_event, args: [RunAiChatRequest]) => {
     const req = args[0];
-    const sender = getDesktopCloudSync()?.createRendererAndMobileAiChatSender(getSender()) ?? getSender();
+    const sync = getDesktopCloudSync();
+    sync?.beginAiTurn(req.aiSessionId);
+    const sender = sync?.createRendererAndMobileAiChatSender(getSender()) ?? getSender();
     // Resume an existing Claude session if we have a providerSessionId stored.
     const session = db.getLocalAiSession(req.aiSessionId);
     const existingSessionId = session?.providerSessionId ?? null;
@@ -335,6 +337,7 @@ export function registerIpcHandlers(win?: BrowserWindow): void {
       providerSessionId: providerSessionId || existingSessionId,
       status: "completed",
     });
+    void sync?.pushAiHistory(req.aiSessionId);
     return providerSessionId;
   });
 
@@ -342,12 +345,15 @@ export function registerIpcHandlers(win?: BrowserWindow): void {
     const req = args[0];
     const session = db.getLocalAiSession(req.aiSessionId);
     const existingSessionId = session?.providerSessionId ?? null;
-    const sender = getDesktopCloudSync()?.createRendererAndMobileAiChatSender(getSender()) ?? getSender();
+    const sync = getDesktopCloudSync();
+    sync?.beginAiTurn(req.aiSessionId);
+    const sender = sync?.createRendererAndMobileAiChatSender(getSender()) ?? getSender();
     const providerSessionId = await runCodexChat(req, sender);
     db.updateLocalAiSession(req.aiSessionId, {
       providerSessionId: providerSessionId || existingSessionId,
       status: "completed",
     });
+    void sync?.pushAiHistory(req.aiSessionId);
     return providerSessionId;
   });
 

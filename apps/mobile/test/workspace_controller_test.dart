@@ -589,6 +589,134 @@ void main() {
     controller.dispose();
   });
 
+  test('sendPrompt creates a local turn separator for follow-up prompts',
+      () async {
+    final controller =
+        WorkspaceController(api: ApiClient(baseUrl: 'http://127.0.0.1:3000'));
+    controller.selectedDevice = const DesktopDevice(
+      id: 'device-1',
+      name: 'desktop',
+      os: 'windows',
+      online: true,
+    );
+    final session = const AiSessionMeta(
+      id: 'session-1',
+      deviceId: 'device-1',
+      providerId: 'codex',
+      title: 'Existing session',
+      status: 'completed',
+      updatedAt: '2026-07-03T00:00:00Z',
+    );
+    controller.messagesBySession['session-1'] = const [
+      ChatMessage(role: ChatRole.user, text: 'first'),
+      ChatMessage(role: ChatRole.assistant, text: 'first answer'),
+    ];
+
+    controller.sendPrompt(session, 'second');
+
+    final messages = controller.messagesBySession['session-1']!;
+    expect(messages, hasLength(4));
+    expect(messages[0].text, 'first');
+    expect(messages[1].text, 'first answer');
+    expect(messages[2].role, ChatRole.user);
+    expect(messages[2].text, 'second');
+    expect(messages[3].role, ChatRole.assistant);
+    expect(messages[3].pending, isTrue);
+
+    await Future<void>.delayed(Duration.zero);
+    controller.dispose();
+  });
+
+  test('codex trace update belongs to the latest user turn', () async {
+    final controller =
+        WorkspaceController(api: ApiClient(baseUrl: 'http://127.0.0.1:3000'));
+    controller.messagesBySession['session-1'] = const [
+      ChatMessage(role: ChatRole.user, text: 'first'),
+      ChatMessage(role: ChatRole.assistant, text: 'first answer'),
+      ChatMessage(role: ChatRole.user, text: 'second'),
+    ];
+
+    controller.handleRealtimeForTesting({
+      'type': 'ai.trace.update',
+      'deviceId': 'device-1',
+      'aiSessionId': 'session-1',
+      'trace': {
+        'aiSessionId': 'session-1',
+        'providerId': 'codex',
+        'traceKind': 'codex',
+        'status': 'running',
+        'finalText': '',
+        'snapshot': {
+          'provider': 'codex',
+          'status': 'running',
+          'items': [],
+          'approvals': [],
+          'errors': [],
+          'finalText': '',
+          'updatedAt': '2026-07-03T00:00:02Z',
+        },
+        'segments': [
+          {
+            'type': 'status',
+            'stepId': 'runtime-status',
+            'label': 'Codex running',
+            'icon': 'think',
+          },
+        ],
+      },
+    });
+
+    final messages = controller.messagesBySession['session-1']!;
+    expect(messages, hasLength(4));
+    expect(messages[1].text, 'first answer');
+    expect(messages[2].role, ChatRole.user);
+    expect(messages[3].role, ChatRole.assistant);
+    expect(messages[3].pending, isTrue);
+    expect(messages[3].segments.single.stepId, 'runtime-status');
+
+    await Future<void>.delayed(Duration.zero);
+    controller.dispose();
+  });
+
+  test('pending assistants separated by a user turn are not merged', () async {
+    final controller =
+        WorkspaceController(api: ApiClient(baseUrl: 'http://127.0.0.1:3000'));
+    controller.messagesBySession['session-1'] = const [
+      ChatMessage(role: ChatRole.user, text: 'first'),
+      ChatMessage(
+        role: ChatRole.assistant,
+        pending: true,
+        segments: [
+          ChatSegment(type: 'status', stepId: 'first-run', label: 'first'),
+        ],
+      ),
+      ChatMessage(role: ChatRole.user, text: 'second'),
+      ChatMessage(
+        role: ChatRole.assistant,
+        pending: true,
+        segments: [
+          ChatSegment(type: 'status', stepId: 'second-run', label: 'second'),
+        ],
+      ),
+    ];
+
+    controller.handleRealtimeForTesting({
+      'type': 'ai.message.done',
+      'deviceId': 'device-1',
+      'aiSessionId': 'session-1',
+      'status': 'completed',
+      'summary': null,
+    });
+
+    final messages = controller.messagesBySession['session-1']!;
+    expect(messages, hasLength(4));
+    expect(messages[1].segments.single.stepId, 'first-run');
+    expect(messages[3].segments.single.stepId, 'second-run');
+
+    await Future<void>.delayed(Duration.zero);
+    controller.dispose();
+  });
+
   test('runtime status is stable and thinking status is preserved', () async {
     final controller =
         WorkspaceController(api: ApiClient(baseUrl: 'http://127.0.0.1:3000'));

@@ -588,6 +588,11 @@ class DesktopCloudSync {
     });
   }
 
+  beginAiTurn(aiSessionId: string): void {
+    this.discardMobileDelta(aiSessionId);
+    this.mobileAssistantDrafts.delete(aiSessionId);
+  }
+
   /**
    * Rename an AI session everywhere: update local SQLite, then call the
    * backend PATCH /ai-sessions/{id} so PostgreSQL is updated and the server
@@ -736,6 +741,14 @@ class DesktopCloudSync {
         text: buffer.text,
         segments: buffer.segments,
       });
+    }
+    this.mobileDeltaBuffers.delete(sessionId);
+  }
+
+  private discardMobileDelta(sessionId: string): void {
+    const buffer = this.mobileDeltaBuffers.get(sessionId);
+    if (buffer?.timer) {
+      clearTimeout(buffer.timer);
     }
     this.mobileDeltaBuffers.delete(sessionId);
   }
@@ -989,9 +1002,10 @@ class DesktopCloudSync {
         return;
       }
 
+      this.beginAiTurn(aiSessionId);
       appendLocalAiMessage(aiSessionId, "user", content);
       this.notify("ai-history-changed", { aiSessionId });
-      void this.pushAiHistory(aiSessionId);
+      await this.pushAiHistory(aiSessionId);
 
       const session = getLocalAiSession(aiSessionId);
       if (!session) {

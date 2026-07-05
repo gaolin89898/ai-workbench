@@ -3144,7 +3144,7 @@ dd {
   position: absolute;
   top: 0;
   bottom: 0;
-  left: max(0px, calc((100% - var(--composer-max-width)) / 2 - 34px));
+  left: 8px;
   z-index: 4;
   width: 34px;
   min-height: 180px;
@@ -5679,15 +5679,15 @@ textarea:focus {
 .settings-content {
   min-width: 0;
   min-height: 0;
-  overflow: hidden;
+  overflow-y: auto;
+  overflow-x: hidden;
+  scrollbar-gutter: stable;
 }
 
 .settings-scroll {
   width: min(1060px, calc(100% - 72px));
-  height: 100vh;
+  min-height: 100vh;
   margin: 0 auto;
-  overflow-y: auto;
-  overflow-x: hidden;
   padding: 42px 0 36px;
   scroll-behavior: smooth;
 }

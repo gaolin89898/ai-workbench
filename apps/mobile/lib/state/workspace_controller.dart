@@ -260,10 +260,33 @@ class WorkspaceController extends ChangeNotifier {
       return;
     }
     runStatusBySession[session.id] = '正在发送给 ${session.providerId}';
+    _beginLocalPromptTurn(session.id, trimmed);
     _notifySafely();
     realtime.sendPrompt(device.id, session.id, trimmed);
     // Best-effort: rename untitled sessions based on the first prompt.
     _maybeRenameUntitledSession(session, trimmed);
+  }
+
+  void _beginLocalPromptTurn(String sessionId, String prompt) {
+    final current = [
+      ...(messagesBySession[sessionId] ?? const <ChatMessage>[])
+    ];
+    _currentAgentMessageStepIds.remove(sessionId);
+    _lastCommittedAssistantTexts.remove(sessionId);
+    current.add(ChatMessage(role: ChatRole.user, text: prompt));
+    current.add(const ChatMessage(
+      role: ChatRole.assistant,
+      pending: true,
+      segments: [
+        ChatSegment(
+          type: 'status',
+          stepId: 'mobile-run-started',
+          label: '正在处理',
+          icon: 'think',
+        ),
+      ],
+    ));
+    messagesBySession[sessionId] = _normalizeSessionMessages(current);
   }
 
   void respondApproval(
@@ -491,7 +514,7 @@ class WorkspaceController extends ChangeNotifier {
             role: history.role,
             text: history.content,
             pending: item['pending'] == true,
-                segments: history.segments,
+            segments: history.segments,
           );
         }).toList();
         final traceJson = json['trace'];
@@ -617,9 +640,7 @@ class WorkspaceController extends ChangeNotifier {
       segments: segments,
     );
     final next = [...messages];
-    final pendingIndex = next.lastIndexWhere(
-      (message) => message.role == ChatRole.assistant && message.pending,
-    );
+    final pendingIndex = _lastPendingAssistantIndexForCurrentTurn(next);
     if (pendingIndex >= 0) {
       next[pendingIndex] = traceMessage;
       if (!trace.pending) {
@@ -628,9 +649,7 @@ class WorkspaceController extends ChangeNotifier {
       }
       return next;
     }
-    final assistantIndex = next.lastIndexWhere(
-      (message) => message.role == ChatRole.assistant,
-    );
+    final assistantIndex = _lastAssistantIndexForCurrentTurn(next);
     if (assistantIndex >= 0) {
       final previous = next[assistantIndex];
       next[assistantIndex] = ChatMessage(
@@ -666,29 +685,46 @@ class WorkspaceController extends ChangeNotifier {
     );
   }
 
+  int _lastUserIndex(List<ChatMessage> messages) {
+    return messages.lastIndexWhere((message) => message.role == ChatRole.user);
+  }
+
+  int _lastAssistantIndexForCurrentTurn(List<ChatMessage> messages) {
+    final lastUserIndex = _lastUserIndex(messages);
+    for (var index = messages.length - 1; index > lastUserIndex; index -= 1) {
+      if (messages[index].role == ChatRole.assistant) return index;
+    }
+    return -1;
+  }
+
+  int _lastPendingAssistantIndexForCurrentTurn(List<ChatMessage> messages) {
+    final lastUserIndex = _lastUserIndex(messages);
+    for (var index = messages.length - 1; index > lastUserIndex; index -= 1) {
+      final message = messages[index];
+      if (message.role == ChatRole.assistant && message.pending) return index;
+    }
+    return -1;
+  }
+
   List<ChatMessage> _mergePendingAssistantMessages(List<ChatMessage> messages) {
     final merged = <ChatMessage>[];
-    var pendingAssistantIndex = -1;
 
     for (final message in messages) {
-      if (message.role != ChatRole.assistant || !message.pending) {
-        merged.add(message);
+      final previous = merged.isEmpty ? null : merged.last;
+      if (previous != null &&
+          previous.role == ChatRole.assistant &&
+          previous.pending &&
+          message.role == ChatRole.assistant &&
+          message.pending) {
+        merged[merged.length - 1] = ChatMessage(
+          role: ChatRole.assistant,
+          pending: true,
+          text: _mergeAssistantText(previous.text, message.text),
+          segments: _mergeSegments(previous.segments, message.segments),
+        );
         continue;
       }
-
-      if (pendingAssistantIndex < 0) {
-        pendingAssistantIndex = merged.length;
-        merged.add(message);
-        continue;
-      }
-
-      final previous = merged[pendingAssistantIndex];
-      merged[pendingAssistantIndex] = ChatMessage(
-        role: ChatRole.assistant,
-        pending: true,
-        text: _mergeAssistantText(previous.text, message.text),
-        segments: _mergeSegments(previous.segments, message.segments),
-      );
+      merged.add(message);
     }
 
     return merged;
@@ -942,8 +978,7 @@ class WorkspaceController extends ChangeNotifier {
     final current = [
       ...(messagesBySession[sessionId] ?? const <ChatMessage>[])
     ];
-    final pendingIndex = current.lastIndexWhere(
-        (message) => message.pending && message.role == ChatRole.assistant);
+    final pendingIndex = _lastPendingAssistantIndexForCurrentTurn(current);
     if (kind == 'done') {
       final pending = pendingIndex >= 0 ? current[pendingIndex] : null;
       final incomingSegments = [
@@ -970,9 +1005,7 @@ class WorkspaceController extends ChangeNotifier {
       if (pendingIndex >= 0) {
         current[pendingIndex] = done;
       } else if (doneText.isNotEmpty || doneSegments.isNotEmpty) {
-        final lastAssistantIndex = current.lastIndexWhere(
-          (message) => message.role == ChatRole.assistant,
-        );
+        final lastAssistantIndex = _lastAssistantIndexForCurrentTurn(current);
         if (lastAssistantIndex >= 0 &&
             _shouldMergeDoneIntoAssistant(current[lastAssistantIndex])) {
           final previous = current[lastAssistantIndex];
@@ -1033,9 +1066,7 @@ class WorkspaceController extends ChangeNotifier {
           segments: nextSegments,
         );
       } else {
-        final lastAssistantIndex = current.lastIndexWhere(
-          (message) => message.role == ChatRole.assistant,
-        );
+        final lastAssistantIndex = _lastAssistantIndexForCurrentTurn(current);
         if (lastAssistantIndex >= 0 && current[lastAssistantIndex].pending) {
           final pending = current[lastAssistantIndex];
           final accumulated =
@@ -1099,9 +1130,7 @@ class WorkspaceController extends ChangeNotifier {
           ]),
         );
       } else {
-        final lastAssistantIndex = current.lastIndexWhere(
-          (message) => message.role == ChatRole.assistant,
-        );
+        final lastAssistantIndex = _lastAssistantIndexForCurrentTurn(current);
         if (lastAssistantIndex >= 0 && current[lastAssistantIndex].pending) {
           final pending = current[lastAssistantIndex];
           final committedSegments = hasProcessSegment
@@ -1194,9 +1223,7 @@ class WorkspaceController extends ChangeNotifier {
     final current = [
       ...(messagesBySession[sessionId] ?? const <ChatMessage>[])
     ];
-    final pendingIndex = current.lastIndexWhere(
-      (message) => message.pending && message.role == ChatRole.assistant,
-    );
+    final pendingIndex = _lastPendingAssistantIndexForCurrentTurn(current);
     if (pendingIndex < 0) return;
 
     final pending = current[pendingIndex];
@@ -1363,16 +1390,13 @@ class WorkspaceController extends ChangeNotifier {
     final current = [
       ...(messagesBySession[sessionId] ?? const <ChatMessage>[])
     ];
-    final pendingIndex = current.lastIndexWhere(
-        (message) => message.pending && message.role == ChatRole.assistant);
+    final pendingIndex = _lastPendingAssistantIndexForCurrentTurn(current);
     if (pendingIndex >= 0) {
       final pending = current[pendingIndex];
       final accumulated = (pending.text ?? '') + content;
       current[pendingIndex] = pending.copyWith(text: accumulated);
     } else {
-      final lastAssistantIndex = current.lastIndexWhere(
-        (message) => message.role == ChatRole.assistant,
-      );
+      final lastAssistantIndex = _lastAssistantIndexForCurrentTurn(current);
       if (lastAssistantIndex >= 0 && current[lastAssistantIndex].pending) {
         final pending = current[lastAssistantIndex];
         final accumulated = (pending.text ?? '') + content;
