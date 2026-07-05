@@ -90,6 +90,9 @@ func (h *Handler) Router() http.Handler {
 	authed.HandleFunc("GET /admin/users", h.listManagedUsers)
 	authed.HandleFunc("PATCH /admin/users/{userId}", h.updateManagedUser)
 	authed.HandleFunc("POST /admin/users/{userId}/reset-password", h.resetManagedUserPassword)
+	// Token 用量：桌面端上报、按工具聚合查询
+	authed.HandleFunc("POST /token-usage", h.reportTokenUsage)
+	authed.HandleFunc("GET /token-usage/summary", h.getTokenUsageSummary)
 
 	mux.Handle("/", auth.AuthMiddleware(h.Secret, authed))
 

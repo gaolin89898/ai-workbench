@@ -1235,3 +1235,74 @@ export function initDesktopCloudSync(mainWindow: BrowserWindow): void {
 export function getDesktopCloudSync(): DesktopCloudSync | null {
   return syncInstance;
 }
+
+// ---- Token 用量上报与查询 ----
+
+export interface TokenUsageReport {
+  aiSessionId: string;
+  providerId: string;
+  inputTokens: number;
+  outputTokens: number;
+  reasoningTokens: number;
+  totalTokens: number;
+}
+
+export interface TokenUsageSummaryItem {
+  providerId: string;
+  inputTokens: number;
+  outputTokens: number;
+  reasoningTokens: number;
+  totalTokens: number;
+  turnCount: number;
+}
+
+export interface TokenUsageSummary {
+  providers: TokenUsageSummaryItem[];
+  totals: TokenUsageSummaryItem;
+}
+
+/**
+ * 上报一次 AI turn 的 token 用量到后端。best-effort：失败仅打日志，不影响主流程。
+ */
+export async function reportTokenUsage(report: TokenUsageReport): Promise<void> {
+  const config = loadStoredConfig();
+  if (!config || !config.accessToken || !report.providerId) return;
+  const url = `${normalizeServerUrl(config.serverUrl)}/token-usage`;
+  try {
+    await fetch(url, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${config.accessToken}`,
+      },
+      body: JSON.stringify({
+        aiSessionId: report.aiSessionId || undefined,
+        providerId: report.providerId,
+        inputTokens: report.inputTokens,
+        outputTokens: report.outputTokens,
+        reasoningTokens: report.reasoningTokens,
+        totalTokens: report.totalTokens,
+      }),
+    });
+  } catch (e) {
+    console.error("reportTokenUsage failed:", e);
+  }
+}
+
+/**
+ * 查询当前用户按工具聚合的 token 用量。
+ */
+export async function fetchTokenUsageSummary(): Promise<TokenUsageSummary | null> {
+  const config = loadStoredConfig();
+  if (!config || !config.accessToken) return null;
+  const url = `${normalizeServerUrl(config.serverUrl)}/token-usage/summary`;
+  try {
+    return (await fetchJson(url, {
+      method: "GET",
+      headers: { Authorization: `Bearer ${config.accessToken}` },
+    })) as TokenUsageSummary;
+  } catch (e) {
+    console.error("fetchTokenUsageSummary failed:", e);
+    return null;
+  }
+}

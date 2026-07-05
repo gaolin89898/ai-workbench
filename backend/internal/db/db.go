@@ -318,6 +318,47 @@ func (d *DB) InsertActivityLog(ctx context.Context, item models.ActivityLogInser
 	return err
 }
 
+// ---- Token Usage ----
+
+// InsertTokenUsage 写入一条 token 用量记录。
+func (d *DB) InsertTokenUsage(ctx context.Context, item models.TokenUsageInsert) error {
+	_, err := d.Pool.Exec(ctx,
+		"INSERT INTO token_usage (user_id, device_id, ai_session_id, provider_id, input_tokens, output_tokens, reasoning_tokens, total_tokens) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)",
+		item.UserId, item.DeviceId, item.AiSessionId, item.ProviderId, item.InputTokens, item.OutputTokens, item.ReasoningTokens, item.TotalTokens,
+	)
+	return err
+}
+
+// SumTokenUsageByProvider 按 provider 聚合指定用户的 token 用量。
+func (d *DB) SumTokenUsageByProvider(ctx context.Context, userID string) ([]models.TokenUsageSummary, error) {
+	rows, err := d.Pool.Query(ctx,
+		`SELECT provider_id,
+		        COALESCE(SUM(input_tokens), 0),
+		        COALESCE(SUM(output_tokens), 0),
+		        COALESCE(SUM(reasoning_tokens), 0),
+		        COALESCE(SUM(total_tokens), 0),
+		        COUNT(*)
+		 FROM token_usage
+		 WHERE user_id = $1
+		 GROUP BY provider_id
+		 ORDER BY provider_id`,
+		userID,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []models.TokenUsageSummary
+	for rows.Next() {
+		var s models.TokenUsageSummary
+		if err := rows.Scan(&s.ProviderId, &s.InputTokens, &s.OutputTokens, &s.ReasoningTokens, &s.TotalTokens, &s.TurnCount); err != nil {
+			return nil, err
+		}
+		out = append(out, s)
+	}
+	return out, rows.Err()
+}
+
 // ---- Settings ----
 
 // LoadSettings loads a user's settings row (load_settings).

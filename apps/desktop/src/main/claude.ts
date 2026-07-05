@@ -6,6 +6,7 @@
 import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
 import { createInterface, type Interface } from "node:readline";
 import type { RunAiChatRequest, AiChatOutputEvent } from "../services/desktop";
+import { reportTokenUsage } from "./sync";
 
 // Structural sender — WebContents / BrowserWindow satisfy this, and test
 // stubs can be passed too.
@@ -88,6 +89,36 @@ function extractAssistantText(message: Record<string, unknown>): string | undefi
 function extractSessionId(message: Record<string, unknown>): string | undefined {
   const sid = message["session_id"] ?? message["sessionId"];
   return typeof sid === "string" ? sid : undefined;
+}
+
+// Claude stream-json 的 result 消息原生带 usage：
+// { usage: { input_tokens, output_tokens, cache_creation_input_tokens, cache_read_input_tokens } }
+function reportClaudeTokenUsage(aiSessionId: string, message: Record<string, unknown>): void {
+  try {
+    const usage = message["usage"];
+    if (!usage || typeof usage !== "object") return;
+    const u = usage as Record<string, unknown>;
+    const inputTokens = numOrZero(u["input_tokens"]) + numOrZero(u["cache_read_input_tokens"]);
+    const outputTokens = numOrZero(u["output_tokens"]);
+    const total = inputTokens + outputTokens;
+    if (total <= 0) return;
+    void reportTokenUsage({
+      aiSessionId,
+      providerId: "claude",
+      inputTokens,
+      outputTokens,
+      reasoningTokens: 0,
+      totalTokens: total,
+    });
+  } catch {
+    // best-effort
+  }
+}
+
+function numOrZero(v: unknown): number {
+  if (typeof v === "number" && Number.isFinite(v)) return Math.floor(v);
+  if (typeof v === "string" && /^\d+$/.test(v)) return parseInt(v, 10);
+  return 0;
 }
 
 // ---------- Internal: single claude invocation ----------
@@ -289,6 +320,9 @@ function runClaudeOnce(
         case "result": {
           resultReceived = true;
           clearTimeout(timeout);
+
+          // Claude stream-json 的 result 消息原生带 usage 字段
+          reportClaudeTokenUsage(aiSessionId, msg);
 
           const subtype = strOrUndef(msg["subtype"]);
           const isErrorFlag = msg["is_error"];

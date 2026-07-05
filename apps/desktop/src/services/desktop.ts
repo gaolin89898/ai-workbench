@@ -1,4 +1,4 @@
-export type ViewName = "workspace" | "projects" | "aiSessions" | "providers" | "settings";
+export type ViewName = "workspace" | "projects" | "aiSessions" | "providers" | "settings" | "tokenUsage";
 
 export type TerminalSession = {
   sessionId: string;
@@ -103,6 +103,20 @@ export type SavedCloudConfig = {
   paired: boolean;
   authMode?: "desktop-login" | "pairing";
   displayName?: string;
+};
+
+export type TokenUsageSummaryItem = {
+  providerId: string;
+  inputTokens: number;
+  outputTokens: number;
+  reasoningTokens: number;
+  totalTokens: number;
+  turnCount: number;
+};
+
+export type TokenUsageSummary = {
+  providers: TokenUsageSummaryItem[];
+  totals: TokenUsageSummaryItem;
 };
 
 export type ChatSegment =
@@ -265,6 +279,7 @@ export type ShellInputRequest = {
 };
 
 export type CodexApprovalDecision = "approved" | "denied";
+export type CodexApprovalMode = "suggest" | "autoEdit" | "fullAccess";
 
 export type CodexApprovalResponseRequest = {
   aiSessionId: string;
@@ -277,6 +292,7 @@ export type RunCodexChatRequest = {
   projectPath: string;
   prompt: string;
   images?: ChatImageAttachment[];
+  approvalMode?: CodexApprovalMode;
 };
 
 export type RunAiChatRequest = {
@@ -441,6 +457,8 @@ export const desktopApi = {
     ipc<string>("build_desktop_pairing_qr_payload", server, code),
   getCloudConfig: (): Promise<SavedCloudConfig | null> =>
     ipc<SavedCloudConfig | null>("get_cloud_config"),
+  getTokenUsageSummary: (): Promise<TokenUsageSummary | null> =>
+    ipc<TokenUsageSummary | null>("get_token_usage_summary"),
   readClipboardImage: (): Promise<ClipboardImage | null> =>
     ipc<ClipboardImage | null>("read_clipboard_image"),
   listAiProviders: (): Promise<AiProvider[]> =>

@@ -228,6 +228,15 @@ class ApiClient {
         jsonDecode(response.body) as Map<String, dynamic>);
   }
 
+  /// GET /token-usage/summary — 拉取云端按工具聚合的 Token 用量。
+  Future<TokenUsageSummary> tokenUsageSummary() async {
+    final response =
+        await http.get(uri('/token-usage/summary'), headers: headers);
+    _throwIfBad(response);
+    return TokenUsageSummary.fromJson(
+        jsonDecode(response.body) as Map<String, dynamic>);
+  }
+
   // ---- OAuth 钉钉登录 ----
 
   /// 启动钉钉 OAuth 流程，返回授权 URL + state。

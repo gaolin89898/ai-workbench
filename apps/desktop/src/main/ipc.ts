@@ -27,6 +27,7 @@ import {
   buildDesktopPairingQrPayload,
   getCloudConfig,
   getDesktopCloudSync,
+  fetchTokenUsageSummary,
 } from "./sync";
 import { saveCredentials, loadCredentials, clearCredentials } from "./credentials";
 import { respondCodexApproval, runCodexChat, stopCodexChat } from "./codex";
@@ -189,6 +190,8 @@ export function registerIpcHandlers(win?: BrowserWindow): void {
   );
 
   handle("get_cloud_config", async () => getCloudConfig());
+
+  handle("get_token_usage_summary", async () => fetchTokenUsageSummary());
 
   handle("read_clipboard_image", async () => {
     const image = clipboard.readImage();

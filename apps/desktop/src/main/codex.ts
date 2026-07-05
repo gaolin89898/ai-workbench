@@ -6,7 +6,8 @@
 import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
 import { createInterface, type Interface } from "node:readline";
 import * as os from "node:os";
-import type { RunCodexChatRequest, ChatImageAttachment, ChatSegment, CodexApprovalDecision, CodexTraceSnapshot } from "../services/desktop";
+import type { RunCodexChatRequest, ChatImageAttachment, ChatSegment, CodexApprovalDecision, CodexApprovalMode, CodexTraceSnapshot } from "../services/desktop";
+import { reportTokenUsage } from "./sync";
 import { getLocalAiSession, resetLocalAiTrace, upsertLocalAiTrace } from "./db";
 import { codexTraceSnapshotToSegments, reduceCodexTraceSnapshot, type CodexRawTraceEvent } from "./codex_trace";
 
@@ -57,6 +58,7 @@ interface CodexSession {
   turnResolver: { resolve: () => void; reject: (error: Error) => void } | null;
   errorEmitted: boolean;
   cancelled: boolean;
+  approvalMode: CodexApprovalMode;
 }
 
 // ---------- Constants ----------
@@ -375,7 +377,6 @@ function handleApprovalRequest(
     segment,
     resolved: false,
   };
-  session.pendingApprovals.set(segment.approvalId, approval);
   emitTraceMethod(session, "approval/requested", {
     approvalId: segment.approvalId,
     approvalKind: segment.approvalKind,
@@ -384,6 +385,13 @@ function handleApprovalRequest(
     fileChanges: segment.fileChanges,
     reason: segment.reason,
   });
+  if (session.approvalMode === "autoEdit" || session.approvalMode === "fullAccess") {
+    approval.resolved = true;
+    sendResponse(session, id, approvalResponseFor(method, "approved"));
+    updateApprovalSegment(session, approval, "approved", session.approvalMode === "fullAccess" ? "已根据完全访问权限自动批准。" : "已根据替我审批自动批准。");
+    return;
+  }
+  session.pendingApprovals.set(segment.approvalId, approval);
 }
 
 function resolvePendingApprovals(session: CodexSession, status: "expired" | "failed", detail?: string): void {
@@ -472,6 +480,39 @@ async function sendRequestWithReconnectRetry(
   throw lastError instanceof Error ? lastError : new Error(errorMessage(lastError));
 }
 
+// Codex app-server turn/completed 的 params 原生带 output_token_usage，
+// 形如 { input_tokens, output_tokens, reasoning_tokens }。提取并上报。
+function reportTurnTokenUsage(session: CodexSession, params: unknown): void {
+  try {
+    if (!params || typeof params !== "object") return;
+    const p = params as Record<string, unknown>;
+    const usage = p["output_token_usage"] ?? p["token_usage"] ?? p["usage"];
+    if (!usage || typeof usage !== "object") return;
+    const u = usage as Record<string, unknown>;
+    const inputTokens = numOrUndef(u["input_tokens"]) ?? numOrUndef(u["inputTokens"]) ?? 0;
+    const outputTokens = numOrUndef(u["output_tokens"]) ?? numOrUndef(u["outputTokens"]) ?? 0;
+    const reasoningTokens = numOrUndef(u["reasoning_tokens"]) ?? numOrUndef(u["reasoningTokens"]) ?? 0;
+    const total = inputTokens + outputTokens + reasoningTokens;
+    if (total <= 0) return;
+    void reportTokenUsage({
+      aiSessionId: session.aiSessionId,
+      providerId: "codex",
+      inputTokens,
+      outputTokens,
+      reasoningTokens,
+      totalTokens: total,
+    });
+  } catch {
+    // best-effort，不影响主流程
+  }
+}
+
+function numOrUndef(v: unknown): number | undefined {
+  if (typeof v === "number" && Number.isFinite(v)) return Math.floor(v);
+  if (typeof v === "string" && /^\d+$/.test(v)) return parseInt(v, 10);
+  return undefined;
+}
+
 function handleNotification(
   session: CodexSession,
   method: string,
@@ -490,6 +531,7 @@ function handleNotification(
       break;
     }
     case "turn/completed": {
+      reportTurnTokenUsage(session, params);
       if (session.turnResolver) {
         session.turnResolver.resolve();
         session.turnResolver = null;
@@ -514,6 +556,7 @@ function createSession(
   cwd: string,
   sender: Sender,
   traceEnabled = false,
+  approvalMode: CodexApprovalMode = "suggest",
 ): CodexSession {
   const child = spawnCodex(["app-server", "--stdio"], cwd);
 
@@ -535,6 +578,7 @@ function createSession(
     turnResolver: null,
     errorEmitted: false,
     cancelled: false,
+    approvalMode,
   };
 
   // stdout: parse JSON-RPC lines
@@ -724,8 +768,8 @@ export async function runCodexChat(
   req: RunCodexChatRequest,
   sender: Sender
 ): Promise<string> {
-  const { aiSessionId, projectPath, prompt, images = [] } = req;
-  const session = createSession(aiSessionId, projectPath, sender, true);
+  const { aiSessionId, projectPath, prompt, images = [], approvalMode = "suggest" } = req;
+  const session = createSession(aiSessionId, projectPath, sender, true, approvalMode);
   const initialTrace = resetLocalAiTrace({
     aiSessionId,
     providerId: "codex",

@@ -462,3 +462,50 @@ class UserSettings {
         'autoReconnectEnabled': autoReconnectEnabled,
       };
 }
+
+/// 单个 AI 工具的 Token 用量聚合。
+class TokenUsageSummaryItem {
+  const TokenUsageSummaryItem({
+    required this.providerId,
+    required this.inputTokens,
+    required this.outputTokens,
+    required this.reasoningTokens,
+    required this.totalTokens,
+    required this.turnCount,
+  });
+
+  final String providerId;
+  final int inputTokens;
+  final int outputTokens;
+  final int reasoningTokens;
+  final int totalTokens;
+  final int turnCount;
+
+  factory TokenUsageSummaryItem.fromJson(Map<String, dynamic> json) =>
+      TokenUsageSummaryItem(
+        providerId: json['providerId'] as String? ?? '',
+        inputTokens: (json['inputTokens'] as num?)?.toInt() ?? 0,
+        outputTokens: (json['outputTokens'] as num?)?.toInt() ?? 0,
+        reasoningTokens: (json['reasoningTokens'] as num?)?.toInt() ?? 0,
+        totalTokens: (json['totalTokens'] as num?)?.toInt() ?? 0,
+        turnCount: (json['turnCount'] as num?)?.toInt() ?? 0,
+      );
+}
+
+/// 所有 AI 工具的 Token 用量汇总。
+class TokenUsageSummary {
+  const TokenUsageSummary({required this.providers, required this.totals});
+
+  final List<TokenUsageSummaryItem> providers;
+  final TokenUsageSummaryItem totals;
+
+  factory TokenUsageSummary.fromJson(Map<String, dynamic> json) =>
+      TokenUsageSummary(
+        providers: ((json['providers'] as List<dynamic>?) ?? const [])
+            .map((e) => TokenUsageSummaryItem.fromJson(e as Map<String, dynamic>))
+            .toList(),
+        totals: TokenUsageSummaryItem.fromJson(
+          (json['totals'] as Map<String, dynamic>?) ?? const {},
+        ),
+      );
+}

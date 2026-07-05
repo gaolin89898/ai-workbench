@@ -11,6 +11,7 @@ const routes: RouteRecordRaw[] = [
       { path: "projects", name: "projects", component: () => import("./components/ProjectsView.vue") },
       { path: "providers", name: "providers", component: () => import("./components/ProvidersView.vue") },
       { path: "settings", name: "settings", component: () => import("./components/SettingsView.vue") },
+      { path: "token-usage", name: "tokenUsage", component: () => import("./components/TokenUsageView.vue") },
     ],
   },
   {

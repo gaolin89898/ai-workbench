@@ -1,6 +1,6 @@
 import { computed, ref, watch } from "vue";
 import router from "../router";
-import { desktopApi, type AiChatOutputEvent, type AiProvider, type AiProviderTrace, type AiSession, type AiTraceUpdateEvent, type AppUpdateDownloadProgress, type ChatImageAttachment, type ChatMessage, type ChatSegment, type DesktopPairingStatus, type ProviderStatus, type TerminalSession, type ViewName, type WorkspaceProject } from "../services/desktop";
+import { desktopApi, type AiChatOutputEvent, type AiProvider, type AiProviderTrace, type AiSession, type AiTraceUpdateEvent, type AppUpdateDownloadProgress, type ChatImageAttachment, type ChatMessage, type ChatSegment, type CodexApprovalMode, type DesktopPairingStatus, type ProviderStatus, type TerminalSession, type ViewName, type WorkspaceProject } from "../services/desktop";
 import { decodeAssistantMessageFromStorage, encodeAssistantMessageForStorage, extractAssistantText } from "../utils/chat";
 
 const providers = ref<AiProvider[]>([]);
@@ -328,6 +328,7 @@ const routePaths: Record<ViewName, string> = {
   aiSessions: "/chat",
   providers: "/providers",
   settings: "/settings",
+  tokenUsage: "/token-usage",
 };
 
 watch(providers, (next) => {
@@ -908,7 +909,7 @@ function isCodexExternalMirrorSession(session: AiSession | null) {
   return !session.providerSessionId.startsWith("app-server:");
 }
 
-async function sendPrompt(prompt: string, images: ChatImageAttachment[] = []) {
+async function sendPrompt(prompt: string, images: ChatImageAttachment[] = [], approvalMode: CodexApprovalMode = "suggest") {
   pushChatDebugEvent("收到发送请求");
   await initAiEventListeners();
   const trimmed = prompt.trim();
@@ -1010,6 +1011,7 @@ async function sendPrompt(prompt: string, images: ChatImageAttachment[] = []) {
       projectPath,
       prompt: promptForSession,
       images: plainImages,
+      approvalMode: providerId === "codex" ? approvalMode : undefined,
     }).then((providerSessionId) => {
       const pending = pendingAssistants.get(sessionId);
       const startedAt = pending?.startedAt ?? chatRunStates.value[sessionId]?.startedAt ?? performance.now();

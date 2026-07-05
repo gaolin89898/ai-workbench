@@ -300,6 +300,7 @@ const routePaths = {
     aiSessions: "/chat",
     providers: "/providers",
     settings: "/settings",
+    tokenUsage: "/token-usage",
 };
 watch(providers, (next) => {
     if (!selectedProviderId.value && next.length)
@@ -866,7 +867,7 @@ function isCodexExternalMirrorSession(session) {
         return false;
     return !session.providerSessionId.startsWith("app-server:");
 }
-async function sendPrompt(prompt, images = []) {
+async function sendPrompt(prompt, images = [], approvalMode = "suggest") {
     pushChatDebugEvent("收到发送请求");
     await initAiEventListeners();
     const trimmed = prompt.trim();
@@ -969,6 +970,7 @@ async function sendPrompt(prompt, images = []) {
             projectPath,
             prompt: promptForSession,
             images: plainImages,
+            approvalMode: providerId === "codex" ? approvalMode : undefined,
         }).then((providerSessionId) => {
             const pending = pendingAssistants.get(sessionId);
             const startedAt = pending?.startedAt ?? chatRunStates.value[sessionId]?.startedAt ?? performance.now();

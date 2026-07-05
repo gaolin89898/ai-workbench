@@ -170,3 +170,39 @@ type ActivityLogInsert struct {
 	Body      string
 	Risky     bool
 }
+
+// TokenUsage maps the `token_usage` table. 每条记录对应一次 AI turn 的 token 消耗。
+type TokenUsage struct {
+	Id              string    `json:"id" db:"id"`
+	UserId          string    `json:"userId" db:"user_id"`
+	DeviceId        string    `json:"deviceId" db:"device_id"`
+	AiSessionId     *string   `json:"aiSessionId" db:"ai_session_id"`
+	ProviderId      string    `json:"providerId" db:"provider_id"`
+	InputTokens     int32     `json:"inputTokens" db:"input_tokens"`
+	OutputTokens    int32     `json:"outputTokens" db:"output_tokens"`
+	ReasoningTokens int32     `json:"reasoningTokens" db:"reasoning_tokens"`
+	TotalTokens     int32     `json:"totalTokens" db:"total_tokens"`
+	CreatedAt       time.Time `json:"createdAt" db:"created_at"`
+}
+
+// TokenUsageInsert 用于写入一条 token 用量记录。
+type TokenUsageInsert struct {
+	UserId          string
+	DeviceId        string
+	AiSessionId     *string
+	ProviderId      string
+	InputTokens     int32
+	OutputTokens    int32
+	ReasoningTokens int32
+	TotalTokens     int32
+}
+
+// TokenUsageSummary 是按 provider 聚合后的统计行。
+type TokenUsageSummary struct {
+	ProviderId      string `json:"providerId"`
+	InputTokens     int64  `json:"inputTokens"`
+	OutputTokens    int64  `json:"outputTokens"`
+	ReasoningTokens int64  `json:"reasoningTokens"`
+	TotalTokens     int64  `json:"totalTokens"`
+	TurnCount       int64  `json:"turnCount"`
+}

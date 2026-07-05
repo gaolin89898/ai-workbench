@@ -7,6 +7,7 @@ import '../widgets/app_theme.dart';
 import 'account_management_page.dart';
 import 'archived_sessions_page.dart';
 import 'login_page.dart';
+import 'token_usage_page.dart';
 import 'update_page.dart';
 
 class SettingsPage extends StatefulWidget {
@@ -140,6 +141,23 @@ class _SettingsPageState extends State<SettingsPage> {
                         builder: (_) => WorkspaceScope(
                           controller: ws,
                           child: const ArchivedSessionsPage(),
+                        ),
+                      ),
+                    ),
+                    trailing: const _Chevron(),
+                  ),
+                  const Divider(height: 1, color: AppColors.divider),
+                  _Row(
+                    icon: Icons.data_usage_outlined,
+                    background: AppColors.infoSoft,
+                    foreground: AppColors.info,
+                    title: 'Token 使用',
+                    subtitle: '查看各 AI 工具的云端 Token 用量',
+                    onTap: () => Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (_) => WorkspaceScope(
+                          controller: ws,
+                          child: const TokenUsagePage(),
                         ),
                       ),
                     ),

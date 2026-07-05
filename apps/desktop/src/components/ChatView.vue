@@ -4,7 +4,7 @@ import ChatMessageRow from "./ChatMessageRow.vue";
 import ApprovalSegment from "./ChatSegment.vue";
 import TerminalView from "./TerminalView.vue";
 import { useWorkspace } from "../composables/useWorkspace";
-import { desktopApi, type AiProvider, type ChatImageAttachment, type ChatMessage, type ChatSegment } from "../services/desktop";
+import { desktopApi, type AiProvider, type ChatImageAttachment, type ChatMessage, type ChatSegment, type CodexApprovalMode } from "../services/desktop";
 
 const providerClaudeIcon = new URL("../assets/icons/provider-claude.svg", import.meta.url).href;
 const providerCodexIcon = new URL("../assets/icons/provider-codex.svg", import.meta.url).href;
@@ -19,8 +19,29 @@ const imageAttachments = ref<ChatImageAttachment[]>([]);
 const previewImage = ref<ChatImageAttachment | null>(null);
 const chatScroll = ref<HTMLDivElement | null>(null);
 const startPromptBox = ref<HTMLFormElement | null>(null);
+const chatComposer = ref<HTMLDivElement | null>(null);
 const activeTab = ref<"chat" | "terminal" | "logs">("chat");
 const startMenuOpen = ref(false);
+const approvalMenuOpen = ref(false);
+const codexApprovalMode = ref<CodexApprovalMode>("autoEdit");
+
+const approvalModes = [
+  {
+    id: "suggest",
+    label: "建议批准",
+    description: "每次编辑外部文件和使用互联网时始终询问。",
+  },
+  {
+    id: "autoEdit",
+    label: "替我审批",
+    description: "仅对检测到的风险操作请求批准。",
+  },
+  {
+    id: "fullAccess",
+    label: "完全访问权限",
+    description: "可不受限制地访问互联网和您电脑上的任务。",
+  },
+] as const;
 const AUTO_SCROLL_BOTTOM_THRESHOLD = 96;
 const VIRTUAL_MESSAGE_ESTIMATE = 156;
 const VIRTUAL_SCROLL_OVERSCAN = 900;
@@ -90,6 +111,7 @@ function logEventTime(event: string): string {
   return event.slice(0, 8);
 }
 const canSend = computed(() => Boolean(prompt.value.trim() || imageAttachments.value.length || ws.activeChatIsRunning.value));
+const selectedApprovalMode = computed(() => approvalModes.find((mode) => mode.id === codexApprovalMode.value) ?? approvalModes[1]);
 const providerIcons: Record<string, string> = {
   claude: providerClaudeIcon,
   codex: providerCodexIcon,
@@ -342,17 +364,34 @@ function providerIcon(providerId: string) {
   return providerIcons[providerId] ?? providerCodexIcon;
 }
 
-function closeStartMenuOnOutsideClick(event: PointerEvent) {
-  if (!startMenuOpen.value) return;
+function closeFloatingMenusOnOutsideClick(event: PointerEvent) {
+  if (!startMenuOpen.value && !approvalMenuOpen.value) return;
   const target = event.target;
-  if (target instanceof Node && startPromptBox.value?.contains(target)) return;
+  if (target instanceof Node && (startPromptBox.value?.contains(target) || chatComposer.value?.contains(target))) return;
   startMenuOpen.value = false;
+  approvalMenuOpen.value = false;
+}
+
+function toggleApprovalMenu() {
+  approvalMenuOpen.value = !approvalMenuOpen.value;
+  if (approvalMenuOpen.value) startMenuOpen.value = false;
+}
+
+function selectApprovalMode(mode: CodexApprovalMode) {
+  codexApprovalMode.value = mode;
+  approvalMenuOpen.value = false;
 }
 
 function onWindowKeydown(event: KeyboardEvent) {
   if (event.key === "Escape" && previewImage.value) {
     event.preventDefault();
     previewImage.value = null;
+    return;
+  }
+  if (event.key === "Escape" && (startMenuOpen.value || approvalMenuOpen.value)) {
+    event.preventDefault();
+    startMenuOpen.value = false;
+    approvalMenuOpen.value = false;
     return;
   }
   if (event.key !== "Escape" || !ws.activeChatIsRunning.value) return;
@@ -533,7 +572,7 @@ watch(
 );
 
 onMounted(() => {
-  document.addEventListener("pointerdown", closeStartMenuOnOutsideClick);
+  document.addEventListener("pointerdown", closeFloatingMenusOnOutsideClick);
   window.addEventListener("keydown", onWindowKeydown);
   window.addEventListener("resize", updateVirtualViewport);
   observeChatScroll();
@@ -541,7 +580,7 @@ onMounted(() => {
 });
 
 onBeforeUnmount(() => {
-  document.removeEventListener("pointerdown", closeStartMenuOnOutsideClick);
+  document.removeEventListener("pointerdown", closeFloatingMenusOnOutsideClick);
   window.removeEventListener("keydown", onWindowKeydown);
   window.removeEventListener("resize", updateVirtualViewport);
   chatScrollResizeObserver?.disconnect();
@@ -584,12 +623,17 @@ async function send() {
   }
   pendingPromptAnchorKey = latestUserAnchor()?.key ?? "__empty__";
   try {
-    await ws.sendPrompt(value, images);
+    await ws.sendPrompt(value, images, codexApprovalMode.value);
   } finally {
     if (pendingPromptAnchorKey === (latestUserAnchor()?.key ?? "__empty__")) {
       pendingPromptAnchorKey = null;
     }
   }
+}
+
+function toggleStartMenu() {
+  startMenuOpen.value = !startMenuOpen.value;
+  if (startMenuOpen.value) approvalMenuOpen.value = false;
 }
 
 function selectStartProvider(providerId = "codex") {
@@ -639,7 +683,7 @@ function onPromptKeydown(event: KeyboardEvent) {
             :class="{ open: startMenuOpen }"
             title="选择 AI 会话类型"
             type="button"
-            @click="startMenuOpen = !startMenuOpen"
+            @click="toggleStartMenu"
             aria-label="选择 AI 会话类型"
           >
             <img :src="providerIcon(selectedProvider?.id ?? 'codex')" alt="" aria-hidden="true" />
@@ -648,6 +692,53 @@ function onPromptKeydown(event: KeyboardEvent) {
               <path d="M5 6.5 8 9.5l3-3" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" />
             </svg>
           </button>
+          <button
+            class="codex-approval-trigger start-approval-trigger"
+            :class="{ open: approvalMenuOpen }"
+            title="选择 Codex 操作批准方式"
+            type="button"
+            @click="toggleApprovalMenu"
+            aria-label="选择 Codex 操作批准方式"
+          >
+            <svg viewBox="0 0 16 16" fill="none" aria-hidden="true">
+              <path d="M8 2.25 13 4.1v3.7c0 3-2.05 5.05-5 5.95-2.95-.9-5-2.95-5-5.95V4.1l5-1.85Z" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round" />
+              <path d="M5.75 7.95 7.25 9.4l3.05-3.05" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" />
+            </svg>
+            <span>{{ selectedApprovalMode.label }}</span>
+          </button>
+          <div v-if="approvalMenuOpen" class="codex-approval-menu">
+            <div class="codex-approval-menu-head">
+              <span>应如何批准 Codex 操作?</span>
+              <a href="https://github.com/openai/codex" target="_blank" rel="noreferrer">了解更多</a>
+            </div>
+            <button
+              v-for="mode in approvalModes"
+              :key="mode.id"
+              type="button"
+              :class="{ active: mode.id === codexApprovalMode }"
+              @click="selectApprovalMode(mode.id)"
+            >
+              <span class="codex-approval-icon" aria-hidden="true">
+                <svg v-if="mode.id === 'suggest'" viewBox="0 0 16 16" fill="none">
+                  <path d="M6.2 13.5c-1.55-.75-2.65-2.35-2.65-4.25v-2.3c0-.65.55-1.15 1.18-1.08.43.05.78.34.93.73V3.1c0-.61.5-1.1 1.1-1.1.61 0 1.1.49 1.1 1.1v2.65-3c0-.6.5-1.1 1.1-1.1.61 0 1.1.5 1.1 1.1v3.15-2.2c0-.6.5-1.1 1.1-1.1.61 0 1.1.5 1.1 1.1v4.45c0 2.95-1.7 5.35-4.4 5.35h-1.66Z" stroke="currentColor" stroke-width="1.25" stroke-linecap="round" stroke-linejoin="round" />
+                </svg>
+                <svg v-else-if="mode.id === 'autoEdit'" viewBox="0 0 16 16" fill="none">
+                  <path d="M8 2.2 13 4v3.55c0 2.85-2.05 5.15-5 6.25-2.95-1.1-5-3.4-5-6.25V4l5-1.8Z" stroke="currentColor" stroke-width="1.25" stroke-linejoin="round" />
+                  <path d="M6 8.1 7.35 9.45 10.4 6.4" stroke="currentColor" stroke-width="1.45" stroke-linecap="round" stroke-linejoin="round" />
+                </svg>
+                <svg v-else viewBox="0 0 16 16" fill="none">
+                  <path d="M8 1.9 13 3.8v3.7c0 3.05-2.05 5.35-5 6.6-2.95-1.25-5-3.55-5-6.6V3.8l5-1.9Z" stroke="currentColor" stroke-width="1.25" stroke-linejoin="round" />
+                  <path d="M8 5.05v3.35" stroke="currentColor" stroke-width="1.35" stroke-linecap="round" />
+                  <path d="M8 10.85h.01" stroke="currentColor" stroke-width="2" stroke-linecap="round" />
+                </svg>
+              </span>
+              <span class="codex-approval-copy">
+                <strong>{{ mode.label }}</strong>
+                <small>{{ mode.description }}</small>
+              </span>
+              <span v-if="mode.id === codexApprovalMode" class="codex-approval-check" aria-hidden="true">✓</span>
+            </button>
+          </div>
           <div v-if="startMenuOpen" class="codex-start-menu">
             <span class="codex-start-menu-label">AI 会话类型</span>
             <button
@@ -802,6 +893,7 @@ function onPromptKeydown(event: KeyboardEvent) {
         <div v-if="showCreateHint" class="chat-toast" :class="{ error: ws.createAiError.value }">{{ ws.createAiResult.value }}</div>
         <div
           v-if="activeTab === 'chat'"
+          ref="chatComposer"
           class="chat-composer"
           :class="{ 'has-approval-cover': pendingApprovalSegment }"
         >
@@ -826,6 +918,53 @@ function onPromptKeydown(event: KeyboardEvent) {
             </div>
           </div>
           <textarea v-model="prompt" rows="3" placeholder="输入你想做的事" @keydown="onPromptKeydown" @paste="onPromptPaste"></textarea>
+          <button
+            class="codex-approval-trigger chat-approval-trigger"
+            :class="{ open: approvalMenuOpen }"
+            title="选择 Codex 操作批准方式"
+            type="button"
+            @click="toggleApprovalMenu"
+            aria-label="选择 Codex 操作批准方式"
+          >
+            <svg viewBox="0 0 16 16" fill="none" aria-hidden="true">
+              <path d="M8 2.25 13 4.1v3.7c0 3-2.05 5.05-5 5.95-2.95-.9-5-2.95-5-5.95V4.1l5-1.85Z" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round" />
+              <path d="M5.75 7.95 7.25 9.4l3.05-3.05" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" />
+            </svg>
+            <span>{{ selectedApprovalMode.label }}</span>
+          </button>
+          <div v-if="approvalMenuOpen" class="codex-approval-menu chat-approval-menu">
+            <div class="codex-approval-menu-head">
+              <span>应如何批准 Codex 操作?</span>
+              <a href="https://github.com/openai/codex" target="_blank" rel="noreferrer">了解更多</a>
+            </div>
+            <button
+              v-for="mode in approvalModes"
+              :key="mode.id"
+              type="button"
+              :class="{ active: mode.id === codexApprovalMode }"
+              @click="selectApprovalMode(mode.id)"
+            >
+              <span class="codex-approval-icon" aria-hidden="true">
+                <svg v-if="mode.id === 'suggest'" viewBox="0 0 16 16" fill="none">
+                  <path d="M6.2 13.5c-1.55-.75-2.65-2.35-2.65-4.25v-2.3c0-.65.55-1.15 1.18-1.08.43.05.78.34.93.73V3.1c0-.61.5-1.1 1.1-1.1.61 0 1.1.49 1.1 1.1v2.65-3c0-.6.5-1.1 1.1-1.1.61 0 1.1.5 1.1 1.1v3.15-2.2c0-.6.5-1.1 1.1-1.1.61 0 1.1.5 1.1 1.1v4.45c0 2.95-1.7 5.35-4.4 5.35h-1.66Z" stroke="currentColor" stroke-width="1.25" stroke-linecap="round" stroke-linejoin="round" />
+                </svg>
+                <svg v-else-if="mode.id === 'autoEdit'" viewBox="0 0 16 16" fill="none">
+                  <path d="M8 2.2 13 4v3.55c0 2.85-2.05 5.15-5 6.25-2.95-1.1-5-3.4-5-6.25V4l5-1.8Z" stroke="currentColor" stroke-width="1.25" stroke-linejoin="round" />
+                  <path d="M6 8.1 7.35 9.45 10.4 6.4" stroke="currentColor" stroke-width="1.45" stroke-linecap="round" stroke-linejoin="round" />
+                </svg>
+                <svg v-else viewBox="0 0 16 16" fill="none">
+                  <path d="M8 1.9 13 3.8v3.7c0 3.05-2.05 5.35-5 6.6-2.95-1.25-5-3.55-5-6.6V3.8l5-1.9Z" stroke="currentColor" stroke-width="1.25" stroke-linejoin="round" />
+                  <path d="M8 5.05v3.35" stroke="currentColor" stroke-width="1.35" stroke-linecap="round" />
+                  <path d="M8 10.85h.01" stroke="currentColor" stroke-width="2" stroke-linecap="round" />
+                </svg>
+              </span>
+              <span class="codex-approval-copy">
+                <strong>{{ mode.label }}</strong>
+                <small>{{ mode.description }}</small>
+              </span>
+              <span v-if="mode.id === codexApprovalMode" class="codex-approval-check" aria-hidden="true">✓</span>
+            </button>
+          </div>
           <button
             class="codex-send-button chat-send-button"
             :class="{ stopping: ws.activeChatIsRunning.value }"
