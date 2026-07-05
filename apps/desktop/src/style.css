@@ -3144,12 +3144,11 @@ dd {
   position: absolute;
   top: 0;
   bottom: 0;
-  left: max(0px, calc((100% - var(--composer-max-width)) / 2 - 46px));
+  left: max(0px, calc((100% - var(--composer-max-width)) / 2 - 34px));
   z-index: 4;
-  width: 42px;
+  width: 34px;
   min-height: 180px;
-  background: color-mix(in srgb, var(--color-bg-muted) 72%, transparent);
-  border-right: 1px solid color-mix(in srgb, var(--color-border) 72%, transparent);
+  background: transparent;
   pointer-events: auto;
 }
 
@@ -3177,22 +3176,22 @@ dd {
 }
 
 .chat-user-anchor-dot {
-  width: 8px;
-  height: 8px;
+  width: 7px;
+  height: 7px;
   border-radius: 999px;
-  background: color-mix(in srgb, var(--color-text-muted) 22%, transparent);
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--color-text-muted) 6%, transparent);
+  background: #e1e5ec;
+  box-shadow: none;
   transition: background-color 120ms ease, box-shadow 120ms ease, transform 120ms ease;
 }
 
 .chat-user-anchor:hover .chat-user-anchor-dot,
 .chat-user-anchor:focus-visible .chat-user-anchor-dot {
-  background: color-mix(in srgb, var(--color-text-secondary) 68%, transparent);
+  background: #a8b0bd;
 }
 
 .chat-user-anchor.active .chat-user-anchor-dot {
-  background: var(--color-text-primary);
-  box-shadow: 0 0 0 4px color-mix(in srgb, var(--color-text-primary) 8%, transparent);
+  background: #111827;
+  box-shadow: 0 0 0 4px rgba(17, 24, 39, 0.08);
   transform: scale(1.04);
 }
 
@@ -3231,9 +3230,7 @@ dd {
   transform: translateY(-50%) rotate(45deg);
 }
 
-.chat-user-anchor:hover .chat-user-anchor-tooltip,
-.chat-user-anchor:focus-visible .chat-user-anchor-tooltip,
-.chat-user-anchor.active .chat-user-anchor-tooltip {
+.chat-user-anchor:hover .chat-user-anchor-tooltip {
   opacity: 1;
   transform: translate(0, -50%);
 }

@@ -47,6 +47,9 @@ const VIRTUAL_MESSAGE_ESTIMATE = 156;
 const VIRTUAL_SCROLL_OVERSCAN = 900;
 const USER_ANCHOR_MIN_VISIBLE = 4;
 const USER_ANCHOR_LIMIT = 18;
+const USER_ANCHOR_MIN_TOP_PERCENT = 8;
+const USER_ANCHOR_MAX_TOP_PERCENT = 92;
+const USER_ANCHOR_DOT_GAP_PX = 20;
 const builtInProviders: AiProvider[] = [
   { id: "codex", name: "Codex", command: "codex", builtIn: true, enabled: true },
   { id: "claude", name: "Claude Code", command: "claude", builtIn: true, enabled: true },
@@ -182,10 +185,7 @@ const virtualMessages = computed(() => {
 const userMessageAnchors = computed<UserMessageAnchor[]>(() => {
   const anchors = allUserMessageAnchors();
   const visibleAnchors = compactUserAnchors(anchors, activeUserAnchorIndex.value);
-  return visibleAnchors.map((anchor) => ({
-    ...anchor,
-    topPercent: userAnchorTopPercent(anchor.index),
-  }));
+  return positionUserAnchors(visibleAnchors);
 });
 
 const activeUserAnchorIndex = computed(() => {
@@ -212,12 +212,24 @@ function allUserMessageAnchors(): UserMessageAnchor[] {
   });
 }
 
-function userAnchorTopPercent(index: number) {
-  const totalHeight = virtualMessages.value.totalHeight;
-  if (totalHeight <= 0) return 50;
-  const messageTop = virtualMessageTop(index);
-  const rawPercent = (messageTop / totalHeight) * 100;
-  return Math.min(96, Math.max(4, rawPercent));
+function positionUserAnchors(anchors: UserMessageAnchor[]) {
+  if (!anchors.length) return [];
+  if (anchors.length === 1) return [{ ...anchors[0], topPercent: 50 }];
+
+  const viewportHeight = Math.max(1, virtualViewportHeight.value);
+  const maxRange = USER_ANCHOR_MAX_TOP_PERCENT - USER_ANCHOR_MIN_TOP_PERCENT;
+  const preferredGap = (USER_ANCHOR_DOT_GAP_PX / viewportHeight) * 100;
+  const gap = Math.min(preferredGap, maxRange / (anchors.length - 1));
+  const centerOffset = (anchors.length - 1) / 2;
+
+  return anchors.map((anchor, index) => ({
+    ...anchor,
+    topPercent: clampUserAnchorTop(50 + (index - centerOffset) * gap),
+  }));
+}
+
+function clampUserAnchorTop(percent: number) {
+  return Math.min(USER_ANCHOR_MAX_TOP_PERCENT, Math.max(USER_ANCHOR_MIN_TOP_PERCENT, percent));
 }
 
 function compactUserAnchors(anchors: UserMessageAnchor[], activeIndex: number) {
@@ -488,7 +500,8 @@ async function scrollToUserMessageStable(index: number) {
   const el = chatScroll.value;
   if (!el) return;
   const version = ++anchorScrollVersion;
-  el.scrollTop = Math.max(0, virtualMessageTop(index) - 24);
+  const rowCenter = virtualMessageTop(index) + virtualMessageHeight(index) / 2;
+  el.scrollTop = Math.max(0, rowCenter - virtualViewportHeight.value / 2);
   updateVirtualViewport();
   await nextTick();
   if (version !== anchorScrollVersion || !chatScroll.value) return;
@@ -496,7 +509,7 @@ async function scrollToUserMessageStable(index: number) {
   if (!(row instanceof HTMLElement)) return;
   const containerRect = chatScroll.value.getBoundingClientRect();
   const rowRect = row.getBoundingClientRect();
-  const delta = rowRect.top - containerRect.top - 24;
+  const delta = rowRect.top + rowRect.height / 2 - (containerRect.top + containerRect.height / 2);
   if (Math.abs(delta) <= 1) return;
   chatScroll.value.scrollTop += delta;
   updateVirtualViewport();
@@ -801,7 +814,6 @@ function onPromptKeydown(event: KeyboardEvent) {
             :class="{ active: anchor.index === activeUserAnchorIndex }"
             :style="{ top: `${anchor.topPercent}%` }"
             type="button"
-            :title="anchor.label"
             :aria-label="`跳转到${anchor.label}`"
             @click="scrollToUserMessage(anchor.index)"
           >
