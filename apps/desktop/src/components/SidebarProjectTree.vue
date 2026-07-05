@@ -861,7 +861,7 @@ onBeforeUnmount(() => {
               <path d="M8 13h8M8 17h5" />
             </svg>
           </span>
-          <span>Token 使用</span>
+          <span>用量统计</span>
         </button>
         <button type="button" role="menuitem" @click="toggleTheme">
           <span class="account-menu-icon" aria-hidden="true">

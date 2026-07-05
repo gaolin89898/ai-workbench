@@ -151,7 +151,7 @@ class _SettingsPageState extends State<SettingsPage> {
                     icon: Icons.data_usage_outlined,
                     background: AppColors.infoSoft,
                     foreground: AppColors.info,
-                    title: 'Token 使用',
+                    title: '用量统计',
                     subtitle: '查看各 AI 工具的云端 Token 用量',
                     onTap: () => Navigator.of(context).push(
                       MaterialPageRoute(

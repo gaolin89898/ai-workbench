@@ -91,12 +91,12 @@ onMounted(() => {
             返回首页
           </button>
           <div class="settings-nav-title">
-            <strong>Token 使用</strong>
+            <strong>用量统计</strong>
             <small>用量统计</small>
           </div>
         </div>
 
-        <nav class="settings-nav-list" aria-label="Token 使用分组">
+        <nav class="settings-nav-list" aria-label="用量统计分组">
           <button class="active" type="button">
             <span class="settings-nav-marker" aria-hidden="true"></span>
             <span class="settings-nav-copy">
@@ -120,7 +120,7 @@ onMounted(() => {
           <header class="settings-header">
             <div>
               <span class="settings-kicker">Token Usage</span>
-              <h1>Token 使用统计</h1>
+              <h1>用量统计</h1>
               <p>按 AI 工具聚合的 Token 用量，数据来自云端，桌面端和移动端共用。</p>
             </div>
             <button class="button secondary narrow" type="button" :disabled="tokenUsageLoading" @click="refreshTokenUsage">

@@ -54,7 +54,7 @@ class _TokenUsagePageState extends State<TokenUsagePage> {
           crossAxisAlignment: CrossAxisAlignment.start,
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Text('Token 使用'),
+            const Text('用量统计'),
             Text('按 AI 工具聚合的云端用量', style: theme.bodyMedium),
           ],
         ),
@@ -79,7 +79,7 @@ class _TokenUsagePageState extends State<TokenUsagePage> {
             if (_loading && summary == null)
               const SizedBox(
                 height: 280,
-                child: EmptyState('正在加载 Token 用量...'),
+                child: EmptyState('正在加载用量数据...'),
               )
             else if (_error != null)
               AppCard(
@@ -106,7 +106,7 @@ class _TokenUsagePageState extends State<TokenUsagePage> {
               if (summary.providers.isEmpty)
                 const AppCard(
                   borderRadius: AppRadius.lg,
-                  child: EmptyState('暂无 Token 用量数据'),
+                  child: EmptyState('暂无用量数据'),
                 )
               else
                 AppCard(
