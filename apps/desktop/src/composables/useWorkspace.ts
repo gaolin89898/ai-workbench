@@ -1491,7 +1491,7 @@ async function handleAiTraceUpdateEvent(event: AiTraceUpdateEvent) {
   if (event.trace.providerId !== "codex" || event.trace.traceKind !== "codex") return;
   let pending = pendingAssistants.get(event.aiSessionId);
   if (!pending && codexTracePending(event.trace)) {
-    pending = ensureIncomingPendingAssistant(event.aiSessionId) ?? await ensureIncomingPendingAssistantAfterRefresh(event.aiSessionId) ?? undefined;
+    pending = await ensureIncomingPendingAssistantAfterRefresh(event.aiSessionId) ?? undefined;
   }
   const traceMessage = codexTraceToChatMessage(event.trace);
   const pendingState = codexTracePending(event.trace);
@@ -1549,9 +1549,7 @@ async function handleAiChatOutputEvent(event: AiChatOutputEvent) {
   if (event.kind === "status" && shouldHideBackendStatus(event.text ?? "")) return;
   let pending = pendingAssistants.get(event.aiSessionId);
   if (!pending && event.kind !== "done" && event.kind !== "error") {
-    const created = shouldHideBackendStatus(event.text ?? "")
-      ? await ensureIncomingPendingAssistantAfterRefresh(event.aiSessionId)
-      : ensureIncomingPendingAssistant(event.aiSessionId) ?? await ensureIncomingPendingAssistantAfterRefresh(event.aiSessionId);
+    const created = await ensureIncomingPendingAssistantAfterRefresh(event.aiSessionId);
     pending = created ?? undefined;
   }
   const providerName = providerNameForSession(event.aiSessionId);

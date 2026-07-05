@@ -319,6 +319,14 @@ function processGroupOpen(groupIndex: number) {
   return Boolean(props.message.pending && !processGroupHasFinalText(groupIndex));
 }
 
+function processGroupExpandable(group: Extract<RenderGroup, { type: "process" }>) {
+  return processBodyItems(group).some((item) => {
+    if (item.type === "segment") return true;
+    if (item.conclusion) return true;
+    return !isThinkingStage(item.segments) && visibleStageSegments(item.segments).length > 0;
+  });
+}
+
 function processGroupDurationMs(segments: ChatSegmentType[]) {
   const summary = processSummary.value;
   if (props.message.pending) {
@@ -787,7 +795,7 @@ function countCommandOutputSignals(text: string) {
     <div class="chat-message-body">
       <template v-for="(group, index) in contentGroups" :key="index">
         <ChatSegment v-if="group.type === 'segment'" :segment="group.segment" :ai-session-id="aiSessionId" />
-        <details v-else class="chat-process-group" :open="processGroupOpen(index)">
+        <details v-else-if="processGroupExpandable(group)" class="chat-process-group" :open="processGroupOpen(index)">
           <summary class="chat-process-group-summary" @click="onProcessSummaryClick($event, group, index)">
             <span class="chat-process-group-icon" :class="{ running: message.pending }" aria-hidden="true"></span>
             <span>{{ processGroupTitle(group, index) }}</span>
@@ -825,6 +833,13 @@ function countCommandOutputSignals(text: string) {
             </template>
           </div>
         </details>
+        <div v-else class="chat-process-group static">
+          <div class="chat-process-group-summary">
+            <span class="chat-process-group-icon" :class="{ running: message.pending }" aria-hidden="true"></span>
+            <span>{{ message.pending ? "正在思考" : processGroupTitle(group, index) }}</span>
+            <span v-if="message.pending" class="thinking-dots" aria-hidden="true"><i></i><i></i><i></i></span>
+          </div>
+        </div>
       </template>
       <div v-if="message.images?.length" class="chat-message-images" :aria-label="`已附 ${message.images.length} 张图片`">
         <button

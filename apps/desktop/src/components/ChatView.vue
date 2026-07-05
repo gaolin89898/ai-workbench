@@ -20,7 +20,7 @@ const previewImage = ref<ChatImageAttachment | null>(null);
 const chatScroll = ref<HTMLDivElement | null>(null);
 const startPromptBox = ref<HTMLFormElement | null>(null);
 const chatComposer = ref<HTMLDivElement | null>(null);
-const activeTab = ref<"chat" | "terminal" | "logs">("chat");
+const activeTab = ref<"chat" | "terminal">("chat");
 const startMenuOpen = ref(false);
 const approvalMenuOpen = ref(false);
 const codexApprovalMode = ref<CodexApprovalMode>("autoEdit");
@@ -82,12 +82,6 @@ const chatHeaderMeta = computed(() => {
 const conversationTitle = computed(() => ws.activeAiSession.value?.title ?? currentProject.value?.name ?? "新对话");
 const startTitle = computed(() => `我们该在 ${currentProject.value?.name ?? "项目"} 中做什么?`);
 const showCreateHint = computed(() => !ws.activeAiSession.value && ws.createAiResult.value);
-const activeProviderName = computed(() => {
-  const providerId = ws.activeAiSession.value?.providerId ?? ws.selectedProviderId.value;
-  return providerChoices.value.find((provider) => provider.id === providerId)?.name
-    ?? builtInProviders.find((provider) => provider.id === providerId)?.name
-    ?? "AI";
-});
 const pendingApprovalSegment = computed<Extract<ChatSegment, { type: "approval" }> | null>(() => {
   for (let messageIndex = ws.chatMessages.value.length - 1; messageIndex >= 0; messageIndex -= 1) {
     const segments = ws.chatMessages.value[messageIndex].segments ?? [];
@@ -99,20 +93,6 @@ const pendingApprovalSegment = computed<Extract<ChatSegment, { type: "approval" 
   return null;
 });
 
-function logEventLevel(event: string): "info" | "success" | "error" {
-  const text = event.slice(9);
-  if (/失败|错误|中断|异常/.test(text)) return "error";
-  if (/完成|成功|已保存|已连接|已启动|已结束/.test(text)) return "success";
-  return "info";
-}
-
-function logEventMessage(event: string): string {
-  return event.slice(9);
-}
-
-function logEventTime(event: string): string {
-  return event.slice(0, 8);
-}
 const canSend = computed(() => Boolean(prompt.value.trim() || imageAttachments.value.length || ws.activeChatIsRunning.value));
 const selectedApprovalMode = computed(() => approvalModes.find((mode) => mode.id === codexApprovalMode.value) ?? approvalModes[1]);
 const providerIcons: Record<string, string> = {
@@ -765,10 +745,6 @@ function onPromptKeydown(event: KeyboardEvent) {
     <nav class="chat-mode-tabs" aria-label="聊天视图切换">
       <button type="button" :class="{ active: activeTab === 'chat' }" @click="activeTab = 'chat'">聊天</button>
       <button type="button" :class="{ active: activeTab === 'terminal' }" @click="activeTab = 'terminal'">终端</button>
-      <button type="button" :class="{ active: activeTab === 'logs' }" @click="activeTab = 'logs'">
-        日志
-        <span v-if="ws.activeChatIsRunning.value" class="chat-tab-dot" aria-hidden="true"></span>
-      </button>
     </nav>
     <section
       class="chat-workspace"
@@ -823,39 +799,6 @@ function onPromptKeydown(event: KeyboardEvent) {
         </div>
         <div v-if="activeTab === 'terminal'" class="terminal-shell">
           <TerminalView />
-        </div>
-        <div v-if="activeTab === 'logs'" class="chat-logs-panel">
-          <header>
-            <div>
-              <strong>执行日志</strong>
-              <span>{{ ws.activeChatIsRunning.value ? `${activeProviderName} 正在执行` : "最近一次运行记录" }}</span>
-            </div>
-            <small>{{ ws.chatDebugEvents.value.length }} 条</small>
-          </header>
-          <div v-if="ws.activeChatRunState.value" class="chat-log-current" :class="[ws.activeChatRunState.value.phase, { active: ws.activeChatRunState.value.active }]">
-            <span class="chat-run-pulse" aria-hidden="true"></span>
-            <div>
-              <strong>{{ ws.activeChatRunState.value.title }}</strong>
-              <p>{{ ws.activeChatRunState.value.detail }}</p>
-            </div>
-          </div>
-          <ol v-if="ws.chatDebugEvents.value.length" class="chat-log-list">
-            <li
-              v-for="event in ws.chatDebugEvents.value"
-              :key="event"
-              :class="logEventLevel(event)"
-            >
-              <span class="chat-log-time">{{ logEventTime(event) }}</span>
-              <div class="chat-log-entry">
-                <span class="chat-log-level">{{ logEventLevel(event) }}</span>
-                <p>{{ logEventMessage(event) }}</p>
-              </div>
-            </li>
-          </ol>
-          <div v-else class="chat-log-empty">
-            <strong>暂无执行日志</strong>
-            <p>发送一条消息后，这里会显示保存、启动、连接、执行和完成状态。</p>
-          </div>
         </div>
         <div v-if="showCreateHint" class="chat-toast" :class="{ error: ws.createAiError.value }">{{ ws.createAiResult.value }}</div>
         <div
