@@ -241,6 +241,39 @@ class _ProcessStageView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    if (_isThinkingStage(item.segments)) {
+      return Container(
+        padding: const EdgeInsets.fromLTRB(10, 9, 10, 10),
+        decoration: BoxDecoration(
+          color: AppColors.surface,
+          borderRadius: BorderRadius.circular(AppRadius.md),
+          border: Border.all(color: AppColors.border),
+        ),
+        child: Row(
+          children: [
+            Container(
+              width: 6,
+              height: 6,
+              decoration: const BoxDecoration(
+                color: AppColors.warning,
+                shape: BoxShape.circle,
+              ),
+            ),
+            const SizedBox(width: 6),
+            Expanded(
+              child: Text(
+                _processStageTitle(item.segments, pending),
+                style: const TextStyle(
+                  color: AppColors.secondary,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
     return InkWell(
       borderRadius: BorderRadius.circular(AppRadius.md),
       onTap: () => _showStageSheet(context),
@@ -543,7 +576,7 @@ List<_ProcessBodyItem> _buildProcessBodyItems(List<ChatSegment> segments,
       continue;
     }
     if (_isProcessStageSegment(segment)) {
-      if (hasExecution && _isThinkingStatusSegment(segment)) continue;
+      if (hasExecution && _isThinkingStageSegment(segment)) continue;
       final nextKind =
           _isThinkingStageSegment(segment) ? 'thinking' : 'execution';
       if (stageKind != null && stageKind != nextKind) flushStageRun();
@@ -565,7 +598,8 @@ List<_ProcessBodyItem> _buildProcessBodyItems(List<ChatSegment> segments,
             (s.type == 'status' && s.status == 'running') ||
             (s.type == 'tool' && s.status == 'running') ||
             (s.type == 'approval' && s.status == 'pending'));
-    if (!lastStageHasRunning) {
+    final lastStageHasConclusion = lastItem?.conclusion != null;
+    if (!lastStageHasRunning && !lastStageHasConclusion) {
       items.add(_ProcessBodyItem.stage([
         ChatSegment(
           type: 'status',
@@ -592,6 +626,7 @@ bool _isProcessStageSegment(ChatSegment segment) {
 
 bool _isThinkingStageSegment(ChatSegment segment) {
   return (segment.type == 'thought' &&
+          !_isProcessCommentaryThought(segment) &&
           !_isExecutionConclusionSegment(segment)) ||
       _isThinkingStatusSegment(segment);
 }
@@ -614,7 +649,12 @@ bool _isExecutionStageSegment(ChatSegment segment) {
 }
 
 bool _isProcessConclusionSegment(ChatSegment segment) {
-  return _isProcessTextSegment(segment);
+  return _isProcessTextSegment(segment) || _isProcessCommentaryThought(segment);
+}
+
+bool _isProcessCommentaryThought(ChatSegment segment) {
+  return segment.type == 'thought' &&
+      (segment.title == '执行说明' || segment.title == '中间结论');
 }
 
 String _processStageTitle(List<ChatSegment> segments, bool pending) {
@@ -655,7 +695,9 @@ String _processStageTitle(List<ChatSegment> segments, bool pending) {
   if (statusLabel != null && statusLabel.isNotEmpty) return statusLabel;
 
   if (segments.any((segment) =>
-      segment.type == 'thought' && !_isExecutionConclusionSegment(segment))) {
+      segment.type == 'thought' &&
+      !_isProcessCommentaryThought(segment) &&
+      !_isExecutionConclusionSegment(segment))) {
     return '正在思考...';
   }
   return pending ? '正在处理' : '已处理';

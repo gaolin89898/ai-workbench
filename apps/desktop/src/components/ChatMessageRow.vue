@@ -559,7 +559,7 @@ function toolStageTitle(segment: Extract<ChatSegmentType, { type: "tool" }>) {
   const verb = segment.status === "running" ? "正在" : "已";
   const commandText = normalizeCommandForTitle(segment.command ?? "");
   const fileChanges = segment.diff ? extractFileChangePaths(segment.diff) : null;
-  if (segment.toolName.includes("修改") || segment.toolName.includes("文件") || fileChanges) {
+  if (segment.toolName.includes("修改") || fileChanges) {
     if (segment.status === "error") return "修改文件失败";
     const filePath = fileChanges?.[0];
     if (filePath) {
@@ -574,14 +574,18 @@ function toolStageTitle(segment: Extract<ChatSegmentType, { type: "tool" }>) {
   }
   if (segment.toolName.includes("命令") || commandText) {
     if (segment.status === "error") return "运行命令失败";
-    if (commandText) {
-      const shortCommand = commandText.split(/\s+/).slice(0, 3).join(" ");
-      return `${verb}运行 ${shortCommand}`;
-    }
+    if (commandText) return `${verb}${toolOperationTitleVerb(toolOperationKind(segment))} ${commandText}`;
     return `${verb}运行命令`;
   }
   if (segment.status === "error") return segment.summary || `处理失败 ${segment.toolName}`;
   return segment.summary || `${verb}处理 ${segment.toolName}`;
+}
+
+function toolOperationTitleVerb(kind: ReturnType<typeof toolOperationKind>) {
+  if (kind === "read") return "读取";
+  if (kind === "search") return "搜索";
+  if (kind === "edit") return "修改";
+  return "运行";
 }
 
 function normalizeCommandForTitle(command: string) {
