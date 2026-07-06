@@ -2005,15 +2005,14 @@ h2 {
   min-height: 100vh;
   place-items: center;
   background: var(--color-bg-content);
-  padding: 48px 32px;
+  padding: 40px 24px;
 }
 
 .codex-start-inner {
   display: grid;
-  width: min(730px, 100%);
+  width: min(640px, 100%);
   justify-items: center;
-  gap: 28px;
-  transform: translateY(-28px);
+  gap: 24px;
 }
 
 .codex-start h1 {
@@ -2021,33 +2020,51 @@ h2 {
   margin: 0;
   overflow-wrap: anywhere;
   color: var(--color-text-primary);
-  font-size: var(--text-2xl);
-  font-weight: 520;
+  font-size: 22px;
+  font-weight: 700;
   line-height: var(--leading-tight);
   text-align: center;
   text-wrap: balance;
 }
 
+.codex-start-project {
+  display: inline-flex;
+  max-width: min(280px, 100%);
+  align-items: center;
+  border-radius: 6px;
+  background: var(--color-primary-muted);
+  color: var(--color-text-body);
+  padding: 2px 8px;
+  vertical-align: baseline;
+}
+
 .codex-prompt-box {
   position: relative;
-  width: 100%;
+  width: min(600px, 100%);
   overflow: visible;
   border: 1px solid var(--color-border);
-  border-radius: 18px;
+  border-radius: 16px;
   background: var(--color-bg-surface);
+  padding: 12px 14px;
   box-shadow: var(--shadow-composer);
+  transition: border-color var(--transition-fast), background-color var(--transition-fast), box-shadow var(--transition-fast);
 }
 
 .codex-prompt-box textarea {
-  min-height: 112px;
-  max-height: 160px;
+  display: block;
+  width: 100%;
+  min-height: 56px;
+  max-height: 132px;
   resize: none;
-  border-radius: 18px;
+  border: 0;
+  border-radius: 0;
   background: transparent;
-  padding: 14px 66px 56px 14px;
-  color: var(--color-text-primary);
+  padding: 0;
+  color: var(--color-text-body);
   font-size: var(--text-md);
+  font-family: var(--font-sans);
   line-height: var(--leading-normal);
+  outline: none;
 }
 
 .codex-prompt-box .chat-image-attachments + textarea {
@@ -2059,7 +2076,76 @@ h2 {
 }
 
 .codex-prompt-box:has(.codex-run-controls .codex-goal-input) textarea {
-  padding-bottom: 92px;
+  padding-bottom: 38px;
+}
+
+.codex-start-toolbar {
+  position: relative;
+  display: flex;
+  min-height: 32px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.codex-start-toolbar .codex-start-add,
+.codex-start-toolbar .start-approval-trigger,
+.codex-start-toolbar .start-run-controls,
+.codex-start-toolbar .codex-send-button {
+  position: static;
+}
+
+.codex-start-toolbar .codex-start-add {
+  order: 1;
+  flex: 0 0 auto;
+}
+
+.codex-start-toolbar .start-run-controls {
+  order: 2;
+  flex: 1 1 auto;
+  min-width: 0;
+  justify-content: flex-end;
+}
+
+.codex-start-toolbar .start-approval-trigger {
+  order: 3;
+  flex: 0 1 auto;
+}
+
+.codex-start-toolbar .codex-send-button {
+  order: 4;
+  flex: 0 0 auto;
+}
+
+.codex-start-toolbar .codex-start-menu {
+  left: 0;
+  bottom: calc(100% + 6px);
+}
+
+.codex-start-toolbar .codex-approval-menu {
+  left: 0;
+  right: auto;
+  bottom: calc(100% + 6px);
+}
+
+.codex-start-toolbar .codex-start-tools-wrap {
+  order: 0;
+  flex: 0 0 auto;
+}
+
+.codex-start-toolbar .codex-run-mode,
+.codex-start-toolbar .codex-goal-toggle,
+.codex-start-toolbar .codex-goal-input,
+.codex-start-toolbar .start-approval-trigger {
+  display: none;
+}
+
+.codex-start-toolbar .codex-model-picker {
+  flex: 0 0 auto;
+  width: auto;
+  min-width: 72px;
+  max-width: 160px;
 }
 
 .chat-image-attachments {
@@ -2072,7 +2158,7 @@ h2 {
 }
 
 .chat-image-attachments.start-attachments {
-  margin: 14px 66px 0 14px;
+  margin: 0 44px 12px 0;
   padding-right: 0;
 }
 
@@ -2218,35 +2304,36 @@ h2 {
 .codex-start-add {
   position: absolute;
   left: 14px;
-  bottom: 14px;
+  bottom: 12px;
   display: inline-flex;
-  max-width: calc(100% - 96px);
-  min-width: 132px;
-  height: 32px;
+  max-width: 150px;
+  min-width: 0;
+  height: 28px;
   align-items: center;
-  gap: 8px;
-  border: 0;
-  border-radius: 8px;
+  gap: 6px;
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-full);
   background: transparent;
   color: var(--color-text-secondary);
-  padding: 0 6px;
+  padding: 0 10px;
   box-shadow: none;
-  font-size: 13px;
-  font-weight: 650;
+  font-size: 11px;
+  font-weight: 620;
   line-height: 1;
   text-align: left;
   transition: border-color 120ms ease, background-color 120ms ease, box-shadow 120ms ease;
 }
 
 .codex-start-add:hover {
-  background: var(--color-bg-surface);
+  border-color: var(--color-border);
+  background: var(--color-bg-hover);
   box-shadow: none;
 }
 
 .codex-start-add img {
   display: block;
-  width: 19px;
-  height: 19px;
+  width: 14px;
+  height: 14px;
   flex: 0 0 auto;
   object-fit: contain;
 }
@@ -2261,8 +2348,8 @@ h2 {
 
 .codex-start-add-chevron {
   display: block;
-  width: 14px;
-  height: 14px;
+  width: 12px;
+  height: 12px;
   flex: 0 0 auto;
   color: var(--color-text-muted);
   transition: transform 140ms ease, color 140ms ease;
@@ -2279,7 +2366,8 @@ h2 {
 .codex-start-menu {
   position: absolute;
   left: 0;
-  top: calc(100% + 8px);
+  top: auto;
+  bottom: calc(100% + 6px);
   z-index: 20;
   display: flex;
   width: 226px;
@@ -2287,10 +2375,10 @@ h2 {
   flex-direction: column;
   gap: 2px;
   border: 1px solid var(--color-border);
-  border-radius: 8px;
-  background: var(--color-bg-content);
-  padding: 4px;
-  box-shadow: 0 10px 24px rgb(15 23 42 / 12%);
+  border-radius: 10px;
+  background: var(--color-bg-elevated);
+  padding: 5px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.28);
 }
 
 .codex-start-menu-label {
@@ -2305,31 +2393,31 @@ h2 {
   display: flex;
   align-items: center;
   gap: 8px;
-  min-height: 34px;
+  min-height: 32px;
   border: 0;
-  border-radius: 6px;
+  border-radius: 7px;
   background: transparent;
   color: var(--color-text-body);
-  padding: 0 8px;
-  font-size: 14px;
-  font-weight: 520;
+  padding: 0 9px;
+  font-size: 13px;
+  font-weight: 500;
   line-height: 20px;
   text-align: left;
 }
 
 .codex-start-menu button:hover {
-  background: var(--color-bg-elevated);
+  background: var(--color-bg-hover);
 }
 
 .codex-start-menu button.active {
-  background: var(--state-info-bg);
-  color: var(--color-primary-hover);
+  background: var(--color-bg-hover);
+  color: var(--color-text-body);
 }
 
 .codex-start-menu img {
   display: block;
-  width: 20px;
-  height: 20px;
+  width: 16px;
+  height: 16px;
   flex: 0 0 auto;
   object-fit: contain;
 }
@@ -2379,15 +2467,21 @@ h2 {
 
 .start-approval-trigger {
   left: auto;
-  right: 58px;
-  bottom: 14px;
-  max-width: 150px;
+  right: 50px;
+  bottom: 12px;
+  max-width: 126px;
+  height: 28px;
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-full);
+  padding: 0 10px;
+  font-size: 11px;
+  font-weight: 620;
 }
 
 .codex-approval-menu {
   position: absolute;
   left: 14px;
-  bottom: 54px;
+  bottom: 48px;
   z-index: 30;
   display: flex;
   width: 286px;
@@ -2499,9 +2593,9 @@ h2 {
 }
 
 .start-run-controls {
-  left: 150px;
-  right: 214px;
-  bottom: 15px;
+  left: 142px;
+  right: 188px;
+  bottom: 12px;
 }
 
 .composer-run-controls {
@@ -2514,57 +2608,58 @@ h2 {
   display: inline-flex;
   flex: 0 0 auto;
   overflow: hidden;
-  border: 1px solid var(--color-border);
-  border-radius: 9px;
-  background: var(--color-bg-content);
-  padding: 1px;
-  box-shadow: var(--shadow-sm);
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-full);
+  background: transparent;
+  padding: 0;
+  box-shadow: none;
 }
 
 .codex-run-mode button {
-  min-width: 40px;
+  min-width: 34px;
   height: 26px;
   border: 0;
-  border-radius: 7px;
+  border-radius: var(--radius-full);
   background: transparent;
   color: var(--color-text-secondary);
-  padding: 0 8px;
-  font-size: 12px;
-  font-weight: 700;
+  padding: 0 9px;
+  font-size: 11px;
+  font-weight: 620;
   line-height: 1;
 }
 
 .codex-run-mode button:hover {
-  background: var(--color-bg-elevated);
-  color: var(--color-text-primary);
+  background: var(--color-bg-hover);
+  color: var(--color-text-body);
 }
 
 .codex-run-mode button.active {
-  background: var(--color-primary);
-  color: var(--color-bg-content);
-  box-shadow: 0 5px 14px var(--color-primary-ring);
+  background: var(--color-bg-hover);
+  color: var(--color-text-body);
+  box-shadow: none;
 }
 
 .codex-model-picker,
 .codex-goal-toggle {
   display: inline-flex;
-  height: 30px;
+  height: 28px;
   min-width: 0;
   align-items: center;
   gap: 6px;
-  border: 1px solid var(--color-border);
-  border-radius: 9px;
-  background: var(--color-bg-content);
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-full);
+  background: transparent;
   color: var(--color-text-secondary);
-  padding: 0 8px;
-  font-size: 12px;
-  font-weight: 680;
-  box-shadow: var(--shadow-sm);
+  padding: 0 10px;
+  font-size: 11px;
+  font-weight: 620;
+  box-shadow: none;
 }
 
 .codex-model-picker {
-  flex: 1 1 168px;
-  max-width: 240px;
+  flex: 0 0 auto;
+  min-width: 72px;
+  max-width: 160px;
 }
 
 .codex-model-picker span,
@@ -2593,12 +2688,12 @@ h2 {
 
 .codex-model-button {
   display: inline-flex;
-  width: 100%;
+  width: auto;
   height: 100%;
   min-width: 0;
   align-items: center;
   justify-content: space-between;
-  gap: 8px;
+  gap: 6px;
   border: 0;
   border-radius: inherit;
   background: transparent;
@@ -2609,6 +2704,7 @@ h2 {
 }
 
 .codex-model-button span {
+  flex: 0 1 auto;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -2616,8 +2712,8 @@ h2 {
 }
 
 .codex-model-button svg {
-  width: 13px;
-  height: 13px;
+  width: 12px;
+  height: 12px;
   flex: 0 0 auto;
   color: var(--color-text-muted);
   transition: transform 120ms ease;
@@ -2635,30 +2731,30 @@ h2 {
 .codex-model-menu {
   position: absolute;
   right: 0;
-  bottom: calc(100% + 8px);
+  bottom: calc(100% + 6px);
   z-index: 34;
   display: flex;
-  width: 188px;
+  width: 220px;
   max-height: 220px;
   flex-direction: column;
   gap: 2px;
   overflow: auto;
   border: 1px solid var(--color-border);
   border-radius: 10px;
-  background: var(--color-bg-content);
+  background: var(--color-bg-elevated);
   padding: 5px;
-  box-shadow: 0 18px 46px rgb(15 23 42 / 16%);
+  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.12);
 }
 
 .codex-model-menu button {
-  min-height: 30px;
+  min-height: 32px;
   border: 0;
   border-radius: 7px;
   background: transparent;
   color: var(--color-text-secondary);
   padding: 0 10px;
-  font-size: 12px;
-  font-weight: 620;
+  font-size: 13px;
+  font-weight: 500;
   text-align: left;
 }
 
@@ -2666,6 +2762,111 @@ h2 {
 .codex-model-menu button.active {
   background: var(--color-bg-hover);
   color: var(--color-text-body);
+}
+
+.codex-model-menu-dual {
+  width: 208px;
+  max-height: none;
+  flex-direction: column;
+  gap: 0;
+  overflow: visible;
+  border: 1px solid var(--color-border);
+  border-radius: 10px;
+  background: var(--color-bg-elevated);
+  padding: 8px 0;
+  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.12);
+}
+
+.codex-model-menu-column {
+  display: flex;
+  flex-direction: column;
+  border: 0;
+  background: transparent;
+  padding: 0;
+  box-shadow: none;
+}
+
+.codex-model-menu-column.models {
+  order: 2;
+  position: relative;
+  width: 100%;
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--color-border-subtle);
+  border-radius: 0;
+}
+
+.codex-model-menu-column.reasoning {
+  order: 1;
+  width: 100%;
+  border-radius: 0;
+}
+
+.codex-model-menu-heading {
+  color: var(--color-text-muted);
+  padding: 6px 12px 4px;
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.codex-model-menu-column.models .codex-model-menu-heading {
+  display: block;
+}
+
+.codex-model-menu-column button {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  gap: 8px;
+  justify-content: flex-start;
+  border-radius: 0;
+  padding: 8px 12px;
+}
+
+.codex-model-submenu-trigger {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  gap: 8px;
+  justify-content: space-between;
+  border-radius: 7px;
+  padding: 8px 12px;
+}
+
+.codex-model-submenu-trigger.open {
+  background: var(--color-bg-hover);
+  color: var(--color-text-body);
+}
+
+.codex-model-submenu-chevron {
+  width: 14px;
+  height: 14px;
+  margin-left: auto;
+  flex: 0 0 14px;
+  color: var(--color-text-muted);
+}
+
+.codex-model-submenu {
+  position: absolute;
+  right: calc(100% + 2px);
+  bottom: 0;
+  z-index: 1;
+  display: flex;
+  width: 200px;
+  flex-direction: column;
+  border: 1px solid var(--color-border);
+  border-radius: 10px;
+  background: var(--color-bg-elevated);
+  padding: 8px 0;
+  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.12);
+}
+
+.codex-model-menu-check {
+  width: 14px;
+  flex: 0 0 14px;
+  margin-left: auto;
+  color: var(--color-text-body);
+  text-align: center;
 }
 
 .codex-goal-toggle {
@@ -2681,18 +2882,18 @@ h2 {
 }
 
 .codex-goal-input {
-  height: 30px;
+  height: 28px;
   min-width: 160px;
   flex: 1 1 180px;
-  border: 1px solid var(--color-border);
-  border-radius: 9px;
-  background: var(--color-bg-content);
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-full);
+  background: var(--color-bg-elevated);
   color: var(--color-text-primary);
   outline: none;
   padding: 0 10px;
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 560;
-  box-shadow: var(--shadow-sm);
+  box-shadow: none;
 }
 
 .codex-run-controls .codex-goal-input {
@@ -2711,38 +2912,37 @@ h2 {
 .codex-send-button {
   position: absolute;
   right: 14px;
-  bottom: 14px;
+  bottom: 10px;
   display: grid;
-  width: 34px;
-  height: 34px;
+  width: 32px;
+  height: 32px;
   place-items: center;
-  border: 1px solid var(--color-primary-muted);
+  border: 0;
   border-radius: var(--radius-full);
-  background: var(--color-primary-muted);
-  color: var(--color-primary);
+  background: var(--color-primary);
+  color: var(--color-text-inverse);
   line-height: 1;
-  box-shadow: var(--shadow-sm);
+  box-shadow: none;
   transition: border-color var(--transition-fast), background-color var(--transition-fast), box-shadow var(--transition-fast), transform var(--transition-fast);
 }
 
 .codex-send-button img {
   display: block;
-  width: 19px;
-  height: 19px;
+  width: 16px;
+  height: 16px;
   object-fit: contain;
   object-position: center;
 }
 
 .codex-send-button:not(:disabled):hover {
-  border-color: var(--color-primary-ring);
-  background: var(--color-primary-soft);
-  box-shadow: 0 5px 14px var(--color-primary-ring);
+  background: var(--color-primary-hover);
+  box-shadow: none;
   transform: translateY(-1px);
 }
 
 .codex-send-button:disabled {
   cursor: default;
-  border-color: var(--color-border);
+  border-color: transparent;
   background: var(--color-bg-elevated);
   color: var(--color-text-muted);
   box-shadow: none;
@@ -5459,10 +5659,10 @@ dd {
 
 .chat-composer .codex-model-picker {
   position: relative;
-  width: 112px;
-  min-width: 112px;
-  max-width: 112px;
-  flex: 0 0 112px;
+  width: auto;
+  min-width: 72px;
+  max-width: 160px;
+  flex: 0 0 auto;
 }
 
 .chat-composer .codex-model-picker-custom {
@@ -5471,7 +5671,7 @@ dd {
 
 .chat-composer .codex-model-button {
   display: inline-flex;
-  width: 100%;
+  width: auto;
   height: 100%;
   min-width: 0;
   align-items: center;
@@ -5526,7 +5726,7 @@ dd {
   border-radius: 10px;
   background: var(--color-bg-content);
   padding: 5px;
-  box-shadow: 0 18px 46px rgb(15 23 42 / 16%);
+  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.12);
 }
 
 .chat-composer .codex-model-menu button {
@@ -5545,6 +5745,45 @@ dd {
 .chat-composer .codex-model-menu button.active {
   background: var(--color-bg-hover);
   color: var(--color-text-body);
+}
+
+.chat-composer .codex-model-menu-dual {
+  width: 208px;
+  max-height: none;
+  flex-direction: column;
+  gap: 0;
+  overflow: visible;
+  border: 1px solid var(--color-border);
+  background: var(--color-bg-elevated);
+  padding: 8px 0;
+  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.12);
+}
+
+.chat-composer .codex-model-menu-column {
+  background: var(--color-bg-elevated);
+  box-shadow: none;
+}
+
+.chat-composer .codex-model-menu-column.models {
+  width: 100%;
+}
+
+.chat-composer .codex-model-menu-column.reasoning {
+  width: 100%;
+}
+
+.chat-composer .codex-model-menu-heading {
+  padding: 6px 12px 4px;
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.chat-composer .codex-model-menu-column button {
+  min-height: 32px;
+  border-radius: 0;
+  padding: 8px 12px;
+  font-size: 13px;
+  font-weight: 500;
 }
 
 .chat-composer .codex-model-picker select {
