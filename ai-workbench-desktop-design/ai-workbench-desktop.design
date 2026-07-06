@@ -33,6 +33,54 @@
       }
     },
     {
+      "id": "page-chat-session-composer-v2",
+      "title": "AI 会话 - 输入框重设计",
+      "type": "page",
+      "version": 1,
+      "createdAt": 1783326600000,
+      "canvasData": {
+        "x": 620,
+        "y": 820,
+        "group": 0
+      },
+      "devMetadata": {
+        "htmlSrc": "pages/chat-session-composer-v2.html",
+        "interactions": []
+      }
+    },
+    {
+      "id": "page-composer-attachment-open",
+      "title": "输入框 - 附件菜单打开",
+      "type": "page",
+      "version": 1,
+      "createdAt": 1783327800000,
+      "canvasData": {
+        "x": 620,
+        "y": 1640,
+        "group": 0
+      },
+      "devMetadata": {
+        "htmlSrc": "pages/composer-attachment-open.html",
+        "interactions": []
+      }
+    },
+    {
+      "id": "page-composer-mention-open",
+      "title": "输入框 - @提及文件打开",
+      "type": "page",
+      "version": 1,
+      "createdAt": 1783327800001,
+      "canvasData": {
+        "x": 1236,
+        "y": 1644,
+        "group": 0
+      },
+      "devMetadata": {
+        "htmlSrc": "pages/composer-mention-open.html",
+        "interactions": []
+      }
+    },
+    {
       "id": "page-terminal",
       "title": "终端",
       "type": "page",

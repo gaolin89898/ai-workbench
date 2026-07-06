@@ -1,0 +1,517 @@
+<!DOCTYPE html>
+<html lang="zh-CN" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>修复认证 bug — AI 工作台</title>
+    <style id="theme-vars">
+/* AI Workbench Desktop — Dark Theme */
+/* Based on actual project style.css, inverted to dark */
+:root {
+  /* Brand */
+  --color-primary: #2563eb;
+  --color-primary-hover: #1d4ed8;
+  --color-primary-muted: rgba(37, 99, 235, 0.15);
+  --color-primary-soft: rgba(37, 99, 235, 0.08);
+  --color-primary-ring: rgba(37, 99, 235, 0.25);
+
+  /* Surface & Background */
+  --color-bg-app: #0f1117;
+  --color-bg-body: #111318;
+  --color-bg-sidebar: #161822;
+  --color-bg-main: #1a1d2e;
+  --color-bg-content: #1e2235;
+  --color-bg-surface: #1e2235;
+  --color-bg-elevated: #252a3a;
+  --color-bg-input: #1e2235;
+  --color-bg-hover: rgba(255, 255, 255, 0.06);
+  --color-bg-active: rgba(37, 99, 235, 0.12);
+
+  /* Text */
+  --color-text-primary: #e8eaed;
+  --color-text-body: #d1d5db;
+  --color-text-secondary: #9aa0b4;
+  --color-text-muted: #6b7280;
+  --color-text-placeholder: #6b7280;
+  --color-text-inverse: #ffffff;
+
+  /* Border */
+  --color-border: rgba(255, 255, 255, 0.1);
+  --color-border-subtle: rgba(255, 255, 255, 0.06);
+  --color-border-active: rgba(37, 99, 235, 0.5);
+
+  /* State Colors */
+  --state-success: #22c55e;
+  --state-success-bg: rgba(34, 197, 94, 0.12);
+  --state-success-ring: rgba(34, 197, 94, 0.25);
+  --state-warning: #f59e0b;
+  --state-warning-bg: rgba(245, 158, 11, 0.12);
+  --state-error: #ef4444;
+  --state-error-bg: rgba(239, 68, 68, 0.12);
+  --state-info: #3b82f6;
+  --state-info-bg: rgba(59, 130, 246, 0.12);
+
+  /* Radius */
+  --radius-sm: 4px;
+  --radius-md: 7px;
+  --radius-lg: 8px;
+  --radius-xl: 12px;
+  --radius-full: 999px;
+
+  /* Typography */
+  --font-sans: "Inter", ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+
+  --text-xs: 11px;
+  --text-sm: 12px;
+  --text-base: 13px;
+  --text-md: 14px;
+  --text-lg: 16px;
+  --text-xl: 20px;
+  --text-2xl: 28px;
+
+  --leading-tight: 1.25;
+  --leading-normal: 1.5;
+  --leading-relaxed: 1.625;
+  --leading-chat: 1.62;
+
+  /* Font Weights */
+  --fw-normal: 400;
+  --fw-medium: 500;
+  --fw-semibold: 620;
+  --fw-bold: 700;
+  --fw-extrabold: 800;
+  --fw-black: 850;
+
+  /* Shadows */
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.15);
+  --shadow-md: 0 10px 24px rgba(0, 0, 0, 0.25);
+  --shadow-lg: 0 24px 56px rgba(0, 0, 0, 0.35);
+  --shadow-composer: 0 16px 42px rgba(0, 0, 0, 0.3);
+
+  /* Spacing */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-10: 40px;
+  --space-14: 56px;
+  --space-18: 72px;
+
+  /* Layout */
+  --sidebar-width: 286px;
+  --topbar-height: 56px;
+  --composer-max-width: 760px;
+
+  /* Transitions */
+  --transition-fast: 120ms ease;
+  --transition-normal: 200ms ease;
+}
+
+    </style>
+    <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4.3.1/dist/index.global.js"></script>
+    <script src="https://unpkg.com/lucide@1.8.0/dist/umd/lucide.min.js"></script>
+    <style type="text/tailwindcss">
+  @theme inline {
+    --color-primary: var(--color-primary);
+    --color-border: var(--color-border);
+  }
+  @layer base {
+    body { background: var(--color-background); color: var(--color-text-primary); }
+    td, th { @apply break-words; word-break: break-all; word-break: auto-phrase; }
+    th { @apply whitespace-nowrap; }
+  }
+    </style>
+    <style>
+      .no-scrollbar::-webkit-scrollbar { display: none; }
+      .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+      [data-icon] {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        -webkit-mask-size: contain;
+        mask-size: contain;
+        -webkit-mask-repeat: no-repeat;
+        mask-repeat: no-repeat;
+        -webkit-mask-position: center;
+        mask-position: center;
+        background-color: currentColor;
+      }
+    </style>
+</head>
+<body class="min-h-screen font-sans antialiased" style="background: var(--color-bg-app); overflow: hidden;">
+    <main>
+
+      <!-- ============================================================ -->
+      <!-- CHAT SESSION PAGE — Grid: 286px minmax(760px, 1fr)          -->
+      <!-- Matching ChatView.vue layout                                 -->
+      <!-- ============================================================ -->
+
+      <div class="flex" style="height: 100vh; overflow: hidden;">
+
+        <!-- ==================== LEFT SIDEBAR (286px) ==================== -->
+        <aside style="background: var(--color-bg-sidebar); border-right: 1px solid var(--color-border); padding: 18px 10px 14px; display: flex; flex-direction: column; gap: 16px; overflow-y: auto;">
+
+          <!-- 项目 section header -->
+          <div style="display: flex; align-items: center; justify-content: space-between;">
+            <span style="font-size: 13px; font-weight: 650; color: var(--color-text-muted);">项目</span>
+            <button style="width: 28px; height: 28px; border-radius: 7px; border: none; background: transparent; color: var(--color-text-muted); cursor: pointer; display: flex; align-items: center; justify-content: center;" aria-label="添加项目">
+              <i data-lucide="plus" style="width: 16px; height: 16px;"></i>
+            </button>
+          </div>
+
+          <!-- Project tree -->
+          <div style="display: flex; flex-direction: column; gap: 2px;">
+
+            <!-- my-saas-app project (expanded) -->
+            <div style="display: flex; flex-direction: column;">
+              <div style="display: flex; align-items: center; gap: 6px; padding: 4px 6px; border-radius: 6px;">
+                <i data-lucide="chevron-down" style="width: 14px; height: 14px; color: var(--color-text-muted); flex-shrink: 0;"></i>
+                <i data-lucide="folder" style="width: 18px; height: 18px; color: var(--color-text-secondary); flex-shrink: 0;"></i>
+                <span style="font-size: 14px; font-weight: 620; color: var(--color-text-primary); flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">my-saas-app</span>
+                <span style="font-size: 11px; color: var(--color-text-muted); background: var(--color-bg-elevated); padding: 1px 7px; border-radius: 999px; white-space: nowrap; line-height: 1.5;">main</span>
+              </div>
+              <div style="padding-left: 32px; display: flex; flex-direction: column; gap: 3px;">
+                <div style="padding: 5px 8px 5px 10px; border-radius: 6px; background: var(--color-bg-hover); cursor: pointer;">
+                  <span style="font-size: 13px; color: var(--color-text-body); display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">修复认证 bug</span>
+                </div>
+                <div style="padding: 5px 8px 5px 10px; border-radius: 6px; cursor: pointer;">
+                  <span style="font-size: 13px; color: var(--color-text-muted); display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">优化 API 性能</span>
+                </div>
+                <div style="padding: 5px 8px 5px 10px; border-radius: 6px; cursor: pointer;">
+                  <span style="font-size: 13px; color: var(--color-text-muted); display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">添加单元测试</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- ai-workbench project (collapsed) -->
+            <div style="display: flex; flex-direction: column;">
+              <div style="display: flex; align-items: center; gap: 6px; padding: 4px 6px; border-radius: 6px;">
+                <i data-lucide="chevron-right" style="width: 14px; height: 14px; color: var(--color-text-muted); flex-shrink: 0;"></i>
+                <i data-lucide="folder" style="width: 18px; height: 18px; color: var(--color-text-secondary); flex-shrink: 0;"></i>
+                <span style="font-size: 14px; font-weight: 620; color: var(--color-text-primary); flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">ai-workbench</span>
+              </div>
+              <div style="padding-left: 32px; display: flex; flex-direction: column; gap: 3px;">
+                <div style="padding: 5px 8px 5px 10px; border-radius: 6px; cursor: pointer;">
+                  <span style="font-size: 13px; color: var(--color-text-muted); display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">重构数据库查询</span>
+                </div>
+              </div>
+            </div>
+
+          </div>
+
+          <div style="flex: 1; min-height: 0;"></div>
+
+          <button style="min-height: 48px; width: 100%; border: 1px solid var(--color-border-subtle); border-radius: 12px; background: transparent; color: var(--color-text-primary); cursor: pointer; display: flex; align-items: center; gap: 10px; padding: 7px 8px; font-family: var(--font-sans); text-align: left; transition: background var(--transition-fast), border-color var(--transition-fast);" aria-label="打开个人账户菜单" onmouseenter="this.style.background='var(--color-bg-hover)'" onmouseleave="this.style.background='transparent'" onmousedown="this.style.background='var(--color-bg-active)'" onmouseup="this.style.background='var(--color-bg-hover)'">
+            <span style="width: 32px; height: 32px; border-radius: 999px; background: linear-gradient(135deg, var(--color-primary), #8b5cf6); color: var(--color-text-inverse); display: inline-flex; align-items: center; justify-content: center; font-size: 14px; font-weight: 800; flex-shrink: 0;">李</span>
+            <span style="display: flex; flex-direction: column; gap: 1px; min-width: 0; flex: 1;">
+              <span style="font-size: 13px; font-weight: 720; color: var(--color-text-primary); line-height: 1.25; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">李明</span>
+              <span style="font-size: 11px; font-weight: 500; color: var(--color-text-muted); line-height: 1.25; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">li@workbench.ai</span>
+            </span>
+            <i data-lucide="chevron-down" style="width: 16px; height: 16px; color: var(--color-text-muted); flex-shrink: 0;"></i>
+          </button>
+
+        </aside>
+
+        <!-- ==================== MAIN CONTENT (flex-1) ==================== -->
+        <div class="flex flex-col flex-1" style="height: 100vh; background: var(--color-bg-content);">
+
+          <!-- ===== 1. CHAT TOPBAR (56px) ===== -->
+          <div class="flex items-center justify-between shrink-0" style="min-height: 56px; border-bottom: 1px solid var(--color-border-subtle); background: var(--color-bg-content); padding: 0 22px;">
+            <!-- Left: title + status badge -->
+            <div class="flex items-center gap-2.5 min-w-0">
+              <h2 class="truncate" style="font-size: var(--text-md); font-weight: 720; color: var(--color-text-body);">修复认证 bug</h2>
+              <span class="inline-flex items-center whitespace-nowrap shrink-0" style="min-height: 26px; border-radius: 7px; background: var(--color-primary-muted); color: var(--color-primary); font-size: var(--text-sm); font-weight: 750; padding: 0 10px;">运行中</span>
+            </div>
+            <!-- Right: git meta -->
+            <div class="flex items-center gap-1.5 shrink-0">
+              <i data-lucide="git-branch" style="width: 13px; height: 13px; color: var(--color-text-muted);"></i>
+              <span class="whitespace-nowrap" style="font-size: var(--text-sm); color: var(--color-text-muted);">main · 3 个文件已更改</span>
+            </div>
+          </div>
+
+          <!-- ===== 2. CHAT MODE TABS (40px) ===== -->
+          <div class="flex items-center gap-1 shrink-0" style="min-height: 40px; border-bottom: 1px solid var(--color-border-subtle); padding: 0 22px;">
+            <!-- Tab: 聊天 (active) -->
+            <button class="inline-flex items-center whitespace-nowrap" style="min-width: 58px; min-height: 28px; border: 0; border-radius: 7px; font-size: var(--text-sm); font-weight: var(--fw-extrabold); background: var(--color-bg-elevated); color: var(--color-text-body); cursor: pointer;">聊天</button>
+            <!-- Tab: 终端 (inactive, with blue dot) -->
+            <button class="inline-flex items-center gap-1.5 whitespace-nowrap" style="min-width: 58px; min-height: 28px; border: 0; border-radius: 7px; font-size: var(--text-sm); font-weight: var(--fw-extrabold); background: transparent; color: var(--color-text-secondary); cursor: pointer;">
+              终端
+              <span class="shrink-0" style="width: 6px; height: 6px; border-radius: 999px; background: var(--color-primary); box-shadow: 0 0 0 3px var(--color-primary-muted);"></span>
+            </button>
+            <!-- Tab: 日志 (inactive) -->
+            <button class="inline-flex items-center whitespace-nowrap" style="min-width: 58px; min-height: 28px; border: 0; border-radius: 7px; font-size: var(--text-sm); font-weight: var(--fw-extrabold); background: transparent; color: var(--color-text-secondary); cursor: pointer;">日志</button>
+          </div>
+
+          <!-- ===== 3. CHAT WORKSPACE (flex-1, display:flex) ===== -->
+          <div class="flex" style="flex: 1; height: calc(100vh - 96px);">
+
+            <!-- Chat panel -->
+            <div class="flex flex-col flex-1">
+
+              <!-- Message scroll area -->
+              <div class="flex-1 overflow-y-auto" style="padding: 48px max(28px, calc((100% - 760px)/2)) 28px;">
+
+                <!-- ---- User message 1 ---- -->
+                <div class="flex gap-3" style="flex-direction: row-reverse;">
+                  <div style="max-width: min(680px, 100%);">
+                    <div class="chat-bubble-user" style="border: 1px solid var(--color-border); border-radius: 8px 8px 3px 8px; background: var(--color-bg-elevated); color: var(--color-text-body); padding: 5px 9px; font-size: var(--text-md); line-height: var(--leading-chat); box-shadow: var(--shadow-sm);">
+                      请修复 JWT token 过期问题，用户 5 分钟后被登出。
+                    </div>
+                  </div>
+                </div>
+
+                <!-- ---- AI response 1 ---- -->
+                <div class="flex gap-3 items-start mt-5">
+                  <!-- AI avatar -->
+                  <div class="flex items-center justify-center shrink-0 mt-0.5" style="width: 28px; height: 28px; border-radius: var(--radius-md); background: var(--color-primary-muted);">
+                    <i data-lucide="sparkles" style="width: 14px; height: 14px; color: var(--color-primary);"></i>
+                  </div>
+                  <div style="max-width: min(680px, 100%);">
+                    <!-- AI text -->
+                    <p style="font-size: var(--text-md); color: var(--color-text-body); line-height: 1.78;">我找到了问题。JWT 过期时间在 <code style="font-family: var(--font-mono); font-size: 12px; background: var(--color-bg-elevated); padding: 1px 5px; border-radius: var(--radius-sm); color: var(--color-primary);">src/auth/jwt.ts</code> 被设为 5 分钟而非预期的 1 小时。以下是修复：</p>
+
+                    <!-- Diff block -->
+                    <div class="mt-2.5 overflow-y-auto" style="max-height: 280px; border: 1px solid var(--color-border); border-radius: 7px; background: var(--color-bg-content);">
+                      <!-- Meta line -->
+                      <div class="flex items-center gap-2 px-3 py-1.5" style="background: var(--color-bg-elevated); border-bottom: 1px solid var(--color-border-subtle);">
+                        <i data-lucide="file-code" style="width: 13px; height: 13px; color: var(--color-text-muted);"></i>
+                        <span style="font-size: var(--text-sm); color: var(--color-text-muted); font-family: var(--font-mono);">src/auth/jwt.ts</span>
+                      </div>
+                      <!-- Diff lines -->
+                      <div style="font-family: var(--font-mono); font-size: 12px; line-height: 1.55;">
+                        <div class="px-3 py-0.5 whitespace-pre" style="color: var(--color-text-secondary);">export function generateToken(payload: JwtPayload): string {</div>
+                        <div class="px-3 py-0.5 whitespace-pre" style="color: var(--color-text-secondary);">  return jwt.sign(payload, SECRET, {</div>
+                        <div class="px-3 py-0.5 whitespace-pre" style="background: var(--state-error-bg); color: var(--state-error);">-  expiresIn: '5m',</div>
+                        <div class="px-3 py-0.5 whitespace-pre" style="background: var(--state-success-bg); color: var(--state-success);">+  expiresIn: '1h',</div>
+                        <div class="px-3 py-0.5 whitespace-pre" style="color: var(--color-text-secondary);">  });</div>
+                        <div class="px-3 py-0.5 whitespace-pre" style="color: var(--color-text-secondary);">}</div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- ---- User message 2 ---- -->
+                <div class="flex gap-3 mt-6" style="flex-direction: row-reverse;">
+                  <div style="max-width: min(680px, 100%);">
+                    <div class="chat-bubble-user" style="border: 1px solid var(--color-border); border-radius: 8px 8px 3px 8px; background: var(--color-bg-elevated); color: var(--color-text-body); padding: 5px 9px; font-size: var(--text-md); line-height: var(--leading-chat); box-shadow: var(--shadow-sm);">
+                      好的，能再添加 refresh token 轮换吗？
+                    </div>
+                  </div>
+                </div>
+
+                <!-- ---- AI response 2 ---- -->
+                <div class="flex gap-3 items-start mt-5">
+                  <!-- AI avatar -->
+                  <div class="flex items-center justify-center shrink-0 mt-0.5" style="width: 28px; height: 28px; border-radius: var(--radius-md); background: var(--color-primary-muted);">
+                    <i data-lucide="sparkles" style="width: 14px; height: 14px; color: var(--color-primary);"></i>
+                  </div>
+                  <div style="max-width: min(680px, 100%);">
+                    <!-- AI text -->
+                    <p style="font-size: var(--text-md); color: var(--color-text-body); line-height: 1.78;">已完成。我创建了支持轮换的新 refresh token 模块。</p>
+
+                    <!-- Diff block for new file -->
+                    <div class="mt-2.5 overflow-y-auto" style="max-height: 280px; border: 1px solid var(--color-border); border-radius: 7px; background: var(--color-bg-content);">
+                      <!-- Meta line -->
+                      <div class="flex items-center gap-2 px-3 py-1.5" style="background: var(--color-bg-elevated); border-bottom: 1px solid var(--color-border-subtle);">
+                        <i data-lucide="file-plus" style="width: 13px; height: 13px; color: var(--state-success);"></i>
+                        <span style="font-size: var(--text-sm); color: var(--color-text-muted); font-family: var(--font-mono);">src/auth/refresh-token.ts</span>
+                        <span class="ml-auto" style="font-size: var(--text-xs); color: var(--state-success); font-weight: var(--fw-medium);">新文件</span>
+                      </div>
+                      <!-- Diff lines (all green/add) -->
+                      <div style="font-family: var(--font-mono); font-size: 12px; line-height: 1.55;">
+                        <div class="px-3 py-0.5 whitespace-pre" style="background: var(--state-success-bg); color: var(--state-success);">+import jwt from 'jsonwebtoken';</div>
+                        <div class="px-3 py-0.5 whitespace-pre" style="background: var(--state-success-bg); color: var(--state-success);">+import { Redis } from 'ioredis';</div>
+                        <div class="px-3 py-0.5 whitespace-pre" style="background: var(--state-success-bg); color: var(--state-success);">+</div>
+                        <div class="px-3 py-0.5 whitespace-pre" style="background: var(--state-success-bg); color: var(--state-success);">+const REFRESH_EXPIRY = '7d';</div>
+                        <div class="px-3 py-0.5 whitespace-pre" style="background: var(--state-success-bg); color: var(--state-success);">+const ROTATION_THRESHOLD = '1d';</div>
+                        <div class="px-3 py-0.5 whitespace-pre" style="background: var(--state-success-bg); color: var(--state-success);">+</div>
+                        <div class="px-3 py-0.5 whitespace-pre" style="background: var(--state-success-bg); color: var(--state-success);">+export async function rotateRefreshToken(</div>
+                        <div class="px-3 py-0.5 whitespace-pre" style="background: var(--state-success-bg); color: var(--state-success);">+  userId: string,</div>
+                        <div class="px-3 py-0.5 whitespace-pre" style="background: var(--state-success-bg); color: var(--state-success);">+  currentToken: string,</div>
+                        <div class="px-3 py-0.5 whitespace-pre" style="background: var(--state-success-bg); color: var(--state-success);">+  redis: Redis</div>
+                        <div class="px-3 py-0.5 whitespace-pre" style="background: var(--state-success-bg); color: var(--state-success);">+): Promise&lt;string&gt; {</div>
+                        <div class="px-3 py-0.5 whitespace-pre" style="background: var(--state-success-bg); color: var(--state-success);">+  // Revoke old token</div>
+                        <div class="px-3 py-0.5 whitespace-pre" style="background: var(--state-success-bg); color: var(--state-success);">+  await redis.del(`refresh:${currentToken}`);</div>
+                        <div class="px-3 py-0.5 whitespace-pre" style="background: var(--state-success-bg); color: var(--state-success);">+  // Issue new token</div>
+                        <div class="px-3 py-0.5 whitespace-pre" style="background: var(--state-success-bg); color: var(--state-success);">+  const newToken = jwt.sign({ userId, type: 'refresh' },</div>
+                        <div class="px-3 py-0.5 whitespace-pre" style="background: var(--state-success-bg); color: var(--state-success);">+    SECRET, { expiresIn: REFRESH_EXPIRY }</div>
+                        <div class="px-3 py-0.5 whitespace-pre" style="background: var(--state-success-bg); color: var(--state-success);">+  );</div>
+                        <div class="px-3 py-0.5 whitespace-pre" style="background: var(--state-success-bg); color: var(--state-success);">+  await redis.set(`refresh:${newToken}`, userId,</div>
+                        <div class="px-3 py-0.5 whitespace-pre" style="background: var(--state-success-bg); color: var(--state-success);">+    'EX', 7 * 24 * 3600);</div>
+                        <div class="px-3 py-0.5 whitespace-pre" style="background: var(--state-success-bg); color: var(--state-success);">+  return newToken;</div>
+                        <div class="px-3 py-0.5 whitespace-pre" style="background: var(--state-success-bg); color: var(--state-success);">+}</div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+              </div>
+              <!-- END message scroll area -->
+
+              <!-- ===== 4. CHAT COMPOSER (redesigned v2 — capable coding-assistant input) ===== -->
+              <div class="shrink-0" style="width: min(760px, calc(100% - 32px)); margin: 0 auto 20px;">
+
+                <!-- Backdrop overlay — subtle, click to close attachment menu -->
+                <div data-dom-id="attachment-menu-backdrop" style="position: fixed; inset: 0; z-index: 40; background: rgba(0,0,0,0.1); cursor: pointer;" aria-label="关闭附件菜单"></div>
+
+                <!-- Composer container — reads as focused/active via inset primary ring -->
+                <div style="border: 1px solid var(--color-border); border-radius: 16px; background: var(--color-bg-surface); padding: 12px 14px; box-shadow: var(--shadow-composer), inset 0 0 0 1px var(--color-border-active);">
+
+                  <!-- Context chips row (attached files) -->
+                  <div style="display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 4px;">
+                    <!-- Chip: src/auth/jwt.ts -->
+                    <span style="display: inline-flex; align-items: center; gap: 4px; border-radius: 999px; background: var(--color-bg-elevated); border: 1px solid var(--color-border-subtle); padding: 3px 4px 3px 8px; font-size: var(--text-xs); color: var(--color-text-secondary); white-space: nowrap;">
+                      <i data-lucide="file-code" style="width: 12px; height: 12px; color: var(--color-text-muted); flex-shrink: 0;"></i>
+                      <span style="font-family: var(--font-mono);">src/auth/jwt.ts</span>
+                      <button style="display: inline-flex; align-items: center; justify-content: center; width: 16px; height: 16px; border: none; background: transparent; cursor: pointer; padding: 0;" aria-label="移除附件 src/auth/jwt.ts">
+                        <i data-lucide="x" style="width: 12px; height: 12px; color: var(--color-text-muted);"></i>
+                      </button>
+                    </span>
+                    <!-- Chip: src/auth/refresh-token.ts -->
+                    <span style="display: inline-flex; align-items: center; gap: 4px; border-radius: 999px; background: var(--color-bg-elevated); border: 1px solid var(--color-border-subtle); padding: 3px 4px 3px 8px; font-size: var(--text-xs); color: var(--color-text-secondary); white-space: nowrap;">
+                      <i data-lucide="file-code" style="width: 12px; height: 12px; color: var(--color-text-muted); flex-shrink: 0;"></i>
+                      <span style="font-family: var(--font-mono);">src/auth/refresh-token.ts</span>
+                      <button style="display: inline-flex; align-items: center; justify-content: center; width: 16px; height: 16px; border: none; background: transparent; cursor: pointer; padding: 0;" aria-label="移除附件 src/auth/refresh-token.ts">
+                        <i data-lucide="x" style="width: 12px; height: 12px; color: var(--color-text-muted);"></i>
+                      </button>
+                    </span>
+                  </div>
+
+                  <!-- Textarea (pre-filled with in-progress message) -->
+                  <textarea
+                    class="w-full resize-none outline-none"
+                    style="min-height: 64px; background: transparent; color: var(--color-text-body); font-size: var(--text-md); font-family: var(--font-sans); line-height: var(--leading-normal); border: none;"
+                    placeholder="询问任何问题，或输入 / 使用命令、@ 提及文件"
+                    rows="3"
+                    aria-label="输入消息"
+                  >再帮我加一个 token 黑名单机制，被撤销的 refresh token 写入黑名单</textarea>
+
+                  <!-- Divider between textarea and toolbar -->
+                  <div style="border-top: 1px solid var(--color-border-subtle); margin-top: 8px; margin-bottom: 8px;"></div>
+
+                  <!-- Bottom toolbar row -->
+                  <div style="display: flex; align-items: center; justify-content: space-between; gap: 8px; position: relative;">
+                    <!-- Attachment popover (open — anchored above toolbar, left-aligned to attachment button) -->
+                    <div data-dom-id="attachment-menu" style="position: absolute; bottom: calc(100% + 8px); left: 0; z-index: 50; background: var(--color-bg-elevated); border: 1px solid var(--color-border); border-radius: 10px; box-shadow: var(--shadow-lg); padding: 6px; min-width: 240px;">
+                      <!-- Menu header -->
+                      <div style="font-size: var(--text-xs); color: var(--color-text-muted); padding: 6px 8px 4px;">添加附件</div>
+                      <!-- Item: 从电脑上传 -->
+                      <button style="display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-radius: 7px; cursor: pointer; width: 100%; text-align: left; border: none; background: transparent; font-family: var(--font-sans);" onmouseenter="this.style.background='var(--color-bg-hover)'" onmouseleave="this.style.background='transparent'">
+                        <i data-lucide="laptop" style="width: 16px; height: 16px; color: var(--color-text-secondary); flex-shrink: 0;"></i>
+                        <span style="font-size: var(--text-sm); color: var(--color-text-body); flex: 1; min-width: 0;">从电脑上传</span>
+                        <span style="font-size: var(--text-xs); color: var(--color-text-muted); white-space: nowrap;">⌘U</span>
+                      </button>
+                      <!-- Item: 从项目添加文件 -->
+                      <button style="display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-radius: 7px; cursor: pointer; width: 100%; text-align: left; border: none; background: transparent; font-family: var(--font-sans);" onmouseenter="this.style.background='var(--color-bg-hover)'" onmouseleave="this.style.background='transparent'">
+                        <i data-lucide="folder-open" style="width: 16px; height: 16px; color: var(--color-text-secondary); flex-shrink: 0;"></i>
+                        <span style="font-size: var(--text-sm); color: var(--color-text-body); flex: 1; min-width: 0;">从项目添加文件</span>
+                        <span style="font-size: var(--text-xs); color: var(--color-text-muted); white-space: nowrap;">⌘P</span>
+                      </button>
+                      <!-- Item: 添加图片 -->
+                      <button style="display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-radius: 7px; cursor: pointer; width: 100%; text-align: left; border: none; background: transparent; font-family: var(--font-sans);" onmouseenter="this.style.background='var(--color-bg-hover)'" onmouseleave="this.style.background='transparent'">
+                        <i data-lucide="image" style="width: 16px; height: 16px; color: var(--color-text-secondary); flex-shrink: 0;"></i>
+                        <span style="font-size: var(--text-sm); color: var(--color-text-body); flex: 1; min-width: 0;">添加图片</span>
+                      </button>
+                      <!-- Divider -->
+                      <div style="border-top: 1px solid var(--color-border-subtle); margin: 4px 0;"></div>
+                      <!-- Section label: 最近文件 -->
+                      <div style="font-size: var(--text-xs); color: var(--color-text-muted); padding: 4px 8px;">最近文件</div>
+                      <!-- Recent file: package.json -->
+                      <button style="display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-radius: 7px; cursor: pointer; width: 100%; text-align: left; border: none; background: transparent; font-family: var(--font-sans);" onmouseenter="this.style.background='var(--color-bg-hover)'" onmouseleave="this.style.background='transparent'">
+                        <i data-lucide="file-code" style="width: 14px; height: 14px; color: var(--color-text-muted); flex-shrink: 0;"></i>
+                        <span style="font-family: var(--font-mono); font-size: var(--text-sm); color: var(--color-text-body); flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">package.json</span>
+                        <span style="font-size: var(--text-xs); color: var(--color-text-muted); white-space: nowrap;">2.1 KB</span>
+                      </button>
+                      <!-- Recent file: tsconfig.json -->
+                      <button style="display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-radius: 7px; cursor: pointer; width: 100%; text-align: left; border: none; background: transparent; font-family: var(--font-sans);" onmouseenter="this.style.background='var(--color-bg-hover)'" onmouseleave="this.style.background='transparent'">
+                        <i data-lucide="file-code" style="width: 14px; height: 14px; color: var(--color-text-muted); flex-shrink: 0;"></i>
+                        <span style="font-family: var(--font-mono); font-size: var(--text-sm); color: var(--color-text-body); flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">tsconfig.json</span>
+                        <span style="font-size: var(--text-xs); color: var(--color-text-muted); white-space: nowrap;">543 B</span>
+                      </button>
+                      <!-- Recent file: README.md -->
+                      <button style="display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-radius: 7px; cursor: pointer; width: 100%; text-align: left; border: none; background: transparent; font-family: var(--font-sans);" onmouseenter="this.style.background='var(--color-bg-hover)'" onmouseleave="this.style.background='transparent'">
+                        <i data-lucide="file-text" style="width: 14px; height: 14px; color: var(--color-text-muted); flex-shrink: 0;"></i>
+                        <span style="font-family: var(--font-mono); font-size: var(--text-sm); color: var(--color-text-body); flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">README.md</span>
+                        <span style="font-size: var(--text-xs); color: var(--color-text-muted); white-space: nowrap;">3.8 KB</span>
+                      </button>
+                    </div>
+                    <!-- LEFT group -->
+                    <div style="display: flex; align-items: center; gap: 6px;">
+                      <!-- Attachment button (active — menu open) -->
+                      <button style="display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 28px; border-radius: 7px; border: none; background: var(--color-bg-hover); cursor: pointer;" aria-label="添加附件" data-dom-id="composer-attachment-toggle">
+                        <i data-lucide="paperclip" style="width: 16px; height: 16px; color: var(--color-text-body);"></i>
+                      </button>
+                      <!-- Mention button -->
+                      <button style="display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 28px; border-radius: 7px; border: none; background: transparent; cursor: pointer;" aria-label="提及文件" onmouseenter="this.style.background='var(--color-bg-hover)'" onmouseleave="this.style.background='transparent'">
+                        <i data-lucide="at-sign" style="width: 16px; height: 16px; color: var(--color-text-muted);"></i>
+                      </button>
+                      <!-- Mode segmented control -->
+                      <div style="display: inline-flex; gap: 2px; border: 1px solid var(--color-border-subtle); border-radius: 7px; background: transparent; padding: 2px;">
+                        <!-- Agent (active) -->
+                        <button style="display: inline-flex; align-items: center; gap: 4px; border: none; border-radius: 5px; background: var(--color-primary-muted); color: var(--color-text-body); font-size: var(--text-xs); font-weight: var(--fw-extrabold); padding: 3px 10px; cursor: pointer;">
+                          <i data-lucide="sparkles" style="width: 12px; height: 12px; color: var(--color-primary);"></i>
+                          <span>代理</span>
+                        </button>
+                        <!-- Ask (inactive) -->
+                        <button style="display: inline-flex; align-items: center; border: none; border-radius: 5px; background: transparent; color: var(--color-text-muted); font-size: var(--text-xs); font-weight: var(--fw-extrabold); padding: 3px 10px; cursor: pointer;">
+                          <span>问答</span>
+                        </button>
+                      </div>
+                    </div>
+
+                    <!-- RIGHT group -->
+                    <div style="display: flex; align-items: center; gap: 10px;">
+                      <!-- Model selector pill -->
+                      <button style="display: inline-flex; align-items: center; gap: 6px; border: 1px solid var(--color-border-subtle); border-radius: 999px; background: transparent; padding: 4px 10px; cursor: pointer;" aria-label="选择模型">
+                        <span style="width: 8px; height: 8px; border-radius: 999px; background: var(--state-success); flex-shrink: 0;"></span>
+                        <span style="font-size: var(--text-xs); font-weight: var(--fw-semibold); color: var(--color-text-secondary);">GPT-4o</span>
+                        <i data-lucide="chevron-down" style="width: 12px; height: 12px; color: var(--color-text-muted);"></i>
+                      </button>
+                      <!-- Token counter -->
+                      <span style="font-size: var(--text-xs); color: var(--color-text-muted); font-family: var(--font-mono); white-space: nowrap;">1.2k / 128k</span>
+                      <!-- Send button -->
+                      <button style="display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; border-radius: 999px; background: var(--color-primary); border: none; cursor: pointer;" aria-label="发送" onmouseenter="this.style.background='var(--color-primary-hover)'" onmouseleave="this.style.background='var(--color-primary)'">
+                        <i data-lucide="arrow-up" style="width: 16px; height: 16px; color: #ffffff;"></i>
+                      </button>
+                    </div>
+                  </div>
+
+                </div>
+
+                <!-- Hint line -->
+                <div style="text-align: center; margin-top: 8px; font-size: var(--text-xs); color: var(--color-text-muted);">回车发送 · Shift+回车换行 · / 唤起命令</div>
+
+              </div>
+
+            </div>
+            <!-- END chat panel -->
+
+          </div>
+          <!-- END chat workspace -->
+
+        </div>
+        <!-- END main content -->
+
+      </div>
+      <!-- END root grid -->
+
+    </main>
+
+    <style>
+      body { background: var(--color-bg-app) !important; color: var(--color-text-primary); }
+      textarea::placeholder { color: var(--color-text-placeholder); }
+      .no-scrollbar::-webkit-scrollbar { display: none; }
+      .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+      button:hover { opacity: 0.9; }
+      ::-webkit-scrollbar { width: 6px; }
+      ::-webkit-scrollbar-track { background: transparent; }
+      ::-webkit-scrollbar-thumb { background: var(--color-bg-elevated); border-radius: var(--radius-full); }
+      ::-webkit-scrollbar-thumb:hover { background: var(--color-text-muted); }
+    </style>
+    <script>lucide.createIcons();</script>
+</body>
+</html>
