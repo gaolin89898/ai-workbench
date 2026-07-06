@@ -409,7 +409,7 @@ void main() {
       'kind': 'delta',
       'phase': 'process',
       'stepId': 'agent-message',
-      'text': '执行结论',
+      'text': '已完成',
     });
     controller.handleRealtimeForTesting({
       'type': 'ai.chat.output',
@@ -433,7 +433,7 @@ void main() {
               segment.stepId == 'process-text-agent-message')
           .single
           .text,
-      '执行过程\n执行结论',
+      '执行过程\n已完成',
     );
 
     await Future<void>.delayed(Duration.zero);

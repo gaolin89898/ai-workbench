@@ -597,7 +597,8 @@ bool _isThinkingStageSegment(ChatSegment segment) {
 }
 
 bool _isExecutionConclusionSegment(ChatSegment segment) {
-  return segment.type == 'thought' && segment.title == '执行结论';
+  return segment.type == 'thought' &&
+      (segment.stepId ?? '').startsWith('agent-message-');
 }
 
 bool _isThinkingStatusSegment(ChatSegment segment) {
@@ -1874,8 +1875,7 @@ class _ToolDetailsSheet extends StatelessWidget {
               if ((segment.command ?? '').trim().isNotEmpty)
                 _SheetSection(title: '命令', child: _CodeBlock(segment.command!)),
               if ((segment.summary ?? '').trim().isNotEmpty)
-                _SheetSection(
-                    title: '执行结论', child: _DetailBlock(segment.summary!)),
+                _SheetSection(child: _DetailBlock(segment.summary!)),
               if (visibleInput.trim().isNotEmpty)
                 _SheetSection(title: '输入', child: _CodeBlock(visibleInput)),
               if (visibleOutput.trim().isNotEmpty)
@@ -1891,9 +1891,9 @@ class _ToolDetailsSheet extends StatelessWidget {
 }
 
 class _SheetSection extends StatelessWidget {
-  const _SheetSection({required this.title, required this.child});
+  const _SheetSection({this.title, required this.child});
 
-  final String title;
+  final String? title;
   final Widget child;
 
   @override
@@ -1903,17 +1903,18 @@ class _SheetSection extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Padding(
-            padding: const EdgeInsets.only(bottom: 6),
-            child: Text(
-              title,
-              style: const TextStyle(
-                color: AppColors.secondary,
-                fontSize: 12,
-                fontWeight: FontWeight.w800,
+          if (title != null)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 6),
+              child: Text(
+                title!,
+                style: const TextStyle(
+                  color: AppColors.secondary,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w800,
+                ),
               ),
             ),
-          ),
           child,
         ],
       ),

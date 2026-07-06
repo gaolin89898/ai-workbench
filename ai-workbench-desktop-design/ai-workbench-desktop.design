@@ -1,82 +1,18 @@
 {
   "data": [
     {
-      "id": "page-workspace",
-      "title": "工作台",
-      "type": "page",
-      "version": 1,
-      "createdAt": 1782513600000,
-      "canvasData": {
-        "x": 0,
-        "y": 0,
-        "group": 0
-      },
-      "devMetadata": {
-        "htmlSrc": "pages/workspace.html",
-        "interactions": []
-      }
-    },
-    {
-      "id": "page-chat-session",
-      "title": "AI 会话",
-      "type": "page",
-      "version": 1,
-      "createdAt": 1782513600000,
-      "canvasData": {
-        "x": 620,
-        "y": 0,
-        "group": 0
-      },
-      "devMetadata": {
-        "htmlSrc": "pages/chat-session.html",
-        "interactions": []
-      }
-    },
-    {
       "id": "page-chat-session-composer-v2",
       "title": "AI 会话 - 输入框重设计",
       "type": "page",
       "version": 1,
       "createdAt": 1783326600000,
       "canvasData": {
-        "x": 620,
-        "y": 820,
+        "x": 0,
+        "y": 0,
         "group": 0
       },
       "devMetadata": {
         "htmlSrc": "pages/chat-session-composer-v2.html",
-        "interactions": []
-      }
-    },
-    {
-      "id": "page-chat-approval-cover-actual",
-      "title": "AI 会话 - 实际审批覆盖态",
-      "type": "page",
-      "version": 1,
-      "createdAt": 1783329600000,
-      "canvasData": {
-        "x": 1236,
-        "y": 816,
-        "group": 0
-      },
-      "devMetadata": {
-        "htmlSrc": "pages/chat-approval-cover-actual.html",
-        "interactions": []
-      }
-    },
-    {
-      "id": "page-chat-approval-cover",
-      "title": "AI 会话 - 操作审批覆盖输入框",
-      "type": "page",
-      "version": 1,
-      "createdAt": 1783253700000,
-      "canvasData": {
-        "x": 1852,
-        "y": 816,
-        "group": 0
-      },
-      "devMetadata": {
-        "htmlSrc": "pages/chat-approval-cover.html",
         "interactions": []
       }
     },
@@ -87,7 +23,7 @@
       "version": 1,
       "createdAt": 1783254000000,
       "canvasData": {
-        "x": 3100,
+        "x": 620,
         "y": 0,
         "group": 0
       },
@@ -103,8 +39,8 @@
       "version": 1,
       "createdAt": 1783351200000,
       "canvasData": {
-        "x": 2470,
-        "y": 1644,
+        "x": 1240,
+        "y": 0,
         "group": 0
       },
       "devMetadata": {
@@ -119,8 +55,8 @@
       "version": 1,
       "createdAt": 1783350000000,
       "canvasData": {
-        "x": 1852,
-        "y": 1644,
+        "x": 1860,
+        "y": 0,
         "group": 0
       },
       "devMetadata": {
@@ -135,28 +71,12 @@
       "version": 1,
       "createdAt": 1782513600000,
       "canvasData": {
-        "x": 1240,
+        "x": 2480,
         "y": 0,
         "group": 0
       },
       "devMetadata": {
         "htmlSrc": "pages/terminal.html",
-        "interactions": []
-      }
-    },
-    {
-      "id": "page-logs",
-      "title": "日志",
-      "type": "page",
-      "version": 1,
-      "createdAt": 1782513600000,
-      "canvasData": {
-        "x": 1860,
-        "y": 0,
-        "group": 0
-      },
-      "devMetadata": {
-        "htmlSrc": "pages/logs.html",
         "interactions": []
       }
     },
@@ -167,7 +87,7 @@
       "version": 1,
       "createdAt": 1782513600000,
       "canvasData": {
-        "x": 2480,
+        "x": 3100,
         "y": 0,
         "group": 0
       },
@@ -183,44 +103,12 @@
       "version": 1,
       "createdAt": 1782513600000,
       "canvasData": {
-        "x": 3100,
-        "y": 0,
-        "group": 0
-      },
-      "devMetadata": {
-        "htmlSrc": "pages/settings.html",
-        "interactions": []
-      }
-    },
-    {
-      "id": "page-settings-pairing",
-      "title": "设置 - 配对",
-      "type": "page",
-      "version": 1,
-      "createdAt": 1782513600000,
-      "canvasData": {
         "x": 3720,
         "y": 0,
         "group": 0
       },
       "devMetadata": {
-        "htmlSrc": "pages/settings-pairing.html",
-        "interactions": []
-      }
-    },
-    {
-      "id": "page-settings-database",
-      "title": "设置 - 数据库",
-      "type": "page",
-      "version": 1,
-      "createdAt": 1782513600000,
-      "canvasData": {
-        "x": 4340,
-        "y": 0,
-        "group": 0
-      },
-      "devMetadata": {
-        "htmlSrc": "pages/settings-database.html",
+        "htmlSrc": "pages/settings.html",
         "interactions": []
       }
     },
@@ -231,7 +119,7 @@
       "version": 1,
       "createdAt": 1782513600000,
       "canvasData": {
-        "x": 4960,
+        "x": 4340,
         "y": 0,
         "group": 0
       },
@@ -247,7 +135,7 @@
       "version": 1,
       "createdAt": 1782513600000,
       "canvasData": {
-        "x": 5580,
+        "x": 4960,
         "y": 0,
         "group": 0
       },
@@ -263,7 +151,7 @@
       "version": 1,
       "createdAt": 1782513600000,
       "canvasData": {
-        "x": 6200,
+        "x": 5580,
         "y": 0,
         "group": 0
       },
@@ -279,7 +167,7 @@
       "version": 1,
       "createdAt": 1782667000000,
       "canvasData": {
-        "x": 7440,
+        "x": 6200,
         "y": 0,
         "group": 0
       },
@@ -295,7 +183,7 @@
       "version": 1,
       "createdAt": 1782667600000,
       "canvasData": {
-        "x": 8060,
+        "x": 6820,
         "y": 0,
         "group": 0
       },
@@ -311,8 +199,8 @@
       "version": 1,
       "createdAt": 1782665197000,
       "canvasData": {
-        "x": 8680,
-        "y": 72,
+        "x": 7440,
+        "y": 0,
         "group": 0
       },
       "devMetadata": {
@@ -322,7 +210,7 @@
     }
   ],
   "config": {
-    "autoLayout": false,
+    "autoLayout": true,
     "deviceType": "desktop",
     "projectName": "AI 工作台 桌面端"
   }

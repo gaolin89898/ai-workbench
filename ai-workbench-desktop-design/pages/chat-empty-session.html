@@ -240,20 +240,87 @@
                   <!-- Toolbar row -->
                   <div class="chat-composer-toolbar" style="display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 8px;">
 
-                    <!-- LEFT: + button -->
+                    <!-- LEFT: + button + AI tool selector -->
                     <div style="display: flex; align-items: center; gap: 6px; min-width: 0;">
                       <button style="display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 28px; border-radius: 7px; border: 1px solid var(--color-border-subtle); background: transparent; cursor: pointer; transition: background var(--transition-fast);" aria-label="添加" onmouseenter="this.style.background='var(--color-bg-hover)'" onmouseleave="this.style.background='transparent'">
                         <i data-lucide="plus" style="width: 16px; height: 16px; color: var(--color-text-secondary);"></i>
+                      </button>
+                      <!-- AI tool selector (Codex logo + name + chevron) -->
+                      <button style="display: inline-flex; align-items: center; gap: 6px; height: 28px; border: 1px solid var(--color-border-subtle); border-radius: 999px; background: transparent; padding: 4px 10px; cursor: pointer; flex: 0 0 auto; transition: background var(--transition-fast);" aria-label="选择 AI 工具" onmouseenter="this.style.background='var(--color-bg-hover)'" onmouseleave="this.style.background='transparent'">
+                        <!-- Codex logo (green hex icon) -->
+                        <svg width="14" height="14" viewBox="0 0 16 16" fill="none" style="flex-shrink: 0;">
+                          <path d="M8 1L14.928 5V11L8 15L1.072 11V5L8 1Z" fill="#10a37f" stroke="#10a37f" stroke-width="0.5"/>
+                        </svg>
+                        <span style="font-size: 11px; font-weight: 620; color: var(--color-text-secondary);">Codex</span>
+                        <i data-lucide="chevron-down" style="width: 12px; height: 12px; color: var(--color-text-muted); flex-shrink: 0;"></i>
                       </button>
                     </div>
 
                     <!-- RIGHT: model picker + send button -->
                     <div style="display: flex; align-items: center; gap: 10px; flex-shrink: 0;">
-                      <!-- Model picker pill -->
-                      <button style="display: inline-flex; align-items: center; gap: 6px; height: 28px; border: 1px solid var(--color-border-subtle); border-radius: 999px; background: transparent; padding: 4px 10px; cursor: pointer; max-width: 220px; flex: 0 1 180px; transition: background var(--transition-fast);" aria-label="选择模型" onmouseenter="this.style.background='var(--color-bg-hover)'" onmouseleave="this.style.background='transparent'">
-                        <span style="font-size: 11px; font-weight: 620; color: var(--color-text-secondary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">claude-sonnet-4-20250514</span>
-                        <i data-lucide="chevron-down" style="width: 12px; height: 12px; color: var(--color-text-muted); flex-shrink: 0;"></i>
-                      </button>
+                      <!-- Model + Reasoning selector with dual-column dropdown (expanded) -->
+                      <div style="position: relative;">
+                        <button style="display: inline-flex; align-items: center; gap: 6px; height: 28px; border: 1px solid var(--color-border-subtle); border-radius: 999px; background: transparent; padding: 4px 10px; cursor: pointer; max-width: 220px; flex: 0 1 180px; transition: background var(--transition-fast);" aria-label="选择模型" onmouseenter="this.style.background='var(--color-bg-hover)'" onmouseleave="this.style.background='transparent'">
+                          <span style="font-size: 11px; font-weight: 620; color: var(--color-text-secondary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">claude-sonnet-4 · 高</span>
+                          <i data-lucide="chevron-down" style="width: 12px; height: 12px; color: var(--color-text-muted); flex-shrink: 0;"></i>
+                        </button>
+                        <!-- Expanded dual-column dropdown -->
+                        <div style="position: absolute; right: 0; bottom: calc(100% + 6px); display: flex; gap: 0; z-index: 50;">
+                          <!-- Left column: 模型 -->
+                          <div style="width: 200px; border-radius: 10px 0 0 10px; border: 1px solid var(--color-border); border-right: none; background: var(--color-bg-elevated); box-shadow: 0 8px 32px rgba(0,0,0,0.28); padding: 5px 0;">
+                            <div style="padding: 6px 12px 4px; font-size: 11px; font-weight: 800; color: var(--color-text-muted);">模型</div>
+                            <!-- claude-sonnet-4 (selected) -->
+                            <button style="display: flex; align-items: center; gap: 8px; width: 100%; border: none; border-radius: 0; background: var(--color-bg-hover); padding: 8px 12px; cursor: pointer; text-align: left;">
+                              <i data-lucide="check" style="width: 14px; height: 14px; color: var(--color-text-body); flex-shrink: 0;"></i>
+                              <span style="font-size: 13px; font-weight: 500; color: var(--color-text-body);">claude-sonnet-4</span>
+                            </button>
+                            <!-- claude-opus-4 -->
+                            <button style="display: flex; align-items: center; gap: 8px; width: 100%; border: none; border-radius: 0; background: transparent; padding: 8px 12px; cursor: pointer; text-align: left;" onmouseenter="this.style.background='var(--color-bg-hover)'" onmouseleave="this.style.background='transparent'">
+                              <span style="width: 14px; flex-shrink: 0;"></span>
+                              <span style="font-size: 13px; font-weight: 500; color: var(--color-text-body);">claude-opus-4</span>
+                            </button>
+                            <!-- gpt-4o -->
+                            <button style="display: flex; align-items: center; gap: 8px; width: 100%; border: none; border-radius: 0; background: transparent; padding: 8px 12px; cursor: pointer; text-align: left;" onmouseenter="this.style.background='var(--color-bg-hover)'" onmouseleave="this.style.background='transparent'">
+                              <span style="width: 14px; flex-shrink: 0;"></span>
+                              <span style="font-size: 13px; font-weight: 500; color: var(--color-text-body);">gpt-4o</span>
+                            </button>
+                            <!-- gpt-4o-mini -->
+                            <button style="display: flex; align-items: center; gap: 8px; width: 100%; border: none; border-radius: 0; background: transparent; padding: 8px 12px; cursor: pointer; text-align: left;" onmouseenter="this.style.background='var(--color-bg-hover)'" onmouseleave="this.style.background='transparent'">
+                              <span style="width: 14px; flex-shrink: 0;"></span>
+                              <span style="font-size: 13px; font-weight: 500; color: var(--color-text-body);">gpt-4o-mini</span>
+                            </button>
+                            <!-- deepseek-v3 -->
+                            <button style="display: flex; align-items: center; gap: 8px; width: 100%; border: none; border-radius: 0; background: transparent; padding: 8px 12px; cursor: pointer; text-align: left;" onmouseenter="this.style.background='var(--color-bg-hover)'" onmouseleave="this.style.background='transparent'">
+                              <span style="width: 14px; flex-shrink: 0;"></span>
+                              <span style="font-size: 13px; font-weight: 500; color: var(--color-text-body);">deepseek-v3</span>
+                            </button>
+                          </div>
+                          <!-- Right column: 推理 -->
+                          <div style="width: 120px; border-radius: 0 10px 10px 0; border: 1px solid var(--color-border); background: var(--color-bg-elevated); box-shadow: 0 8px 32px rgba(0,0,0,0.28); padding: 5px 0;">
+                            <div style="padding: 6px 12px 4px; font-size: 11px; font-weight: 800; color: var(--color-text-muted);">推理</div>
+                            <!-- 低 -->
+                            <button style="display: flex; align-items: center; gap: 8px; width: 100%; border: none; border-radius: 0; background: transparent; padding: 8px 12px; cursor: pointer; text-align: left;" onmouseenter="this.style.background='var(--color-bg-hover)'" onmouseleave="this.style.background='transparent'">
+                              <span style="width: 14px; flex-shrink: 0;"></span>
+                              <span style="font-size: 13px; font-weight: 500; color: var(--color-text-body);">低</span>
+                            </button>
+                            <!-- 中 -->
+                            <button style="display: flex; align-items: center; gap: 8px; width: 100%; border: none; border-radius: 0; background: transparent; padding: 8px 12px; cursor: pointer; text-align: left;" onmouseenter="this.style.background='var(--color-bg-hover)'" onmouseleave="this.style.background='transparent'">
+                              <span style="width: 14px; flex-shrink: 0;"></span>
+                              <span style="font-size: 13px; font-weight: 500; color: var(--color-text-body);">中</span>
+                            </button>
+                            <!-- 高 (selected) -->
+                            <button style="display: flex; align-items: center; gap: 8px; width: 100%; border: none; border-radius: 0; background: var(--color-bg-hover); padding: 8px 12px; cursor: pointer; text-align: left;">
+                              <i data-lucide="check" style="width: 14px; height: 14px; color: var(--color-text-body); flex-shrink: 0;"></i>
+                              <span style="font-size: 13px; font-weight: 500; color: var(--color-text-body);">高</span>
+                            </button>
+                            <!-- 超高 -->
+                            <button style="display: flex; align-items: center; gap: 8px; width: 100%; border: none; border-radius: 0; background: transparent; padding: 8px 12px; cursor: pointer; text-align: left;" onmouseenter="this.style.background='var(--color-bg-hover)'" onmouseleave="this.style.background='transparent'">
+                              <span style="width: 14px; flex-shrink: 0;"></span>
+                              <span style="font-size: 13px; font-weight: 500; color: var(--color-text-body);">超高</span>
+                            </button>
+                          </div>
+                        </div>
+                      </div>
                       <!-- Send button -->
                       <button style="display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; border-radius: 999px; background: var(--color-primary); border: none; cursor: pointer; transition: background var(--transition-fast);" aria-label="发送" onmouseenter="this.style.background='var(--color-primary-hover)'" onmouseleave="this.style.background='var(--color-primary)'">
                         <i data-lucide="arrow-up" style="width: 16px; height: 16px; color: #ffffff;"></i>

@@ -486,7 +486,7 @@ function isProcessStageSegment(segment: ChatSegmentType) {
 }
 
 function isExecutionConclusionSegment(segment: ChatSegmentType) {
-  return segment.type === "thought" && segment.title === "执行结论";
+  return segment.type === "thought" && (segment.stepId ?? "").startsWith("agent-message-");
 }
 
 function isCompletedThinkingSegment(segment: ChatSegmentType) {

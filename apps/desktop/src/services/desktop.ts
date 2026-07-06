@@ -296,10 +296,13 @@ export type CodexModelOption = {
   isDefault?: boolean;
 };
 
+export type CodexReasoningEffort = "low" | "medium" | "high" | "ultra";
+
 export type CodexChatOptions = {
   approvalMode?: CodexApprovalMode;
   codexMode?: CodexRunMode;
   codexModel?: string | null;
+  codexReasoningEffort?: CodexReasoningEffort | null;
   codexGoal?: string | null;
   codexGoalTokenBudget?: number | null;
 };

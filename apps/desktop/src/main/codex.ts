@@ -175,6 +175,11 @@ function trimmedOrNull(v: unknown): string | null {
   return typeof v === "string" && v.trim().length > 0 ? v.trim() : null;
 }
 
+function codexReasoningEffort(v: unknown): string | null {
+  const value = trimmedOrNull(v);
+  return value === "low" || value === "medium" || value === "high" || value === "ultra" ? value : null;
+}
+
 function arrayOfStrings(v: unknown): string[] {
   if (!Array.isArray(v)) return [];
   return v.filter((item): item is string => typeof item === "string" && item.trim().length > 0);
@@ -833,12 +838,14 @@ function buildCodexTurnParams(
   images: ChatImageAttachment[]
 ): Record<string, unknown> {
   const model = trimmedOrNull(req.codexModel);
+  const reasoningEffort = codexReasoningEffort(req.codexReasoningEffort);
   const collaborationMode = req.codexMode === "plan" ? "plan" : "default";
   const params: Record<string, unknown> = {
     threadId: threadInfo.threadId,
     input: buildUserInput(req.prompt, images),
   };
   if (model) params["model"] = model;
+  if (reasoningEffort) params["reasoning_effort"] = reasoningEffort;
   if (collaborationMode === "plan") {
     const settingsModel = model ?? threadInfo.model;
     if (settingsModel) {
@@ -846,7 +853,7 @@ function buildCodexTurnParams(
         mode: "plan",
         settings: {
           model: settingsModel,
-          reasoning_effort: null,
+          reasoning_effort: reasoningEffort,
           developer_instructions: null,
         },
       };

@@ -449,7 +449,6 @@ export function codexTraceSnapshotToSegments(snapshot: CodexTraceSnapshot): Chat
         segments.push({
           type: "thought",
           stepId: `agent-message-${item.id}`,
-          title: "执行结论",
           text: item.text,
           collapsed: false,
           durationMs: itemDurationMs(item, snapshot.completedAt),

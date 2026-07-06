@@ -4,7 +4,7 @@ import ChatMessageRow from "./ChatMessageRow.vue";
 import ApprovalSegment from "./ChatSegment.vue";
 import TerminalView from "./TerminalView.vue";
 import { useWorkspace } from "../composables/useWorkspace";
-import { desktopApi, type AiProvider, type ChatImageAttachment, type ChatMessage, type ChatSegment, type CodexApprovalMode, type CodexChatOptions, type CodexModelOption, type CodexRunMode } from "../services/desktop";
+import { desktopApi, type AiProvider, type ChatImageAttachment, type ChatMessage, type ChatSegment, type CodexApprovalMode, type CodexChatOptions, type CodexModelOption, type CodexReasoningEffort, type CodexRunMode } from "../services/desktop";
 
 const providerClaudeIcon = new URL("../assets/icons/provider-claude.svg", import.meta.url).href;
 const providerCodexIcon = new URL("../assets/icons/provider-codex.svg", import.meta.url).href;
@@ -29,12 +29,23 @@ const modelSubmenuOpen = ref(false);
 const codexApprovalMode = ref<CodexApprovalMode>("autoEdit");
 const codexMode = ref<CodexRunMode>("default");
 const codexSelectedModel = ref("");
-const codexReasoningLevel = ref<"low" | "medium" | "high" | "ultra">("high");
+const codexReasoningLevel = ref<CodexReasoningEffort>("high");
 const codexGoalEnabled = ref(false);
 const codexGoal = ref("");
 const codexModels = ref<CodexModelOption[]>([]);
 const codexModelsLoading = ref(false);
 const codexModelsLoaded = ref(false);
+const floatingMenuTargetSelector = [
+  ".codex-start-add",
+  ".codex-start-menu",
+  ".codex-approval-trigger",
+  ".codex-approval-menu",
+  ".codex-composer-add",
+  ".codex-composer-add-menu",
+  ".codex-model-picker",
+  ".codex-model-menu",
+  ".codex-model-submenu",
+].join(", ");
 
 const approvalModes = [
   {
@@ -368,10 +379,13 @@ function providerIcon(providerId: string) {
   return providerIcons[providerId] ?? providerCodexIcon;
 }
 
+function isFloatingMenuTarget(target: EventTarget | null) {
+  return target instanceof Element && Boolean(target.closest(floatingMenuTargetSelector));
+}
+
 function closeFloatingMenusOnOutsideClick(event: PointerEvent) {
   if (!startMenuOpen.value && !approvalMenuOpen.value && !composerToolsOpen.value && !modelMenuOpen.value && !modelSubmenuOpen.value) return;
-  const target = event.target;
-  if (target instanceof Node && (startPromptBox.value?.contains(target) || chatComposer.value?.contains(target))) return;
+  if (isFloatingMenuTarget(event.target)) return;
   startMenuOpen.value = false;
   approvalMenuOpen.value = false;
   composerToolsOpen.value = false;
@@ -475,6 +489,7 @@ function buildCodexOptions(): CodexChatOptions {
     approvalMode: codexApprovalMode.value,
     codexMode: codexMode.value,
     codexModel: codexSelectedModel.value || null,
+    codexReasoningEffort: codexReasoningLevel.value,
     codexGoal: goal || null,
   };
 }
