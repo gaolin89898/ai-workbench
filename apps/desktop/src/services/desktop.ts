@@ -280,6 +280,7 @@ export type ShellInputRequest = {
 
 export type CodexApprovalDecision = "approved" | "denied";
 export type CodexApprovalMode = "suggest" | "autoEdit" | "fullAccess";
+export type CodexRunMode = "default" | "plan";
 
 export type CodexApprovalResponseRequest = {
   aiSessionId: string;
@@ -287,13 +288,28 @@ export type CodexApprovalResponseRequest = {
   decision: CodexApprovalDecision;
 };
 
+export type CodexModelOption = {
+  id: string;
+  model: string;
+  displayName: string;
+  description?: string | null;
+  isDefault?: boolean;
+};
+
+export type CodexChatOptions = {
+  approvalMode?: CodexApprovalMode;
+  codexMode?: CodexRunMode;
+  codexModel?: string | null;
+  codexGoal?: string | null;
+  codexGoalTokenBudget?: number | null;
+};
+
 export type RunCodexChatRequest = {
   aiSessionId: string;
   projectPath: string;
   prompt: string;
   images?: ChatImageAttachment[];
-  approvalMode?: CodexApprovalMode;
-};
+} & CodexChatOptions;
 
 export type RunAiChatRequest = {
   aiSessionId: string;
@@ -497,6 +513,8 @@ export const desktopApi = {
     ipc<string>("run_ai_chat", req),
   runCodexChat: (req: RunCodexChatRequest): Promise<string> =>
     ipc<string>("run_codex_chat", req),
+  listCodexModels: (): Promise<CodexModelOption[]> =>
+    ipc<CodexModelOption[]>("list_codex_models"),
   stopAiChat: (aiSessionId: string): Promise<boolean> =>
     ipc<boolean>("stop_ai_chat", aiSessionId),
   respondCodexApproval: (req: CodexApprovalResponseRequest): Promise<boolean> =>

@@ -1,6 +1,6 @@
 import { computed, ref, watch } from "vue";
 import router from "../router";
-import { desktopApi, type AiChatOutputEvent, type AiProvider, type AiProviderTrace, type AiSession, type AiTraceUpdateEvent, type AppUpdateDownloadProgress, type ChatImageAttachment, type ChatMessage, type ChatSegment, type CodexApprovalMode, type DesktopPairingStatus, type ProviderStatus, type TerminalSession, type ViewName, type WorkspaceProject } from "../services/desktop";
+import { desktopApi, type AiChatOutputEvent, type AiProvider, type AiProviderTrace, type AiSession, type AiTraceUpdateEvent, type AppUpdateDownloadProgress, type ChatImageAttachment, type CodexChatOptions, type ChatMessage, type ChatSegment, type DesktopPairingStatus, type ProviderStatus, type TerminalSession, type ViewName, type WorkspaceProject } from "../services/desktop";
 import { decodeAssistantMessageFromStorage, encodeAssistantMessageForStorage, extractAssistantText } from "../utils/chat";
 
 const providers = ref<AiProvider[]>([]);
@@ -866,14 +866,37 @@ function chatMessageScore(message: ChatMessage) {
 
 async function loadAiSessionHistory(sessionId: string, options: { force?: boolean } = {}) {
   try {
-    if (!options.force && pendingAssistants.has(sessionId)) return;
+    const hasPending = pendingAssistants.has(sessionId);
     const history = await loadAiSessionHistorySnapshot(sessionId);
-    if (activeAiSession.value?.id !== sessionId || (!options.force && pendingAssistants.has(sessionId))) return;
+    if (activeAiSession.value?.id !== sessionId) return;
     void repairGeneratedCodexSessionTitleFromHistory(sessionId, history);
+    if (!options.force && hasPending) {
+      restorePendingSessionMessages(sessionId, history);
+      return;
+    }
     chatMessages.value = history;
   } catch (error) {
-    if (options.force || !pendingAssistants.has(sessionId)) chatMessages.value = [{ role: "error", text: `读取历史失败：${String(error)}` }];
+    if (activeAiSession.value?.id !== sessionId) return;
+    if (pendingAssistants.has(sessionId) && !options.force) {
+      restorePendingSessionMessages(sessionId);
+      return;
+    }
+    chatMessages.value = [{ role: "error", text: `读取历史失败：${String(error)}` }];
   }
+}
+
+function restorePendingSessionMessages(sessionId: string, history: ChatMessage[] = []) {
+  const pending = pendingAssistants.get(sessionId);
+  if (!pending || activeAiSession.value?.id !== sessionId) return false;
+  const base = [...history];
+  const lastAssistantIndex = base.map((message) => message.role).lastIndexOf("assistant");
+  if (lastAssistantIndex >= 0 && base[lastAssistantIndex].pending) {
+    base[lastAssistantIndex] = pending.message;
+  } else {
+    base.push(pending.message);
+  }
+  chatMessages.value = dedupeAdjacentChatMessages(base);
+  return true;
 }
 
 async function repairGeneratedCodexSessionTitleFromHistory(sessionId: string, history: ChatMessage[]) {
@@ -909,7 +932,7 @@ function isCodexExternalMirrorSession(session: AiSession | null) {
   return !session.providerSessionId.startsWith("app-server:");
 }
 
-async function sendPrompt(prompt: string, images: ChatImageAttachment[] = [], approvalMode: CodexApprovalMode = "suggest") {
+async function sendPrompt(prompt: string, images: ChatImageAttachment[] = [], codexOptions: CodexChatOptions = {}) {
   pushChatDebugEvent("收到发送请求");
   await initAiEventListeners();
   const trimmed = prompt.trim();
@@ -1006,23 +1029,29 @@ async function sendPrompt(prompt: string, images: ChatImageAttachment[] = [], ap
     pushChatDebugEvent(`用户消息已保存：${sessionId.slice(0, 8)}`);
     pushChatDebugEvent(`已连接 ${runtimeName}`);
     const runChat = providerId === "codex" ? desktopApi.runCodexChat : desktopApi.runAiChat;
-    void runChat({
+    const runRequest = {
       aiSessionId: sessionId,
       projectPath,
       prompt: promptForSession,
       images: plainImages,
-      approvalMode: providerId === "codex" ? approvalMode : undefined,
-    }).then((providerSessionId) => {
+      ...(providerId === "codex" ? codexOptions : {}),
+    };
+    void runChat(runRequest).then((providerSessionId) => {
       const pending = pendingAssistants.get(sessionId);
       const startedAt = pending?.startedAt ?? chatRunStates.value[sessionId]?.startedAt ?? performance.now();
       const elapsedMs = Math.round(performance.now() - startedAt);
       if (!pending) {
-        pushChatDebugEvent(`${providerName} 进程已退出：providerSessionId ${providerSessionId ? "已更新" : "为空"}`);
+        const wasStopped = stoppedAiSessions.delete(sessionId);
+        pushChatDebugEvent(wasStopped
+          ? `${providerName} 执行已中断`
+          : `${providerName} 进程已退出：providerSessionId ${providerSessionId ? "已更新" : "为空"}`);
         setChatRunState(sessionId, {
           active: false,
           phase: "done",
-          title: `${providerName} 已完成`,
-          detail: `执行已结束，用时 ${formatElapsedMs(elapsedMs)}。正在等待下一条消息。`,
+          title: wasStopped ? "已中断" : `${providerName} 已完成`,
+          detail: wasStopped
+            ? "本次执行已停止，已保留中断前的执行过程。"
+            : `执行已结束，用时 ${formatElapsedMs(elapsedMs)}。正在等待下一条消息。`,
         });
         return;
       }
@@ -1264,6 +1293,22 @@ function appendPendingAssistantText(sessionId: string, text: string, stepId?: st
   thinkingSessionIds.value = { ...thinkingSessionIds.value, [sessionId]: true };
 }
 
+function persistPendingAssistantSnapshot(sessionId: string, pending: PendingAssistant, fallbackText = "") {
+  const finalText = extractAssistantText((pending.finalText || pending.message.text || fallbackText).trim());
+  const finalSegments = pending.message.segments ?? [];
+  if (!finalText && !finalSegments.length) return;
+  const storageKey = finalText || JSON.stringify(finalSegments);
+  const draft = assistantDrafts.get(sessionId);
+  if (draft && storageKey === draft.savedText) return;
+  assistantDrafts.set(sessionId, { message: pending.message, savedText: storageKey });
+  void desktopApi.appendLocalAiMessage(sessionId, "assistant", encodeAssistantMessageForStorage({
+    text: finalText,
+    segments: finalSegments,
+  })).catch((error) => {
+    pushChatDebugEvent(`保存回答失败：${String(error)}`);
+  });
+}
+
 function completePendingAssistantFromExec(sessionId: string) {
   const pending = pendingAssistants.get(sessionId);
   if (!pending) return;
@@ -1272,19 +1317,26 @@ function completePendingAssistantFromExec(sessionId: string) {
   pending.finalText = stripProcessTextFromFinalText(text, [...pending.steps.values()]);
   upsertCompletionSummary(sessionId);
   syncPendingAssistantSegments(sessionId, true);
-  const finalText = extractAssistantText(pending.finalText.trim());
-  const finalSegments = pending.message.segments;
-  const draft = assistantDrafts.get(sessionId);
-  if (draft && finalText && finalText !== draft.savedText) {
-    assistantDrafts.set(sessionId, { ...draft, savedText: finalText });
-    void desktopApi.appendLocalAiMessage(sessionId, "assistant", encodeAssistantMessageForStorage({
-      text: finalText,
-      segments: finalSegments,
-    })).catch((error) => {
-      pushChatDebugEvent(`保存回答失败：${String(error)}`);
-    });
-  }
+  persistPendingAssistantSnapshot(sessionId, pending);
   thinkingSessionIds.value = { ...thinkingSessionIds.value, [sessionId]: false };
+  pendingAssistants.delete(sessionId);
+  assistantDrafts.delete(sessionId);
+  stopRunningElapsedTimerIfIdle();
+}
+
+function interruptPendingAssistant(sessionId: string) {
+  const pending = pendingAssistants.get(sessionId);
+  if (!pending) return;
+  pending.steps.delete("runtime-status");
+  pending.steps.delete("initial-thinking");
+  pending.steps.set("interrupted", {
+    type: "status",
+    stepId: "interrupted",
+    label: "已中断",
+    icon: "warn",
+  });
+  syncPendingAssistantSegments(sessionId, true);
+  persistPendingAssistantSnapshot(sessionId, pending, "已中断");
   pendingAssistants.delete(sessionId);
   assistantDrafts.delete(sessionId);
   stopRunningElapsedTimerIfIdle();
@@ -1307,20 +1359,7 @@ async function stopActiveAiChat() {
       replacePendingAssistantText(sessionId, pending.finalText, true);
       completePendingAssistantFromExec(sessionId);
     } else {
-      patchPendingAssistant(sessionId, {
-        pending: false,
-        role: "assistant",
-        text: "",
-        segments: [{
-          type: "status",
-          stepId: "interrupted",
-          label: "已中断",
-          icon: "warn",
-        }],
-      });
-      pendingAssistants.delete(sessionId);
-      assistantDrafts.delete(sessionId);
-      stopRunningElapsedTimerIfIdle();
+      interruptPendingAssistant(sessionId);
     }
   }
   thinkingSessionIds.value = { ...thinkingSessionIds.value, [sessionId]: false };
@@ -1411,6 +1450,9 @@ function patchPendingAssistant(sessionId: string, patch: Partial<ChatMessage>) {
   const currentMessage = pending.message;
   const nextMessage = { ...currentMessage, ...patch };
   pending.message = nextMessage;
+  const draft = assistantDrafts.get(sessionId);
+  if (draft) assistantDrafts.set(sessionId, { message: nextMessage, savedText: draft.savedText });
+  if (activeAiSession.value?.id !== sessionId) return nextMessage;
   let replaced = false;
   chatMessages.value = chatMessages.value.map((message) => (
     message.clientId === pending.clientId || message === currentMessage
@@ -1420,8 +1462,6 @@ function patchPendingAssistant(sessionId: string, patch: Partial<ChatMessage>) {
   if (!replaced) {
     chatMessages.value = [...chatMessages.value, nextMessage];
   }
-  const draft = assistantDrafts.get(sessionId);
-  if (draft) assistantDrafts.set(sessionId, { message: nextMessage, savedText: draft.savedText });
   return nextMessage;
 }
 
@@ -1494,8 +1534,26 @@ async function handleAiTraceUpdateEvent(event: AiTraceUpdateEvent) {
     pending = await ensureIncomingPendingAssistantAfterRefresh(event.aiSessionId) ?? undefined;
   }
   const traceMessage = codexTraceToChatMessage(event.trace);
-  const pendingState = codexTracePending(event.trace);
+  const stopped = stoppedAiSessions.has(event.aiSessionId);
+  if (stopped && !codexTracePending(event.trace)) {
+    if (pending) {
+      if (traceMessage?.text) pending.finalText = traceMessage.text;
+      for (const [index, segment] of (traceMessage?.segments ?? []).entries()) {
+        pending.steps.set(segment.stepId ?? `codex-trace-${index}`, segment);
+      }
+      interruptPendingAssistant(event.aiSessionId);
+    }
+    thinkingSessionIds.value = { ...thinkingSessionIds.value, [event.aiSessionId]: false };
+    setChatRunState(event.aiSessionId, {
+      active: false,
+      phase: "done",
+      title: "已中断",
+      detail: "本次执行已停止，已保留中断前的执行过程。",
+    });
+    return;
+  }
   if (!traceMessage) return;
+  const pendingState = codexTracePending(event.trace);
   if (pending) {
     pending.finalText = traceMessage.text ?? pending.finalText;
     const mergedSegments = mergeTraceSegments([...pending.steps.values()], traceMessage.segments ?? [], !traceMessage.pending);

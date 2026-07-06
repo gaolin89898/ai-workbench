@@ -6,7 +6,7 @@
 import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
 import { createInterface, type Interface } from "node:readline";
 import * as os from "node:os";
-import type { RunCodexChatRequest, ChatImageAttachment, ChatSegment, CodexApprovalDecision, CodexApprovalMode, CodexTraceSnapshot } from "../services/desktop";
+import type { RunCodexChatRequest, ChatImageAttachment, ChatSegment, CodexApprovalDecision, CodexApprovalMode, CodexTraceSnapshot, CodexModelOption } from "../services/desktop";
 import { reportTokenUsage } from "./sync";
 import { getLocalAiSession, resetLocalAiTrace, upsertLocalAiTrace } from "./db";
 import { codexTraceSnapshotToSegments, reduceCodexTraceSnapshot, type CodexRawTraceEvent } from "./codex_trace";
@@ -36,6 +36,11 @@ interface PendingApproval {
   stepId: string;
   segment: Extract<ChatSegment, { type: "approval" }>;
   resolved: boolean;
+}
+
+interface CodexThreadInfo {
+  threadId: string;
+  model: string | null;
 }
 
 // ---------- Session state ----------
@@ -166,6 +171,10 @@ function strOrUndef(v: unknown): string | undefined {
   return typeof v === "string" ? v : undefined;
 }
 
+function trimmedOrNull(v: unknown): string | null {
+  return typeof v === "string" && v.trim().length > 0 ? v.trim() : null;
+}
+
 function arrayOfStrings(v: unknown): string[] {
   if (!Array.isArray(v)) return [];
   return v.filter((item): item is string => typeof item === "string" && item.trim().length > 0);
@@ -182,6 +191,18 @@ function extractThreadId(value: unknown): string | null {
     if (typeof candidate === "string") return candidate;
   }
   return null;
+}
+
+function extractThreadInfo(value: unknown, fallbackThreadId?: string | null): CodexThreadInfo | null {
+  const threadId = extractThreadId(value) ?? fallbackThreadId ?? null;
+  if (!threadId) return null;
+  let model: string | null = null;
+  if (value && typeof value === "object") {
+    const r = value as Record<string, unknown>;
+    const directModel = r["model"];
+    if (typeof directModel === "string" && directModel.trim()) model = directModel;
+  }
+  return { threadId, model };
 }
 
 function buildUserInput(text: string, images: ChatImageAttachment[] = []): Array<Record<string, unknown>> {
@@ -778,8 +799,8 @@ function decodeAppServerProviderSessionId(providerSessionId: string | null): str
 async function ensureThread(
   session: CodexSession,
   aiSessionId: string
-): Promise<string> {
-  if (session.threadId) return session.threadId;
+): Promise<CodexThreadInfo> {
+  if (session.threadId) return { threadId: session.threadId, model: null };
 
   // Try to resume from a DB-stored providerSessionId
   const existing = lookupExistingProviderSessionId(aiSessionId);
@@ -788,21 +809,68 @@ async function ensureThread(
       const resp = await sendRequestWithReconnectRetry(session, "thread/resume", {
         threadId: existing,
       });
-      const tid = extractThreadId(resp.result) ?? existing;
-      session.threadId = tid;
-      return tid;
+      const info = extractThreadInfo(resp.result, existing);
+      if (!info) throw new Error("未能从 codex 恢复 threadId");
+      session.threadId = info.threadId;
+      return info;
     } catch {
       // resume failed — fall back to thread/start
     }
   }
 
   const resp = await sendRequestWithReconnectRetry(session, "thread/start", {});
-  const tid = extractThreadId(resp.result);
-  if (!tid) {
+  const info = extractThreadInfo(resp.result);
+  if (!info) {
     throw new Error("未能从 codex 获取 threadId");
   }
-  session.threadId = tid;
-  return tid;
+  session.threadId = info.threadId;
+  return info;
+}
+
+function buildCodexTurnParams(
+  threadInfo: CodexThreadInfo,
+  req: RunCodexChatRequest,
+  images: ChatImageAttachment[]
+): Record<string, unknown> {
+  const model = trimmedOrNull(req.codexModel);
+  const collaborationMode = req.codexMode === "plan" ? "plan" : "default";
+  const params: Record<string, unknown> = {
+    threadId: threadInfo.threadId,
+    input: buildUserInput(req.prompt, images),
+  };
+  if (model) params["model"] = model;
+  if (collaborationMode === "plan") {
+    const settingsModel = model ?? threadInfo.model;
+    if (settingsModel) {
+      params["collaborationMode"] = {
+        mode: "plan",
+        settings: {
+          model: settingsModel,
+          reasoning_effort: null,
+          developer_instructions: null,
+        },
+      };
+    }
+  }
+  return params;
+}
+
+async function applyCodexGoal(
+  session: CodexSession,
+  threadId: string,
+  req: RunCodexChatRequest
+): Promise<void> {
+  const objective = trimmedOrNull(req.codexGoal);
+  if (!objective) return;
+  const tokenBudget = typeof req.codexGoalTokenBudget === "number" && Number.isFinite(req.codexGoalTokenBudget)
+    ? Math.max(1, Math.floor(req.codexGoalTokenBudget))
+    : null;
+  await sendRequestWithReconnectRetry(session, "thread/goal/set", {
+    threadId,
+    objective,
+    status: "active",
+    tokenBudget,
+  });
 }
 
 // ---------- Public API ----------
@@ -818,7 +886,7 @@ export async function runCodexChat(
   req: RunCodexChatRequest,
   sender: Sender
 ): Promise<string> {
-  const { aiSessionId, projectPath, prompt, images = [], approvalMode = "suggest" } = req;
+  const { aiSessionId, projectPath, images = [], approvalMode = "suggest" } = req;
   const session = createSession(aiSessionId, projectPath, sender, true, approvalMode);
   const initialTrace = resetLocalAiTrace({
     aiSessionId,
@@ -868,7 +936,8 @@ export async function runCodexChat(
     await sendRequestWithReconnectRetry(session, "initialize", { clientInfo: CODEX_CLIENT_INFO });
 
     // 2. start or resume thread
-    const threadId = await ensureThread(session, aiSessionId);
+    const threadInfo = await ensureThread(session, aiSessionId);
+    await applyCodexGoal(session, threadInfo.threadId, req);
 
     // 3. set up turn-completion promise (resolved by turn/completed,
     //    rejected by error notification / child exit / timeout)
@@ -877,17 +946,14 @@ export async function runCodexChat(
     });
 
     // 4. send turn/start with the user's prompt exactly as entered.
-    await sendRequestWithReconnectRetry(session, "turn/start", {
-      threadId,
-      input: buildUserInput(prompt, images),
-    });
+    await sendRequestWithReconnectRetry(session, "turn/start", buildCodexTurnParams(threadInfo, req, images));
 
     // 5. wait for turn/completed or error
     await turnDone;
 
     clearTimeout(timeout);
     killSession(session);
-    return encodeAppServerProviderSessionId(threadId);
+    return encodeAppServerProviderSessionId(threadInfo.threadId);
   } catch (err) {
     clearTimeout(timeout);
     if (session.cancelled) {
@@ -903,6 +969,64 @@ export async function runCodexChat(
     if (activeCodexSessions.get(aiSessionId) === session) {
       activeCodexSessions.delete(aiSessionId);
     }
+  }
+}
+
+function extractCodexModelOptions(result: unknown): CodexModelOption[] {
+  if (!result || typeof result !== "object") return [];
+  const data = (result as Record<string, unknown>)["data"];
+  if (!Array.isArray(data)) return [];
+  return data.flatMap((item): CodexModelOption[] => {
+    if (!item || typeof item !== "object") return [];
+    const row = item as Record<string, unknown>;
+    const model = trimmedOrNull(row["model"]) ?? trimmedOrNull(row["id"]);
+    const id = trimmedOrNull(row["id"]) ?? model;
+    if (!id || !model) return [];
+    return [{
+      id,
+      model,
+      displayName: trimmedOrNull(row["displayName"]) ?? model,
+      description: trimmedOrNull(row["description"]),
+      isDefault: row["isDefault"] === true,
+    }];
+  });
+}
+
+function extractNextCursor(result: unknown): string | null {
+  if (!result || typeof result !== "object") return null;
+  return trimmedOrNull((result as Record<string, unknown>)["nextCursor"]);
+}
+
+export async function listCodexModels(sender: Sender = { send: () => undefined }): Promise<CodexModelOption[]> {
+  const session = createSession(`codex-model-list-${Date.now()}`, os.homedir(), sender);
+  const timeout = setTimeout(() => {
+    for (const [, pending] of session.pendingRequests) pending.reject(new Error("timeout"));
+    session.pendingRequests.clear();
+    killSession(session);
+  }, CODEX_WARMUP_TIMEOUT_MS);
+
+  try {
+    await sendRequestWithReconnectRetry(session, "initialize", { clientInfo: CODEX_CLIENT_INFO });
+    const models = new Map<string, CodexModelOption>();
+    let cursor: string | null = null;
+    do {
+      const resp = await sendRequestWithReconnectRetry(session, "model/list", {
+        cursor,
+        limit: 100,
+        includeHidden: false,
+      });
+      for (const model of extractCodexModelOptions(resp.result)) {
+        models.set(model.model, model);
+      }
+      cursor = extractNextCursor(resp.result);
+    } while (cursor);
+    return [...models.values()].sort((left, right) => {
+      if (left.isDefault !== right.isDefault) return left.isDefault ? -1 : 1;
+      return left.displayName.localeCompare(right.displayName, "zh-Hans-CN", { numeric: true, sensitivity: "base" });
+    });
+  } finally {
+    clearTimeout(timeout);
+    killSession(session);
   }
 }
 
@@ -1000,10 +1124,10 @@ export async function warmupCodexSession(
 
   try {
     await sendRequestWithReconnectRetry(session, "initialize", { clientInfo: CODEX_CLIENT_INFO });
-    const threadId = await ensureThread(session, aiSessionId);
+    const threadInfo = await ensureThread(session, aiSessionId);
     clearTimeout(timeout);
     killSession(session);
-    return { providerSessionId: encodeAppServerProviderSessionId(threadId) };
+    return { providerSessionId: encodeAppServerProviderSessionId(threadInfo.threadId) };
   } catch {
     clearTimeout(timeout);
     killSession(session);

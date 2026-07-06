@@ -30,7 +30,7 @@ import {
   fetchTokenUsageSummary,
 } from "./sync";
 import { saveCredentials, loadCredentials, clearCredentials } from "./credentials";
-import { respondCodexApproval, runCodexChat, stopCodexChat } from "./codex";
+import { listCodexModels, respondCodexApproval, runCodexChat, stopCodexChat } from "./codex";
 import { syncCodexHistoryMirror } from "./codex_sessions";
 import { runAiChat, stopAiChat } from "./claude";
 import { checkAppUpdate, installAppUpdate, initUpdater } from "./updater";
@@ -356,6 +356,8 @@ export function registerIpcHandlers(win?: BrowserWindow): void {
     void sync?.pushAiHistory(req.aiSessionId);
     return providerSessionId;
   });
+
+  handle("list_codex_models", async () => listCodexModels());
 
   handle("stop_ai_chat", async (_event, args: [string]) => {
     const aiSessionId = args[0];

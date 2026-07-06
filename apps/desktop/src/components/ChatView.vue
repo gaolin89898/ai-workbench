@@ -4,7 +4,7 @@ import ChatMessageRow from "./ChatMessageRow.vue";
 import ApprovalSegment from "./ChatSegment.vue";
 import TerminalView from "./TerminalView.vue";
 import { useWorkspace } from "../composables/useWorkspace";
-import { desktopApi, type AiProvider, type ChatImageAttachment, type ChatMessage, type ChatSegment, type CodexApprovalMode } from "../services/desktop";
+import { desktopApi, type AiProvider, type ChatImageAttachment, type ChatMessage, type ChatSegment, type CodexApprovalMode, type CodexChatOptions, type CodexModelOption, type CodexRunMode } from "../services/desktop";
 
 const providerClaudeIcon = new URL("../assets/icons/provider-claude.svg", import.meta.url).href;
 const providerCodexIcon = new URL("../assets/icons/provider-codex.svg", import.meta.url).href;
@@ -24,6 +24,13 @@ const activeTab = ref<"chat" | "terminal">("chat");
 const startMenuOpen = ref(false);
 const approvalMenuOpen = ref(false);
 const codexApprovalMode = ref<CodexApprovalMode>("autoEdit");
+const codexMode = ref<CodexRunMode>("default");
+const codexSelectedModel = ref("");
+const codexGoalEnabled = ref(false);
+const codexGoal = ref("");
+const codexModels = ref<CodexModelOption[]>([]);
+const codexModelsLoading = ref(false);
+const codexModelsLoaded = ref(false);
 
 const approvalModes = [
   {
@@ -75,6 +82,11 @@ const selectedProvider = computed(() => {
     ?? providerChoices.value.find((provider) => provider.id === "codex")
     ?? providerChoices.value[0];
 });
+const showCodexRunControls = computed(() => {
+  const providerId = ws.activeAiSession.value?.providerId ?? selectedProvider.value?.id ?? ws.selectedProviderId.value;
+  return providerId === "codex";
+});
+const codexModelOptions = computed(() => codexModels.value.filter((model) => model.model.trim().length > 0));
 const chatHeaderMeta = computed(() => {
   if (!currentProject.value) return "选择项目后开始聊天";
   return `${currentProject.value.gitBranch ?? "未知分支"} · ${currentProject.value.gitDirty ? "有变更" : "Git 干净"}`;
@@ -340,6 +352,7 @@ function closeFloatingMenusOnOutsideClick(event: PointerEvent) {
 }
 
 function toggleApprovalMenu() {
+  if (!showCodexRunControls.value) return;
   approvalMenuOpen.value = !approvalMenuOpen.value;
   if (approvalMenuOpen.value) startMenuOpen.value = false;
 }
@@ -347,6 +360,37 @@ function toggleApprovalMenu() {
 function selectApprovalMode(mode: CodexApprovalMode) {
   codexApprovalMode.value = mode;
   approvalMenuOpen.value = false;
+}
+
+async function loadCodexModels() {
+  if (codexModelsLoaded.value || codexModelsLoading.value) return;
+  codexModelsLoading.value = true;
+  try {
+    const models = await desktopApi.listCodexModels();
+    codexModels.value = models;
+    codexModelsLoaded.value = true;
+    const defaultModel = models.find((model) => model.isDefault) ?? models[0];
+    if (!codexSelectedModel.value && defaultModel) codexSelectedModel.value = defaultModel.model;
+  } catch (error) {
+    console.warn("Codex model list failed", error);
+  } finally {
+    codexModelsLoading.value = false;
+  }
+}
+
+function setCodexMode(mode: CodexRunMode) {
+  codexMode.value = mode;
+}
+
+function buildCodexOptions(): CodexChatOptions {
+  if (!showCodexRunControls.value) return {};
+  const goal = codexGoalEnabled.value ? codexGoal.value.trim() : "";
+  return {
+    approvalMode: codexApprovalMode.value,
+    codexMode: codexMode.value,
+    codexModel: codexSelectedModel.value || null,
+    codexGoal: goal || null,
+  };
 }
 
 function onWindowKeydown(event: KeyboardEvent) {
@@ -532,6 +576,15 @@ watch(
 );
 
 watch(
+  () => showCodexRunControls.value,
+  (visible) => {
+    if (visible) void loadCodexModels();
+    else approvalMenuOpen.value = false;
+  },
+  { immediate: true },
+);
+
+watch(
   () => activeTab.value,
   async () => {
     await nextTick();
@@ -590,7 +643,7 @@ async function send() {
   }
   pendingPromptAnchorKey = latestUserAnchor()?.key ?? "__empty__";
   try {
-    await ws.sendPrompt(value, images, codexApprovalMode.value);
+    await ws.sendPrompt(value, images, buildCodexOptions());
   } finally {
     if (pendingPromptAnchorKey === (latestUserAnchor()?.key ?? "__empty__")) {
       pendingPromptAnchorKey = null;
@@ -661,6 +714,7 @@ function onPromptKeydown(event: KeyboardEvent) {
           </button>
           <button
             class="codex-approval-trigger start-approval-trigger"
+            v-if="showCodexRunControls"
             :class="{ open: approvalMenuOpen }"
             title="选择 Codex 操作批准方式"
             type="button"
@@ -673,7 +727,7 @@ function onPromptKeydown(event: KeyboardEvent) {
             </svg>
             <span>{{ selectedApprovalMode.label }}</span>
           </button>
-          <div v-if="approvalMenuOpen" class="codex-approval-menu">
+          <div v-if="showCodexRunControls && approvalMenuOpen" class="codex-approval-menu">
             <div class="codex-approval-menu-head">
               <span>应如何批准 Codex 操作?</span>
               <a href="https://github.com/openai/codex" target="_blank" rel="noreferrer">了解更多</a>
@@ -705,6 +759,36 @@ function onPromptKeydown(event: KeyboardEvent) {
               </span>
               <span v-if="mode.id === codexApprovalMode" class="codex-approval-check" aria-hidden="true">✓</span>
             </button>
+          </div>
+          <div v-if="showCodexRunControls" class="codex-run-controls start-run-controls">
+            <div class="codex-run-mode" role="group" aria-label="Codex 运行模式">
+              <button type="button" :class="{ active: codexMode === 'default' }" @click="setCodexMode('default')">默认</button>
+              <button type="button" :class="{ active: codexMode === 'plan' }" @click="setCodexMode('plan')">计划</button>
+            </div>
+            <label class="codex-model-picker" title="选择 Codex 模型">
+              <span>模型</span>
+              <select v-model="codexSelectedModel" :disabled="codexModelsLoading">
+                <option value="">{{ codexModelsLoading ? "加载中" : "默认" }}</option>
+                <option
+                  v-for="model in codexModelOptions"
+                  :key="model.id"
+                  :value="model.model"
+                >
+                  {{ model.displayName }}
+                </option>
+              </select>
+            </label>
+            <label class="codex-goal-toggle" title="开启目标模式">
+              <input v-model="codexGoalEnabled" type="checkbox" />
+              <span>目标</span>
+            </label>
+            <input
+              v-if="codexGoalEnabled"
+              v-model="codexGoal"
+              class="codex-goal-input"
+              type="text"
+              placeholder="这轮工作的目标"
+            />
           </div>
           <div v-if="startMenuOpen" class="codex-start-menu">
             <span class="codex-start-menu-label">AI 会话类型</span>
@@ -830,6 +914,7 @@ function onPromptKeydown(event: KeyboardEvent) {
           <textarea v-model="prompt" rows="3" placeholder="输入你想做的事" @keydown="onPromptKeydown" @paste="onPromptPaste"></textarea>
           <button
             class="codex-approval-trigger chat-approval-trigger"
+            v-if="showCodexRunControls"
             :class="{ open: approvalMenuOpen }"
             title="选择 Codex 操作批准方式"
             type="button"
@@ -842,7 +927,7 @@ function onPromptKeydown(event: KeyboardEvent) {
             </svg>
             <span>{{ selectedApprovalMode.label }}</span>
           </button>
-          <div v-if="approvalMenuOpen" class="codex-approval-menu chat-approval-menu">
+          <div v-if="showCodexRunControls && approvalMenuOpen" class="codex-approval-menu chat-approval-menu">
             <div class="codex-approval-menu-head">
               <span>应如何批准 Codex 操作?</span>
               <a href="https://github.com/openai/codex" target="_blank" rel="noreferrer">了解更多</a>
@@ -874,6 +959,36 @@ function onPromptKeydown(event: KeyboardEvent) {
               </span>
               <span v-if="mode.id === codexApprovalMode" class="codex-approval-check" aria-hidden="true">✓</span>
             </button>
+          </div>
+          <div v-if="showCodexRunControls" class="codex-run-controls composer-run-controls">
+            <div class="codex-run-mode" role="group" aria-label="Codex 运行模式">
+              <button type="button" :class="{ active: codexMode === 'default' }" @click="setCodexMode('default')">默认</button>
+              <button type="button" :class="{ active: codexMode === 'plan' }" @click="setCodexMode('plan')">计划</button>
+            </div>
+            <label class="codex-model-picker" title="选择 Codex 模型">
+              <span>模型</span>
+              <select v-model="codexSelectedModel" :disabled="codexModelsLoading">
+                <option value="">{{ codexModelsLoading ? "加载中" : "默认" }}</option>
+                <option
+                  v-for="model in codexModelOptions"
+                  :key="model.id"
+                  :value="model.model"
+                >
+                  {{ model.displayName }}
+                </option>
+              </select>
+            </label>
+            <label class="codex-goal-toggle" title="开启目标模式">
+              <input v-model="codexGoalEnabled" type="checkbox" />
+              <span>目标</span>
+            </label>
+            <input
+              v-if="codexGoalEnabled"
+              v-model="codexGoal"
+              class="codex-goal-input"
+              type="text"
+              placeholder="这轮工作的目标"
+            />
           </div>
           <button
             class="codex-send-button chat-send-button"
