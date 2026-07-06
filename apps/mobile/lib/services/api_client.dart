@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
@@ -19,6 +20,7 @@ class ApiClient {
   static const _emailKey = 'saved_email';
   static const _passwordKey = 'saved_password';
   static const _secureStorage = FlutterSecureStorage();
+  static const _networkTimeout = Duration(seconds: 12);
 
   final String baseUrl;
   String? token;
@@ -107,16 +109,14 @@ class ApiClient {
 
   Future<void> login(String email, String password) async {
     final loginUri = uri('/auth/login');
-    late final http.Response response;
-    try {
-      response = await http.post(
+    final response = await _requestWithTimeout(
+      http.post(
         loginUri,
         headers: headers,
         body: jsonEncode({'email': email, 'password': password}),
-      );
-    } catch (error) {
-      throw Exception('无法连接服务器：$loginUri\n$error');
-    }
+      ),
+      loginUri,
+    );
     if (response.statusCode == 404) {
       await register(email, password);
       return;
@@ -127,14 +127,84 @@ class ApiClient {
   }
 
   Future<void> register(String email, String password) async {
-    final response = await http.post(
-      uri('/auth/register'),
-      headers: headers,
-      body: jsonEncode({'email': email, 'password': password}),
+    final registerUri = uri('/auth/register');
+    final response = await _requestWithTimeout(
+      http.post(
+        registerUri,
+        headers: headers,
+        body: jsonEncode({'email': email, 'password': password}),
+      ),
+      registerUri,
     );
     _throwIfBad(response);
     token = jsonDecode(response.body)['accessToken'] as String;
     await saveStoredToken(token!, baseUrl: baseUrl);
+  }
+
+  Future<http.Response> _requestWithTimeout(
+    Future<http.Response> request,
+    Uri requestUri,
+  ) async {
+    try {
+      return await request.timeout(_networkTimeout);
+    } on TimeoutException {
+      throw Exception('服务器响应超时：$requestUri');
+    } catch (error) {
+      throw Exception('无法连接服务器：$requestUri\n$error');
+    }
+  }
+
+  Future<http.Response> _get(String path) {
+    final requestUri = uri(path);
+    return _requestWithTimeout(
+        http.get(requestUri, headers: headers), requestUri);
+  }
+
+  Future<http.Response> _post(
+    String path, {
+    Object? body,
+    Map<String, String>? requestHeaders,
+  }) {
+    final requestUri = uri(path);
+    return _requestWithTimeout(
+      http.post(
+        requestUri,
+        headers: requestHeaders ?? headers,
+        body: body,
+      ),
+      requestUri,
+    );
+  }
+
+  Future<http.Response> _patch(String path, {Object? body}) {
+    final requestUri = uri(path);
+    return _requestWithTimeout(
+      http.patch(requestUri, headers: headers, body: body),
+      requestUri,
+    );
+  }
+
+  Future<http.Response> _put(String path, {Object? body}) {
+    final requestUri = uri(path);
+    return _requestWithTimeout(
+      http.put(requestUri, headers: headers, body: body),
+      requestUri,
+    );
+  }
+
+  Future<http.Response> _postUri(
+    Uri requestUri, {
+    Object? body,
+    Map<String, String>? requestHeaders,
+  }) {
+    return _requestWithTimeout(
+      http.post(
+        requestUri,
+        headers: requestHeaders ?? headers,
+        body: body,
+      ),
+      requestUri,
+    );
   }
 
   Future<List<DesktopDevice>> devices() =>
@@ -152,7 +222,7 @@ class ApiClient {
       ActivityLog.fromJson);
 
   Future<PairingCode> createPairingCode() async {
-    final response = await http.post(uri('/pairing/codes'), headers: headers);
+    final response = await _post('/pairing/codes');
     _throwIfBad(response);
     return PairingCode.fromJson(
         jsonDecode(response.body) as Map<String, dynamic>);
@@ -162,10 +232,9 @@ class ApiClient {
     required String serverUrl,
     required String code,
   }) async {
-    final response = await http.post(
+    final response = await _postUri(
       Uri.parse(
           '${serverUrl.replaceFirst(RegExp(r'/$'), '')}/desktop/pairing-requests/${Uri.encodeComponent(code)}/approve'),
-      headers: headers,
     );
     _throwIfBad(response);
   }
@@ -177,9 +246,8 @@ class ApiClient {
     String? projectId,
     String? projectPath,
   }) async {
-    final response = await http.post(
-      uri('/devices/$deviceId/ai-sessions'),
-      headers: headers,
+    final response = await _post(
+      '/devices/$deviceId/ai-sessions',
       body: jsonEncode({
         'providerId': providerId,
         'projectId': projectId,
@@ -200,9 +268,8 @@ class ApiClient {
     String sessionId, {
     required String title,
   }) async {
-    final response = await http.patch(
-      uri('/ai-sessions/${Uri.encodeComponent(sessionId)}'),
-      headers: headers,
+    final response = await _patch(
+      '/ai-sessions/${Uri.encodeComponent(sessionId)}',
       body: jsonEncode({'title': title}),
     );
     _throwIfBad(response);
@@ -211,16 +278,15 @@ class ApiClient {
   }
 
   Future<UserSettings> settings() async {
-    final response = await http.get(uri('/settings'), headers: headers);
+    final response = await _get('/settings');
     _throwIfBad(response);
     return UserSettings.fromJson(
         jsonDecode(response.body) as Map<String, dynamic>);
   }
 
   Future<UserSettings> updateSettings(UserSettings settings) async {
-    final response = await http.put(
-      uri('/settings'),
-      headers: headers,
+    final response = await _put(
+      '/settings',
       body: jsonEncode(settings.toJson()),
     );
     _throwIfBad(response);
@@ -230,8 +296,7 @@ class ApiClient {
 
   /// GET /token-usage/summary — 拉取云端按工具聚合的 Token 用量。
   Future<TokenUsageSummary> tokenUsageSummary() async {
-    final response =
-        await http.get(uri('/token-usage/summary'), headers: headers);
+    final response = await _get('/token-usage/summary');
     _throwIfBad(response);
     return TokenUsageSummary.fromJson(
         jsonDecode(response.body) as Map<String, dynamic>);
@@ -241,8 +306,7 @@ class ApiClient {
 
   /// 启动钉钉 OAuth 流程，返回授权 URL + state。
   Future<OAuthStartResult> startDingTalkOAuth() async {
-    final response =
-        await http.get(uri('/oauth/dingtalk/start'), headers: headers);
+    final response = await _get('/oauth/dingtalk/start');
     _throwIfBad(response);
     final data = jsonDecode(response.body) as Map<String, dynamic>;
     return OAuthStartResult(
@@ -253,10 +317,8 @@ class ApiClient {
 
   /// 轮询钉钉 OAuth 登录结果。
   Future<OAuthPollResult> pollDingTalkOAuth(String state) async {
-    final response = await http.get(
-      uri('/oauth/dingtalk/poll?state=${Uri.encodeComponent(state)}'),
-      headers: headers,
-    );
+    final response =
+        await _get('/oauth/dingtalk/poll?state=${Uri.encodeComponent(state)}');
     _throwIfBad(response);
     final data = jsonDecode(response.body) as Map<String, dynamic>;
     final status = data['status'] as String;
@@ -275,7 +337,7 @@ class ApiClient {
     String path,
     T Function(Map<String, dynamic>) fromJson,
   ) async {
-    final response = await http.get(uri(path), headers: headers);
+    final response = await _get(path);
     _throwIfBad(response);
     final list = jsonDecode(response.body) as List<dynamic>;
     return list.map((item) => fromJson(item as Map<String, dynamic>)).toList();

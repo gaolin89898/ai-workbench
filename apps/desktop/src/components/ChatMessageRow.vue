@@ -10,6 +10,8 @@ const props = defineProps<{
 }>();
 const activeMobileProcessGroupIndex = ref<number | null>(null);
 const nowTick = ref(Date.now());
+const processGroupOpenOverrides = ref<Record<string, boolean>>({});
+const userToggledProcessGroups = new Set<string>();
 // 缓存 runtime-status 的 startedAt，避免 trace flush 短暂丢失 segment 时计时闪动
 const cachedRuntimeStartedAt = ref<number | null>(null);
 const cachedRuntimeDurationMs = ref<number | null>(null);
@@ -315,8 +317,28 @@ function processGroupTitle(group: Extract<RenderGroup, { type: "process" }>, gro
   return duration ? `${prefix} ${formatCompactDuration(duration)}` : prefix;
 }
 
-function processGroupOpen(groupIndex: number) {
+function processGroupKey(groupIndex: number) {
+  return `process-${groupIndex}`;
+}
+
+function processGroupDefaultOpen(groupIndex: number) {
   return Boolean(props.message.pending && !processGroupHasFinalText(groupIndex));
+}
+
+function processGroupOpen(groupIndex: number) {
+  const key = processGroupKey(groupIndex);
+  return processGroupOpenOverrides.value[key] ?? processGroupDefaultOpen(groupIndex);
+}
+
+function onProcessGroupToggle(event: Event, groupIndex: number) {
+  const key = processGroupKey(groupIndex);
+  if (!userToggledProcessGroups.has(key)) return;
+  userToggledProcessGroups.delete(key);
+  const target = event.currentTarget;
+  if (!(target instanceof HTMLDetailsElement)) return;
+  const next = { ...processGroupOpenOverrides.value };
+  next[key] = target.open;
+  processGroupOpenOverrides.value = next;
 }
 
 function processGroupDurationMs(segments: ChatSegmentType[]) {
@@ -348,7 +370,10 @@ function processGroupDurationMs(segments: ChatSegmentType[]) {
 }
 
 function onProcessSummaryClick(event: MouseEvent, group: Extract<RenderGroup, { type: "process" }>, groupIndex: number) {
-  if (!isMobileProcessSheetViewport()) return;
+  if (!isMobileProcessSheetViewport()) {
+    userToggledProcessGroups.add(processGroupKey(groupIndex));
+    return;
+  }
   event.preventDefault();
   activeMobileProcessGroupIndex.value = groupIndex;
 }
@@ -787,7 +812,7 @@ function countCommandOutputSignals(text: string) {
     <div class="chat-message-body">
       <template v-for="(group, index) in contentGroups" :key="index">
         <ChatSegment v-if="group.type === 'segment'" :segment="group.segment" :ai-session-id="aiSessionId" />
-        <details v-else class="chat-process-group" :open="processGroupOpen(index)">
+        <details v-else class="chat-process-group" :open="processGroupOpen(index)" @toggle="onProcessGroupToggle($event, index)">
           <summary class="chat-process-group-summary" @click="onProcessSummaryClick($event, group, index)">
             <span class="chat-process-group-icon" :class="{ running: message.pending }" aria-hidden="true"></span>
             <span>{{ processGroupTitle(group, index) }}</span>
