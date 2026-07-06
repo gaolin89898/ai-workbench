@@ -911,22 +911,71 @@ function onPromptKeydown(event: KeyboardEvent) {
               </button>
             </div>
           </div>
-          <textarea v-model="prompt" rows="3" placeholder="输入你想做的事" @keydown="onPromptKeydown" @paste="onPromptPaste"></textarea>
-          <button
-            class="codex-approval-trigger chat-approval-trigger"
-            v-if="showCodexRunControls"
-            :class="{ open: approvalMenuOpen }"
-            title="选择 Codex 操作批准方式"
-            type="button"
-            @click="toggleApprovalMenu"
-            aria-label="选择 Codex 操作批准方式"
-          >
-            <svg viewBox="0 0 16 16" fill="none" aria-hidden="true">
-              <path d="M8 2.25 13 4.1v3.7c0 3-2.05 5.05-5 5.95-2.95-.9-5-2.95-5-5.95V4.1l5-1.85Z" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round" />
-              <path d="M5.75 7.95 7.25 9.4l3.05-3.05" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" />
-            </svg>
-            <span>{{ selectedApprovalMode.label }}</span>
-          </button>
+          <textarea v-model="prompt" rows="3" placeholder="询问任何问题，或输入 / 使用命令、@ 提及文件" @keydown="onPromptKeydown" @paste="onPromptPaste"></textarea>
+          <div class="chat-composer-divider"></div>
+          <div class="chat-composer-toolbar">
+            <div class="chat-composer-toolbar-left">
+              <button
+                class="codex-approval-trigger chat-approval-trigger"
+                v-if="showCodexRunControls"
+                :class="{ open: approvalMenuOpen }"
+                title="选择 Codex 操作批准方式"
+                type="button"
+                @click="toggleApprovalMenu"
+                aria-label="选择 Codex 操作批准方式"
+              >
+                <svg viewBox="0 0 16 16" fill="none" aria-hidden="true">
+                  <path d="M8 2.25 13 4.1v3.7c0 3-2.05 5.05-5 5.95-2.95-.9-5-2.95-5-5.95V4.1l5-1.85Z" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round" />
+                  <path d="M5.75 7.95 7.25 9.4l3.05-3.05" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" />
+                </svg>
+                <span>{{ selectedApprovalMode.label }}</span>
+              </button>
+              <div v-if="showCodexRunControls" class="codex-run-controls composer-run-controls">
+                <div class="codex-run-mode" role="group" aria-label="Codex 运行模式">
+                  <button type="button" :class="{ active: codexMode === 'default' }" @click="setCodexMode('default')">默认</button>
+                  <button type="button" :class="{ active: codexMode === 'plan' }" @click="setCodexMode('plan')">计划</button>
+                </div>
+                <label class="codex-goal-toggle" title="开启目标模式">
+                  <input v-model="codexGoalEnabled" type="checkbox" />
+                  <span>目标</span>
+                </label>
+                <input
+                  v-if="codexGoalEnabled"
+                  v-model="codexGoal"
+                  class="codex-goal-input"
+                  type="text"
+                  placeholder="这轮工作的目标"
+                />
+              </div>
+            </div>
+            <div class="chat-composer-toolbar-right">
+              <label v-if="showCodexRunControls" class="codex-model-picker" title="选择 Codex 模型">
+                <span>模型</span>
+                <select v-model="codexSelectedModel" :disabled="codexModelsLoading">
+                  <option value="">{{ codexModelsLoading ? "加载中" : "默认" }}</option>
+                  <option
+                    v-for="model in codexModelOptions"
+                    :key="model.id"
+                    :value="model.model"
+                  >
+                    {{ model.displayName }}
+                  </option>
+                </select>
+              </label>
+              <button
+                class="codex-send-button chat-send-button"
+                :class="{ stopping: ws.activeChatIsRunning.value }"
+                :disabled="!canSend"
+                :title="ws.activeChatIsRunning.value ? '中断' : '发送'"
+                type="button"
+                @click="send"
+                :aria-label="ws.activeChatIsRunning.value ? '中断' : '发送'"
+              >
+                <span v-if="ws.activeChatIsRunning.value" class="chat-stop-icon" aria-hidden="true"></span>
+                <img v-else :src="sendIcon" alt="" aria-hidden="true" />
+              </button>
+            </div>
+          </div>
           <div v-if="showCodexRunControls && approvalMenuOpen" class="codex-approval-menu chat-approval-menu">
             <div class="codex-approval-menu-head">
               <span>应如何批准 Codex 操作?</span>
@@ -960,49 +1009,8 @@ function onPromptKeydown(event: KeyboardEvent) {
               <span v-if="mode.id === codexApprovalMode" class="codex-approval-check" aria-hidden="true">✓</span>
             </button>
           </div>
-          <div v-if="showCodexRunControls" class="codex-run-controls composer-run-controls">
-            <div class="codex-run-mode" role="group" aria-label="Codex 运行模式">
-              <button type="button" :class="{ active: codexMode === 'default' }" @click="setCodexMode('default')">默认</button>
-              <button type="button" :class="{ active: codexMode === 'plan' }" @click="setCodexMode('plan')">计划</button>
-            </div>
-            <label class="codex-model-picker" title="选择 Codex 模型">
-              <span>模型</span>
-              <select v-model="codexSelectedModel" :disabled="codexModelsLoading">
-                <option value="">{{ codexModelsLoading ? "加载中" : "默认" }}</option>
-                <option
-                  v-for="model in codexModelOptions"
-                  :key="model.id"
-                  :value="model.model"
-                >
-                  {{ model.displayName }}
-                </option>
-              </select>
-            </label>
-            <label class="codex-goal-toggle" title="开启目标模式">
-              <input v-model="codexGoalEnabled" type="checkbox" />
-              <span>目标</span>
-            </label>
-            <input
-              v-if="codexGoalEnabled"
-              v-model="codexGoal"
-              class="codex-goal-input"
-              type="text"
-              placeholder="这轮工作的目标"
-            />
-          </div>
-          <button
-            class="codex-send-button chat-send-button"
-            :class="{ stopping: ws.activeChatIsRunning.value }"
-            :disabled="!canSend"
-            :title="ws.activeChatIsRunning.value ? '中断' : '发送'"
-            type="button"
-            @click="send"
-            :aria-label="ws.activeChatIsRunning.value ? '中断' : '发送'"
-          >
-            <span v-if="ws.activeChatIsRunning.value" class="chat-stop-icon" aria-hidden="true"></span>
-            <img v-else :src="sendIcon" alt="" aria-hidden="true" />
-          </button>
         </div>
+        <div class="chat-composer-hint">回车发送 · Shift+回车换行 · / 唤起命令</div>
       </article>
     </section>
     </template>
