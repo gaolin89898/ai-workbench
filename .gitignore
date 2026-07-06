@@ -15,6 +15,7 @@ apps/desktop/release/
 apps/desktop/dist-electron/
 releases/
 backend/.gocache/
+.gocache/
 # pnpm 本地缓存
 .pnpm-store/
 .uploads/

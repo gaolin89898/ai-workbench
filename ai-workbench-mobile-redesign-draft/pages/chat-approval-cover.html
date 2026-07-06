@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<html class="light" lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>审批确认 - AI Workbench</title>
+    <style id="theme-vars">
+/* AI Workbench Mobile — Light Task-Oriented Theme */
+/* Inspired by Trae Work clean aesthetic */
+:root {
+  /* Brand */
+  --color-primary: #2563eb;
+  --color-primary-hover: #1d4ed8;
+  --color-primary-muted: rgba(37, 99, 235, 0.12);
+  --color-primary-soft: rgba(37, 99, 235, 0.06);
+
+  /* Surface & Background */
+  --color-bg-app: #f8fafc;
+  --color-bg-sidebar: #ffffff;
+  --color-bg-main: #f8fafc;
+  --color-bg-surface: #ffffff;
+  --color-bg-elevated: #ffffff;
+  --color-bg-input: #f1f5f9;
+  --color-bg-hover: rgba(0, 0, 0, 0.02);
+  --color-bg-active: rgba(37, 99, 235, 0.08);
+
+  /* Text */
+  --color-text-primary: #0f172a;
+  --color-text-secondary: #475569;
+  --color-text-muted: #94a3b8;
+  --color-text-inverse: #ffffff;
+
+  /* Border */
+  --color-border: #e2e8f0;
+  --color-border-active: rgba(37, 99, 235, 0.4);
+
+  /* State Colors */
+  --state-success: #22c55e;
+  --state-warning: #f59e0b;
+  --state-error: #ef4444;
+  --state-info: #3b82f6;
+
+  /* Radius */
+  --radius-sm: 4px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --radius-full: 9999px;
+
+  /* Typography */
+  --font-sans: "Inter", ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --font-mono: "JetBrains Mono", "Fira Code", ui-monospace, "Cascadia Code", monospace;
+
+  --text-xs: 11px;
+  --text-sm: 12px;
+  --text-base: 13px;
+  --text-md: 14px;
+  --text-lg: 16px;
+  --text-xl: 20px;
+  --text-2xl: 28px;
+
+  --leading-tight: 1.25;
+  --leading-normal: 1.5;
+  --leading-relaxed: 1.625;
+
+  --font-weight-normal: 400;
+  --font-weight-medium: 500;
+  --font-weight-semibold: 600;
+  --font-weight-bold: 700;
+  --font-weight-extrabold: 800;
+
+  /* Shadow */
+  --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.05);
+  --shadow-elevated: 0 4px 12px rgba(0, 0, 0, 0.08);
+  --shadow-modal: 0 8px 32px rgba(0, 0, 0, 0.12);
+
+  /* Spacing */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-10: 40px;
+}
+
+    </style>
+    <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4.3.1/dist/index.global.js"></script>
+    <script src="https://unpkg.com/lucide@1.8.0/dist/umd/lucide.min.js"></script>
+    <style type="text/tailwindcss">
+  @theme inline {
+    --color-primary: var(--color-primary);
+    --color-border: var(--color-border);
+  }
+  @layer base {
+    body { background: var(--color-background); color: var(--color-text-primary); }
+    td, th { @apply break-words; word-break: break-all; word-break: auto-phrase; }
+    th { @apply whitespace-nowrap; }
+  }
+    </style>
+    <style>
+      .no-scrollbar::-webkit-scrollbar { display: none; }
+      .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+      [data-icon] {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        -webkit-mask-size: contain;
+        mask-size: contain;
+        -webkit-mask-repeat: no-repeat;
+        mask-repeat: no-repeat;
+        -webkit-mask-position: center;
+        mask-position: center;
+        background-color: currentColor;
+      }
+    </style>
+</head>
+<body class="font-sans antialiased" style="font-family: var(--font-sans); background: var(--color-bg-app); color: var(--color-text-primary); min-height: 100vh;">
+  <div class="relative min-h-screen overflow-hidden" style="background: var(--color-bg-app);">
+    <header class="sticky top-0 z-30" style="height: 56px; background: var(--color-bg-surface); border-bottom: 1px solid var(--color-border);">
+      <div class="flex h-full items-center gap-3 px-4">
+        <button data-dom-id="chat-back" class="inline-flex shrink-0 items-center justify-center transition-transform duration-150 active:scale-[0.98] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2" aria-label="返回项目" style="width: 34px; height: 34px; border-radius: var(--radius-lg); border: 1px solid var(--color-border); background: var(--color-bg-surface); color: var(--color-text-secondary); outline-color: var(--color-primary);">
+          <i data-lucide="chevron-left" style="width: 18px; height: 18px;"></i>
+        </button>
+        <div class="min-w-0 flex-1">
+          <h1 class="truncate" style="font-size: 16px; line-height: 1.25; font-weight: 800; letter-spacing: -0.02em; text-wrap: balance; word-break: keep-all; overflow-wrap: break-word;">修复认证 bug</h1>
+          <p class="truncate" style="font-size: 12px; line-height: 1.4; color: var(--color-text-secondary); margin-top: 2px;">Codex · ai-workbench</p>
+        </div>
+        <button data-dom-id="chat-more" class="inline-flex shrink-0 items-center justify-center transition-transform duration-150 active:scale-[0.98] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2" aria-label="更多操作" style="width: 34px; height: 34px; border-radius: var(--radius-lg); border: 1px solid var(--color-border); background: var(--color-bg-surface); color: var(--color-text-secondary); outline-color: var(--color-primary);">
+          <i data-lucide="more-horizontal" style="width: 18px; height: 18px;"></i>
+        </button>
+      </div>
+    </header>
+
+    <main class="px-4 pt-4 space-y-4 overflow-y-auto no-scrollbar" style="height: calc(100vh - 56px); padding-bottom: calc(288px + env(safe-area-inset-bottom)); background: var(--color-bg-app);">
+      <section class="space-y-4" aria-label="会话内容">
+        <article class="flex items-start gap-2">
+          <span class="inline-flex shrink-0 items-center justify-center" style="width: 28px; height: 28px; border-radius: var(--radius-md); background: var(--color-bg-input); color: var(--color-text-secondary);">
+            <i data-lucide="user" style="width: 15px; height: 15px;"></i>
+          </span>
+          <div class="min-w-0 flex-1" style="padding: 10px 12px; border-radius: var(--radius-lg); border: 1px solid var(--color-border); background: var(--color-bg-surface);">
+            <p class="line-clamp-3" style="font-size: 13px; line-height: 1.55; color: var(--color-text-primary); margin: 0;">请检查登录后的会话刷新问题，顺手跑一下构建确认移动端页面没有编译错误。</p>
+          </div>
+        </article>
+
+        <article class="flex items-start gap-2">
+          <span class="inline-flex shrink-0 items-center justify-center" style="width: 28px; height: 28px; border-radius: var(--radius-md); background: var(--color-primary-soft); color: var(--color-primary);">
+            <i data-lucide="bot" style="width: 15px; height: 15px;"></i>
+          </span>
+          <div class="min-w-0 flex-1" style="padding: 10px 12px; border-radius: var(--radius-lg); border: 1px solid var(--color-border); background: var(--color-bg-surface);">
+            <p class="line-clamp-4" style="font-size: 13px; line-height: 1.55; color: var(--color-text-primary); margin: 0;">我已定位到移动聊天页的输入状态处理，并准备执行本地构建。此操作会读取依赖并可能触发生成文件变更。</p>
+          </div>
+        </article>
+
+        <article class="flex items-start justify-end gap-2">
+          <div class="min-w-0 max-w-[82%]" style="padding: 10px 12px; border-radius: var(--radius-lg); background: var(--color-primary); color: var(--color-text-inverse);">
+            <p class="line-clamp-2" style="font-size: 13px; line-height: 1.55; margin: 0;">可以，但高风险操作需要我确认后再继续。</p>
+          </div>
+        </article>
+
+        <article class="flex items-start gap-2">
+          <span class="inline-flex shrink-0 items-center justify-center" style="width: 28px; height: 28px; border-radius: var(--radius-md); background: var(--color-primary-soft); color: var(--color-primary);">
+            <i data-lucide="bot" style="width: 15px; height: 15px;"></i>
+          </span>
+          <div class="min-w-0 flex-1" style="padding: 10px 12px; border-radius: var(--radius-lg); border: 1px solid var(--color-border); background: var(--color-bg-surface);">
+            <div class="flex items-center gap-2 min-w-0">
+              <i data-lucide="shield-alert" class="shrink-0" style="width: 15px; height: 15px; color: var(--state-warning);"></i>
+              <strong class="truncate" style="font-size: 13px; line-height: 1.3; font-weight: 800; color: var(--color-text-primary);">等待审批</strong>
+            </div>
+            <p class="line-clamp-3" style="font-size: 12px; line-height: 1.55; color: var(--color-text-secondary); margin: 6px 0 0;">我需要确认后才能执行命令。底部输入框已锁定，请先拒绝或同意本次操作。</p>
+          </div>
+        </article>
+      </section>
+    </main>
+
+    <div class="fixed inset-x-0 bottom-0 z-40" style="background: linear-gradient(to top, var(--color-bg-app) 76%, color-mix(in srgb, var(--color-bg-app) 0%, transparent)); padding: 8px 16px env(safe-area-inset-bottom);">
+      <div id="composer-locked" data-dom-id="composer-locked" class="mb-2 flex items-center gap-2" aria-label="输入框已锁定" style="height: 42px; padding: 0 12px; border-radius: var(--radius-lg); border: 1px dashed var(--color-border); background: var(--color-bg-input); color: var(--color-text-muted); opacity: .82;">
+        <i data-lucide="lock" class="shrink-0" style="width: 15px; height: 15px;"></i>
+        <span class="truncate" style="font-size: 12px; font-weight: 700;">输入框已锁定，等待审批决定</span>
+      </div>
+
+      <section id="approval-cover" data-dom-id="approval-cover" aria-label="高风险操作审批" style="border-radius: var(--radius-lg); border: 1px solid color-mix(in srgb, var(--state-warning) 32%, var(--color-border)); background: color-mix(in srgb, var(--state-warning) 8%, var(--color-bg-surface)); box-shadow: var(--shadow-elevated); padding: 12px;">
+        <div class="flex items-center justify-between gap-3">
+          <div class="flex min-w-0 items-center gap-2">
+            <span class="inline-flex shrink-0 items-center justify-center" style="width: 28px; height: 28px; border-radius: var(--radius-md); background: color-mix(in srgb, var(--state-warning) 13%, var(--color-bg-surface)); color: var(--state-warning);">
+              <i data-lucide="shield-check" style="width: 16px; height: 16px;"></i>
+            </span>
+            <strong class="truncate" style="font-size: 13px; line-height: 1.25; font-weight: 800; color: var(--color-text-primary);">需要审批</strong>
+          </div>
+          <span class="inline-flex shrink-0 items-center whitespace-nowrap" style="height: 24px; padding: 0 8px; border-radius: var(--radius-md); background: color-mix(in srgb, var(--state-warning) 12%, var(--color-bg-surface)); color: var(--state-warning); font-size: 12px; font-weight: 800;">待确认</span>
+        </div>
+
+        <div class="mt-3 space-y-2">
+          <h2 style="font-size: 16px; line-height: 1.25; font-weight: 800; margin: 0; letter-spacing: -0.01em; text-wrap: balance; word-break: keep-all; overflow-wrap: break-word;">允许 Codex 执行命令？</h2>
+          <p class="line-clamp-2" style="font-size: 12px; line-height: 1.55; color: var(--color-text-secondary); margin: 0;">该操作可能修改项目文件，确认后 AI 工具会继续执行。</p>
+        </div>
+
+        <div class="mt-3 flex items-center gap-2" style="height: 36px; padding: 0 10px; border-radius: var(--radius-md); border: 1px solid var(--color-border); background: var(--color-bg-surface); color: var(--color-text-primary);">
+          <i data-lucide="terminal" class="shrink-0" style="width: 15px; height: 15px; color: var(--state-warning);"></i>
+          <code class="truncate" style="font-family: var(--font-mono); font-size: 12px; font-weight: 700;">npm run build</code>
+        </div>
+
+        <div class="mt-3 flex flex-nowrap gap-2 overflow-x-auto no-scrollbar" aria-label="可能影响的文件">
+          <span class="inline-flex shrink-0 items-center whitespace-nowrap" style="height: 26px; padding: 0 8px; border-radius: var(--radius-md); border: 1px solid var(--color-border); background: var(--color-bg-surface); color: var(--color-text-secondary); font-size: 12px; font-weight: 700;">ChatView.vue</span>
+          <span class="inline-flex shrink-0 items-center whitespace-nowrap" style="height: 26px; padding: 0 8px; border-radius: var(--radius-md); border: 1px solid var(--color-border); background: var(--color-bg-surface); color: var(--color-text-secondary); font-size: 12px; font-weight: 700;">chat_page.dart</span>
+        </div>
+
+        <div class="mt-3 grid grid-cols-2 gap-2">
+          <button id="approval-deny" data-dom-id="approval-deny" class="inline-flex h-11 items-center justify-center whitespace-nowrap transition-[opacity,transform,background-color,border-color] duration-150 active:scale-[0.98] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 disabled:opacity-50" style="border-radius: var(--radius-md); border: 1px solid var(--color-border); background: var(--color-bg-surface); color: var(--color-text-primary); font-size: 14px; font-weight: 800; outline-color: var(--color-primary);">拒绝</button>
+          <button id="approval-allow" data-dom-id="approval-allow" class="inline-flex h-11 items-center justify-center gap-1 whitespace-nowrap transition-[opacity,transform,background-color] duration-150 active:scale-[0.98] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 disabled:opacity-50" style="border-radius: var(--radius-md); border: 0; background: var(--color-primary); color: var(--color-text-inverse); font-size: 14px; font-weight: 800; outline-color: var(--color-primary);">
+            <span>同意本次</span>
+            <i data-lucide="arrow-right" style="width: 15px; height: 15px;"></i>
+          </button>
+        </div>
+      </section>
+    </div>
+  </div>
+
+  <style>
+    .no-scrollbar::-webkit-scrollbar { display: none; }
+    .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+    button, a { -webkit-tap-highlight-color: transparent; }
+    button:hover { opacity: .92; }
+    button:active { transform: translateY(1px); }
+    @media (hover: none) { button:hover { opacity: 1; } }
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after { transition-duration: .01ms !important; animation-duration: .01ms !important; scroll-behavior: auto !important; }
+    }
+  </style>
+  <script>
+    lucide.createIcons();
+  </script>
+</body>
+</html>

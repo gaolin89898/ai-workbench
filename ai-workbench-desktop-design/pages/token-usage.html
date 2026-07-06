@@ -1,0 +1,498 @@
+<!DOCTYPE html>
+<html lang="zh-CN" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Workbench — 用量统计</title>
+    <style id="theme-vars">
+/* AI Workbench Desktop — Dark Theme */
+/* Based on actual project style.css, inverted to dark */
+:root {
+  /* Brand */
+  --color-primary: #2563eb;
+  --color-primary-hover: #1d4ed8;
+  --color-primary-muted: rgba(37, 99, 235, 0.15);
+  --color-primary-soft: rgba(37, 99, 235, 0.08);
+  --color-primary-ring: rgba(37, 99, 235, 0.25);
+
+  /* Surface & Background */
+  --color-bg-app: #0f1117;
+  --color-bg-body: #111318;
+  --color-bg-sidebar: #161822;
+  --color-bg-main: #1a1d2e;
+  --color-bg-content: #1e2235;
+  --color-bg-surface: #1e2235;
+  --color-bg-elevated: #252a3a;
+  --color-bg-input: #1e2235;
+  --color-bg-hover: rgba(255, 255, 255, 0.06);
+  --color-bg-active: rgba(37, 99, 235, 0.12);
+
+  /* Text */
+  --color-text-primary: #e8eaed;
+  --color-text-body: #d1d5db;
+  --color-text-secondary: #9aa0b4;
+  --color-text-muted: #6b7280;
+  --color-text-placeholder: #6b7280;
+  --color-text-inverse: #ffffff;
+
+  /* Border */
+  --color-border: rgba(255, 255, 255, 0.1);
+  --color-border-subtle: rgba(255, 255, 255, 0.06);
+  --color-border-active: rgba(37, 99, 235, 0.5);
+
+  /* State Colors */
+  --state-success: #22c55e;
+  --state-success-bg: rgba(34, 197, 94, 0.12);
+  --state-success-ring: rgba(34, 197, 94, 0.25);
+  --state-warning: #f59e0b;
+  --state-warning-bg: rgba(245, 158, 11, 0.12);
+  --state-error: #ef4444;
+  --state-error-bg: rgba(239, 68, 68, 0.12);
+  --state-info: #3b82f6;
+  --state-info-bg: rgba(59, 130, 246, 0.12);
+
+  /* Radius */
+  --radius-sm: 4px;
+  --radius-md: 7px;
+  --radius-lg: 8px;
+  --radius-xl: 12px;
+  --radius-full: 999px;
+
+  /* Typography */
+  --font-sans: "Inter", ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+
+  --text-xs: 11px;
+  --text-sm: 12px;
+  --text-base: 13px;
+  --text-md: 14px;
+  --text-lg: 16px;
+  --text-xl: 20px;
+  --text-2xl: 28px;
+
+  --leading-tight: 1.25;
+  --leading-normal: 1.5;
+  --leading-relaxed: 1.625;
+  --leading-chat: 1.62;
+
+  /* Font Weights */
+  --fw-normal: 400;
+  --fw-medium: 500;
+  --fw-semibold: 620;
+  --fw-bold: 700;
+  --fw-extrabold: 800;
+  --fw-black: 850;
+
+  /* Shadows */
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.15);
+  --shadow-md: 0 10px 24px rgba(0, 0, 0, 0.25);
+  --shadow-lg: 0 24px 56px rgba(0, 0, 0, 0.35);
+  --shadow-composer: 0 16px 42px rgba(0, 0, 0, 0.3);
+
+  /* Spacing */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-10: 40px;
+  --space-14: 56px;
+  --space-18: 72px;
+
+  /* Layout */
+  --sidebar-width: 286px;
+  --topbar-height: 56px;
+  --composer-max-width: 760px;
+
+  /* Transitions */
+  --transition-fast: 120ms ease;
+  --transition-normal: 200ms ease;
+}
+
+    </style>
+    <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4.3.1/dist/index.global.js"></script>
+    <script src="https://unpkg.com/lucide@1.8.0/dist/umd/lucide.min.js"></script>
+    <style type="text/tailwindcss">
+  @theme inline {
+    --color-primary: var(--color-primary);
+    --color-border: var(--color-border);
+  }
+  @layer base {
+    body { background: var(--color-background); color: var(--color-text-primary); }
+    td, th { @apply break-words; word-break: break-all; word-break: auto-phrase; }
+    th { @apply whitespace-nowrap; }
+  }
+    </style>
+    <style>
+      .no-scrollbar::-webkit-scrollbar { display: none; }
+      .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+      [data-icon] {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        -webkit-mask-size: contain;
+        mask-size: contain;
+        -webkit-mask-repeat: no-repeat;
+        mask-repeat: no-repeat;
+        -webkit-mask-position: center;
+        mask-position: center;
+        background-color: currentColor;
+      }
+    </style>
+</head>
+<body class="min-h-screen font-sans antialiased overflow-hidden" style="background:var(--color-bg-body); color:var(--color-text-primary); font-family:var(--font-sans);">
+    <main class="flex" style="height:100vh; background:var(--color-bg-body);">
+
+        <!-- ========== LEFT SETTINGS NAV (286px) ========== -->
+        <aside class="flex flex-col shrink-0" style="width:286px; border-right:1px solid var(--color-border); background:var(--color-bg-sidebar); padding:18px 12px 14px;">
+
+            <!-- Top Section -->
+            <div class="flex flex-col" style="gap:18px; padding-bottom:18px;">
+                <!-- Back Button -->
+                <button class="inline-flex items-center gap-1.5 cursor-pointer" style="min-height:32px; border-radius:var(--radius-md); color:var(--color-text-secondary); font-size:13px; font-weight:var(--fw-semibold); background:none; border:none;">
+                    <i data-lucide="arrow-left" style="width:14px; height:14px;"></i>
+                    <span>返回</span>
+                </button>
+                <!-- Title -->
+                <div>
+                    <div style="font-size:22px; font-weight:var(--fw-black); color:var(--color-text-body); line-height:1.2;">设置</div>
+                    <div style="font-size:12px; color:var(--color-text-secondary); font-weight:var(--fw-semibold); margin-top:2px;">应用配置</div>
+                </div>
+            </div>
+
+            <!-- Nav List -->
+            <nav class="grid" style="gap:3px;">
+                <!-- Inactive: 连接 -->
+                <button class="grid items-center cursor-pointer" style="grid-template-columns:10px minmax(0,1fr) auto; gap:10px; min-height:68px; border:1px solid transparent; border-radius:var(--radius-lg); padding:10px; background:none;">
+                    <span style="width:8px; height:8px; border-radius:var(--radius-full); background:var(--color-border);"></span>
+                    <div class="flex flex-col items-start min-w-0" style="gap:2px;">
+                        <div class="flex items-center gap-2 min-w-0">
+                            <i data-lucide="server" style="width:18px; height:18px; color:var(--color-text-secondary); flex-shrink:0;"></i>
+                            <strong class="truncate" style="font-size:14px; font-weight:var(--fw-extrabold); color:var(--color-text-secondary);">连接</strong>
+                        </div>
+                    </div>
+                    <span class="inline-flex items-center shrink-0" style="min-height:24px; border-radius:var(--radius-md); background:var(--color-bg-elevated); color:var(--color-text-muted); font-size:11px; font-weight:var(--fw-black); padding:0 8px;">基础</span>
+                </button>
+
+                <!-- Inactive: 配对 -->
+                <button class="grid items-center cursor-pointer" style="grid-template-columns:10px minmax(0,1fr) auto; gap:10px; min-height:68px; border:1px solid transparent; border-radius:var(--radius-lg); padding:10px; background:none;">
+                    <span style="width:8px; height:8px; border-radius:var(--radius-full); background:var(--color-border);"></span>
+                    <div class="flex flex-col items-start min-w-0" style="gap:2px;">
+                        <div class="flex items-center gap-2 min-w-0">
+                            <i data-lucide="link" style="width:18px; height:18px; color:var(--color-text-secondary); flex-shrink:0;"></i>
+                            <strong class="truncate" style="font-size:14px; font-weight:var(--fw-extrabold); color:var(--color-text-secondary);">配对</strong>
+                        </div>
+                    </div>
+                    <span class="inline-flex items-center shrink-0" style="min-height:24px; border-radius:var(--radius-md); background:var(--color-bg-elevated); color:var(--color-text-muted); font-size:11px; font-weight:var(--fw-black); padding:0 8px;">移动端</span>
+                </button>
+
+                <!-- Inactive: 数据库 -->
+                <button class="grid items-center cursor-pointer" style="grid-template-columns:10px minmax(0,1fr) auto; gap:10px; min-height:68px; border:1px solid transparent; border-radius:var(--radius-lg); padding:10px; background:none;">
+                    <span style="width:8px; height:8px; border-radius:var(--radius-full); background:var(--color-border);"></span>
+                    <div class="flex flex-col items-start min-w-0" style="gap:2px;">
+                        <div class="flex items-center gap-2 min-w-0">
+                            <i data-lucide="database" style="width:18px; height:18px; color:var(--color-text-secondary); flex-shrink:0;"></i>
+                            <strong class="truncate" style="font-size:14px; font-weight:var(--fw-extrabold); color:var(--color-text-secondary);">数据库</strong>
+                        </div>
+                    </div>
+                    <span class="inline-flex items-center shrink-0" style="min-height:24px; border-radius:var(--radius-md); background:var(--color-bg-elevated); color:var(--color-text-muted); font-size:11px; font-weight:var(--fw-black); padding:0 8px;">存储</span>
+                </button>
+
+                <!-- ACTIVE: 用量统计 -->
+                <button class="grid items-center cursor-pointer" style="grid-template-columns:10px minmax(0,1fr) auto; gap:10px; min-height:68px; border:1px solid var(--color-primary-muted); border-radius:var(--radius-lg); padding:10px; background:var(--color-bg-elevated); box-shadow:var(--shadow-sm);">
+                    <span style="width:8px; height:8px; border-radius:var(--radius-full); background:var(--color-primary); box-shadow:0 0 0 4px var(--color-primary-muted);"></span>
+                    <div class="flex flex-col items-start min-w-0" style="gap:2px;">
+                        <div class="flex items-center gap-2 min-w-0">
+                            <i data-lucide="bar-chart-3" style="width:18px; height:18px; color:var(--color-text-body); flex-shrink:0;"></i>
+                            <strong class="truncate" style="font-size:14px; font-weight:var(--fw-extrabold); color:var(--color-text-body);">用量统计</strong>
+                        </div>
+                    </div>
+                    <span class="inline-flex items-center shrink-0" style="min-height:24px; border-radius:var(--radius-md); background:var(--color-primary-muted); color:var(--color-primary); font-size:11px; font-weight:var(--fw-black); padding:0 8px;">Token</span>
+                </button>
+
+                <!-- Inactive: 安全 -->
+                <button class="grid items-center cursor-pointer" style="grid-template-columns:10px minmax(0,1fr) auto; gap:10px; min-height:68px; border:1px solid transparent; border-radius:var(--radius-lg); padding:10px; background:none;">
+                    <span style="width:8px; height:8px; border-radius:var(--radius-full); background:var(--color-border);"></span>
+                    <div class="flex flex-col items-start min-w-0" style="gap:2px;">
+                        <div class="flex items-center gap-2 min-w-0">
+                            <i data-lucide="shield" style="width:18px; height:18px; color:var(--color-text-secondary); flex-shrink:0;"></i>
+                            <strong class="truncate" style="font-size:14px; font-weight:var(--fw-extrabold); color:var(--color-text-secondary);">安全</strong>
+                        </div>
+                    </div>
+                    <span class="inline-flex items-center shrink-0" style="min-height:24px; border-radius:var(--radius-md); background:var(--color-bg-elevated); color:var(--color-text-muted); font-size:11px; font-weight:var(--fw-black); padding:0 8px;">保护</span>
+                </button>
+
+                <!-- Inactive: 归档会话 -->
+                <button class="grid items-center cursor-pointer" style="grid-template-columns:10px minmax(0,1fr) auto; gap:10px; min-height:68px; border:1px solid transparent; border-radius:var(--radius-lg); padding:10px; background:none;">
+                    <span style="width:8px; height:8px; border-radius:var(--radius-full); background:var(--color-border);"></span>
+                    <div class="flex flex-col items-start min-w-0" style="gap:2px;">
+                        <div class="flex items-center gap-2 min-w-0">
+                            <i data-lucide="archive" style="width:18px; height:18px; color:var(--color-text-secondary); flex-shrink:0;"></i>
+                            <strong class="truncate" style="font-size:14px; font-weight:var(--fw-extrabold); color:var(--color-text-secondary);">归档会话</strong>
+                        </div>
+                    </div>
+                    <span class="inline-flex items-center shrink-0" style="min-height:24px; border-radius:var(--radius-md); background:var(--color-bg-elevated); color:var(--color-text-muted); font-size:11px; font-weight:var(--fw-black); padding:0 8px;">历史</span>
+                </button>
+
+                <!-- Inactive: 关于 -->
+                <button class="grid items-center cursor-pointer" style="grid-template-columns:10px minmax(0,1fr) auto; gap:10px; min-height:68px; border:1px solid transparent; border-radius:var(--radius-lg); padding:10px; background:none;">
+                    <span style="width:8px; height:8px; border-radius:var(--radius-full); background:var(--color-border);"></span>
+                    <div class="flex flex-col items-start min-w-0" style="gap:2px;">
+                        <div class="flex items-center gap-2 min-w-0">
+                            <i data-lucide="info" style="width:18px; height:18px; color:var(--color-text-secondary); flex-shrink:0;"></i>
+                            <strong class="truncate" style="font-size:14px; font-weight:var(--fw-extrabold); color:var(--color-text-secondary);">关于</strong>
+                        </div>
+                    </div>
+                    <span class="inline-flex items-center shrink-0" style="min-height:24px; border-radius:var(--radius-md); background:var(--color-bg-elevated); color:var(--color-text-muted); font-size:11px; font-weight:var(--fw-black); padding:0 8px;">信息</span>
+                </button>
+            </nav>
+
+            <!-- Foot -->
+            <div class="mt-auto" style="margin-top:auto; border:1px solid var(--color-border); border-radius:var(--radius-lg); background:var(--color-bg-elevated); padding:12px;">
+                <div style="font-size:11px; font-weight:var(--fw-black); color:var(--color-text-muted);">版本</div>
+                <div style="font-size:12px; font-weight:var(--fw-semibold); color:var(--color-text-secondary); margin-top:2px;">v0.3.2</div>
+            </div>
+        </aside>
+
+        <!-- ========== RIGHT CONTENT AREA ========== -->
+        <div class="flex-1 overflow-y-auto" style="padding:42px 0 36px;">
+            <div class="mx-auto" style="max-width:860px; padding:0 36px;">
+
+                <!-- Section Header -->
+                <div class="flex flex-col" style="gap:6px; margin-bottom:28px;">
+                    <span style="font-size:11px; font-weight:var(--fw-black); color:var(--color-primary); text-transform:uppercase; letter-spacing:0.05em;">Token</span>
+                    <h1 style="font-size:28px; font-weight:var(--fw-black); color:var(--color-text-primary); line-height:1.2; text-wrap:balance; word-break:keep-all; overflow-wrap:break-word;">用量统计</h1>
+                    <div class="flex items-center justify-between gap-4">
+                        <p class="max-w-[660px]" style="font-size:13px; color:var(--color-text-secondary); line-height:var(--leading-normal);">按 AI 工具聚合的 Token 用量，数据来自云端，桌面端和移动端共用。</p>
+                        <button class="inline-flex items-center gap-1.5 shrink-0" style="min-height:32px; padding:0 12px; border-radius:var(--radius-md); border:1px solid var(--color-border); background:var(--color-bg-elevated); color:var(--color-text-secondary); font-size:13px; font-weight:var(--fw-semibold); cursor:pointer;">
+                            <i data-lucide="refresh-cw" style="width:14px; height:14px;"></i>
+                            <span>刷新</span>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Overview Cards: 4 columns -->
+                <div class="grid" style="grid-template-columns:repeat(4, minmax(0, 1fr)); gap:12px; margin-bottom:28px;">
+                    <!-- Card: 总输入 -->
+                    <div class="rounded-lg p-4" style="background:var(--color-bg-surface); border:1px solid var(--color-border);">
+                        <div class="flex items-center gap-2 mb-2">
+                            <span class="flex items-center justify-center shrink-0" style="width:28px; height:28px; border-radius:var(--radius-md); background:var(--state-info-bg);">
+                                <i data-lucide="arrow-down-to-line" style="width:14px; height:14px; color:var(--state-info);"></i>
+                            </span>
+                            <span style="font-size:12px; color:var(--color-text-secondary); font-weight:var(--fw-medium);">总输入</span>
+                        </div>
+                        <div style="font-size:22px; font-weight:var(--fw-black); color:var(--color-text-primary); line-height:1; font-family:var(--font-mono); font-variant-numeric:tabular-nums;">1.24M</div>
+                    </div>
+
+                    <!-- Card: 总输出 -->
+                    <div class="rounded-lg p-4" style="background:var(--color-bg-surface); border:1px solid var(--color-border);">
+                        <div class="flex items-center gap-2 mb-2">
+                            <span class="flex items-center justify-center shrink-0" style="width:28px; height:28px; border-radius:var(--radius-md); background:var(--state-success-bg);">
+                                <i data-lucide="arrow-up-from-line" style="width:14px; height:14px; color:var(--state-success);"></i>
+                            </span>
+                            <span style="font-size:12px; color:var(--color-text-secondary); font-weight:var(--fw-medium);">总输出</span>
+                        </div>
+                        <div style="font-size:22px; font-weight:var(--fw-black); color:var(--color-text-primary); line-height:1; font-family:var(--font-mono); font-variant-numeric:tabular-nums;">356.8K</div>
+                    </div>
+
+                    <!-- Card: 推理 Token -->
+                    <div class="rounded-lg p-4" style="background:var(--color-bg-surface); border:1px solid var(--color-border);">
+                        <div class="flex items-center gap-2 mb-2">
+                            <span class="flex items-center justify-center shrink-0" style="width:28px; height:28px; border-radius:var(--radius-md); background:var(--state-warning-bg);">
+                                <i data-lucide="brain-circuit" style="width:14px; height:14px; color:var(--state-warning);"></i>
+                            </span>
+                            <span style="font-size:12px; color:var(--color-text-secondary); font-weight:var(--fw-medium);">推理 Token</span>
+                        </div>
+                        <div style="font-size:22px; font-weight:var(--fw-black); color:var(--color-text-primary); line-height:1; font-family:var(--font-mono); font-variant-numeric:tabular-nums;">89.2K</div>
+                    </div>
+
+                    <!-- Card: 合计 (highlight) -->
+                    <div class="rounded-lg p-4" style="background:var(--color-primary-muted); border:1px solid var(--color-primary-muted);">
+                        <div class="flex items-center gap-2 mb-2">
+                            <span class="flex items-center justify-center shrink-0" style="width:28px; height:28px; border-radius:var(--radius-md); background:rgba(37, 99, 235, 0.2);">
+                                <i data-lucide="sigma" style="width:14px; height:14px; color:var(--color-primary);"></i>
+                            </span>
+                            <span style="font-size:12px; color:var(--color-text-secondary); font-weight:var(--fw-medium);">合计</span>
+                        </div>
+                        <div style="font-size:22px; font-weight:var(--fw-black); color:var(--color-primary); line-height:1; font-family:var(--font-mono); font-variant-numeric:tabular-nums;">1.69M</div>
+                    </div>
+                </div>
+
+                <!-- Provider Detail Table -->
+                <div class="flex flex-col" style="gap:14px;">
+                    <h2 style="font-size:17px; font-weight:var(--fw-bold); color:var(--color-text-body); line-height:1.3;">工具用量明细</h2>
+
+                    <div class="rounded-lg overflow-hidden" style="background:var(--color-bg-surface); border:1px solid var(--color-border);">
+                        <table class="w-full" style="border-collapse:collapse; font-size:13px;">
+                            <thead>
+                                <tr style="border-bottom:1px solid var(--color-border);">
+                                    <th class="text-left px-4 py-3" style="font-size:11px; font-weight:var(--fw-black); color:var(--color-text-muted); text-transform:uppercase; letter-spacing:0.05em; white-space:nowrap; min-width:160px;">工具</th>
+                                    <th class="text-right px-4 py-3" style="font-size:11px; font-weight:var(--fw-black); color:var(--color-text-muted); text-transform:uppercase; letter-spacing:0.05em; white-space:nowrap;">输入 Token</th>
+                                    <th class="text-right px-4 py-3" style="font-size:11px; font-weight:var(--fw-black); color:var(--color-text-muted); text-transform:uppercase; letter-spacing:0.05em; white-space:nowrap;">输出 Token</th>
+                                    <th class="text-right px-4 py-3" style="font-size:11px; font-weight:var(--fw-black); color:var(--color-text-muted); text-transform:uppercase; letter-spacing:0.05em; white-space:nowrap;">推理 Token</th>
+                                    <th class="text-right px-4 py-3" style="font-size:11px; font-weight:var(--fw-black); color:var(--color-text-muted); text-transform:uppercase; letter-spacing:0.05em; white-space:nowrap;">合计</th>
+                                    <th class="text-right px-4 py-3" style="font-size:11px; font-weight:var(--fw-black); color:var(--color-text-muted); text-transform:uppercase; letter-spacing:0.05em; white-space:nowrap;">会话次数</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <!-- Row: Codex -->
+                                <tr style="border-bottom:1px solid var(--color-border-subtle);">
+                                    <td class="px-4 py-3">
+                                        <div class="flex items-center gap-3">
+                                            <span class="flex items-center justify-center shrink-0" style="width:32px; height:32px; border-radius:var(--radius-md); background:var(--color-bg-elevated); border:1px solid var(--color-border);">
+                                                <i data-lucide="terminal" style="width:16px; height:16px; color:var(--color-text-body);"></i>
+                                            </span>
+                                            <span class="truncate" style="font-size:14px; font-weight:var(--fw-medium); color:var(--color-text-primary);">Codex</span>
+                                        </div>
+                                    </td>
+                                    <td class="text-right px-4 py-3" style="font-family:var(--font-mono); font-variant-numeric:tabular-nums; color:var(--color-text-body); white-space:nowrap;">820.5K</td>
+                                    <td class="text-right px-4 py-3" style="font-family:var(--font-mono); font-variant-numeric:tabular-nums; color:var(--color-text-body); white-space:nowrap;">245.3K</td>
+                                    <td class="text-right px-4 py-3" style="font-family:var(--font-mono); font-variant-numeric:tabular-nums; color:var(--state-warning); white-space:nowrap;">52.1K</td>
+                                    <td class="text-right px-4 py-3" style="font-family:var(--font-mono); font-variant-numeric:tabular-nums; color:var(--color-text-primary); font-weight:var(--fw-semibold); white-space:nowrap;">1.12M</td>
+                                    <td class="text-right px-4 py-3" style="font-family:var(--font-mono); font-variant-numeric:tabular-nums; color:var(--color-text-secondary); white-space:nowrap;">847</td>
+                                </tr>
+
+                                <!-- Row: Claude Code -->
+                                <tr style="border-bottom:1px solid var(--color-border-subtle);">
+                                    <td class="px-4 py-3">
+                                        <div class="flex items-center gap-3">
+                                            <span class="flex items-center justify-center shrink-0" style="width:32px; height:32px; border-radius:var(--radius-md); background:var(--color-bg-elevated); border:1px solid var(--color-border);">
+                                                <i data-lucide="code-2" style="width:16px; height:16px; color:var(--color-text-body);"></i>
+                                            </span>
+                                            <span class="truncate" style="font-size:14px; font-weight:var(--fw-medium); color:var(--color-text-primary);">Claude Code</span>
+                                        </div>
+                                    </td>
+                                    <td class="text-right px-4 py-3" style="font-family:var(--font-mono); font-variant-numeric:tabular-nums; color:var(--color-text-body); white-space:nowrap;">312.8K</td>
+                                    <td class="text-right px-4 py-3" style="font-family:var(--font-mono); font-variant-numeric:tabular-nums; color:var(--color-text-body); white-space:nowrap;">89.4K</td>
+                                    <td class="text-right px-4 py-3" style="font-family:var(--font-mono); font-variant-numeric:tabular-nums; color:var(--state-warning); white-space:nowrap;">31.6K</td>
+                                    <td class="text-right px-4 py-3" style="font-family:var(--font-mono); font-variant-numeric:tabular-nums; color:var(--color-text-primary); font-weight:var(--fw-semibold); white-space:nowrap;">433.8K</td>
+                                    <td class="text-right px-4 py-3" style="font-family:var(--font-mono); font-variant-numeric:tabular-nums; color:var(--color-text-secondary); white-space:nowrap;">312</td>
+                                </tr>
+
+                                <!-- Row: OpenCode -->
+                                <tr>
+                                    <td class="px-4 py-3">
+                                        <div class="flex items-center gap-3">
+                                            <span class="flex items-center justify-center shrink-0" style="width:32px; height:32px; border-radius:var(--radius-md); background:var(--color-bg-elevated); border:1px solid var(--color-border);">
+                                                <i data-lucide="braces" style="width:16px; height:16px; color:var(--color-text-body);"></i>
+                                            </span>
+                                            <span class="truncate" style="font-size:14px; font-weight:var(--fw-medium); color:var(--color-text-primary);">OpenCode</span>
+                                        </div>
+                                    </td>
+                                    <td class="text-right px-4 py-3" style="font-family:var(--font-mono); font-variant-numeric:tabular-nums; color:var(--color-text-body); white-space:nowrap;">108.2K</td>
+                                    <td class="text-right px-4 py-3" style="font-family:var(--font-mono); font-variant-numeric:tabular-nums; color:var(--color-text-body); white-space:nowrap;">22.1K</td>
+                                    <td class="text-right px-4 py-3" style="font-family:var(--font-mono); font-variant-numeric:tabular-nums; color:var(--state-warning); white-space:nowrap;">5.5K</td>
+                                    <td class="text-right px-4 py-3" style="font-family:var(--font-mono); font-variant-numeric:tabular-nums; color:var(--color-text-primary); font-weight:var(--fw-semibold); white-space:nowrap;">135.8K</td>
+                                    <td class="text-right px-4 py-3" style="font-family:var(--font-mono); font-variant-numeric:tabular-nums; color:var(--color-text-secondary); white-space:nowrap;">156</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- Error State (hidden by default) -->
+                <div class="rounded-lg flex items-center gap-3 mt-6" style="background:var(--state-error-bg); border:1px solid rgba(239, 68, 68, 0.2); padding:16px; display:none;" data-dom-id="token-usage-error-card">
+                    <i data-lucide="alert-circle" style="width:20px; height:20px; color:var(--state-error); flex-shrink:0;"></i>
+                    <div class="min-w-0">
+                        <div style="font-size:14px; font-weight:var(--fw-semibold); color:var(--state-error);">加载失败</div>
+                        <div style="font-size:13px; color:var(--color-text-secondary); margin-top:2px;">无法获取 Token 用量数据，请检查网络连接后重试。</div>
+                    </div>
+                    <button class="shrink-0 ml-auto" style="min-height:32px; padding:0 12px; border-radius:var(--radius-md); border:1px solid rgba(239, 68, 68, 0.3); background:var(--state-error-bg); color:var(--state-error); font-size:13px; font-weight:var(--fw-semibold); cursor:pointer;">
+                        重试
+                    </button>
+                </div>
+
+                <!-- Empty State (hidden by default) -->
+                <div class="rounded-lg flex flex-col items-center mt-6" style="background:var(--color-bg-surface); border:1px solid var(--color-border); padding:48px 24px; display:none; text-align:center;" data-dom-id="token-usage-empty-card">
+                    <i data-lucide="bar-chart-big" style="width:48px; height:48px; color:var(--color-text-muted); margin-bottom:16px;"></i>
+                    <div style="font-size:16px; font-weight:var(--fw-semibold); color:var(--color-text-secondary);">暂无 Token 用量数据</div>
+                    <div style="font-size:13px; color:var(--color-text-muted); margin-top:6px; max-width:400px;">发起一次 AI 会话后会自动统计。</div>
+                </div>
+
+            </div>
+        </div>
+
+    </main>
+
+    <!-- Custom Styles (must be in body, not head) -->
+    <style>
+        /* Nav button hover */
+        aside nav button:hover {
+            background: var(--color-bg-hover);
+        }
+
+        /* Refresh button hover */
+        button:hover {
+            filter: brightness(1.1);
+        }
+
+        /* Table row hover */
+        tbody tr:hover {
+            background: var(--color-bg-hover);
+        }
+
+        /* Scrollbar styling */
+        .overflow-y-auto::-webkit-scrollbar {
+            width: 6px;
+        }
+        .overflow-y-auto::-webkit-scrollbar-track {
+            background: transparent;
+        }
+        .overflow-y-auto::-webkit-scrollbar-thumb {
+            background: var(--color-border);
+            border-radius: 3px;
+        }
+
+        /* Responsive: stack nav on smaller screens */
+        @media (max-width: 768px) {
+            main {
+                flex-direction: column !important;
+                height: auto !important;
+                min-height: 100vh;
+                overflow-y: auto;
+            }
+            aside {
+                width: 100% !important;
+                border-right: none !important;
+                border-bottom: 1px solid var(--color-border) !important;
+                padding: 12px 16px !important;
+            }
+            aside nav {
+                display: flex !important;
+                overflow-x: auto;
+                gap: 2px !important;
+            }
+            aside nav button {
+                min-width: max-content;
+            }
+            .overflow-y-auto {
+                padding: 24px 16px !important;
+            }
+            .overflow-y-auto > div {
+                padding: 0 !important;
+            }
+            /* Stack overview cards 2x2 on tablet, 2x2 on mobile */
+            .grid[style*="repeat(4"] {
+                grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+            }
+            /* Make table scrollable */
+            .rounded-lg[style*="overflow"] {
+                overflow-x: auto;
+            }
+            table {
+                min-width: 600px;
+            }
+        }
+
+        @media (max-width: 480px) {
+            .grid[style*="repeat(4"] {
+                grid-template-columns: 1fr !important;
+            }
+        }
+    </style>
+
+    <script>lucide.createIcons();</script>
+</body>
+</html>
