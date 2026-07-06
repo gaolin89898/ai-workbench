@@ -2044,7 +2044,7 @@ h2 {
   resize: none;
   border-radius: 18px;
   background: transparent;
-  padding: 14px 66px 90px 14px;
+  padding: 14px 66px 56px 14px;
   color: var(--color-text-primary);
   font-size: var(--text-md);
   line-height: var(--leading-normal);
@@ -2056,6 +2056,10 @@ h2 {
 
 .codex-prompt-box textarea::placeholder {
   color: var(--color-text-placeholder);
+}
+
+.codex-prompt-box:has(.codex-run-controls .codex-goal-input) textarea {
+  padding-bottom: 92px;
 }
 
 .chat-image-attachments {
@@ -2374,9 +2378,10 @@ h2 {
 }
 
 .start-approval-trigger {
-  left: 156px;
+  left: auto;
+  right: 58px;
   bottom: 14px;
-  max-width: calc(100% - 238px);
+  max-width: 150px;
 }
 
 .codex-approval-menu {
@@ -2487,44 +2492,45 @@ h2 {
   display: flex;
   min-width: 0;
   align-items: center;
-  gap: 8px;
+  gap: 7px;
   color: var(--color-text-secondary);
   font-size: 12px;
   line-height: 1;
 }
 
 .start-run-controls {
-  left: 14px;
-  right: 58px;
-  bottom: 52px;
+  left: 150px;
+  right: 214px;
+  bottom: 15px;
 }
 
 .composer-run-controls {
   left: 12px;
-  right: 58px;
-  bottom: 50px;
+  right: 208px;
+  bottom: 13px;
 }
 
 .codex-run-mode {
   display: inline-flex;
   flex: 0 0 auto;
   overflow: hidden;
-  border: 1px solid var(--color-border-subtle);
-  border-radius: 8px;
+  border: 1px solid var(--color-border);
+  border-radius: 9px;
   background: var(--color-bg-content);
-  padding: 2px;
+  padding: 1px;
+  box-shadow: var(--shadow-sm);
 }
 
 .codex-run-mode button {
-  min-width: 42px;
-  height: 24px;
+  min-width: 40px;
+  height: 26px;
   border: 0;
-  border-radius: 6px;
+  border-radius: 7px;
   background: transparent;
   color: var(--color-text-secondary);
   padding: 0 8px;
   font-size: 12px;
-  font-weight: 720;
+  font-weight: 700;
   line-height: 1;
 }
 
@@ -2536,6 +2542,7 @@ h2 {
 .codex-run-mode button.active {
   background: var(--color-primary);
   color: var(--color-bg-content);
+  box-shadow: 0 5px 14px var(--color-primary-ring);
 }
 
 .codex-model-picker,
@@ -2545,18 +2552,19 @@ h2 {
   min-width: 0;
   align-items: center;
   gap: 6px;
-  border: 1px solid var(--color-border-subtle);
-  border-radius: 8px;
+  border: 1px solid var(--color-border);
+  border-radius: 9px;
   background: var(--color-bg-content);
   color: var(--color-text-secondary);
   padding: 0 8px;
   font-size: 12px;
   font-weight: 680;
+  box-shadow: var(--shadow-sm);
 }
 
 .codex-model-picker {
-  flex: 1 1 180px;
-  max-width: 260px;
+  flex: 1 1 168px;
+  max-width: 240px;
 }
 
 .codex-model-picker span,
@@ -2580,6 +2588,7 @@ h2 {
 
 .codex-goal-toggle {
   flex: 0 0 auto;
+  cursor: pointer;
 }
 
 .codex-goal-toggle input {
@@ -2591,16 +2600,26 @@ h2 {
 
 .codex-goal-input {
   height: 30px;
-  min-width: 140px;
+  min-width: 160px;
   flex: 1 1 180px;
-  border: 1px solid var(--color-border-subtle);
-  border-radius: 8px;
+  border: 1px solid var(--color-border);
+  border-radius: 9px;
   background: var(--color-bg-content);
   color: var(--color-text-primary);
   outline: none;
   padding: 0 10px;
   font-size: 12px;
   font-weight: 560;
+  box-shadow: var(--shadow-sm);
+}
+
+.codex-run-controls .codex-goal-input {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 38px;
+  width: min(340px, 100%);
+  flex: none;
 }
 
 .codex-goal-input::placeholder {
@@ -5096,7 +5115,7 @@ dd {
   border: 1px solid var(--color-border);
   border-radius: 18px;
   background: var(--color-bg-surface);
-  padding: 12px 58px 84px 14px;
+  padding: 12px 58px 50px 14px;
   box-shadow: var(--shadow-composer);
   transition: border-color var(--transition-fast), box-shadow var(--transition-fast), background-color var(--transition-fast);
 }
@@ -5105,6 +5124,10 @@ dd {
   border-color: var(--color-border-active);
   background: var(--color-bg-content);
   box-shadow: 0 18px 48px rgb(15 23 42 / 9%);
+}
+
+.chat-composer:has(.codex-run-controls .codex-goal-input) {
+  padding-bottom: 84px;
 }
 
 .chat-composer.has-approval-cover {
@@ -5164,9 +5187,10 @@ dd {
 }
 
 .chat-approval-trigger {
-  left: 12px;
+  left: auto;
+  right: 58px;
   bottom: 12px;
-  max-width: calc(100% - 78px);
+  max-width: 146px;
 }
 
 .chat-approval-menu {
@@ -7078,24 +7102,36 @@ textarea:focus {
 
 @media (max-width: 720px) {
   .codex-prompt-box textarea {
-    padding-bottom: 126px;
+    padding-bottom: 92px;
   }
 
   .chat-composer {
-    padding-bottom: 118px;
+    padding-bottom: 86px;
   }
 
-  .codex-run-controls {
-    flex-wrap: wrap;
-    row-gap: 6px;
+  .start-run-controls {
+    left: 14px;
+    right: 58px;
+    bottom: 52px;
+  }
+
+  .composer-run-controls {
+    left: 12px;
+    right: 58px;
+    bottom: 48px;
+  }
+
+  .start-approval-trigger,
+  .chat-approval-trigger {
+    max-width: 138px;
+  }
+
+  .codex-run-controls .codex-goal-input {
+    width: 100%;
   }
 
   .codex-model-picker {
     max-width: none;
-  }
-
-  .codex-goal-input {
-    flex-basis: 100%;
   }
 
   .chat-user-anchor-rail {
