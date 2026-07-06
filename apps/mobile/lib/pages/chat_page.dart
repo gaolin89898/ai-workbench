@@ -188,7 +188,7 @@ class _ChatPageState extends State<ChatPage> {
                   addRepaintBoundaries: false,
                   itemCount: messages.isEmpty ? 1 : messages.length,
                   itemBuilder: (_, index) => messages.isEmpty
-                      ? const _SystemLine('桌面在线时会从本机 SQLite 拉取历史。')
+                      ? const _SystemLine('这个会话还没有聊天记录。')
                       : RepaintBoundary(
                           key: ValueKey(_messageRenderKey(
                             messages[index],

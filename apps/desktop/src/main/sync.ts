@@ -35,7 +35,6 @@ import { codexTraceSnapshotToSegments } from "./codex_trace";
 // ---------- Cloud config persistence ----------
 
 const STRUCTURED_MESSAGE_PREFIX = "__AI_WORKBENCH_MESSAGE_V1__";
-const CODEX_APP_SERVER_SESSION_PREFIX = "app-server:";
 const DEFAULT_CLOUD_SERVER_URL = "http://8.162.12.148:3000";
 const configPath = path.join(app.getPath("userData"), "cloud-config.json");
 const machineIdPath = path.join(app.getPath("userData"), "machine-id");
@@ -83,14 +82,8 @@ function encodeStructuredHistoryContent(content: string, segments: unknown[]): s
   })}`;
 }
 
-function isCodexExternalMirrorSession(session: { providerId: string; providerSessionId?: string | null }): boolean {
-  return session.providerId === "codex"
-    && Boolean(session.providerSessionId)
-    && !session.providerSessionId!.startsWith(CODEX_APP_SERVER_SESSION_PREFIX);
-}
-
 function listSyncableAiSessions() {
-  return listLocalAiSessions().filter((session) => !isCodexExternalMirrorSession(session));
+  return listLocalAiSessions();
 }
 
 function isCodexSession(aiSessionId: string) {

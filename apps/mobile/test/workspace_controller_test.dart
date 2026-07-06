@@ -56,6 +56,40 @@ void main() {
     controller.dispose();
   });
 
+  test('open session shows history timeout when desktop does not respond',
+      () async {
+    final controller = WorkspaceController(
+      api: ApiClient(baseUrl: 'http://127.0.0.1:3000'),
+      historyRequestTimeout: const Duration(milliseconds: 1),
+    );
+    controller.selectedDevice = const DesktopDevice(
+      id: 'device-1',
+      name: 'desktop',
+      os: 'linux',
+      online: true,
+    );
+
+    controller.openSession(
+      const AiSessionMeta(
+        id: 'session-1',
+        deviceId: 'device-1',
+        providerId: 'codex',
+        title: '历史会话',
+        status: 'idle',
+        updatedAt: '2026-07-03T00:00:00Z',
+      ),
+    );
+
+    await Future<void>.delayed(const Duration(milliseconds: 20));
+
+    final messages = controller.messagesBySession['session-1']!;
+    expect(messages, hasLength(1));
+    expect(messages.single.role, ChatRole.error);
+    expect(messages.single.text, contains('桌面端'));
+
+    controller.dispose();
+  });
+
   test('loadDevices hides duplicate desktop device rows', () async {
     final controller = WorkspaceController(
       api: _FakeDeviceApiClient([

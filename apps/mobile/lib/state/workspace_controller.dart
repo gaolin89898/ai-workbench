@@ -9,16 +9,25 @@ import '../services/api_client.dart';
 import '../services/realtime_client.dart';
 
 class WorkspaceController extends ChangeNotifier {
-  WorkspaceController({required this.api}) : realtime = RealtimeClient(api) {
+  WorkspaceController({
+    required this.api,
+    Duration historyRequestTimeout = const Duration(seconds: 12),
+  })  : realtime = RealtimeClient(api),
+        _historyRequestTimeout = historyRequestTimeout {
     _persistenceLoaded = _loadPersistence();
   }
 
   final ApiClient api;
   final RealtimeClient realtime;
+  final Duration _historyRequestTimeout;
   StreamSubscription<Map<String, dynamic>>? _events;
   static const _devicesReloadInterval = Duration(seconds: 5);
   static const _historyRefreshInterval = Duration(seconds: 5);
+  static const _historyLoadingText = '正在从桌面端拉取本地历史...';
+  static const _historyTimeoutText = '没有收到桌面端返回的历史。请确认桌面端已打开、已登录同一账号，并保持在线。';
   Timer? _historyRefreshTimer;
+  Timer? _historyTimeoutTimer;
+  String? _historyTimeoutSessionId;
   String? _openSessionId;
   Future<void>? _loadDevicesInFlight;
   late final Future<void> _persistenceLoaded;
@@ -224,10 +233,14 @@ class WorkspaceController extends ChangeNotifier {
     _openSessionId = session.id;
     messagesBySession.putIfAbsent(
       session.id,
-      () => const [ChatMessage(role: ChatRole.system, text: '正在从桌面端拉取本地历史...')],
+      () =>
+          const [ChatMessage(role: ChatRole.system, text: _historyLoadingText)],
     );
     final device = selectedDevice;
-    if (device != null) realtime.requestHistory(device.id, session.id);
+    if (device != null) {
+      realtime.requestHistory(device.id, session.id);
+      _startHistoryTimeout(session.id);
+    }
     _startHistoryRefresh(session.id);
     markSessionRead(session.id);
     _notifySafely();
@@ -238,6 +251,7 @@ class WorkspaceController extends ChangeNotifier {
     _openSessionId = null;
     _historyRefreshTimer?.cancel();
     _historyRefreshTimer = null;
+    _cancelHistoryTimeout(session.id);
   }
 
   void _startHistoryRefresh(String sessionId) {
@@ -248,6 +262,34 @@ class WorkspaceController extends ChangeNotifier {
       if (device == null) return;
       realtime.requestHistory(device.id, sessionId);
     });
+  }
+
+  void _startHistoryTimeout(String sessionId) {
+    _historyTimeoutTimer?.cancel();
+    _historyTimeoutSessionId = sessionId;
+    _historyTimeoutTimer = Timer(_historyRequestTimeout, () {
+      if (_openSessionId != sessionId) return;
+      if (_historyTimeoutSessionId != sessionId) return;
+      final current = messagesBySession[sessionId] ?? const <ChatMessage>[];
+      if (!_isHistoryLoadingPlaceholder(current)) return;
+      messagesBySession[sessionId] = const [
+        ChatMessage(role: ChatRole.error, text: _historyTimeoutText),
+      ];
+      _notifySafely();
+    });
+  }
+
+  void _cancelHistoryTimeout(String sessionId) {
+    if (_historyTimeoutSessionId != sessionId) return;
+    _historyTimeoutTimer?.cancel();
+    _historyTimeoutTimer = null;
+    _historyTimeoutSessionId = null;
+  }
+
+  bool _isHistoryLoadingPlaceholder(List<ChatMessage> messages) {
+    return messages.length == 1 &&
+        messages.single.role == ChatRole.system &&
+        messages.single.text == _historyLoadingText;
   }
 
   void sendPrompt(AiSessionMeta session, String prompt) {
@@ -502,6 +544,7 @@ class WorkspaceController extends ChangeNotifier {
         break;
       case 'ai.history.response':
         final sessionId = json['aiSessionId'] as String;
+        _cancelHistoryTimeout(sessionId);
         final current = messagesBySession[sessionId] ?? const <ChatMessage>[];
         final hasPendingAssistant = current.any(
             (message) => message.role == ChatRole.assistant && message.pending);
@@ -1520,6 +1563,7 @@ class WorkspaceController extends ChangeNotifier {
   @override
   void dispose() {
     _historyRefreshTimer?.cancel();
+    _historyTimeoutTimer?.cancel();
     _events?.cancel();
     realtime.close();
     super.dispose();
