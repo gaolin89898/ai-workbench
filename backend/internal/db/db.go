@@ -57,9 +57,9 @@ func (d *DB) Close() {
 }
 
 // RunMigrations reads every .sql file in migrationsDir (sorted by name) and
-// executes each one in order. This is the simple implementation requested by
-// the spec: it does not track applied migrations, so it targets a fresh
-// database (re-running on an already-migrated DB will fail on CREATE TABLE).
+// executes each one once. Older deployments did not track applied migrations,
+// so the first run with this table may re-apply the current idempotent files
+// and then record them; subsequent restarts skip them.
 func (d *DB) RunMigrations(ctx context.Context, migrationsDir string) error {
 	entries, err := os.ReadDir(migrationsDir)
 	if err != nil {
@@ -72,13 +72,38 @@ func (d *DB) RunMigrations(ctx context.Context, migrationsDir string) error {
 		}
 	}
 	sort.Strings(files)
+	if _, err := d.Pool.Exec(ctx, `CREATE TABLE IF NOT EXISTS schema_migrations (
+		name TEXT PRIMARY KEY,
+		applied_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+	)`); err != nil {
+		return fmt.Errorf("ensure schema_migrations: %w", err)
+	}
 	for _, name := range files {
+		var applied bool
+		if err := d.Pool.QueryRow(ctx, "SELECT EXISTS(SELECT 1 FROM schema_migrations WHERE name = $1)", name).Scan(&applied); err != nil {
+			return fmt.Errorf("check migration %s: %w", name, err)
+		}
+		if applied {
+			continue
+		}
 		content, err := os.ReadFile(filepath.Join(migrationsDir, name))
 		if err != nil {
 			return fmt.Errorf("read migration %s: %w", name, err)
 		}
-		if _, err := d.Pool.Exec(ctx, string(content)); err != nil {
+		tx, err := d.Pool.Begin(ctx)
+		if err != nil {
+			return fmt.Errorf("begin migration %s: %w", name, err)
+		}
+		if _, err := tx.Exec(ctx, string(content)); err != nil {
+			_ = tx.Rollback(ctx)
 			return fmt.Errorf("apply migration %s: %w", name, err)
+		}
+		if _, err := tx.Exec(ctx, "INSERT INTO schema_migrations (name) VALUES ($1)", name); err != nil {
+			_ = tx.Rollback(ctx)
+			return fmt.Errorf("record migration %s: %w", name, err)
+		}
+		if err := tx.Commit(ctx); err != nil {
+			return fmt.Errorf("commit migration %s: %w", name, err)
 		}
 	}
 	return nil

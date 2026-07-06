@@ -1322,13 +1322,8 @@ export async function fetchTokenUsageSummary(): Promise<TokenUsageSummary | null
   const config = loadStoredConfig();
   if (!config || !config.accessToken) return null;
   const url = `${normalizeServerUrl(config.serverUrl)}/token-usage/summary`;
-  try {
-    return (await fetchJson(url, {
-      method: "GET",
-      headers: { Authorization: `Bearer ${config.accessToken}` },
-    })) as TokenUsageSummary;
-  } catch (e) {
-    console.error("fetchTokenUsageSummary failed:", e);
-    return null;
-  }
+  return (await fetchJson(url, {
+    method: "GET",
+    headers: { Authorization: `Bearer ${config.accessToken}` },
+  })) as TokenUsageSummary;
 }

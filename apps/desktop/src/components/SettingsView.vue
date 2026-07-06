@@ -232,6 +232,7 @@ const deviceIdDisplay = computed(() => {
 const tokenUsageSummary = ref<TokenUsageSummary | null>(null);
 const tokenUsageLoading = ref(false);
 const tokenUsageError = ref<string>("");
+const tokenUsageLoaded = ref(false);
 
 const tokenUsageRows = computed<(TokenUsageSummaryItem & { name: string; icon: string })[]>(() => {
   const rows = tokenUsageSummary.value?.providers ?? [];
@@ -265,10 +266,12 @@ function formatTokens(n: number): string {
 }
 
 async function refreshTokenUsage() {
+  if (tokenUsageLoading.value) return;
   tokenUsageLoading.value = true;
   tokenUsageError.value = "";
   try {
     tokenUsageSummary.value = await desktopApi.getTokenUsageSummary();
+    tokenUsageLoaded.value = true;
   } catch (e) {
     tokenUsageError.value = e instanceof Error ? e.message : "加载失败";
     tokenUsageSummary.value = null;
@@ -277,10 +280,15 @@ async function refreshTokenUsage() {
   }
 }
 
+watch(settingsPanel, (panel) => {
+  if (panel === "tokenUsage" && !tokenUsageLoaded.value) {
+    void refreshTokenUsage();
+  }
+});
+
 onMounted(() => {
   void refreshCloudConfig();
   void refreshDesktopRuntimeInfo();
-  void refreshTokenUsage();
 });
 
 function archivedAtLabel(value?: string | null) {
