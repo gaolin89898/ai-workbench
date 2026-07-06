@@ -3,19 +3,15 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AI 会话 - 文件写入权限审批</title>
+    <title>AI 会话 — 文件写入权限审批 — AI 工作台</title>
     <style id="theme-vars">
 /* AI Workbench Desktop — Dark Theme */
-/* Based on actual project style.css, inverted to dark */
 :root {
-  /* Brand */
   --color-primary: #2563eb;
   --color-primary-hover: #1d4ed8;
   --color-primary-muted: rgba(37, 99, 235, 0.15);
   --color-primary-soft: rgba(37, 99, 235, 0.08);
   --color-primary-ring: rgba(37, 99, 235, 0.25);
-
-  /* Surface & Background */
   --color-bg-app: #0f1117;
   --color-bg-body: #111318;
   --color-bg-sidebar: #161822;
@@ -26,21 +22,15 @@
   --color-bg-input: #1e2235;
   --color-bg-hover: rgba(255, 255, 255, 0.06);
   --color-bg-active: rgba(37, 99, 235, 0.12);
-
-  /* Text */
   --color-text-primary: #e8eaed;
   --color-text-body: #d1d5db;
   --color-text-secondary: #9aa0b4;
   --color-text-muted: #6b7280;
   --color-text-placeholder: #6b7280;
   --color-text-inverse: #ffffff;
-
-  /* Border */
   --color-border: rgba(255, 255, 255, 0.1);
   --color-border-subtle: rgba(255, 255, 255, 0.06);
   --color-border-active: rgba(37, 99, 235, 0.5);
-
-  /* State Colors */
   --state-success: #22c55e;
   --state-success-bg: rgba(34, 197, 94, 0.12);
   --state-success-ring: rgba(34, 197, 94, 0.25);
@@ -50,18 +40,13 @@
   --state-error-bg: rgba(239, 68, 68, 0.12);
   --state-info: #3b82f6;
   --state-info-bg: rgba(59, 130, 246, 0.12);
-
-  /* Radius */
   --radius-sm: 4px;
   --radius-md: 7px;
   --radius-lg: 8px;
   --radius-xl: 12px;
   --radius-full: 999px;
-
-  /* Typography */
   --font-sans: "Inter", ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-
   --text-xs: 11px;
   --text-sm: 12px;
   --text-base: 13px;
@@ -69,27 +54,20 @@
   --text-lg: 16px;
   --text-xl: 20px;
   --text-2xl: 28px;
-
   --leading-tight: 1.25;
   --leading-normal: 1.5;
   --leading-relaxed: 1.625;
   --leading-chat: 1.62;
-
-  /* Font Weights */
   --fw-normal: 400;
   --fw-medium: 500;
   --fw-semibold: 620;
   --fw-bold: 700;
   --fw-extrabold: 800;
   --fw-black: 850;
-
-  /* Shadows */
   --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.15);
   --shadow-md: 0 10px 24px rgba(0, 0, 0, 0.25);
   --shadow-lg: 0 24px 56px rgba(0, 0, 0, 0.35);
   --shadow-composer: 0 16px 42px rgba(0, 0, 0, 0.3);
-
-  /* Spacing */
   --space-1: 4px;
   --space-2: 8px;
   --space-3: 12px;
@@ -100,17 +78,12 @@
   --space-10: 40px;
   --space-14: 56px;
   --space-18: 72px;
-
-  /* Layout */
   --sidebar-width: 286px;
   --topbar-height: 56px;
   --composer-max-width: 760px;
-
-  /* Transitions */
   --transition-fast: 120ms ease;
   --transition-normal: 200ms ease;
 }
-
     </style>
     <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4.3.1/dist/index.global.js"></script>
     <script src="https://unpkg.com/lucide@1.8.0/dist/umd/lucide.min.js"></script>
@@ -142,9 +115,240 @@
       }
     </style>
 </head>
-<body class="min-h-screen font-sans antialiased">
+<body class="min-h-screen font-sans antialiased" style="background: var(--color-bg-app); overflow: hidden;">
     <main>
+
+      <div class="flex" style="height: 100vh; overflow: hidden;">
+
+        <!-- ==================== LEFT SIDEBAR (286px) ==================== -->
+        <aside style="background: var(--color-bg-sidebar); border-right: 1px solid var(--color-border); padding: 18px 10px 14px; display: flex; flex-direction: column; gap: 16px; overflow-y: auto;">
+
+          <div style="display: flex; align-items: center; justify-content: space-between;">
+            <span style="font-size: 13px; font-weight: 650; color: var(--color-text-muted);">项目</span>
+            <button style="width: 28px; height: 28px; border-radius: 7px; border: none; background: transparent; color: var(--color-text-muted); cursor: pointer; display: flex; align-items: center; justify-content: center;" aria-label="添加项目">
+              <i data-lucide="plus" style="width: 16px; height: 16px;"></i>
+            </button>
+          </div>
+
+          <div style="display: flex; flex-direction: column; gap: 2px;">
+            <div style="display: flex; flex-direction: column;">
+              <div style="display: flex; align-items: center; gap: 6px; padding: 4px 6px; border-radius: 6px;">
+                <i data-lucide="chevron-down" style="width: 14px; height: 14px; color: var(--color-text-muted); flex-shrink: 0;"></i>
+                <i data-lucide="folder" style="width: 18px; height: 18px; color: var(--color-text-secondary); flex-shrink: 0;"></i>
+                <span style="font-size: 14px; font-weight: 620; color: var(--color-text-primary); flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">my-saas-app</span>
+                <span style="font-size: 11px; color: var(--color-text-muted); background: var(--color-bg-elevated); padding: 1px 7px; border-radius: 999px; white-space: nowrap; line-height: 1.5;">main</span>
+              </div>
+              <div style="padding-left: 32px; display: flex; flex-direction: column; gap: 3px;">
+                <div style="padding: 5px 8px 5px 10px; border-radius: 6px; background: var(--color-bg-hover); cursor: pointer;">
+                  <span style="font-size: 13px; color: var(--color-text-body); display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">修复认证 bug</span>
+                </div>
+                <div style="padding: 5px 8px 5px 10px; border-radius: 6px; cursor: pointer;">
+                  <span style="font-size: 13px; color: var(--color-text-muted); display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">优化 API 性能</span>
+                </div>
+                <div style="padding: 5px 8px 5px 10px; border-radius: 6px; cursor: pointer;">
+                  <span style="font-size: 13px; color: var(--color-text-muted); display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">添加单元测试</span>
+                </div>
+              </div>
+            </div>
+            <div style="display: flex; flex-direction: column;">
+              <div style="display: flex; align-items: center; gap: 6px; padding: 4px 6px; border-radius: 6px;">
+                <i data-lucide="chevron-right" style="width: 14px; height: 14px; color: var(--color-text-muted); flex-shrink: 0;"></i>
+                <i data-lucide="folder" style="width: 18px; height: 18px; color: var(--color-text-secondary); flex-shrink: 0;"></i>
+                <span style="font-size: 14px; font-weight: 620; color: var(--color-text-primary); flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">ai-workbench</span>
+              </div>
+              <div style="padding-left: 32px; display: flex; flex-direction: column; gap: 3px;">
+                <div style="padding: 5px 8px 5px 10px; border-radius: 6px; cursor: pointer;">
+                  <span style="font-size: 13px; color: var(--color-text-muted); display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">重构数据库查询</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div style="flex: 1; min-height: 0;"></div>
+
+          <button style="min-height: 48px; width: 100%; border: 1px solid var(--color-border-subtle); border-radius: 12px; background: transparent; color: var(--color-text-primary); cursor: pointer; display: flex; align-items: center; gap: 10px; padding: 7px 8px; font-family: var(--font-sans); text-align: left; transition: background var(--transition-fast), border-color var(--transition-fast);" aria-label="打开个人账户菜单" onmouseenter="this.style.background='var(--color-bg-hover)'" onmouseleave="this.style.background='transparent'" onmousedown="this.style.background='var(--color-bg-active)'" onmouseup="this.style.background='var(--color-bg-hover)'">
+            <span style="width: 32px; height: 32px; border-radius: 999px; background: linear-gradient(135deg, var(--color-primary), #8b5cf6); color: var(--color-text-inverse); display: inline-flex; align-items: center; justify-content: center; font-size: 14px; font-weight: 800; flex-shrink: 0;">李</span>
+            <span style="display: flex; flex-direction: column; gap: 1px; min-width: 0; flex: 1;">
+              <span style="font-size: 13px; font-weight: 720; color: var(--color-text-primary); line-height: 1.25; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">李明</span>
+              <span style="font-size: 11px; font-weight: 500; color: var(--color-text-muted); line-height: 1.25; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">li@workbench.ai</span>
+            </span>
+            <i data-lucide="chevron-down" style="width: 16px; height: 16px; color: var(--color-text-muted); flex-shrink: 0;"></i>
+          </button>
+
+        </aside>
+
+        <!-- ==================== MAIN CONTENT (flex-1) ==================== -->
+        <div class="flex flex-col flex-1" style="height: 100vh; background: var(--color-bg-content);">
+
+          <!-- TOPBAR (56px) -->
+          <div class="flex items-center justify-between shrink-0" style="min-height: 56px; border-bottom: 1px solid var(--color-border-subtle); background: var(--color-bg-content); padding: 0 22px;">
+            <div class="flex items-center gap-2.5 min-w-0">
+              <h2 class="truncate" style="font-size: var(--text-md); font-weight: 720; color: var(--color-text-body);">桌面打包流水线</h2>
+              <span class="inline-flex items-center whitespace-nowrap shrink-0" style="min-height: 26px; border-radius: 7px; background: var(--state-warning-bg); color: var(--state-warning); font-size: var(--text-sm); font-weight: 750; padding: 0 10px;">等待审批</span>
+            </div>
+            <div class="flex items-center gap-1.5 shrink-0">
+              <i data-lucide="git-branch" style="width: 13px; height: 13px; color: var(--color-text-muted);"></i>
+              <span class="whitespace-nowrap" style="font-size: var(--text-sm); color: var(--color-text-muted);">main · v0.1.62</span>
+            </div>
+          </div>
+
+          <!-- TABS (40px) -->
+          <div class="flex items-center gap-1 shrink-0" style="min-height: 40px; border-bottom: 1px solid var(--color-border-subtle); padding: 0 22px;">
+            <button class="inline-flex items-center whitespace-nowrap" style="min-width: 58px; min-height: 28px; border: 0; border-radius: 7px; font-size: var(--text-sm); font-weight: var(--fw-extrabold); background: var(--color-bg-elevated); color: var(--color-text-body); cursor: pointer;">聊天</button>
+            <button class="inline-flex items-center gap-1.5 whitespace-nowrap" style="min-width: 58px; min-height: 28px; border: 0; border-radius: 7px; font-size: var(--text-sm); font-weight: var(--fw-extrabold); background: transparent; color: var(--color-text-secondary); cursor: pointer;">
+              终端
+              <span class="shrink-0" style="width: 6px; height: 6px; border-radius: 999px; background: var(--state-success); box-shadow: 0 0 0 3px var(--state-success-bg);"></span>
+            </button>
+            <button class="inline-flex items-center whitespace-nowrap" style="min-width: 58px; min-height: 28px; border: 0; border-radius: 7px; font-size: var(--text-sm); font-weight: var(--fw-extrabold); background: transparent; color: var(--color-text-secondary); cursor: pointer;">日志</button>
+          </div>
+
+          <!-- CHAT WORKSPACE -->
+          <div class="flex" style="flex: 1; height: calc(100vh - 96px);">
+            <div class="flex flex-col flex-1">
+
+              <!-- Message scroll area -->
+              <div class="flex-1 overflow-y-auto" style="padding: 48px max(28px, calc((100% - 760px)/2)) 28px;">
+
+                <!-- User message -->
+                <div class="flex gap-3" style="flex-direction: row-reverse;">
+                  <div style="max-width: min(680px, 100%);">
+                    <div style="border: 1px solid var(--color-border); border-radius: 8px 8px 3px 8px; background: var(--color-bg-elevated); color: var(--color-text-body); padding: 5px 9px; font-size: var(--text-md); line-height: var(--leading-chat); box-shadow: var(--shadow-sm);">
+                      触发桌面打包流水线，使用 v0.1.62 tag。
+                    </div>
+                  </div>
+                </div>
+
+                <!-- AI response 1 -->
+                <div class="flex gap-3 items-start mt-5">
+                  <div class="flex items-center justify-center shrink-0 mt-0.5" style="width: 28px; height: 28px; border-radius: var(--radius-md); background: var(--color-primary-muted);">
+                    <i data-lucide="sparkles" style="width: 14px; height: 14px; color: var(--color-primary);"></i>
+                  </div>
+                  <div style="max-width: min(680px, 100%);">
+                    <p style="font-size: var(--text-md); color: var(--color-text-body); line-height: 1.78;">桌面打包流水线通过 v* tag 触发，而非普通 push。当前最新 tag 是 v0.1.61，计划使用 v0.1.62。</p>
+                    <div class="flex items-center gap-2 mt-2.5">
+                      <div class="flex items-center justify-center shrink-0" style="width: 16px; height: 16px;">
+                        <i data-lucide="terminal" style="width: 13px; height: 13px; color: var(--color-text-muted);"></i>
+                      </div>
+                      <span style="font-size: var(--text-xs); color: var(--color-text-muted);">已运行 2 条命令</span>
+                      <span class="shrink-0" style="width: 6px; height: 6px; border-radius: 999px; background: var(--state-success);"></span>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- AI response 2 -->
+                <div class="flex gap-3 items-start mt-6">
+                  <div class="flex items-center justify-center shrink-0 mt-0.5" style="width: 28px; height: 28px; border-radius: var(--radius-md); background: var(--color-primary-muted);">
+                    <i data-lucide="sparkles" style="width: 14px; height: 14px; color: var(--color-primary);"></i>
+                  </div>
+                  <div style="max-width: min(680px, 100%);">
+                    <p style="font-size: var(--text-md); color: var(--color-text-body); line-height: 1.78;">但 .git 目录是只读的，需要你授权写入权限才能完成 git 操作。</p>
+                    <div class="flex items-center gap-2 mt-2.5">
+                      <div class="flex items-center justify-center shrink-0" style="width: 16px; height: 16px;">
+                        <i data-lucide="terminal" style="width: 13px; height: 13px; color: var(--color-text-muted);"></i>
+                      </div>
+                      <span style="font-size: var(--text-xs); color: var(--color-text-muted);">已运行 1 条命令</span>
+                      <span class="shrink-0" style="width: 6px; height: 6px; border-radius: 999px; background: var(--state-success);"></span>
+                    </div>
+                  </div>
+                </div>
+
+              </div>
+
+              <!-- BOTTOM: Composer area with permission dialog -->
+              <div class="shrink-0" style="width: min(760px, calc(100% - 32px)); margin: 0 auto 20px;">
+
+                <!-- Ghost composer (locked, 0.22 opacity) -->
+                <div id="composer-locked" style="opacity: 0.22; border: 1px solid var(--color-border-subtle); border-radius: 16px; background: var(--color-bg-content); padding: 12px 14px; filter: grayscale(1); pointer-events: none;">
+                  <textarea class="w-full resize-none outline-none" style="min-height: 40px; background: transparent; color: var(--color-text-body); font-size: var(--text-md); font-family: var(--font-sans); line-height: var(--leading-normal); border: none;" placeholder="输入你的消息..." rows="2" aria-label="输入消息" disabled></textarea>
+                  <div style="border-top: 1px solid var(--color-border-subtle); margin-top: 8px; margin-bottom: 8px;"></div>
+                  <div style="display: flex; align-items: center; justify-content: space-between; gap: 8px;">
+                    <div style="display: flex; align-items: center; gap: 6px;">
+                      <div style="width: 28px; height: 28px; border-radius: 7px; border: 1px solid var(--color-border-subtle); background: transparent;"></div>
+                    </div>
+                    <div style="display: flex; align-items: center; gap: 10px;">
+                      <div style="height: 28px; border: 1px solid var(--color-border-subtle); border-radius: 999px; background: transparent; min-width: 120px;"></div>
+                      <div style="width: 32px; height: 32px; border-radius: 999px; background: var(--color-primary);"></div>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Permission dialog overlay -->
+                <div id="permission-cover" style="position: relative; margin-top: -92px; z-index: 10;">
+                  <div style="border-radius: 12px; border: 1px solid var(--color-border); background: var(--color-bg-elevated); box-shadow: 0 8px 32px rgba(0,0,0,0.28); padding: 20px 24px 16px;">
+
+                    <!-- Header -->
+                    <div class="flex items-center gap-2.5" style="margin-bottom: 16px;">
+                      <div class="flex items-center justify-center shrink-0" style="width: 16px; height: 16px;">
+                        <i data-lucide="shield-alert" style="width: 16px; height: 16px; color: var(--state-warning);"></i>
+                      </div>
+                      <span style="font-size: var(--text-lg); font-weight: var(--fw-bold); color: var(--color-text-primary);">是否允许写入 .git?</span>
+                    </div>
+
+                    <!-- Body fields -->
+                    <div style="display: flex; flex-direction: column; gap: 12px; margin-bottom: 16px;">
+                      <div>
+                        <div style="font-size: var(--text-sm); color: var(--color-text-muted); margin-bottom: 4px;">原因</div>
+                        <p style="font-size: 13px; color: var(--color-text-body); line-height: 1.5; margin: 0;">需要写入 Git 索引、提交对象和标签，才能提交并推送触发桌面打包。</p>
+                      </div>
+                      <div>
+                        <div style="font-size: var(--text-sm); color: var(--color-text-muted); margin-bottom: 4px;">写入</div>
+                        <code style="font-family: var(--font-mono); font-size: var(--text-sm); color: var(--color-text-primary); background: var(--color-primary-soft); padding: 2px 8px; border-radius: var(--radius-sm);">C:\Users\32891\Desktop\ai-workbench\.git</code>
+                      </div>
+                    </div>
+
+                    <!-- Radio options -->
+                    <div style="display: flex; flex-direction: column; gap: 10px; margin-bottom: 4px;">
+                      <label class="flex items-center gap-3 cursor-pointer" style="padding: 4px 0;">
+                        <span class="shrink-0 flex items-center justify-center" style="width: 18px; height: 18px;">
+                          <span style="width: 8px; height: 8px; border-radius: 999px; background: var(--color-primary);"></span>
+                        </span>
+                        <span style="font-size: 13px; color: var(--color-text-body);">是，允许用于此轮</span>
+                      </label>
+                      <label class="flex items-center gap-3 cursor-pointer" style="padding: 4px 0;">
+                        <span class="shrink-0 flex items-center justify-center" style="width: 18px; height: 18px; border: 1.5px solid var(--color-text-muted); border-radius: 999px;"></span>
+                        <span style="font-size: 13px; color: var(--color-text-secondary);">否，请告知 Codex 如何调整</span>
+                      </label>
+                    </div>
+
+                    <!-- Action row -->
+                    <div class="flex items-center justify-end gap-2" style="margin-top: 12px;">
+                      <button id="fs-permission-skip" style="display: inline-flex; align-items: center; justify-content: center; min-width: 64px; height: 34px; border: 1px solid var(--color-border); background: transparent; border-radius: 8px; font-size: 13px; font-weight: var(--fw-medium); color: var(--color-text-body); cursor: pointer; font-family: var(--font-sans); transition: background var(--transition-fast);" onmouseenter="this.style.background='var(--color-bg-hover)'" onmouseleave="this.style.background='transparent'" aria-label="跳过">跳过</button>
+                      <button id="fs-permission-submit" style="display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-width: 64px; height: 34px; border: none; background: var(--color-primary); border-radius: 8px; font-size: 13px; font-weight: var(--fw-medium); color: #ffffff; cursor: pointer; font-family: var(--font-sans); transition: background var(--transition-fast);" onmouseenter="this.style.background='var(--color-primary-hover)'" onmouseleave="this.style.background='var(--color-primary)'" aria-label="提交">
+                        提交
+                        <i data-lucide="arrow-up" style="width: 14px; height: 14px; color: #ffffff;"></i>
+                      </button>
+                    </div>
+
+                    <!-- Hint -->
+                    <div style="text-align: center; margin-top: 8px;">
+                      <span style="font-size: 11px; color: var(--color-text-muted);">审批期间输入框已锁定</span>
+                    </div>
+
+                  </div>
+                </div>
+
+              </div>
+
+            </div>
+          </div>
+
+        </div>
+
+      </div>
+
     </main>
+
+    <style>
+      body { background: var(--color-bg-app) !important; color: var(--color-text-primary); }
+      textarea::placeholder { color: var(--color-text-placeholder); }
+      .no-scrollbar::-webkit-scrollbar { display: none; }
+      .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+      button:hover { opacity: 0.9; }
+      ::-webkit-scrollbar { width: 6px; }
+      ::-webkit-scrollbar-track { background: transparent; }
+      ::-webkit-scrollbar-thumb { background: var(--color-bg-elevated); border-radius: var(--radius-full); }
+      ::-webkit-scrollbar-thumb:hover { background: var(--color-text-muted); }
+    </style>
     <script>lucide.createIcons();</script>
 </body>
 </html>
