@@ -111,7 +111,7 @@ class _PairingPageState extends State<PairingPage> {
                   controller: _desktopServerController,
                   decoration: const InputDecoration(
                     labelText: '服务器地址',
-                    hintText: 'http://8.162.12.148:3000',
+                    hintText: 'http://118.196.78.91:3000',
                   ),
                 ),
                 const SizedBox(height: 10),

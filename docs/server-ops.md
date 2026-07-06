@@ -18,7 +18,7 @@ Go 后端通过 Docker Compose 部署在生产服务器上，由 PostgreSQL 17 +
 
 | 项 | 值 |
 | --- | --- |
-| 地址 | `8.162.12.148` |
+| 地址 | `118.196.78.91` |
 | 系统 | Ubuntu 24.04 |
 | 项目目录 | `/opt/ai-workbench` |
 | 监听端口 | `3000` |
@@ -99,7 +99,7 @@ curl http://localhost:3000/health
 # 期望：{"status":"ok"}
 
 # 外部访问（在本机执行）
-curl http://8.162.12.148:3000/health
+curl http://118.196.78.91:3000/health
 ```
 
 ## 日常运维

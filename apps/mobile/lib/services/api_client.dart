@@ -13,8 +13,8 @@ class ApiClient {
 
   static String get defaultBaseUrl =>
       defaultTargetPlatform == TargetPlatform.android
-          ? 'http://8.162.12.148:3000'
-          : 'http://8.162.12.148:3000';
+          ? 'http://118.196.78.91:3000'
+          : 'http://118.196.78.91:3000';
   static const _tokenKey = 'auth_token';
   static const _tokenServerKey = 'auth_token_server_url';
   static const _emailKey = 'saved_email';
