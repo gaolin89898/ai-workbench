@@ -1,6 +1,6 @@
 # 后端运维手册
 
-Go 后端通过 Docker Compose 部署在生产服务器上，由 PostgreSQL 17 + Go 单二进制组成。
+Go 后端通过 Docker Compose 部署在自有生产环境中，由 PostgreSQL 17 + Go 单二进制组成。
 
 ## 部署架构
 
@@ -12,19 +12,19 @@ Go 后端通过 Docker Compose 部署在生产服务器上，由 PostgreSQL 17 +
 编排文件：[docker-compose.prod.yml](../docker-compose.prod.yml)
 
 > `backend/Dockerfile.runtime` 和 `backend/docker-compose.prod.yml` 是后端运行镜像的备用/历史部署文件；当前根目录生产部署主路径使用根目录 [docker-compose.prod.yml](../docker-compose.prod.yml)。
-密钥文件：服务器上 `/opt/ai-workbench/.env`（权限 600，不入库）
+密钥文件：部署目录下 `.env`（权限 600，不入库）
 
-## 服务器信息
+## 部署环境信息
 
 | 项 | 值 |
 | --- | --- |
-| 地址 | `118.196.78.91` |
-| 系统 | Ubuntu 24.04 |
-| 项目目录 | `/opt/ai-workbench` |
+| 地址 | `<your-server-host-or-ip>` |
+| 系统 | `<your-linux-distribution>` |
+| 项目目录 | `<deploy-dir>` |
 | 监听端口 | `3000` |
 | 数据卷 | `ai-workbench_postgres-data` |
 
-> 阿里云安全组需放行 3000/tcp 入方向，否则外部无法访问。
+> 云厂商安全组或防火墙需放行 3000/tcp 入方向，否则外部无法访问。
 
 ## 首次部署
 
@@ -78,7 +78,7 @@ ufw allow 3000/tcp
 ufw reload
 ```
 
-同时在阿里云控制台 → ECS → 安全组 → 入方向添加 TCP 3000 放行规则。
+同时在云厂商控制台或主机防火墙中添加 TCP 3000 入方向放行规则。
 
 ### 5. 构建并启动
 
@@ -99,7 +99,7 @@ curl http://localhost:3000/health
 # 期望：{"status":"ok"}
 
 # 外部访问（在本机执行）
-curl http://118.196.78.91:3000/health
+curl http://<your-server-host-or-ip>:3000/health
 ```
 
 ## 日常运维
@@ -123,7 +123,7 @@ docker logs --tail 50 ai-workbench-postgres-1
 ### 重启服务
 
 ```bash
-cd /opt/ai-workbench
+cd <deploy-dir>
 docker compose -f docker-compose.prod.yml restart server
 ```
 
@@ -147,7 +147,7 @@ docker compose -f docker-compose.prod.yml down
 代码推送到 main 分支后，在服务器上执行：
 
 ```bash
-cd /opt/ai-workbench
+cd <deploy-dir>
 git pull
 docker compose -f docker-compose.prod.yml up -d --build
 ```
@@ -211,7 +211,7 @@ docker exec -it ai-workbench-postgres-1 psql -U remote_term -d remote_term \
 
 1. 本机 `curl http://localhost:3000/health` 是否正常 → 排查容器
 2. `ufw status` 是否放行 3000 → 排查系统防火墙
-3. 阿里云安全组是否放行 3000 → 排查云安全组
+3. 云厂商安全组或主机防火墙是否放行 3000 → 排查网络访问策略
 
 ### 容器反复重启
 
