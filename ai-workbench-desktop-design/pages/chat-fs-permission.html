@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="zh-CN" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI 会话 - 文件写入权限审批</title>
+    <style id="theme-vars">
+/* AI Workbench Desktop — Dark Theme */
+/* Based on actual project style.css, inverted to dark */
+:root {
+  /* Brand */
+  --color-primary: #2563eb;
+  --color-primary-hover: #1d4ed8;
+  --color-primary-muted: rgba(37, 99, 235, 0.15);
+  --color-primary-soft: rgba(37, 99, 235, 0.08);
+  --color-primary-ring: rgba(37, 99, 235, 0.25);
+
+  /* Surface & Background */
+  --color-bg-app: #0f1117;
+  --color-bg-body: #111318;
+  --color-bg-sidebar: #161822;
+  --color-bg-main: #1a1d2e;
+  --color-bg-content: #1e2235;
+  --color-bg-surface: #1e2235;
+  --color-bg-elevated: #252a3a;
+  --color-bg-input: #1e2235;
+  --color-bg-hover: rgba(255, 255, 255, 0.06);
+  --color-bg-active: rgba(37, 99, 235, 0.12);
+
+  /* Text */
+  --color-text-primary: #e8eaed;
+  --color-text-body: #d1d5db;
+  --color-text-secondary: #9aa0b4;
+  --color-text-muted: #6b7280;
+  --color-text-placeholder: #6b7280;
+  --color-text-inverse: #ffffff;
+
+  /* Border */
+  --color-border: rgba(255, 255, 255, 0.1);
+  --color-border-subtle: rgba(255, 255, 255, 0.06);
+  --color-border-active: rgba(37, 99, 235, 0.5);
+
+  /* State Colors */
+  --state-success: #22c55e;
+  --state-success-bg: rgba(34, 197, 94, 0.12);
+  --state-success-ring: rgba(34, 197, 94, 0.25);
+  --state-warning: #f59e0b;
+  --state-warning-bg: rgba(245, 158, 11, 0.12);
+  --state-error: #ef4444;
+  --state-error-bg: rgba(239, 68, 68, 0.12);
+  --state-info: #3b82f6;
+  --state-info-bg: rgba(59, 130, 246, 0.12);
+
+  /* Radius */
+  --radius-sm: 4px;
+  --radius-md: 7px;
+  --radius-lg: 8px;
+  --radius-xl: 12px;
+  --radius-full: 999px;
+
+  /* Typography */
+  --font-sans: "Inter", ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+
+  --text-xs: 11px;
+  --text-sm: 12px;
+  --text-base: 13px;
+  --text-md: 14px;
+  --text-lg: 16px;
+  --text-xl: 20px;
+  --text-2xl: 28px;
+
+  --leading-tight: 1.25;
+  --leading-normal: 1.5;
+  --leading-relaxed: 1.625;
+  --leading-chat: 1.62;
+
+  /* Font Weights */
+  --fw-normal: 400;
+  --fw-medium: 500;
+  --fw-semibold: 620;
+  --fw-bold: 700;
+  --fw-extrabold: 800;
+  --fw-black: 850;
+
+  /* Shadows */
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.15);
+  --shadow-md: 0 10px 24px rgba(0, 0, 0, 0.25);
+  --shadow-lg: 0 24px 56px rgba(0, 0, 0, 0.35);
+  --shadow-composer: 0 16px 42px rgba(0, 0, 0, 0.3);
+
+  /* Spacing */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-10: 40px;
+  --space-14: 56px;
+  --space-18: 72px;
+
+  /* Layout */
+  --sidebar-width: 286px;
+  --topbar-height: 56px;
+  --composer-max-width: 760px;
+
+  /* Transitions */
+  --transition-fast: 120ms ease;
+  --transition-normal: 200ms ease;
+}
+
+    </style>
+    <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4.3.1/dist/index.global.js"></script>
+    <script src="https://unpkg.com/lucide@1.8.0/dist/umd/lucide.min.js"></script>
+    <style type="text/tailwindcss">
+  @theme inline {
+    --color-primary: var(--color-primary);
+    --color-border: var(--color-border);
+  }
+  @layer base {
+    body { background: var(--color-background); color: var(--color-text-primary); }
+    td, th { @apply break-words; word-break: break-all; word-break: auto-phrase; }
+    th { @apply whitespace-nowrap; }
+  }
+    </style>
+    <style>
+      .no-scrollbar::-webkit-scrollbar { display: none; }
+      .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+      [data-icon] {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        -webkit-mask-size: contain;
+        mask-size: contain;
+        -webkit-mask-repeat: no-repeat;
+        mask-repeat: no-repeat;
+        -webkit-mask-position: center;
+        mask-position: center;
+        background-color: currentColor;
+      }
+    </style>
+</head>
+<body class="min-h-screen font-sans antialiased">
+    <main>
+    </main>
+    <script>lucide.createIcons();</script>
+</body>
+</html>

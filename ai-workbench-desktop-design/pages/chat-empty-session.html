@@ -1,0 +1,303 @@
+<!DOCTYPE html>
+<html lang="zh-CN" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI 会话 — 空白会话首页</title>
+    <style id="theme-vars">
+/* AI Workbench Desktop — Dark Theme */
+/* Based on actual project style.css, inverted to dark */
+:root {
+  /* Brand */
+  --color-primary: #2563eb;
+  --color-primary-hover: #1d4ed8;
+  --color-primary-muted: rgba(37, 99, 235, 0.15);
+  --color-primary-soft: rgba(37, 99, 235, 0.08);
+  --color-primary-ring: rgba(37, 99, 235, 0.25);
+
+  /* Surface & Background */
+  --color-bg-app: #0f1117;
+  --color-bg-body: #111318;
+  --color-bg-sidebar: #161822;
+  --color-bg-main: #1a1d2e;
+  --color-bg-content: #1e2235;
+  --color-bg-surface: #1e2235;
+  --color-bg-elevated: #252a3a;
+  --color-bg-input: #1e2235;
+  --color-bg-hover: rgba(255, 255, 255, 0.06);
+  --color-bg-active: rgba(37, 99, 235, 0.12);
+
+  /* Text */
+  --color-text-primary: #e8eaed;
+  --color-text-body: #d1d5db;
+  --color-text-secondary: #9aa0b4;
+  --color-text-muted: #6b7280;
+  --color-text-placeholder: #6b7280;
+  --color-text-inverse: #ffffff;
+
+  /* Border */
+  --color-border: rgba(255, 255, 255, 0.1);
+  --color-border-subtle: rgba(255, 255, 255, 0.06);
+  --color-border-active: rgba(37, 99, 235, 0.5);
+
+  /* State Colors */
+  --state-success: #22c55e;
+  --state-success-bg: rgba(34, 197, 94, 0.12);
+  --state-success-ring: rgba(34, 197, 94, 0.25);
+  --state-warning: #f59e0b;
+  --state-warning-bg: rgba(245, 158, 11, 0.12);
+  --state-error: #ef4444;
+  --state-error-bg: rgba(239, 68, 68, 0.12);
+  --state-info: #3b82f6;
+  --state-info-bg: rgba(59, 130, 246, 0.12);
+
+  /* Radius */
+  --radius-sm: 4px;
+  --radius-md: 7px;
+  --radius-lg: 8px;
+  --radius-xl: 12px;
+  --radius-full: 999px;
+
+  /* Typography */
+  --font-sans: "Inter", ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+
+  --text-xs: 11px;
+  --text-sm: 12px;
+  --text-base: 13px;
+  --text-md: 14px;
+  --text-lg: 16px;
+  --text-xl: 20px;
+  --text-2xl: 28px;
+
+  --leading-tight: 1.25;
+  --leading-normal: 1.5;
+  --leading-relaxed: 1.625;
+  --leading-chat: 1.62;
+
+  /* Font Weights */
+  --fw-normal: 400;
+  --fw-medium: 500;
+  --fw-semibold: 620;
+  --fw-bold: 700;
+  --fw-extrabold: 800;
+  --fw-black: 850;
+
+  /* Shadows */
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.15);
+  --shadow-md: 0 10px 24px rgba(0, 0, 0, 0.25);
+  --shadow-lg: 0 24px 56px rgba(0, 0, 0, 0.35);
+  --shadow-composer: 0 16px 42px rgba(0, 0, 0, 0.3);
+
+  /* Spacing */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-10: 40px;
+  --space-14: 56px;
+  --space-18: 72px;
+
+  /* Layout */
+  --sidebar-width: 286px;
+  --topbar-height: 56px;
+  --composer-max-width: 760px;
+
+  /* Transitions */
+  --transition-fast: 120ms ease;
+  --transition-normal: 200ms ease;
+}
+
+    </style>
+    <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4.3.1/dist/index.global.js"></script>
+    <script src="https://unpkg.com/lucide@1.8.0/dist/umd/lucide.min.js"></script>
+    <style type="text/tailwindcss">
+  @theme inline {
+    --color-primary: var(--color-primary);
+    --color-border: var(--color-border);
+  }
+  @layer base {
+    body { background: var(--color-background); color: var(--color-text-primary); }
+    td, th { @apply break-words; word-break: break-all; word-break: auto-phrase; }
+    th { @apply whitespace-nowrap; }
+  }
+    </style>
+    <style>
+      .no-scrollbar::-webkit-scrollbar { display: none; }
+      .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+      [data-icon] {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        -webkit-mask-size: contain;
+        mask-size: contain;
+        -webkit-mask-repeat: no-repeat;
+        mask-repeat: no-repeat;
+        -webkit-mask-position: center;
+        mask-position: center;
+        background-color: currentColor;
+      }
+    </style>
+</head>
+<body class="min-h-screen font-sans antialiased" style="background: var(--color-bg-app); overflow: hidden;">
+    <main>
+
+      <!-- ============================================================ -->
+      <!-- EMPTY SESSION PAGE — Centered empty state with composer      -->
+      <!-- ============================================================ -->
+
+      <div class="flex" style="height: 100vh; overflow: hidden;">
+
+        <!-- ==================== LEFT SIDEBAR (286px) ==================== -->
+        <aside style="background: var(--color-bg-sidebar); border-right: 1px solid var(--color-border); padding: 18px 10px 14px; display: flex; flex-direction: column; gap: 16px; overflow-y: auto;">
+
+          <!-- 项目 section header -->
+          <div style="display: flex; align-items: center; justify-content: space-between;">
+            <span style="font-size: 13px; font-weight: 650; color: var(--color-text-muted);">项目</span>
+            <button style="width: 28px; height: 28px; border-radius: 7px; border: none; background: transparent; color: var(--color-text-muted); cursor: pointer; display: flex; align-items: center; justify-content: center;" aria-label="添加项目">
+              <i data-lucide="plus" style="width: 16px; height: 16px;"></i>
+            </button>
+          </div>
+
+          <!-- Project tree -->
+          <div style="display: flex; flex-direction: column; gap: 2px;">
+
+            <!-- my-saas-app project (expanded) -->
+            <div style="display: flex; flex-direction: column;">
+              <div style="display: flex; align-items: center; gap: 6px; padding: 4px 6px; border-radius: 6px;">
+                <i data-lucide="chevron-down" style="width: 14px; height: 14px; color: var(--color-text-muted); flex-shrink: 0;"></i>
+                <i data-lucide="folder" style="width: 18px; height: 18px; color: var(--color-text-secondary); flex-shrink: 0;"></i>
+                <span style="font-size: 14px; font-weight: 620; color: var(--color-text-primary); flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">my-saas-app</span>
+                <span style="font-size: 11px; color: var(--color-text-muted); background: var(--color-bg-elevated); padding: 1px 7px; border-radius: 999px; white-space: nowrap; line-height: 1.5;">main</span>
+              </div>
+              <div style="padding-left: 32px; display: flex; flex-direction: column; gap: 3px;">
+                <div style="padding: 5px 8px 5px 10px; border-radius: 6px; cursor: pointer;">
+                  <span style="font-size: 13px; color: var(--color-text-muted); display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">修复认证 bug</span>
+                </div>
+                <div style="padding: 5px 8px 5px 10px; border-radius: 6px; cursor: pointer;">
+                  <span style="font-size: 13px; color: var(--color-text-muted); display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">优化 API 性能</span>
+                </div>
+                <div style="padding: 5px 8px 5px 10px; border-radius: 6px; cursor: pointer;">
+                  <span style="font-size: 13px; color: var(--color-text-muted); display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">添加单元测试</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- ai-workbench project (collapsed) -->
+            <div style="display: flex; flex-direction: column;">
+              <div style="display: flex; align-items: center; gap: 6px; padding: 4px 6px; border-radius: 6px;">
+                <i data-lucide="chevron-right" style="width: 14px; height: 14px; color: var(--color-text-muted); flex-shrink: 0;"></i>
+                <i data-lucide="folder" style="width: 18px; height: 18px; color: var(--color-text-secondary); flex-shrink: 0;"></i>
+                <span style="font-size: 14px; font-weight: 620; color: var(--color-text-primary); flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">ai-workbench</span>
+              </div>
+            </div>
+
+          </div>
+
+          <div style="flex: 1; min-height: 0;"></div>
+
+          <button style="min-height: 48px; width: 100%; border: 1px solid var(--color-border-subtle); border-radius: 12px; background: transparent; color: var(--color-text-primary); cursor: pointer; display: flex; align-items: center; gap: 10px; padding: 7px 8px; font-family: var(--font-sans); text-align: left; transition: background var(--transition-fast), border-color var(--transition-fast);" aria-label="打开个人账户菜单" onmouseenter="this.style.background='var(--color-bg-hover)'" onmouseleave="this.style.background='transparent'" onmousedown="this.style.background='var(--color-bg-active)'" onmouseup="this.style.background='var(--color-bg-hover)'">
+            <span style="width: 32px; height: 32px; border-radius: 999px; background: linear-gradient(135deg, var(--color-primary), #8b5cf6); color: var(--color-text-inverse); display: inline-flex; align-items: center; justify-content: center; font-size: 14px; font-weight: 800; flex-shrink: 0;">李</span>
+            <span style="display: flex; flex-direction: column; gap: 1px; min-width: 0; flex: 1;">
+              <span style="font-size: 13px; font-weight: 720; color: var(--color-text-primary); line-height: 1.25; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">李明</span>
+              <span style="font-size: 11px; font-weight: 500; color: var(--color-text-muted); line-height: 1.25; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">li@workbench.ai</span>
+            </span>
+            <i data-lucide="chevron-down" style="width: 16px; height: 16px; color: var(--color-text-muted); flex-shrink: 0;"></i>
+          </button>
+
+        </aside>
+
+        <!-- ==================== MAIN CONTENT (flex-1) ==================== -->
+        <div class="flex flex-col flex-1" style="height: 100vh; background: var(--color-bg-content);">
+
+          <!-- Full main area: centered flex column for empty state -->
+          <div class="flex flex-col items-center justify-center flex-1" style="padding: 40px 24px;">
+
+            <!-- Centered content block -->
+            <div style="max-width: 640px; width: 100%; display: flex; flex-direction: column; align-items: center; gap: 24px;">
+
+              <!-- Heading -->
+              <h2 style="font-size: 22px; font-weight: 700; color: var(--color-text-primary); text-align: center; text-wrap: balance; word-break: keep-all; overflow-wrap: break-word;">
+                我们该在 <span style="font-size: 22px; font-weight: 700; color: var(--color-text-body); background: var(--color-primary-muted); padding: 2px 8px; border-radius: 6px;">my-saas-app</span> 中做什么?
+              </h2>
+
+              <!-- Composer container (empty, unfocused) -->
+              <div style="width: 100%; max-width: 600px;">
+                <div class="chat-composer" style="border: 1px solid var(--color-border); border-radius: 16px; background: var(--color-bg-surface); padding: 12px 14px; box-shadow: var(--shadow-composer); transition: border-color 120ms ease, box-shadow 120ms ease, background-color 120ms ease;">
+
+                  <!-- Textarea (empty) -->
+                  <textarea
+                    class="w-full resize-none outline-none"
+                    style="min-height: 56px; background: transparent; color: var(--color-text-body); font-size: var(--text-md); font-family: var(--font-sans); line-height: var(--leading-normal); border: none;"
+                    placeholder="输入你想做的事"
+                    rows="2"
+                    aria-label="输入消息"
+                  ></textarea>
+
+                  <!-- Toolbar row -->
+                  <div class="chat-composer-toolbar" style="display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 8px;">
+
+                    <!-- LEFT: + button -->
+                    <div style="display: flex; align-items: center; gap: 6px; min-width: 0;">
+                      <button style="display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 28px; border-radius: 7px; border: 1px solid var(--color-border-subtle); background: transparent; cursor: pointer; transition: background var(--transition-fast);" aria-label="添加" onmouseenter="this.style.background='var(--color-bg-hover)'" onmouseleave="this.style.background='transparent'">
+                        <i data-lucide="plus" style="width: 16px; height: 16px; color: var(--color-text-secondary);"></i>
+                      </button>
+                    </div>
+
+                    <!-- RIGHT: model picker + send button -->
+                    <div style="display: flex; align-items: center; gap: 10px; flex-shrink: 0;">
+                      <!-- Model picker pill -->
+                      <button style="display: inline-flex; align-items: center; gap: 6px; height: 28px; border: 1px solid var(--color-border-subtle); border-radius: 999px; background: transparent; padding: 4px 10px; cursor: pointer; max-width: 220px; flex: 0 1 180px; transition: background var(--transition-fast);" aria-label="选择模型" onmouseenter="this.style.background='var(--color-bg-hover)'" onmouseleave="this.style.background='transparent'">
+                        <span style="font-size: 11px; font-weight: 620; color: var(--color-text-secondary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">claude-sonnet-4-20250514</span>
+                        <i data-lucide="chevron-down" style="width: 12px; height: 12px; color: var(--color-text-muted); flex-shrink: 0;"></i>
+                      </button>
+                      <!-- Send button -->
+                      <button style="display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; border-radius: 999px; background: var(--color-primary); border: none; cursor: pointer; transition: background var(--transition-fast);" aria-label="发送" onmouseenter="this.style.background='var(--color-primary-hover)'" onmouseleave="this.style.background='var(--color-primary)'">
+                        <i data-lucide="arrow-up" style="width: 16px; height: 16px; color: #ffffff;"></i>
+                      </button>
+                    </div>
+
+                  </div>
+
+                </div>
+
+                <!-- Hint line -->
+                <div style="text-align: center; margin-top: 8px; font-size: var(--text-xs); color: var(--color-text-muted);">回车发送 · Shift+回车换行</div>
+              </div>
+
+              <!-- Suggested prompt chips -->
+              <div style="display: flex; flex-wrap: wrap; gap: 8px; justify-content: center;">
+                <button style="border: 1px solid var(--color-border-subtle); border-radius: 999px; padding: 6px 14px; font-size: 12px; font-weight: 500; color: var(--color-text-secondary); background: transparent; cursor: pointer; font-family: var(--font-sans); white-space: nowrap; transition: background var(--transition-fast), border-color var(--transition-fast), color var(--transition-fast);" onmouseenter="this.style.background='var(--color-bg-hover)'; this.style.borderColor='var(--color-border)'; this.style.color='var(--color-text-body)'" onmouseleave="this.style.background='transparent'; this.style.borderColor='var(--color-border-subtle)'; this.style.color='var(--color-text-secondary)'">修复认证 bug</button>
+                <button style="border: 1px solid var(--color-border-subtle); border-radius: 999px; padding: 6px 14px; font-size: 12px; font-weight: 500; color: var(--color-text-secondary); background: transparent; cursor: pointer; font-family: var(--font-sans); white-space: nowrap; transition: background var(--transition-fast), border-color var(--transition-fast), color var(--transition-fast);" onmouseenter="this.style.background='var(--color-bg-hover)'; this.style.borderColor='var(--color-border)'; this.style.color='var(--color-text-body)'" onmouseleave="this.style.background='transparent'; this.style.borderColor='var(--color-border-subtle)'; this.style.color='var(--color-text-secondary)'">优化 API 性能</button>
+                <button style="border: 1px solid var(--color-border-subtle); border-radius: 999px; padding: 6px 14px; font-size: 12px; font-weight: 500; color: var(--color-text-secondary); background: transparent; cursor: pointer; font-family: var(--font-sans); white-space: nowrap; transition: background var(--transition-fast), border-color var(--transition-fast), color var(--transition-fast);" onmouseenter="this.style.background='var(--color-bg-hover)'; this.style.borderColor='var(--color-border)'; this.style.color='var(--color-text-body)'" onmouseleave="this.style.background='transparent'; this.style.borderColor='var(--color-border-subtle)'; this.style.color='var(--color-text-secondary)'">添加单元测试</button>
+              </div>
+
+            </div>
+
+          </div>
+
+        </div>
+        <!-- END main content -->
+
+      </div>
+      <!-- END root grid -->
+
+    </main>
+
+    <style>
+      body { background: var(--color-bg-app) !important; color: var(--color-text-primary); }
+      textarea::placeholder { color: var(--color-text-placeholder); }
+      .no-scrollbar::-webkit-scrollbar { display: none; }
+      .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+      button:hover { opacity: 0.9; }
+      ::-webkit-scrollbar { width: 6px; }
+      ::-webkit-scrollbar-track { background: transparent; }
+      ::-webkit-scrollbar-thumb { background: var(--color-bg-elevated); border-radius: var(--radius-full); }
+      ::-webkit-scrollbar-thumb:hover { background: var(--color-text-muted); }
+    </style>
+    <script>lucide.createIcons();</script>
+</body>
+</html>

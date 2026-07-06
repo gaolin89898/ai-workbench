@@ -321,13 +321,24 @@ function processGroupKey(groupIndex: number) {
   return `process-${groupIndex}`;
 }
 
-function processGroupDefaultOpen(groupIndex: number) {
-  return Boolean(props.message.pending && !processGroupHasFinalText(groupIndex));
+function processGroupIsThinkingOnly(group: Extract<RenderGroup, { type: "process" }>) {
+  return !group.segments.length || group.segments.every(isThinkingStageSegment);
 }
 
-function processGroupOpen(groupIndex: number) {
+function processGroupStaticTitle(group: Extract<RenderGroup, { type: "process" }>, groupIndex: number) {
+  if (!processGroupIsThinkingOnly(group)) return processGroupTitle(group, groupIndex);
+  const thinkingStage = processBodyItems(group).find((item): item is Extract<ProcessBodyItem, { type: "stage" }> => item.type === "stage");
+  return thinkingStage?.title ?? "正在思考...";
+}
+
+function processGroupDefaultOpen(group: Extract<RenderGroup, { type: "process" }>, groupIndex: number) {
+  if (!props.message.pending || processGroupHasFinalText(groupIndex)) return false;
+  return group.segments.some((segment) => !isThinkingStageSegment(segment));
+}
+
+function processGroupOpen(group: Extract<RenderGroup, { type: "process" }>, groupIndex: number) {
   const key = processGroupKey(groupIndex);
-  return processGroupOpenOverrides.value[key] ?? processGroupDefaultOpen(groupIndex);
+  return processGroupOpenOverrides.value[key] ?? processGroupDefaultOpen(group, groupIndex);
 }
 
 function onProcessGroupToggle(event: Event, groupIndex: number) {
@@ -812,7 +823,13 @@ function countCommandOutputSignals(text: string) {
     <div class="chat-message-body">
       <template v-for="(group, index) in contentGroups" :key="index">
         <ChatSegment v-if="group.type === 'segment'" :segment="group.segment" :ai-session-id="aiSessionId" />
-        <details v-else class="chat-process-group" :open="processGroupOpen(index)" @toggle="onProcessGroupToggle($event, index)">
+        <div v-else-if="processGroupIsThinkingOnly(group)" class="chat-process-group thinking-only">
+          <div class="chat-process-group-summary static">
+            <span class="chat-process-group-icon" :class="{ running: message.pending }" aria-hidden="true"></span>
+            <span>{{ processGroupStaticTitle(group, index) }}</span>
+          </div>
+        </div>
+        <details v-else class="chat-process-group" :open="processGroupOpen(group, index)" @toggle="onProcessGroupToggle($event, index)">
           <summary class="chat-process-group-summary" @click="onProcessSummaryClick($event, group, index)">
             <span class="chat-process-group-icon" :class="{ running: message.pending }" aria-hidden="true"></span>
             <span>{{ processGroupTitle(group, index) }}</span>
@@ -827,6 +844,12 @@ function countCommandOutputSignals(text: string) {
             </div>
             <template v-else v-for="(item, itemIndex) in processBodyItems(group)" :key="itemIndex">
               <ChatSegment v-if="item.type === 'segment'" :segment="item.segment" :ai-session-id="aiSessionId" />
+              <div v-else-if="isThinkingStage(item.segments)" class="chat-process-stage thinking-only">
+                <div class="chat-process-stage-header static">
+                  <span class="chat-process-stage-dot" :class="{ running: processStageRunning(item.segments) }" aria-hidden="true"></span>
+                  <strong>{{ item.title }}</strong>
+                </div>
+              </div>
               <details v-else class="chat-process-stage" open>
                 <summary class="chat-process-stage-header">
                   <span class="chat-process-stage-dot" :class="{ running: processStageRunning(item.segments) }" aria-hidden="true"></span>
@@ -887,6 +910,12 @@ function countCommandOutputSignals(text: string) {
           <div class="chat-process-sheet-body">
             <template v-for="(item, itemIndex) in processBodyItems(activeMobileProcessGroup.group)" :key="itemIndex">
               <ChatSegment v-if="item.type === 'segment'" :segment="item.segment" :ai-session-id="aiSessionId" />
+              <div v-else-if="isThinkingStage(item.segments)" class="chat-process-stage thinking-only">
+                <div class="chat-process-stage-header static">
+                  <span class="chat-process-stage-dot" :class="{ running: processStageRunning(item.segments) }" aria-hidden="true"></span>
+                  <strong>{{ item.title }}</strong>
+                </div>
+              </div>
               <details v-else class="chat-process-stage" open>
                 <summary class="chat-process-stage-header">
                   <span class="chat-process-stage-dot" :class="{ running: processStageRunning(item.segments) }" aria-hidden="true"></span>
