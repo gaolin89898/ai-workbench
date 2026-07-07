@@ -35,6 +35,15 @@ type SystemUserRecord = {
   createdAt: string;
 };
 
+type UserDevice = {
+  id: string;
+  name: string;
+  os: string;
+  online: boolean;
+  lastSeenAt: string | null;
+  createdAt: string;
+};
+
 const token = ref(localStorage.getItem("user-admin-token") ?? "");
 const loginMode = ref<"login" | "register">("login");
 const authLoading = ref(false);
@@ -43,7 +52,10 @@ const actionLoading = ref(false);
 const editModalVisible = ref(false);
 const passwordModalVisible = ref(false);
 const deleteModalVisible = ref(false);
+const drawerVisible = ref(false);
 const activeUser = ref<SystemUserRecord | null>(null);
+const userDevices = ref<UserDevice[]>([]);
+const devicesLoading = ref(false);
 const loginForm = reactive({
   email: "admin",
   password: "070900gl",
@@ -288,6 +300,20 @@ async function toggleDisableUser(user: SystemUserRecord) {
     actionLoading.value = false;
   }
 }
+
+async function openUserDrawer(user: SystemUserRecord) {
+  activeUser.value = user;
+  drawerVisible.value = true;
+  devicesLoading.value = true;
+  try {
+    userDevices.value = await requestAPI<UserDevice[]>(`/admin/users/${user.id}/devices`);
+  } catch (error) {
+    Message.error(error instanceof Error ? error.message : String(error));
+    userDevices.value = [];
+  } finally {
+    devicesLoading.value = false;
+  }
+}
 </script>
 
 <template>
@@ -389,6 +415,7 @@ async function toggleDisableUser(user: SystemUserRecord) {
             :bordered="false"
             :pagination="{ pageSize: 8, showTotal: true, showJumper: true }"
             stripe
+            @row-click="openUserDrawer"
           >
             <template #user="{ record }">
               <div class="user-cell">
@@ -529,6 +556,40 @@ async function toggleDisableUser(user: SystemUserRecord) {
         确定要删除用户 <strong>{{ activeUser.account }}</strong> 吗？
       </p>
     </a-modal>
+
+    <a-drawer
+      v-model:visible="drawerVisible"
+      :title="activeUser ? `${activeUser.account} 的设备` : '用户设备'"
+      :width="480"
+      :footer="false"
+    >
+      <a-spin :loading="devicesLoading" style="width: 100%">
+        <a-empty v-if="!devicesLoading && userDevices.length === 0" description="暂无设备" />
+        <a-list v-else :bordered="false">
+          <a-list-item v-for="device in userDevices" :key="device.id">
+            <a-list-item-meta>
+              <template #title>
+                <a-space>
+                  <icon-desktop />
+                  <span>{{ device.name }}</span>
+                  <a-tag :color="device.online ? 'green' : 'gray'" size="small">
+                    {{ device.online ? "在线" : "离线" }}
+                  </a-tag>
+                </a-space>
+              </template>
+              <template #description>
+                <a-space direction="vertical" :size="4">
+                  <span>系统：{{ device.os }}</span>
+                  <span>设备 ID：{{ device.id }}</span>
+                  <span>最近活跃：{{ formatDate(device.lastSeenAt) }}</span>
+                  <span>创建时间：{{ formatDate(device.createdAt) }}</span>
+                </a-space>
+              </template>
+            </a-list-item-meta>
+          </a-list-item>
+        </a-list>
+      </a-spin>
+    </a-drawer>
   </a-layout>
 </template>
 
@@ -744,6 +805,14 @@ async function toggleDisableUser(user: SystemUserRecord) {
   color: #4e5969;
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   font-size: 12px;
+}
+
+:deep(.arco-table-tr) {
+  cursor: pointer;
+}
+
+:deep(.arco-table-tr:hover) {
+  background-color: #f2f3f5;
 }
 
 .password-alert {

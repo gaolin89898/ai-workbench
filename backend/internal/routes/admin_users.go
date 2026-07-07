@@ -383,3 +383,47 @@ func (h *Handler) toggleDisableUser(w http.ResponseWriter, r *http.Request) {
 	}
 	writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
 }
+
+type userDeviceResponse struct {
+	Id         string     `json:"id"`
+	Name       string     `json:"name"`
+	Os         string     `json:"os"`
+	Online     bool       `json:"online"`
+	LastSeenAt *time.Time `json:"lastSeenAt"`
+	CreatedAt  time.Time  `json:"createdAt"`
+}
+
+func (h *Handler) listUserDevices(w http.ResponseWriter, r *http.Request) {
+	if !h.requireAdminUser(w, r) {
+		return
+	}
+	userID := r.PathValue("userId")
+
+	rows, err := h.DB.Pool.Query(r.Context(),
+		`SELECT id, name, os, online, last_seen_at, created_at
+		 FROM desktop_devices
+		 WHERE user_id = $1
+		 ORDER BY last_seen_at DESC NULLS LAST, created_at DESC`,
+		userID,
+	)
+	if err != nil {
+		writeInternal(w)
+		return
+	}
+	defer rows.Close()
+
+	devices := []userDeviceResponse{}
+	for rows.Next() {
+		var d userDeviceResponse
+		if err := rows.Scan(&d.Id, &d.Name, &d.Os, &d.Online, &d.LastSeenAt, &d.CreatedAt); err != nil {
+			writeInternal(w)
+			return
+		}
+		devices = append(devices, d)
+	}
+	if err := rows.Err(); err != nil {
+		writeInternal(w)
+		return
+	}
+	writeJSON(w, http.StatusOK, devices)
+}
