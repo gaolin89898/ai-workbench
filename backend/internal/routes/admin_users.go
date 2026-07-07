@@ -315,13 +315,12 @@ func (h *Handler) applyLiveMobileStats(user *adminSystemUserResponse, now time.T
 }
 
 type adminSessionResponse struct {
-	SessionId    string  `json:"sessionId"`
-	Name         string  `json:"name"`
-	Backend      string  `json:"backend"`
-	Tool         string  `json:"tool"`
-	Status       string  `json:"status"`
-	Cwd          string  `json:"cwd"`
-	RecentOutput *string `json:"recentOutput"`
+	Id           string     `json:"id"`
+	Title        string     `json:"title"`
+	ProviderId   string     `json:"providerId"`
+	Status       string     `json:"status"`
+	CreatedAt    time.Time  `json:"createdAt"`
+	UpdatedAt    time.Time  `json:"updatedAt"`
 }
 
 func (h *Handler) adminListDeviceSessions(w http.ResponseWriter, r *http.Request) {
@@ -331,7 +330,10 @@ func (h *Handler) adminListDeviceSessions(w http.ResponseWriter, r *http.Request
 	deviceID := r.PathValue("deviceId")
 
 	rows, err := h.DB.Pool.Query(r.Context(),
-		"SELECT session_id, name, backend, tool, status, cwd, recent_output FROM terminal_sessions WHERE device_id = $1 ORDER BY name",
+		`SELECT id, title, provider_id, status, created_at, updated_at
+		 FROM ai_sessions
+		 WHERE device_id = $1
+		 ORDER BY updated_at DESC`,
 		deviceID,
 	)
 	if err != nil {
@@ -343,7 +345,7 @@ func (h *Handler) adminListDeviceSessions(w http.ResponseWriter, r *http.Request
 	sessions := []adminSessionResponse{}
 	for rows.Next() {
 		var s adminSessionResponse
-		if err := rows.Scan(&s.SessionId, &s.Name, &s.Backend, &s.Tool, &s.Status, &s.Cwd, &s.RecentOutput); err != nil {
+		if err := rows.Scan(&s.Id, &s.Title, &s.ProviderId, &s.Status, &s.CreatedAt, &s.UpdatedAt); err != nil {
 			writeInternal(w)
 			return
 		}

@@ -43,13 +43,12 @@ type UserDevice = {
 };
 
 type DeviceSession = {
-  sessionId: string;
-  name: string;
-  backend: string;
-  tool: string;
+  id: string;
+  title: string;
+  providerId: string;
   status: string;
-  cwd: string;
-  recentOutput: string | null;
+  createdAt: string;
+  updatedAt: string;
 };
 
 const token = ref(localStorage.getItem("user-admin-token") ?? "");
@@ -693,22 +692,21 @@ function backToDevices() {
         <a-spin :loading="sessionsLoading" style="width: 100%">
           <a-empty v-if="!sessionsLoading && deviceSessions.length === 0" description="暂无会话" />
           <a-list v-else :bordered="false">
-            <a-list-item v-for="session in deviceSessions" :key="session.sessionId">
+            <a-list-item v-for="session in deviceSessions" :key="session.id">
               <a-list-item-meta>
                 <template #title>
                   <a-space>
-                    <span>{{ session.name }}</span>
-                    <a-tag :color="session.status === 'active' ? 'green' : 'gray'" size="small">
+                    <span>{{ session.title }}</span>
+                    <a-tag :color="session.status === 'completed' ? 'green' : session.status === 'active' ? 'blue' : 'gray'" size="small">
                       {{ session.status }}
                     </a-tag>
-                    <a-tag size="small">{{ session.tool }}</a-tag>
+                    <a-tag size="small">{{ session.providerId }}</a-tag>
                   </a-space>
                 </template>
                 <template #description>
                   <a-space direction="vertical" :size="4">
-                    <span>后端：{{ session.backend }}</span>
-                    <span>工作目录：{{ session.cwd }}</span>
-                    <span v-if="session.recentOutput" class="session-output">最近输出：{{ session.recentOutput }}</span>
+                    <span>创建时间：{{ formatDate(session.createdAt) }}</span>
+                    <span>更新时间：{{ formatDate(session.updatedAt) }}</span>
                   </a-space>
                 </template>
               </a-list-item-meta>
