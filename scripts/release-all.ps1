@@ -10,7 +10,7 @@ param(
 $ErrorActionPreference = 'Stop'
 
 function Assert-CleanReleaseFiles {
-  $status = git status --short -- .github apps/desktop/package.json
+  $status = git status --short -- .github apps/desktop/package.json apps/mobile/pubspec.yaml apps/mobile/lib/services/update_service.dart scripts/release-all.ps1
   if ($status -and -not $NoCommit) {
     throw "Release config files have uncommitted changes. Commit or stash them first, or run with -NoCommit after preparing them."
   }
