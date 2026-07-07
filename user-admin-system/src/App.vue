@@ -626,7 +626,7 @@ function backToDevices() {
     <a-drawer
       v-model:visible="drawerVisible"
       :title="activeUser ? `${activeUser.account} 的设备` : '用户设备'"
-      :width="520"
+      :width="720"
       :footer="false"
     >
       <template v-if="!activeDevice">
@@ -691,27 +691,40 @@ function backToDevices() {
         </div>
         <a-spin :loading="sessionsLoading" style="width: 100%">
           <a-empty v-if="!sessionsLoading && deviceSessions.length === 0" description="暂无会话" />
-          <a-list v-else :bordered="false">
-            <a-list-item v-for="session in deviceSessions" :key="session.id">
-              <a-list-item-meta>
-                <template #title>
-                  <a-space>
-                    <span>{{ session.title }}</span>
-                    <a-tag :color="session.status === 'completed' ? 'green' : session.status === 'active' ? 'blue' : 'gray'" size="small">
-                      {{ session.status }}
-                    </a-tag>
-                    <a-tag size="small">{{ session.providerId }}</a-tag>
-                  </a-space>
+          <a-table
+            v-else
+            :data="deviceSessions"
+            :bordered="false"
+            :pagination="{ pageSize: 10, showTotal: true, showJumper: true }"
+            :scroll="{ y: 500 }"
+            stripe
+          >
+            <template #columns>
+              <a-table-column title="会话标题" data-index="title" :width="240" />
+              <a-table-column title="Provider" data-index="providerId" :width="100">
+                <template #cell="{ record }">
+                  <a-tag size="small">{{ record.providerId }}</a-tag>
                 </template>
-                <template #description>
-                  <a-space direction="vertical" :size="4">
-                    <span>创建时间：{{ formatDate(session.createdAt) }}</span>
-                    <span>更新时间：{{ formatDate(session.updatedAt) }}</span>
-                  </a-space>
+              </a-table-column>
+              <a-table-column title="状态" data-index="status" :width="100">
+                <template #cell="{ record }">
+                  <a-tag :color="record.status === 'completed' ? 'green' : record.status === 'active' ? 'blue' : record.status === 'failed' ? 'red' : 'gray'" size="small">
+                    {{ record.status }}
+                  </a-tag>
                 </template>
-              </a-list-item-meta>
-            </a-list-item>
-          </a-list>
+              </a-table-column>
+              <a-table-column title="创建时间" data-index="createdAt" :width="170">
+                <template #cell="{ record }">
+                  {{ formatDate(record.createdAt) }}
+                </template>
+              </a-table-column>
+              <a-table-column title="更新时间" data-index="updatedAt" :width="170">
+                <template #cell="{ record }">
+                  {{ formatDate(record.updatedAt) }}
+                </template>
+              </a-table-column>
+            </template>
+          </a-table>
         </a-spin>
       </template>
     </a-drawer>
