@@ -5,12 +5,10 @@ import {
   IconClockCircle,
   IconDesktop,
   IconEdit,
-  IconFile,
   IconLock,
   IconMobile,
   IconRefresh,
   IconSearch,
-  IconSettings,
   IconUser,
 } from "@arco-design/web-vue/es/icon";
 import { Message } from "@arco-design/web-vue";
@@ -355,18 +353,6 @@ async function openUserDrawer(user: SystemUserRecord) {
         <a-menu-item key="users">
           <template #icon><icon-user /></template>
           用户管理
-        </a-menu-item>
-        <a-menu-item key="devices">
-          <template #icon><icon-desktop /></template>
-          设备概览
-        </a-menu-item>
-        <a-menu-item key="logs">
-          <template #icon><icon-file /></template>
-          操作日志
-        </a-menu-item>
-        <a-menu-item key="settings">
-          <template #icon><icon-settings /></template>
-          系统设置
         </a-menu-item>
       </a-menu>
     </a-layout-sider>
