@@ -22,6 +22,12 @@ export type ProviderStatus = {
   providerId: string;
   installed: boolean;
   version?: string | null;
+  latestVersion?: string | null;
+  updateAvailable?: boolean | null;
+  versionCheckError?: string | null;
+  installCommand?: string | null;
+  updateCommand?: string | null;
+  installUrl?: string | null;
   authStatus: string;
   lastCheckedAt: string;
 };

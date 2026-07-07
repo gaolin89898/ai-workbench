@@ -7005,6 +7005,30 @@ textarea:focus {
   color: var(--state-warning);
 }
 
+.settings-provider-card-actions {
+  display: flex;
+  min-height: 30px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.settings-provider-card-actions .button {
+  flex: 0 0 auto;
+}
+
+.settings-provider-card-action-note {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--color-text-muted);
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1.35;
+  text-align: right;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .settings-provider-card-foot {
   display: flex;
   align-items: center;

@@ -15,6 +15,37 @@ const BUILTIN_PROVIDERS: AiProvider[] = [
 
 let detectionInFlight: Promise<ProviderStatus[]> | null = null;
 
+type ProviderMetadata = {
+  npmPackage?: string;
+  installCommand?: string;
+  updateCommand?: string;
+  installUrl?: string;
+};
+
+const PROVIDER_METADATA: Record<string, ProviderMetadata> = {
+  codex: {
+    npmPackage: "@openai/codex",
+    installCommand: "npm install -g @openai/codex",
+    updateCommand: "npm install -g @openai/codex@latest",
+    installUrl: "https://www.npmjs.com/package/@openai/codex",
+  },
+  claude: {
+    npmPackage: "@anthropic-ai/claude-code",
+    installCommand: "npm install -g @anthropic-ai/claude-code",
+    updateCommand: "npm install -g @anthropic-ai/claude-code@latest",
+    installUrl: "https://www.npmjs.com/package/@anthropic-ai/claude-code",
+  },
+  opencode: {
+    npmPackage: "opencode-ai",
+    installCommand: "curl -fsSL https://opencode.ai/install | bash",
+    updateCommand: "curl -fsSL https://opencode.ai/install | bash",
+    installUrl: "https://opencode.ai/docs",
+  },
+  mimo: {
+    installUrl: "https://mimo.xiaomi.com/",
+  },
+};
+
 type CommandResult = {
   status: number | null;
   stdout: string;
@@ -114,6 +145,65 @@ function detectAuthStatus(providerId: string): string {
   return "unknown";
 }
 
+function extractVersion(value: string | null | undefined): string | null {
+  if (!value) return null;
+  const match = value.match(/\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?/);
+  return match?.[0] ?? null;
+}
+
+function compareVersions(left: string | null | undefined, right: string | null | undefined): number | null {
+  const leftVersion = extractVersion(left);
+  const rightVersion = extractVersion(right);
+  if (!leftVersion || !rightVersion) return null;
+  const leftParts = leftVersion.split(/[.+-]/).slice(0, 3).map((part) => Number.parseInt(part, 10));
+  const rightParts = rightVersion.split(/[.+-]/).slice(0, 3).map((part) => Number.parseInt(part, 10));
+  if (leftParts.some(Number.isNaN) || rightParts.some(Number.isNaN)) return null;
+  for (let i = 0; i < 3; i += 1) {
+    if (leftParts[i] !== rightParts[i]) return leftParts[i] > rightParts[i] ? 1 : -1;
+  }
+  return 0;
+}
+
+async function fetchJsonWithTimeout(url: string, timeout = 4000): Promise<unknown> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeout);
+  try {
+    const response = await fetch(url, {
+      headers: { "Accept": "application/json" },
+      signal: controller.signal,
+    });
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    return await response.json();
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+async function fetchNpmLatestVersion(packageName: string): Promise<string> {
+  const encodedPackage = packageName.replace(/\//g, "%2F");
+  const data = await fetchJsonWithTimeout(`https://registry.npmjs.org/${encodedPackage}`);
+  if (!data || typeof data !== "object") throw new Error("registry response is empty");
+  const tags = (data as { "dist-tags"?: Record<string, unknown> })["dist-tags"];
+  const latest = tags?.latest;
+  if (typeof latest !== "string" || !latest) throw new Error("registry response has no latest tag");
+  return latest;
+}
+
+async function detectLatestVersion(providerId: string): Promise<{ latestVersion: string | null; versionCheckError: string | null }> {
+  const metadata = PROVIDER_METADATA[providerId];
+  if (!metadata?.npmPackage) {
+    return { latestVersion: null, versionCheckError: "暂未配置版本源" };
+  }
+  try {
+    return { latestVersion: await fetchNpmLatestVersion(metadata.npmPackage), versionCheckError: null };
+  } catch (error) {
+    return {
+      latestVersion: null,
+      versionCheckError: error instanceof Error ? error.message : String(error),
+    };
+  }
+}
+
 export function listAiProviders(): AiProvider[] {
   return BUILTIN_PROVIDERS;
 }
@@ -121,13 +211,22 @@ export function listAiProviders(): AiProvider[] {
 async function detectAiProvidersUncached(): Promise<ProviderStatus[]> {
   const lastCheckedAt = new Date().toISOString();
   return Promise.all(BUILTIN_PROVIDERS.map(async (provider) => {
+    const metadata = PROVIDER_METADATA[provider.id] ?? {};
     const installed = await commandExists(provider.command);
     const version = installed ? await getCommandVersion(provider.command) : null;
     const authStatus = detectAuthStatus(provider.id);
+    const { latestVersion, versionCheckError } = await detectLatestVersion(provider.id);
+    const versionComparison = installed ? compareVersions(version, latestVersion) : null;
     return {
       providerId: provider.id,
       installed,
       version,
+      latestVersion,
+      updateAvailable: versionComparison === null ? null : versionComparison === -1,
+      versionCheckError,
+      installCommand: metadata.installCommand ?? null,
+      updateCommand: metadata.updateCommand ?? metadata.installCommand ?? null,
+      installUrl: metadata.installUrl ?? null,
       authStatus,
       lastCheckedAt,
     };

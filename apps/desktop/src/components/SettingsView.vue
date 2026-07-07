@@ -42,6 +42,7 @@ const desktopRuntimeInfo = ref<DesktopRuntimeInfo | null>(null);
 const providerRefreshLoading = ref(false);
 const providerRefreshMessage = ref("");
 const providerRefreshError = ref(false);
+const providerActionMessages = ref<Record<string, string>>({});
 
 const settingsPanels: SettingsPanelItem[] = [
   {
@@ -175,6 +176,94 @@ function providerDetail(row: ProviderRow) {
   if (!row.status) return `等待检测 ${row.provider.command}`;
   if (!row.status.installed) return `未找到命令：${row.provider.command}`;
   return row.status.version ?? `${row.provider.command} 可执行`;
+}
+
+function latestVersionLabel(status?: ProviderStatus) {
+  if (!status) return "待检测";
+  if (status.latestVersion) return status.latestVersion;
+  if (status.versionCheckError === "暂未配置版本源") return "未配置";
+  if (status.versionCheckError) return "检查失败";
+  return "未知";
+}
+
+function latestVersionTone(status?: ProviderStatus) {
+  if (!status) return "muted";
+  if (status.updateAvailable) return "warning";
+  if (status.versionCheckError) return "muted";
+  if (status.latestVersion) return "success";
+  return "muted";
+}
+
+function providerVersionNote(status?: ProviderStatus) {
+  if (!status) return "";
+  if (status.updateAvailable) return "发现新版本";
+  if (status.versionCheckError && status.versionCheckError !== "暂未配置版本源") return "版本检查失败";
+  if (status.installed && status.latestVersion && status.updateAvailable === false) return "已是最新";
+  if (status.installed && status.latestVersion && status.updateAvailable === null) return "版本待确认";
+  if (!status.installed && status.latestVersion) return "可安装最新版";
+  return "";
+}
+
+function providerActionKind(row: ProviderRow): "install" | "update" | null {
+  if (!row.status) return null;
+  if (!row.status.installed && (row.status.installCommand || row.status.installUrl)) return "install";
+  if (row.status.installed && row.status.updateAvailable && (row.status.updateCommand || row.status.installUrl)) return "update";
+  return null;
+}
+
+function providerActionLabel(row: ProviderRow) {
+  const kind = providerActionKind(row);
+  if (kind === "install") return "安装";
+  if (kind === "update") return "更新";
+  return "";
+}
+
+function providerActionCommand(row: ProviderRow) {
+  const kind = providerActionKind(row);
+  if (kind === "install") return row.status?.installCommand ?? "";
+  if (kind === "update") return row.status?.updateCommand ?? row.status?.installCommand ?? "";
+  return "";
+}
+
+function providerActionFeedback(row: ProviderRow) {
+  return providerActionMessages.value[row.provider.id] ?? providerVersionNote(row.status);
+}
+
+async function runProviderAction(row: ProviderRow) {
+  const label = providerActionLabel(row);
+  if (!label || !row.status) return;
+  const command = providerActionCommand(row);
+  const installUrl = row.status.installUrl;
+  let copied = false;
+  let opened = false;
+  if (command) {
+    try {
+      await navigator.clipboard.writeText(command);
+      copied = true;
+    } catch {
+      copied = false;
+    }
+  }
+  if (installUrl) {
+    try {
+      await desktopApi.openExternalUrl(installUrl);
+      opened = true;
+    } catch {
+      opened = false;
+    }
+  }
+  const fallback = command || installUrl ? "" : "暂无安装说明";
+  const message = copied && opened
+    ? `已复制${label}命令，并打开说明`
+    : copied
+      ? `已复制${label}命令`
+      : opened
+        ? "已打开安装说明"
+        : fallback || "操作失败";
+  providerActionMessages.value = {
+    ...providerActionMessages.value,
+    [row.provider.id]: message,
+  };
 }
 
 function providerIcon(providerId: string) {
@@ -520,9 +609,24 @@ async function restoreSession(sessionId: string) {
                       <span v-else class="muted">未安装</span>
                     </div>
                     <div class="settings-provider-card-row">
+                      <span>最新版本</span>
+                      <span :class="['muted', latestVersionTone(row.status)]">{{ latestVersionLabel(row.status) }}</span>
+                    </div>
+                    <div class="settings-provider-card-row">
                       <span>登录状态</span>
                       <span :class="['muted', authTone(row.status)]">{{ authLabel(row.status) }}</span>
                     </div>
+                  </div>
+                  <div class="settings-provider-card-actions">
+                    <button
+                      v-if="providerActionKind(row)"
+                      :class="['button', providerActionKind(row) === 'install' ? 'primary' : 'secondary', 'mini', 'narrow']"
+                      type="button"
+                      @click="runProviderAction(row)"
+                    >
+                      {{ providerActionLabel(row) }}
+                    </button>
+                    <span v-if="providerActionFeedback(row)" class="settings-provider-card-action-note">{{ providerActionFeedback(row) }}</span>
                   </div>
                   <div class="settings-provider-card-foot">
                     <span class="badge" :class="installedTone(row.status)">{{ installedLabel(row.status) }}</span>
