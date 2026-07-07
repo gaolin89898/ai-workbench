@@ -626,7 +626,7 @@ function backToDevices() {
     <a-drawer
       v-model:visible="drawerVisible"
       :title="activeUser ? `${activeUser.account} 的设备` : '用户设备'"
-      :width="720"
+      :width="960"
       :footer="false"
     >
       <template v-if="!activeDevice">
