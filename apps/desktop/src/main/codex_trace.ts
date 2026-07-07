@@ -65,6 +65,33 @@ function extractErrorMessage(params: unknown): string {
   return firstString(p.message, error.message, p.error) ?? "未知错误";
 }
 
+function normalizePlanStatus(value: unknown): "pending" | "in_progress" | "completed" {
+  if (value === "in_progress" || value === "inProgress" || value === "running") return "in_progress";
+  if (value === "completed" || value === "complete" || value === "done") return "completed";
+  return "pending";
+}
+
+function extractPlanSteps(params: unknown): Array<{ step: string; status: "pending" | "in_progress" | "completed" }> {
+  const p = record(params);
+  const plan = Array.isArray(p.plan) ? p.plan : [];
+  return plan.flatMap((entry) => {
+    const item = record(entry);
+    const step = firstString(item.step, item.title, item.text, item.description);
+    return step ? [{ step, status: normalizePlanStatus(item.status) }] : [];
+  });
+}
+
+function extractGoal(params: unknown): { objective: string; status?: string | null } | null {
+  const p = record(params);
+  const goal = record(p.goal);
+  const objective = firstString(goal.objective, p.objective);
+  if (!objective) return null;
+  return {
+    objective,
+    status: firstString(goal.status, p.status) ?? null,
+  };
+}
+
 function fileChangesFrom(value: unknown): string[] {
   const changes = record(value);
   return Object.keys(changes).filter((path) => path.trim().length > 0);
@@ -221,6 +248,23 @@ export function reduceCodexTraceSnapshot(
       snapshot = { ...snapshot, threadId: extractThreadId(event.params) ?? snapshot.threadId };
       break;
     }
+    case "thread/goal/updated": {
+      const goal = extractGoal(event.params);
+      if (goal) {
+        snapshot = {
+          ...snapshot,
+          goal: {
+            ...goal,
+            updatedAt: now,
+          },
+        };
+      }
+      break;
+    }
+    case "thread/goal/cleared": {
+      snapshot = { ...snapshot, goal: null };
+      break;
+    }
     case "turn/started": {
       snapshot = {
         ...snapshot,
@@ -231,6 +275,22 @@ export function reduceCodexTraceSnapshot(
         finalText: "",
         errors: [],
       };
+      break;
+    }
+    case "turn/plan/updated": {
+      const p = record(event.params);
+      const steps = extractPlanSteps(event.params);
+      if (steps.length) {
+        snapshot = {
+          ...snapshot,
+          plan: {
+            turnId: extractTurnId(event.params) ?? snapshot.turnId,
+            explanation: firstString(p.explanation),
+            steps,
+            updatedAt: now,
+          },
+        };
+      }
       break;
     }
     case "item/started": {
@@ -439,6 +499,24 @@ export function codexTraceSnapshotToSegments(snapshot: CodexTraceSnapshot): Chat
       completedAt: snapshot.completedAt,
       durationMs,
       rawItemType: "runtime",
+    });
+  }
+
+  if (snapshot.plan?.steps?.length) {
+    segments.push({
+      type: "plan",
+      stepId: `plan-${snapshot.plan.turnId ?? "current"}`,
+      title: "执行计划",
+      summary: snapshot.plan.explanation ?? undefined,
+      steps: snapshot.plan.steps,
+    });
+  }
+
+  if (snapshot.goal?.objective) {
+    segments.push({
+      type: "goal",
+      stepId: "active-goal",
+      objective: snapshot.goal.objective,
     });
   }
 

@@ -119,7 +119,8 @@ const pendingApprovalSegment = computed<Extract<ChatSegment, { type: "approval" 
   return null;
 });
 
-const canSend = computed(() => Boolean(prompt.value.trim() || imageAttachments.value.length || ws.activeChatIsRunning.value));
+const approvalInputLocked = computed(() => Boolean(pendingApprovalSegment.value));
+const canSend = computed(() => Boolean(ws.activeChatIsRunning.value || (!approvalInputLocked.value && (prompt.value.trim() || imageAttachments.value.length))));
 const selectedApprovalMode = computed(() => approvalModes.find((mode) => mode.id === codexApprovalMode.value) ?? approvalModes[1]);
 const reasoningOptions = [
   { id: "low", label: "低" },
@@ -484,7 +485,7 @@ function setCodexMode(mode: CodexRunMode) {
 
 function buildCodexOptions(): CodexChatOptions {
   if (!showCodexRunControls.value) return {};
-  const goal = codexGoalEnabled.value ? codexGoal.value.trim() : "";
+  const goal = codexGoalEnabled.value ? (codexGoal.value.trim() || prompt.value.trim()) : "";
   return {
     approvalMode: codexApprovalMode.value,
     codexMode: codexMode.value,
@@ -724,6 +725,7 @@ async function send() {
     await ws.stopActiveAiChat();
     return;
   }
+  if (approvalInputLocked.value) return;
   const value = prompt.value.trim();
   const images = imageAttachments.value.map((image) => ({
     id: image.id,
@@ -1090,6 +1092,28 @@ function onPromptKeydown(event: KeyboardEvent) {
         </div>
         <div v-if="showCreateHint" class="chat-toast" :class="{ error: ws.createAiError.value }">{{ ws.createAiResult.value }}</div>
         <div
+          v-if="activeTab === 'chat' && showCodexRunControls && codexGoalEnabled"
+          class="codex-goal-bar"
+        >
+          <svg class="codex-goal-bar-icon" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+            <circle cx="8" cy="8" r="5.5" stroke="currentColor" stroke-width="1.35" />
+            <circle cx="8" cy="8" r="2.1" stroke="currentColor" stroke-width="1.35" />
+            <path d="M8 1.8v2M8 12.2v2M1.8 8h2M12.2 8h2" stroke="currentColor" stroke-width="1.35" stroke-linecap="round" />
+          </svg>
+          <input
+            v-model="codexGoal"
+            class="codex-goal-bar-input"
+            type="text"
+            placeholder="这轮工作的目标"
+            aria-label="这轮工作的目标"
+          />
+          <button type="button" class="codex-goal-bar-action danger" title="关闭目标模式" @click="toggleComposerGoalMode">
+            <svg viewBox="0 0 16 16" fill="none" aria-hidden="true">
+              <path d="M4.5 4.5 11.5 11.5M11.5 4.5 4.5 11.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" />
+            </svg>
+          </button>
+        </div>
+        <div
           v-if="activeTab === 'chat'"
           ref="chatComposer"
           class="chat-composer"
@@ -1115,7 +1139,14 @@ function onPromptKeydown(event: KeyboardEvent) {
               </button>
             </div>
           </div>
-          <textarea v-model="prompt" rows="3" placeholder="输入你的消息..." @keydown="onPromptKeydown" @paste="onPromptPaste"></textarea>
+          <textarea
+            v-model="prompt"
+            rows="3"
+            :placeholder="approvalInputLocked ? '审批期间输入框已锁定' : '输入你的消息...'"
+            :disabled="approvalInputLocked"
+            @keydown="onPromptKeydown"
+            @paste="onPromptPaste"
+          ></textarea>
           <div class="chat-composer-divider"></div>
           <div class="chat-composer-toolbar">
             <div class="chat-composer-toolbar-left">
@@ -1162,7 +1193,7 @@ function onPromptKeydown(event: KeyboardEvent) {
               </div>
               <button
                 v-if="showCodexRunControls && codexMode === 'plan'"
-                class="codex-mode-chip"
+                class="codex-mode-chip codex-plan-chip"
                 title="关闭计划模式"
                 type="button"
                 @click="setCodexMode('default')"
@@ -1171,10 +1202,11 @@ function onPromptKeydown(event: KeyboardEvent) {
                   <path d="M4 4h3.5M8.5 4H12M4 8h8M4 12h3.5M8.5 12H12" stroke="currentColor" stroke-width="1.35" stroke-linecap="round" />
                 </svg>
                 <span>计划</span>
+                <small>已开启</small>
               </button>
               <button
                 v-if="showCodexRunControls && codexGoalEnabled"
-                class="codex-mode-chip"
+                class="codex-mode-chip codex-goal-chip"
                 title="关闭目标模式"
                 type="button"
                 @click="toggleComposerGoalMode"
@@ -1184,14 +1216,8 @@ function onPromptKeydown(event: KeyboardEvent) {
                   <circle cx="8" cy="8" r="2.1" stroke="currentColor" stroke-width="1.35" />
                 </svg>
                 <span>目标</span>
+                <small>已开启</small>
               </button>
-              <input
-                v-if="showCodexRunControls && codexGoalEnabled"
-                v-model="codexGoal"
-                class="codex-goal-input"
-                type="text"
-                placeholder="这轮工作的目标"
-              />
             </div>
             <div class="chat-composer-toolbar-right">
               <div v-if="showCodexRunControls" class="codex-model-picker codex-model-picker-custom" title="选择 Codex 模型">
@@ -1298,7 +1324,6 @@ function onPromptKeydown(event: KeyboardEvent) {
             </button>
           </div>
         </div>
-        <div class="chat-composer-hint">回车发送 · Shift+回车换行</div>
       </article>
     </section>
     </template>

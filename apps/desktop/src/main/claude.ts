@@ -490,8 +490,9 @@ export function stopAiChat(aiSessionId: string): boolean {
     segment: {
       type: "status",
       stepId: "interrupted",
-      label: "已中断",
+      label: "用户主动停止",
       icon: "warn",
+      status: "canceled",
     },
   });
   run.stop();

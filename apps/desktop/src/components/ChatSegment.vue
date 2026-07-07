@@ -33,6 +33,7 @@ const toolDiffLines = computed<DiffLine[]>(() => {
   const diff = toolDiffText(props.segment);
   return diff ? parseDiffLines(diff) : [];
 });
+const toolHasDiff = computed(() => props.segment.type === "tool" && toolDiffLines.value.length > 0);
 
 const approvalBusy = computed(() => props.segment.type === "approval" && props.segment.status !== "pending");
 const statusDisplay = computed(() => {
@@ -45,15 +46,29 @@ const statusDisplay = computed(() => {
     };
   }
   return {
-    label: props.segment.label,
+    label: isUserStoppedStatus(props.segment) ? "用户主动停止" : props.segment.label,
     detail: props.segment.detail,
     icon: props.segment.icon,
   };
+});
+const statusClasses = computed(() => {
+  if (props.segment.type !== "status") return [];
+  return [
+    statusDisplay.value?.icon,
+    isUserStoppedStatus(props.segment) ? "danger" : "",
+  ].filter(Boolean);
 });
 
 function isContextCompactionStatus(rawItemType?: string | null, label?: string) {
   return /^(?:contextCompaction|context_compaction)$/i.test(rawItemType ?? "")
     || /contextCompaction|context_compaction/i.test(label ?? "");
+}
+
+function isUserStoppedStatus(segment: Extract<ChatSegmentType, { type: "status" }>) {
+  return segment.stepId === "interrupted"
+    || segment.status === "canceled"
+    || segment.label === "用户主动停止"
+    || segment.label === "已中断";
 }
 
 function formatDuration(durationMs?: number) {
@@ -108,6 +123,22 @@ function toolLineMeta(segment: Extract<ChatSegmentType, { type: "tool" }>) {
 
 function toolHasDetails(segment: Extract<ChatSegmentType, { type: "tool" }>) {
   return Boolean(segment.command || segment.summary || toolVisibleInput(segment) || toolVisibleOutput(segment) || toolDiffText(segment));
+}
+
+function toolShowCommand(segment: Extract<ChatSegmentType, { type: "tool" }>) {
+  return !toolDiffText(segment) && Boolean(segment.command);
+}
+
+function toolShowSummary(segment: Extract<ChatSegmentType, { type: "tool" }>) {
+  return !toolDiffText(segment) && Boolean(segment.summary);
+}
+
+function toolShowInput(segment: Extract<ChatSegmentType, { type: "tool" }>) {
+  return !toolDiffText(segment) && Boolean(toolVisibleInput(segment));
+}
+
+function toolShowOutput(segment: Extract<ChatSegmentType, { type: "tool" }>) {
+  return !toolDiffText(segment) && Boolean(toolVisibleOutput(segment));
 }
 
 function toolDetailText(segment: Extract<ChatSegmentType, { type: "tool" }>, value?: string) {
@@ -292,8 +323,7 @@ function parseDiffLines(diff: string): DiffLine[] {
 function isPatchWrapperLine(line: string) {
   return line.startsWith("*** Begin Patch")
     || line.startsWith("*** End Patch")
-    || /^\*\*\* (?:Add|Update|Delete) File: /.test(line)
-    || line.startsWith("@@");
+    || /^\*\*\* (?:Add|Update|Delete) File: /.test(line);
 }
 
 function parseMarkdownBlocks(text: string): MarkdownBlock[] {
@@ -548,7 +578,7 @@ async function respondApproval(decision: "approved" | "denied") {
     </template>
   </article>
 
-  <div v-else-if="segment.type === 'status'" class="chat-segment-status" :class="statusDisplay?.icon">
+  <div v-else-if="segment.type === 'status'" class="chat-segment-status" :class="statusClasses">
     <span>{{ statusDisplay?.label }}</span>
     <strong v-if="statusDisplay?.detail">{{ statusDisplay.detail }}</strong>
     <span v-if="segment.additions !== undefined" class="chat-segment-additions">+{{ segment.additions }}</span>
@@ -566,6 +596,42 @@ async function respondApproval(decision: "approved" | "denied") {
     </summary>
     <div class="chat-segment-content">{{ segment.text }}</div>
   </details>
+
+  <div v-else-if="segment.type === 'goal'" class="chat-segment-goal">
+    <svg viewBox="0 0 16 16" fill="none" aria-hidden="true">
+      <circle cx="8" cy="8" r="5.5" stroke="currentColor" stroke-width="1.35" />
+      <circle cx="8" cy="8" r="2.1" stroke="currentColor" stroke-width="1.35" />
+      <path d="M8 1.8v2M8 12.2v2M1.8 8h2M12.2 8h2" stroke="currentColor" stroke-width="1.35" stroke-linecap="round" />
+    </svg>
+    <span>目标: {{ segment.objective }}</span>
+  </div>
+
+  <article v-else-if="segment.type === 'plan'" class="chat-segment-plan">
+    <header class="chat-segment-plan-header">
+      <div class="chat-segment-plan-kicker">
+        <svg viewBox="0 0 16 16" fill="none" aria-hidden="true">
+          <path d="M4.25 2.75h5.5L12.5 5.5v7.75h-8.25V2.75Z" stroke="currentColor" stroke-width="1.35" stroke-linejoin="round" />
+          <path d="M9.75 2.75V5.5h2.75M6.25 8h4M6.25 10.5h4" stroke="currentColor" stroke-width="1.35" stroke-linecap="round" stroke-linejoin="round" />
+        </svg>
+        <span>计划</span>
+      </div>
+    </header>
+    <div class="chat-segment-plan-body">
+      <h3>{{ segment.title }}</h3>
+      <section v-if="segment.summary">
+        <strong>SUMMARY</strong>
+        <p>{{ segment.summary }}</p>
+      </section>
+      <section>
+        <strong>KEY CHANGES</strong>
+        <ul>
+          <li v-for="(step, index) in segment.steps" :key="index" :class="`status-${step.status}`">
+            <span>{{ step.step }}</span>
+          </li>
+        </ul>
+      </section>
+    </div>
+  </article>
 
   <template v-else-if="segment.type === 'tool'">
     <details
@@ -589,15 +655,15 @@ async function respondApproval(decision: "approved" | "denied") {
         </svg>
       </summary>
       <div class="chat-segment-tool-details">
-        <section v-if="segment.command" class="chat-segment-output-block">
+        <section v-if="toolShowCommand(segment)" class="chat-segment-output-block">
           <strong>命令</strong>
           <pre>{{ segment.command }}</pre>
         </section>
-        <section v-if="segment.summary" class="chat-segment-output-block">
+        <section v-if="toolShowSummary(segment)" class="chat-segment-output-block">
           <strong>说明</strong>
           <pre>{{ segment.summary }}</pre>
         </section>
-        <section v-if="toolDiffLines.length" class="chat-segment-diff-section">
+        <section v-if="toolHasDiff" class="chat-segment-diff-section">
           <div class="chat-segment-diff">
             <div
               v-for="(line, lineIndex) in toolDiffLines"
@@ -609,11 +675,11 @@ async function respondApproval(decision: "approved" | "denied") {
             </div>
           </div>
         </section>
-        <section v-if="toolVisibleInput(segment)" class="chat-segment-output-block">
+        <section v-if="toolShowInput(segment)" class="chat-segment-output-block">
           <strong>输入</strong>
           <pre>{{ toolDetailText(segment, toolVisibleInput(segment)) }}</pre>
         </section>
-        <section v-if="toolVisibleOutput(segment)" class="chat-segment-output-block">
+        <section v-if="toolShowOutput(segment)" class="chat-segment-output-block">
           <strong>输出</strong>
           <pre>{{ toolDetailText(segment, toolVisibleOutput(segment)) }}</pre>
         </section>

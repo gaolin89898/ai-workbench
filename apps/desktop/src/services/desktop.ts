@@ -156,6 +156,21 @@ export type ChatSegment =
       durationMs?: number;
     }
   | {
+      type: "goal";
+      stepId?: string;
+      objective: string;
+    }
+  | {
+      type: "plan";
+      stepId?: string;
+      title: string;
+      summary?: string;
+      steps: Array<{
+        step: string;
+        status: "pending" | "in_progress" | "completed";
+      }>;
+    }
+  | {
       type: "tool";
       stepId?: string;
       toolName: string;
@@ -234,6 +249,22 @@ export type CodexTraceError = {
   at: string;
 };
 
+export type CodexTracePlan = {
+  turnId?: string | null;
+  explanation?: string | null;
+  steps: Array<{
+    step: string;
+    status: "pending" | "in_progress" | "completed";
+  }>;
+  updatedAt: string;
+};
+
+export type CodexTraceGoal = {
+  objective: string;
+  status?: string | null;
+  updatedAt: string;
+};
+
 export type CodexTraceSnapshot = {
   provider: "codex";
   status: "idle" | "running" | "completed" | "failed" | "canceled";
@@ -245,6 +276,8 @@ export type CodexTraceSnapshot = {
   items: CodexTraceItem[];
   approvals: CodexTraceApproval[];
   errors: CodexTraceError[];
+  goal?: CodexTraceGoal | null;
+  plan?: CodexTracePlan | null;
   finalText: string;
 };
 

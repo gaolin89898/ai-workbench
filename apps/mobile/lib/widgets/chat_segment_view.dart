@@ -241,21 +241,23 @@ class _ProcessStageView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final stoppedByUser = _processStageStoppedByUser(item.segments);
+    final titleColor = stoppedByUser ? AppColors.danger : AppColors.secondary;
+    final dotColor = stoppedByUser
+        ? AppColors.danger
+        : _processStageRunning(item.segments)
+            ? AppColors.warning
+            : AppColors.successDeep;
     if (_isThinkingStage(item.segments)) {
-      return Container(
-        padding: const EdgeInsets.fromLTRB(10, 9, 10, 10),
-        decoration: BoxDecoration(
-          color: AppColors.surface,
-          borderRadius: BorderRadius.circular(AppRadius.md),
-          border: Border.all(color: AppColors.border),
-        ),
+      return Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 3),
         child: Row(
           children: [
             Container(
               width: 6,
               height: 6,
-              decoration: const BoxDecoration(
-                color: AppColors.warning,
+              decoration: BoxDecoration(
+                color: stoppedByUser ? AppColors.danger : AppColors.warning,
                 shape: BoxShape.circle,
               ),
             ),
@@ -263,8 +265,8 @@ class _ProcessStageView extends StatelessWidget {
             Expanded(
               child: Text(
                 _processStageTitle(item.segments, pending),
-                style: const TextStyle(
-                  color: AppColors.secondary,
+                style: TextStyle(
+                  color: titleColor,
                   fontSize: 12,
                   fontWeight: FontWeight.w700,
                 ),
@@ -290,9 +292,7 @@ class _ProcessStageView extends StatelessWidget {
               width: 6,
               height: 6,
               decoration: BoxDecoration(
-                color: _processStageRunning(item.segments)
-                    ? AppColors.warning
-                    : AppColors.successDeep,
+                color: dotColor,
                 shape: BoxShape.circle,
               ),
             ),
@@ -300,8 +300,8 @@ class _ProcessStageView extends StatelessWidget {
             Expanded(
               child: Text(
                 _processStageTitle(item.segments, pending),
-                style: const TextStyle(
-                  color: AppColors.secondary,
+                style: TextStyle(
+                  color: titleColor,
                   fontSize: 12,
                   fontWeight: FontWeight.w700,
                 ),
@@ -588,7 +588,7 @@ List<_ProcessBodyItem> _buildProcessBodyItems(List<ChatSegment> segments,
     items.add(_ProcessBodyItem.segment(segment));
   }
   flushStageRun();
-  // pending 且最后一个 stage 无 running item 时，追加"正在思考..."占位 stage
+  // pending 且最后一个 stage 无 running item 时，追加"正在思考"占位 stage
   // 对应 Codex turn/started 后、下一个 item/started 前的空档期
   if (pending) {
     final lastItem = items.isEmpty ? null : items.last;
@@ -662,7 +662,7 @@ String _processStageTitle(List<ChatSegment> segments, bool pending) {
       .where((segment) =>
           _isThinkingStatusSegment(segment) && segment.status == 'running')
       .firstOrNull;
-  if (runningThinking != null) return '正在思考...';
+  if (runningThinking != null) return '正在思考';
   final toolSegments =
       segments.where((segment) => segment.type == 'tool').toList();
   final aggregateTitle = _aggregateToolStageTitle(toolSegments);
@@ -691,6 +691,9 @@ String _processStageTitle(List<ChatSegment> segments, bool pending) {
       .toList()
       .reversed
       .firstOrNull;
+  if (latestStatus != null && _isUserStoppedStatus(latestStatus)) {
+    return '用户主动停止';
+  }
   final statusLabel = latestStatus?.label?.trim();
   if (statusLabel != null && statusLabel.isNotEmpty) return statusLabel;
 
@@ -698,7 +701,7 @@ String _processStageTitle(List<ChatSegment> segments, bool pending) {
       segment.type == 'thought' &&
       !_isProcessCommentaryThought(segment) &&
       !_isExecutionConclusionSegment(segment))) {
-    return '正在思考...';
+    return '正在思考';
   }
   return pending ? '正在处理' : '已处理';
 }
@@ -888,6 +891,10 @@ bool _processStageRunning(List<ChatSegment> segments) {
       (segment.type == 'tool' && segment.status == 'running') ||
       (segment.type == 'approval' && segment.status == 'pending') ||
       (_isThinkingStatusSegment(segment) && segment.status == 'running'));
+}
+
+bool _processStageStoppedByUser(List<ChatSegment> segments) {
+  return segments.any(_isUserStoppedStatus);
 }
 
 int? _processStageDurationMs(List<ChatSegment> segments) {
@@ -1700,6 +1707,7 @@ class _StatusSegment extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final stoppedByUser = _isUserStoppedStatus(segment);
     final icon = switch (segment.icon) {
       'check' => Icons.check_circle_outline,
       'warn' => Icons.warning_amber_rounded,
@@ -1708,11 +1716,7 @@ class _StatusSegment extends StatelessWidget {
       'read' => Icons.article_outlined,
       _ => Icons.circle_outlined,
     };
-    final color = segment.icon == 'warn'
-        ? AppColors.warningDeep
-        : segment.icon == 'check'
-            ? AppColors.successDeep
-            : AppColors.muted;
+    final color = _statusColor(segment, stoppedByUser);
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -1723,9 +1727,12 @@ class _StatusSegment extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                segment.label ?? segment.text ?? 'AI 正在执行',
-                style: const TextStyle(
-                    color: AppColors.secondary,
+                stoppedByUser
+                    ? '用户主动停止'
+                    : segment.label ?? segment.text ?? 'AI 正在执行',
+                style: TextStyle(
+                    color:
+                        stoppedByUser ? AppColors.danger : AppColors.secondary,
                     fontSize: 12,
                     height: 1.45,
                     fontWeight: FontWeight.w600),
@@ -1744,6 +1751,21 @@ class _StatusSegment extends StatelessWidget {
       ],
     );
   }
+}
+
+Color _statusColor(ChatSegment segment, bool stoppedByUser) {
+  if (stoppedByUser) return AppColors.danger;
+  if (segment.icon == 'warn') return AppColors.warningDeep;
+  if (segment.icon == 'check') return AppColors.successDeep;
+  return AppColors.muted;
+}
+
+bool _isUserStoppedStatus(ChatSegment segment) {
+  final label = segment.label ?? segment.text ?? '';
+  return segment.stepId == 'interrupted' ||
+      segment.status == 'canceled' ||
+      label == '用户主动停止' ||
+      label == '已中断';
 }
 
 class _ToolSegment extends StatelessWidget {
@@ -1861,6 +1883,7 @@ class _ToolDetailsSheet extends StatelessWidget {
     final visibleInput = _toolVisibleInput(segment);
     final visibleOutput = _toolVisibleOutput(segment);
     final diff = _toolDiffText(segment);
+    final hasDiff = diff.trim().isNotEmpty;
     final title = _toolTitle(segment);
     return SafeArea(
       child: Padding(
@@ -1914,16 +1937,15 @@ class _ToolDetailsSheet extends StatelessWidget {
                 ],
               ),
               const SizedBox(height: 16),
-              if ((segment.command ?? '').trim().isNotEmpty)
+              if (!hasDiff && (segment.command ?? '').trim().isNotEmpty)
                 _SheetSection(title: '命令', child: _CodeBlock(segment.command!)),
-              if ((segment.summary ?? '').trim().isNotEmpty)
+              if (!hasDiff && (segment.summary ?? '').trim().isNotEmpty)
                 _SheetSection(child: _DetailBlock(segment.summary!)),
-              if (visibleInput.trim().isNotEmpty)
+              if (!hasDiff && visibleInput.trim().isNotEmpty)
                 _SheetSection(title: '输入', child: _CodeBlock(visibleInput)),
-              if (visibleOutput.trim().isNotEmpty)
+              if (!hasDiff && visibleOutput.trim().isNotEmpty)
                 _SheetSection(title: '输出', child: _CodeBlock(visibleOutput)),
-              if (diff.trim().isNotEmpty)
-                _SheetSection(title: '变更', child: _DiffBlock(diff)),
+              if (hasDiff) _SheetSection(title: '变更', child: _DiffBlock(diff)),
             ],
           ),
         ),
@@ -2302,7 +2324,7 @@ class _TypingText extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return const Text('正在思考...',
+    return const Text('正在思考',
         style: TextStyle(color: AppColors.muted, fontSize: 12));
   }
 }
@@ -2643,8 +2665,7 @@ Color _diffLineColor(String line) {
 bool _isPatchWrapperLine(String line) {
   return line.startsWith('*** Begin Patch') ||
       line.startsWith('*** End Patch') ||
-      RegExp(r'^\*\*\* (?:Add|Update|Delete) File: ').hasMatch(line) ||
-      line.startsWith('@@');
+      RegExp(r'^\*\*\* (?:Add|Update|Delete) File: ').hasMatch(line);
 }
 
 String _approvalMeta(ChatSegment segment) {

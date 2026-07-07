@@ -750,7 +750,7 @@ function killSession(session: CodexSession): void {
 function interruptSession(session: CodexSession): void {
   if (session.closed) return;
   flushTrace(session);
-  resolvePendingApprovals(session, "expired", "用户已中断当前 AI 会话。");
+  resolvePendingApprovals(session, "expired", "用户主动停止当前 AI 会话。");
   session.closed = true;
   try {
     session.rl.close();
@@ -839,26 +839,19 @@ function buildCodexTurnParams(
 ): Record<string, unknown> {
   const model = trimmedOrNull(req.codexModel);
   const reasoningEffort = codexReasoningEffort(req.codexReasoningEffort);
-  const collaborationMode = req.codexMode === "plan" ? "plan" : "default";
+  const inputPrompt = req.codexMode === "plan"
+    ? [
+        "请以计划模式处理这轮请求：先分析问题并给出清晰计划，不要修改文件、不要运行会改变环境的命令；如果需要进入实现，请等待用户明确确认。",
+        "",
+        req.prompt,
+      ].join("\n")
+    : req.prompt;
   const params: Record<string, unknown> = {
     threadId: threadInfo.threadId,
-    input: buildUserInput(req.prompt, images),
+    input: buildUserInput(inputPrompt, images),
   };
   if (model) params["model"] = model;
-  if (reasoningEffort) params["reasoning_effort"] = reasoningEffort;
-  if (collaborationMode === "plan") {
-    const settingsModel = model ?? threadInfo.model;
-    if (settingsModel) {
-      params["collaborationMode"] = {
-        mode: "plan",
-        settings: {
-          model: settingsModel,
-          reasoning_effort: reasoningEffort,
-          developer_instructions: null,
-        },
-      };
-    }
-  }
+  if (reasoningEffort) params["effort"] = reasoningEffort;
   return params;
 }
 
@@ -872,12 +865,13 @@ async function applyCodexGoal(
   const tokenBudget = typeof req.codexGoalTokenBudget === "number" && Number.isFinite(req.codexGoalTokenBudget)
     ? Math.max(1, Math.floor(req.codexGoalTokenBudget))
     : null;
-  await sendRequestWithReconnectRetry(session, "thread/goal/set", {
+  const params: Record<string, unknown> = {
     threadId,
     objective,
     status: "active",
-    tokenBudget,
-  });
+  };
+  if (tokenBudget !== null) params["tokenBudget"] = tokenBudget;
+  await sendRequestWithReconnectRetry(session, "thread/goal/set", params);
 }
 
 // ---------- Public API ----------
@@ -952,7 +946,8 @@ export async function runCodexChat(
       session.turnResolver = { resolve, reject };
     });
 
-    // 4. send turn/start with the user's prompt exactly as entered.
+    // 4. send turn/start. Plan mode is enforced through the prompt because the
+    // current Codex app-server protocol no longer accepts collaborationMode.
     await sendRequestWithReconnectRetry(session, "turn/start", buildCodexTurnParams(threadInfo, req, images));
 
     // 5. wait for turn/completed or error
@@ -1069,7 +1064,7 @@ export function stopCodexChat(aiSessionId: string): boolean {
     pending.reject(error);
   }
   session.pendingRequests.clear();
-  resolvePendingApprovals(session, "expired", "用户已中断当前 AI 会话。");
+  resolvePendingApprovals(session, "expired", "用户主动停止当前 AI 会话。");
   if (session.turnResolver) {
     session.turnResolver.reject(error);
     session.turnResolver = null;

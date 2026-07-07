@@ -1,13 +1,45 @@
 {
   "data": [
     {
+      "id": "page-chat-plan-mode",
+      "title": "AI 会话 - 计划模式",
+      "type": "page",
+      "version": 1,
+      "createdAt": 1783360000000,
+      "canvasData": {
+        "x": 0,
+        "y": 0,
+        "group": 0
+      },
+      "devMetadata": {
+        "htmlSrc": "pages/chat-plan-mode.html",
+        "interactions": []
+      }
+    },
+    {
+      "id": "page-chat-goal-mode",
+      "title": "AI 会话 - 目标模式",
+      "type": "page",
+      "version": 1,
+      "createdAt": 1783360100000,
+      "canvasData": {
+        "x": 620,
+        "y": 0,
+        "group": 0
+      },
+      "devMetadata": {
+        "htmlSrc": "pages/chat-goal-mode.html",
+        "interactions": []
+      }
+    },
+    {
       "id": "page-chat-session-composer-v2",
       "title": "AI 会话 - 输入框重设计",
       "type": "page",
       "version": 1,
       "createdAt": 1783326600000,
       "canvasData": {
-        "x": 0,
+        "x": 1240,
         "y": 0,
         "group": 0
       },
@@ -23,7 +55,7 @@
       "version": 1,
       "createdAt": 1783254000000,
       "canvasData": {
-        "x": 620,
+        "x": 1860,
         "y": 0,
         "group": 0
       },
@@ -39,7 +71,7 @@
       "version": 1,
       "createdAt": 1783351200000,
       "canvasData": {
-        "x": 1240,
+        "x": 2480,
         "y": 0,
         "group": 0
       },
@@ -55,7 +87,7 @@
       "version": 1,
       "createdAt": 1783350000000,
       "canvasData": {
-        "x": 1860,
+        "x": 3100,
         "y": 0,
         "group": 0
       },
@@ -71,7 +103,7 @@
       "version": 1,
       "createdAt": 1782513600000,
       "canvasData": {
-        "x": 2480,
+        "x": 3720,
         "y": 0,
         "group": 0
       },
@@ -87,7 +119,7 @@
       "version": 1,
       "createdAt": 1782513600000,
       "canvasData": {
-        "x": 3100,
+        "x": 4340,
         "y": 0,
         "group": 0
       },
@@ -103,7 +135,7 @@
       "version": 1,
       "createdAt": 1782513600000,
       "canvasData": {
-        "x": 3720,
+        "x": 4960,
         "y": 0,
         "group": 0
       },
@@ -119,7 +151,7 @@
       "version": 1,
       "createdAt": 1782513600000,
       "canvasData": {
-        "x": 4340,
+        "x": 5580,
         "y": 0,
         "group": 0
       },
@@ -135,7 +167,7 @@
       "version": 1,
       "createdAt": 1782513600000,
       "canvasData": {
-        "x": 4960,
+        "x": 6200,
         "y": 0,
         "group": 0
       },
@@ -151,7 +183,7 @@
       "version": 1,
       "createdAt": 1782513600000,
       "canvasData": {
-        "x": 5580,
+        "x": 6820,
         "y": 0,
         "group": 0
       },
@@ -167,7 +199,7 @@
       "version": 1,
       "createdAt": 1782667000000,
       "canvasData": {
-        "x": 6200,
+        "x": 7440,
         "y": 0,
         "group": 0
       },
@@ -183,7 +215,7 @@
       "version": 1,
       "createdAt": 1782667600000,
       "canvasData": {
-        "x": 6820,
+        "x": 8060,
         "y": 0,
         "group": 0
       },
@@ -199,7 +231,7 @@
       "version": 1,
       "createdAt": 1782665197000,
       "canvasData": {
-        "x": 7440,
+        "x": 8680,
         "y": 0,
         "group": 0
       },

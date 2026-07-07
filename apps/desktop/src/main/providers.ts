@@ -140,9 +140,37 @@ function runShellCommand(command: string, timeout = 300000, env?: NodeJS.Process
 }
 
 function normalizeRegistry(value: string | null | undefined): string {
-  const trimmed = (value ?? "").trim();
+  let trimmed = (value ?? "").trim();
+  for (let index = 0; index < 3; index += 1) {
+    try {
+      const parsed = JSON.parse(trimmed);
+      if (typeof parsed === "string") {
+        trimmed = parsed.trim();
+        continue;
+      }
+    } catch {
+      // Fall back to manual quote trimming below.
+    }
+    const unquoted = trimmed.replace(/^["']|["']$/g, "").trim();
+    if (unquoted === trimmed) break;
+    trimmed = unquoted;
+  }
   if (!trimmed || trimmed === "undefined" || trimmed === "null") return "https://registry.npmjs.org/";
   return trimmed.endsWith("/") ? trimmed : `${trimmed}/`;
+}
+
+function readUserNpmrcRegistry(): string | null {
+  try {
+    const npmrc = path.join(os.homedir(), ".npmrc");
+    if (!fs.existsSync(npmrc)) return null;
+    const line = fs.readFileSync(npmrc, "utf-8")
+      .split(/\r?\n/)
+      .find((item) => item.trim().startsWith("registry="));
+    if (!line) return null;
+    return line.slice(line.indexOf("=") + 1);
+  } catch {
+    return null;
+  }
 }
 
 function npmRegistryOptions() {
@@ -182,7 +210,7 @@ function markProviderAutoDetectComplete() {
 
 export async function getNpmRegistry(): Promise<NpmRegistryInfo> {
   const result = await runShellCommand("npm config get registry", 5000);
-  const registry = normalizeRegistry(result.status === 0 ? result.stdout : selectedNpmRegistry);
+  const registry = normalizeRegistry(result.status === 0 ? result.stdout : selectedNpmRegistry ?? readUserNpmrcRegistry());
   selectedNpmRegistry = registry;
   return {
     registry,
@@ -194,8 +222,7 @@ export async function getNpmRegistry(): Promise<NpmRegistryInfo> {
 
 export async function setNpmRegistry(registry: string): Promise<NpmRegistryInfo> {
   const next = normalizeRegistry(registry);
-  const safeRegistry = JSON.stringify(next);
-  const result = await runShellCommand(`npm config set registry ${safeRegistry}`, 10000);
+  const result = await runShellCommand(`npm config set registry ${next}`, 10000);
   if (result.status !== 0) {
     return {
       registry: next,
@@ -253,9 +280,20 @@ export async function probeNpmRegistries(): Promise<NpmRegistryInfo> {
 }
 
 async function commandExists(command: string): Promise<boolean> {
-  const result = process.platform === "win32"
-    ? await runCommand("cmd.exe", ["/d", "/s", "/c", "where", command], 3000)
-    : await runCommand("which", [command], 3000);
+  if (process.platform === "win32") {
+    const result = await runCommand("cmd.exe", ["/d", "/s", "/c", "where", command], 3000);
+    if (result.status === 0) return true;
+    const escapedCommand = command.replace(/'/g, "''");
+    const powershellResult = await runCommand("powershell.exe", [
+      "-NoProfile",
+      "-ExecutionPolicy",
+      "Bypass",
+      "-Command",
+      `if (Get-Command '${escapedCommand}' -ErrorAction SilentlyContinue) { exit 0 } else { exit 1 }`,
+    ], 3000);
+    return powershellResult.status === 0;
+  }
+  const result = await runCommand("which", [command], 3000);
   return result.status === 0;
 }
 
@@ -266,6 +304,34 @@ async function getCommandVersion(command: string): Promise<string | null> {
   if (result.status !== 0) return null;
   const out = (result.stdout || result.stderr || "").trim();
   return out.length > 0 ? out : null;
+}
+
+function globalNodeModulesCandidates(): string[] {
+  const candidates = new Set<string>();
+  if (process.platform === "win32") {
+    if (process.env.APPDATA) candidates.add(path.join(process.env.APPDATA, "npm", "node_modules"));
+    candidates.add(path.join(os.homedir(), "AppData", "Roaming", "npm", "node_modules"));
+  } else {
+    candidates.add(path.join(os.homedir(), ".npm-global", "lib", "node_modules"));
+    candidates.add("/usr/local/lib/node_modules");
+    candidates.add("/usr/lib/node_modules");
+  }
+  return [...candidates];
+}
+
+async function getGlobalNpmPackageVersion(packageName: string | undefined): Promise<string | null> {
+  if (!packageName) return null;
+  for (const root of globalNodeModulesCandidates()) {
+    const packageJson = path.join(root, packageName, "package.json");
+    try {
+      if (!fs.existsSync(packageJson)) continue;
+      const parsed = JSON.parse(fs.readFileSync(packageJson, "utf-8")) as { version?: unknown };
+      return typeof parsed.version === "string" && parsed.version ? parsed.version : null;
+    } catch {
+      // Continue with the next candidate.
+    }
+  }
+  return null;
 }
 
 function fileExists(p: string): boolean {
@@ -387,8 +453,10 @@ async function detectAiProvidersUncached(): Promise<ProviderStatus[]> {
   const npmRegistry = (await getNpmRegistry()).registry;
   return Promise.all(BUILTIN_PROVIDERS.map(async (provider) => {
     const metadata = PROVIDER_METADATA[provider.id] ?? {};
-    const installed = await commandExists(provider.command);
-    const version = installed ? await getCommandVersion(provider.command) : null;
+    const commandVersion = await getCommandVersion(provider.command);
+    const packageVersion = commandVersion ? null : await getGlobalNpmPackageVersion(metadata.npmPackage);
+    const version = commandVersion ?? packageVersion;
+    const installed = version !== null || await commandExists(provider.command);
     const authStatus = detectAuthStatus(provider.id);
     const { latestVersion, versionCheckError } = await detectLatestVersion(provider.id, npmRegistry);
     const versionComparison = installed ? compareVersions(version, latestVersion) : null;

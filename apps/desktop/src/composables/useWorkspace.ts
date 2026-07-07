@@ -1092,12 +1092,12 @@ async function sendPrompt(prompt: string, images: ChatImageAttachment[] = [], co
       if (!pending) {
         const wasStopped = stoppedAiSessions.delete(sessionId);
         pushChatDebugEvent(wasStopped
-          ? `${providerName} 执行已中断`
+          ? `${providerName} 执行已由用户主动停止`
           : `${providerName} 进程已退出：providerSessionId ${providerSessionId ? "已更新" : "为空"}`);
         setChatRunState(sessionId, {
           active: false,
           phase: "done",
-          title: wasStopped ? "已中断" : `${providerName} 已完成`,
+          title: wasStopped ? "用户主动停止" : `${providerName} 已完成`,
           detail: wasStopped
             ? "本次执行已停止，已保留中断前的执行过程。"
             : `执行已结束，用时 ${formatElapsedMs(elapsedMs)}。正在等待下一条消息。`,
@@ -1133,7 +1133,7 @@ async function sendPrompt(prompt: string, images: ChatImageAttachment[] = [], co
       });
     }).catch((error) => {
       if (stoppedAiSessions.delete(sessionId)) {
-        pushChatDebugEvent(`${providerName} 执行已中断`);
+        pushChatDebugEvent(`${providerName} 执行已由用户主动停止`);
         return;
       }
       pushChatDebugEvent(`${providerName} 执行失败：${String(error)}`);
@@ -1370,11 +1370,12 @@ function interruptPendingAssistant(sessionId: string) {
   pending.steps.set("interrupted", {
     type: "status",
     stepId: "interrupted",
-    label: "已中断",
+    label: "用户主动停止",
     icon: "warn",
+    status: "canceled",
   });
   syncPendingAssistantSegments(sessionId, true);
-  persistPendingAssistantSnapshot(sessionId, pending, "已中断");
+  persistPendingAssistantSnapshot(sessionId, pending, "用户主动停止");
   pendingAssistants.delete(sessionId);
   assistantDrafts.delete(sessionId);
   stopRunningElapsedTimerIfIdle();
@@ -1404,7 +1405,7 @@ async function stopActiveAiChat() {
   setChatRunState(sessionId, {
     active: false,
     phase: "done",
-    title: "已中断",
+    title: "用户主动停止",
     detail: "本次执行已停止，可以继续发送新消息。",
   });
 }
@@ -1586,7 +1587,7 @@ async function handleAiTraceUpdateEvent(event: AiTraceUpdateEvent) {
     setChatRunState(event.aiSessionId, {
       active: false,
       phase: "done",
-      title: "已中断",
+      title: "用户主动停止",
       detail: "本次执行已停止，已保留中断前的执行过程。",
     });
     return;

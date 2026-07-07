@@ -201,7 +201,7 @@ const contentGroups = computed<RenderGroup[]>(() => {
   const segments = visibleSegments.value;
   const firstProcessIndex = segments.findIndex(isProcessGroupSegment);
   if (firstProcessIndex < 0) {
-    // pending 且无 process segment 时，强制创建空 process group 占位（显示"正在思考..."）
+    // pending 且无 process segment 时，强制创建空 process group 占位（显示"正在思考"）
     if (props.message.pending && props.message.role === "assistant" && !props.message.images?.length) {
       return [{ type: "process", segments: [] as ChatSegmentType[] }];
     }
@@ -328,7 +328,11 @@ function processGroupIsThinkingOnly(group: Extract<RenderGroup, { type: "process
 function processGroupStaticTitle(group: Extract<RenderGroup, { type: "process" }>, groupIndex: number) {
   if (!processGroupIsThinkingOnly(group)) return processGroupTitle(group, groupIndex);
   const thinkingStage = processBodyItems(group).find((item): item is Extract<ProcessBodyItem, { type: "stage" }> => item.type === "stage");
-  return thinkingStage?.title ?? "正在思考...";
+  return thinkingStage?.title ?? "正在思考";
+}
+
+function processGroupIsThinking(group: Extract<RenderGroup, { type: "process" }>) {
+  return processGroupIsThinkingOnly(group) && props.message.pending;
 }
 
 function processGroupDefaultOpen(group: Extract<RenderGroup, { type: "process" }>, groupIndex: number) {
@@ -455,7 +459,7 @@ function processBodyItems(group: Extract<RenderGroup, { type: "process" }>): Pro
     items.push({ type: "segment", segment });
   }
   flushStageRun();
-  // pending 且最后一个 stage 无 running item 时，追加"正在思考..."占位 stage
+  // pending 且最后一个 stage 无 running item 时，追加"正在思考"占位 stage
   // 对应 Codex turn/started 后、下一个 item/started 前的空档期
   if (props.message.pending) {
     const lastItem = items[items.length - 1];
@@ -465,7 +469,7 @@ function processBodyItems(group: Extract<RenderGroup, { type: "process" }>): Pro
     if (!lastStageHasRunning) {
       items.push({
         type: "stage",
-        title: "正在思考...",
+        title: "正在思考",
         segments: [{
           type: "status",
           stepId: "pending-thinking-placeholder",
@@ -503,7 +507,7 @@ function isProcessConclusionSegment(segment: ChatSegmentType) {
 
 function processStageTitle(segments: ChatSegmentType[]) {
   const runningThinking = segments.find((segment) => isThinkingStatusSegment(segment) && segment.status === "running");
-  if (runningThinking) return "正在思考...";
+  if (runningThinking) return "正在思考";
   const toolSegments = segments.filter((segment): segment is Extract<ChatSegmentType, { type: "tool" }> => segment.type === "tool");
   const aggregateTitle = aggregateToolStageTitle(toolSegments);
   if (aggregateTitle) return aggregateTitle;
@@ -516,9 +520,9 @@ function processStageTitle(segments: ChatSegmentType[]) {
   const latestTool = [...toolSegments].reverse()[0];
   if (latestTool) return toolStageTitle(latestTool);
   const latestStatus = [...segments].reverse().find((segment) => segment.type === "status");
-  if (latestStatus?.type === "status") return latestStatus.label;
+  if (latestStatus?.type === "status") return isUserStoppedStatus(latestStatus) ? "用户主动停止" : latestStatus.label;
   const hasThought = segments.some((segment) => segment.type === "thought");
-  if (hasThought) return "正在思考...";
+  if (hasThought) return "正在思考";
   return props.message.pending ? "正在处理" : "已处理";
 }
 
@@ -626,6 +630,10 @@ function processStageDurationMs(segments: ChatSegmentType[]) {
 function isThinkingStage(segments: ChatSegmentType[]) {
   return segments.length > 0 && segments.every(isThinkingStageSegment);
 }
+
+function thinkingStageRunning(segments: ChatSegmentType[]) {
+  return isThinkingStage(segments) && processStageRunning(segments);
+}
 function visibleStageSegments(segments: ChatSegmentType[]) {
   return isThinkingStage(segments) ? [] : segments;
 }
@@ -642,6 +650,17 @@ function processStageRunning(segments: ChatSegmentType[]) {
       || segment.type === "approval" && segment.status === "pending"
       || isThinkingStatusSegment(segment) && segment.status === "running";
   });
+}
+
+function processStageStoppedByUser(segments: ChatSegmentType[]) {
+  return segments.some((segment) => segment.type === "status" && isUserStoppedStatus(segment));
+}
+
+function isUserStoppedStatus(segment: Extract<ChatSegmentType, { type: "status" }>) {
+  return segment.stepId === "interrupted"
+    || segment.status === "canceled"
+    || segment.label === "用户主动停止"
+    || segment.label === "已中断";
 }
 
 function isImageOnlyPromptText(text: string) {
@@ -830,7 +849,7 @@ function countCommandOutputSignals(text: string) {
         <div v-else-if="processGroupIsThinkingOnly(group)" class="chat-process-group thinking-only">
           <div class="chat-process-group-summary static">
             <span class="chat-process-group-icon" :class="{ running: message.pending }" aria-hidden="true"></span>
-            <span>{{ processGroupStaticTitle(group, index) }}</span>
+            <span :class="{ 'chat-shimmer': processGroupIsThinking(group) }">{{ processGroupStaticTitle(group, index) }}</span>
           </div>
         </div>
         <details v-else class="chat-process-group" :open="processGroupOpen(group, index)" @toggle="onProcessGroupToggle($event, index)">
@@ -843,21 +862,20 @@ function countCommandOutputSignals(text: string) {
           </summary>
           <div class="chat-process-group-body">
             <div v-if="!processBodyItems(group).length" class="chat-pending-line">
-              <span>正在思考</span>
-              <span class="thinking-dots" aria-hidden="true"><i></i><i></i><i></i></span>
+              <span class="chat-shimmer">正在思考</span>
             </div>
             <template v-else v-for="(item, itemIndex) in processBodyItems(group)" :key="itemIndex">
               <ChatSegment v-if="item.type === 'segment'" :segment="item.segment" :ai-session-id="aiSessionId" />
               <div v-else-if="isThinkingStage(item.segments)" class="chat-process-stage thinking-only">
-                <div class="chat-process-stage-header static">
-                  <span class="chat-process-stage-dot" :class="{ running: processStageRunning(item.segments) }" aria-hidden="true"></span>
-                  <strong>{{ item.title }}</strong>
+                <div class="chat-process-stage-header static" :class="{ danger: processStageStoppedByUser(item.segments) }">
+                  <span class="chat-process-stage-dot" :class="{ running: processStageRunning(item.segments), danger: processStageStoppedByUser(item.segments) }" aria-hidden="true"></span>
+                  <strong :class="{ 'chat-shimmer': thinkingStageRunning(item.segments) }">{{ item.title }}</strong>
                 </div>
               </div>
               <details v-else class="chat-process-stage" open>
-                <summary class="chat-process-stage-header">
-                  <span class="chat-process-stage-dot" :class="{ running: processStageRunning(item.segments) }" aria-hidden="true"></span>
-                  <strong>{{ item.title }}</strong>
+                <summary class="chat-process-stage-header" :class="{ danger: processStageStoppedByUser(item.segments) }">
+                  <span class="chat-process-stage-dot" :class="{ running: processStageRunning(item.segments), danger: processStageStoppedByUser(item.segments) }" aria-hidden="true"></span>
+                  <strong :class="{ 'chat-shimmer': thinkingStageRunning(item.segments) }">{{ item.title }}</strong>
                   <svg class="chat-process-stage-chevron" viewBox="0 0 16 16" fill="none" aria-hidden="true">
                     <path d="M5 6.5 8 9.5l3-3" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" />
                   </svg>
@@ -915,14 +933,14 @@ function countCommandOutputSignals(text: string) {
             <template v-for="(item, itemIndex) in processBodyItems(activeMobileProcessGroup.group)" :key="itemIndex">
               <ChatSegment v-if="item.type === 'segment'" :segment="item.segment" :ai-session-id="aiSessionId" />
               <div v-else-if="isThinkingStage(item.segments)" class="chat-process-stage thinking-only">
-                <div class="chat-process-stage-header static">
-                  <span class="chat-process-stage-dot" :class="{ running: processStageRunning(item.segments) }" aria-hidden="true"></span>
+                <div class="chat-process-stage-header static" :class="{ danger: processStageStoppedByUser(item.segments) }">
+                  <span class="chat-process-stage-dot" :class="{ running: processStageRunning(item.segments), danger: processStageStoppedByUser(item.segments) }" aria-hidden="true"></span>
                   <strong>{{ item.title }}</strong>
                 </div>
               </div>
               <details v-else class="chat-process-stage" open>
-                <summary class="chat-process-stage-header">
-                  <span class="chat-process-stage-dot" :class="{ running: processStageRunning(item.segments) }" aria-hidden="true"></span>
+                <summary class="chat-process-stage-header" :class="{ danger: processStageStoppedByUser(item.segments) }">
+                  <span class="chat-process-stage-dot" :class="{ running: processStageRunning(item.segments), danger: processStageStoppedByUser(item.segments) }" aria-hidden="true"></span>
                   <strong>{{ item.title }}</strong>
                   <svg class="chat-process-stage-chevron" viewBox="0 0 16 16" fill="none" aria-hidden="true">
                     <path d="M5 6.5 8 9.5l3-3" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" />
