@@ -42,6 +42,16 @@ type UserDevice = {
   createdAt: string;
 };
 
+type DeviceSession = {
+  sessionId: string;
+  name: string;
+  backend: string;
+  tool: string;
+  status: string;
+  cwd: string;
+  recentOutput: string | null;
+};
+
 const token = ref(localStorage.getItem("user-admin-token") ?? "");
 const loginMode = ref<"login" | "register">("login");
 const authLoading = ref(false);
@@ -56,6 +66,9 @@ const userDevices = ref<UserDevice[]>([]);
 const devicesLoading = ref(false);
 const editingDeviceId = ref<string | null>(null);
 const editingDeviceName = ref("");
+const activeDevice = ref<UserDevice | null>(null);
+const deviceSessions = ref<DeviceSession[]>([]);
+const sessionsLoading = ref(false);
 const loginForm = reactive({
   email: "admin",
   password: "070900gl",
@@ -350,6 +363,24 @@ async function saveDeviceName(device: UserDevice) {
     Message.error(error instanceof Error ? error.message : String(error));
   }
 }
+
+async function openDeviceSessions(device: UserDevice) {
+  activeDevice.value = device;
+  sessionsLoading.value = true;
+  try {
+    deviceSessions.value = await requestAPI<DeviceSession[]>(`/admin/devices/${device.id}/sessions`);
+  } catch (error) {
+    Message.error(error instanceof Error ? error.message : String(error));
+    deviceSessions.value = [];
+  } finally {
+    sessionsLoading.value = false;
+  }
+}
+
+function backToDevices() {
+  activeDevice.value = null;
+  deviceSessions.value = [];
+}
 </script>
 
 <template>
@@ -584,55 +615,95 @@ async function saveDeviceName(device: UserDevice) {
     <a-drawer
       v-model:visible="drawerVisible"
       :title="activeUser ? `${activeUser.account} 的设备` : '用户设备'"
-      :width="480"
+      :width="520"
       :footer="false"
     >
-      <a-spin :loading="devicesLoading" style="width: 100%">
-        <a-empty v-if="!devicesLoading && userDevices.length === 0" description="暂无设备" />
-        <a-list v-else :bordered="false">
-          <a-list-item v-for="device in userDevices" :key="device.id">
-            <a-list-item-meta>
-              <template #title>
-                <a-space>
-                  <icon-desktop />
-                  <template v-if="editingDeviceId === device.id">
-                    <a-input
-                      v-model="editingDeviceName"
-                      size="small"
-                      style="width: 200px"
-                      @keyup.enter="saveDeviceName(device)"
-                      @keyup.escape="cancelEditDeviceName"
-                    />
-                    <a-button type="text" size="mini" status="success" @click="saveDeviceName(device)">
-                      保存
-                    </a-button>
-                    <a-button type="text" size="mini" @click="cancelEditDeviceName">
-                      取消
-                    </a-button>
-                  </template>
-                  <template v-else>
-                    <span>{{ device.name }}</span>
-                    <a-button type="text" size="mini" @click="startEditDeviceName(device)">
-                      <template #icon><icon-edit /></template>
-                    </a-button>
-                  </template>
-                  <a-tag :color="device.online ? 'green' : 'gray'" size="small">
-                    {{ device.online ? "在线" : "离线" }}
-                  </a-tag>
-                </a-space>
-              </template>
-              <template #description>
-                <a-space direction="vertical" :size="4">
-                  <span>系统：{{ device.os }}</span>
-                  <span>设备 ID：{{ device.id }}</span>
-                  <span>最近活跃：{{ formatDate(device.lastSeenAt) }}</span>
-                  <span>创建时间：{{ formatDate(device.createdAt) }}</span>
-                </a-space>
-              </template>
-            </a-list-item-meta>
-          </a-list-item>
-        </a-list>
-      </a-spin>
+      <template v-if="!activeDevice">
+        <a-spin :loading="devicesLoading" style="width: 100%">
+          <a-empty v-if="!devicesLoading && userDevices.length === 0" description="暂无设备" />
+          <a-list v-else :bordered="false">
+            <a-list-item v-for="device in userDevices" :key="device.id" @click="openDeviceSessions(device)" style="cursor: pointer">
+              <a-list-item-meta>
+                <template #title>
+                  <a-space>
+                    <icon-desktop />
+                    <template v-if="editingDeviceId === device.id">
+                      <a-input
+                        v-model="editingDeviceName"
+                        size="small"
+                        style="width: 200px"
+                        @keyup.enter="saveDeviceName(device)"
+                        @keyup.escape="cancelEditDeviceName"
+                        @click.stop
+                      />
+                      <a-button type="text" size="mini" status="success" @click.stop="saveDeviceName(device)">
+                        保存
+                      </a-button>
+                      <a-button type="text" size="mini" @click.stop="cancelEditDeviceName">
+                        取消
+                      </a-button>
+                    </template>
+                    <template v-else>
+                      <span>{{ device.name }}</span>
+                      <a-button type="text" size="mini" @click.stop="startEditDeviceName(device)">
+                        <template #icon><icon-edit /></template>
+                      </a-button>
+                    </template>
+                    <a-tag :color="device.online ? 'green' : 'gray'" size="small">
+                      {{ device.online ? "在线" : "离线" }}
+                    </a-tag>
+                  </a-space>
+                </template>
+                <template #description>
+                  <a-space direction="vertical" :size="4">
+                    <span>系统：{{ device.os }}</span>
+                    <span>设备 ID：{{ device.id }}</span>
+                    <span>最近活跃：{{ formatDate(device.lastSeenAt) }}</span>
+                    <span>创建时间：{{ formatDate(device.createdAt) }}</span>
+                  </a-space>
+                </template>
+              </a-list-item-meta>
+            </a-list-item>
+          </a-list>
+        </a-spin>
+      </template>
+
+      <template v-else>
+        <div style="margin-bottom: 16px">
+          <a-button type="text" @click="backToDevices">
+            <template #icon><icon-refresh /></template>
+            返回设备列表
+          </a-button>
+          <span style="margin-left: 12px; color: #4e5969">
+            {{ activeDevice.name }} 的会话
+          </span>
+        </div>
+        <a-spin :loading="sessionsLoading" style="width: 100%">
+          <a-empty v-if="!sessionsLoading && deviceSessions.length === 0" description="暂无会话" />
+          <a-list v-else :bordered="false">
+            <a-list-item v-for="session in deviceSessions" :key="session.sessionId">
+              <a-list-item-meta>
+                <template #title>
+                  <a-space>
+                    <span>{{ session.name }}</span>
+                    <a-tag :color="session.status === 'active' ? 'green' : 'gray'" size="small">
+                      {{ session.status }}
+                    </a-tag>
+                    <a-tag size="small">{{ session.tool }}</a-tag>
+                  </a-space>
+                </template>
+                <template #description>
+                  <a-space direction="vertical" :size="4">
+                    <span>后端：{{ session.backend }}</span>
+                    <span>工作目录：{{ session.cwd }}</span>
+                    <span v-if="session.recentOutput" class="session-output">最近输出：{{ session.recentOutput }}</span>
+                  </a-space>
+                </template>
+              </a-list-item-meta>
+            </a-list-item>
+          </a-list>
+        </a-spin>
+      </template>
     </a-drawer>
   </a-layout>
 </template>
@@ -857,6 +928,16 @@ async function saveDeviceName(device: UserDevice) {
 
 :deep(.arco-table-tr:hover) {
   background-color: #f2f3f5;
+}
+
+.session-output {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12px;
+  color: #86909c;
+  max-width: 400px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .password-alert {

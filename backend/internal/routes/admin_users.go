@@ -237,6 +237,7 @@ func (h *Handler) adminUserByID(ctx context.Context, userID string) (adminSystem
 		   u.email,
 		   COALESCE(o.display_name, '') AS display_name,
 		   CASE WHEN o.provider IS NULL THEN 'password' ELSE o.provider END AS auth_mode,
+		   u.disabled,
 		   u.created_at,
 		   COALESCE(d.desktop_device_count, 0) AS desktop_device_count,
 		   COALESCE(d.online_desktop_count, 0) AS online_desktop_count,
@@ -279,6 +280,7 @@ func (h *Handler) adminUserByID(ctx context.Context, userID string) (adminSystem
 		&user.Email,
 		&user.DisplayName,
 		&user.AuthMode,
+		&user.Disabled,
 		&user.CreatedAt,
 		&user.DesktopDeviceCount,
 		&user.OnlineDesktopCount,
@@ -298,6 +300,48 @@ func (h *Handler) adminUserByID(ctx context.Context, userID string) (adminSystem
 		user.Status = "offline"
 	}
 	return user, nil
+}
+
+type adminSessionResponse struct {
+	SessionId    string  `json:"sessionId"`
+	Name         string  `json:"name"`
+	Backend      string  `json:"backend"`
+	Tool         string  `json:"tool"`
+	Status       string  `json:"status"`
+	Cwd          string  `json:"cwd"`
+	RecentOutput *string `json:"recentOutput"`
+}
+
+func (h *Handler) adminListDeviceSessions(w http.ResponseWriter, r *http.Request) {
+	if !h.requireAdminUser(w, r) {
+		return
+	}
+	deviceID := r.PathValue("deviceId")
+
+	rows, err := h.DB.Pool.Query(r.Context(),
+		"SELECT session_id, name, backend, tool, status, cwd, recent_output FROM terminal_sessions WHERE device_id = $1 ORDER BY name",
+		deviceID,
+	)
+	if err != nil {
+		writeInternal(w)
+		return
+	}
+	defer rows.Close()
+
+	sessions := []adminSessionResponse{}
+	for rows.Next() {
+		var s adminSessionResponse
+		if err := rows.Scan(&s.SessionId, &s.Name, &s.Backend, &s.Tool, &s.Status, &s.Cwd, &s.RecentOutput); err != nil {
+			writeInternal(w)
+			return
+		}
+		sessions = append(sessions, s)
+	}
+	if err := rows.Err(); err != nil {
+		writeInternal(w)
+		return
+	}
+	writeJSON(w, http.StatusOK, sessions)
 }
 
 func (h *Handler) requireAdminUser(w http.ResponseWriter, r *http.Request) bool {
