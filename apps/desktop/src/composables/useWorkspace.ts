@@ -34,6 +34,7 @@ const updateDownloadProgress = ref<AppUpdateDownloadProgress | null>(null);
 const chatMessages = ref<ChatMessage[]>([
   { role: "system", text: "创建 AI 会话后，这里会变成聊天界面。" },
 ]);
+const chatMessagesBySessionId = ref<Record<string, ChatMessage[]>>({});
 const shellBuffers = ref<Record<string, string>>({});
 const liveShellSessions = ref<Record<string, boolean>>({});
 const thinkingSessionIds = ref<Record<string, boolean>>({});
@@ -319,6 +320,45 @@ function chatClientId(prefix: string) {
   return `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
+function setChatMessagesForSession(sessionId: string, messages: ChatMessage[]) {
+  chatMessagesBySessionId.value = {
+    ...chatMessagesBySessionId.value,
+    [sessionId]: messages,
+  };
+  if (activeAiSession.value?.id === sessionId) {
+    chatMessages.value = messages;
+  }
+}
+
+function chatMessagesForSession(sessionId: string) {
+  return activeAiSession.value?.id === sessionId
+    ? chatMessages.value
+    : chatMessagesBySessionId.value[sessionId] ?? [];
+}
+
+function replaceCurrentChatMessages(messages: ChatMessage[]) {
+  const sessionId = activeAiSession.value?.id;
+  if (sessionId) {
+    setChatMessagesForSession(sessionId, messages);
+    return;
+  }
+  chatMessages.value = messages;
+}
+
+function appendCurrentChatMessage(message: ChatMessage) {
+  replaceCurrentChatMessages([...chatMessages.value, message]);
+}
+
+function appendChatMessageForSession(sessionId: string, message: ChatMessage) {
+  setChatMessagesForSession(sessionId, [...chatMessagesForSession(sessionId), message]);
+}
+
+function cacheActiveChatMessages() {
+  const sessionId = activeAiSession.value?.id;
+  if (!sessionId) return;
+  setChatMessagesForSession(sessionId, chatMessages.value);
+}
+
 function projectShellSessionId(projectPath: string) {
   return `project:${projectPath}`;
 }
@@ -338,6 +378,7 @@ watch(providers, (next) => {
 
 watch(selectedProjectPath, () => {
   if (activeAiSession.value && selectedProjectPath.value && activeAiSession.value.summary !== selectedProjectPath.value) {
+    cacheActiveChatMessages();
     activeAiSession.value = null;
     chatMessages.value = [];
     aiSessionTitle.value = "新的 AI CLI 会话";
@@ -484,6 +525,7 @@ async function removeProject(project: WorkspaceProject) {
       selectedProjectPath.value = projects.value[0]?.path ?? "";
     }
     if (activeAiSession.value?.summary === project.path) {
+      cacheActiveChatMessages();
       activeAiSession.value = null;
       chatMessages.value = [];
     }
@@ -513,6 +555,7 @@ function selectProjectPath(path: string) {
 }
 
 function resetChatControlsForNewSession(path: string) {
+  cacheActiveChatMessages();
   activeAiSession.value = null;
   chatMessages.value = [];
   aiSessionTitle.value = "新的 AI CLI 会话";
@@ -530,6 +573,7 @@ async function createAiSessionForProject(path: string, providerId?: string) {
 }
 
 async function attachAiSessionForProject(path: string, terminalSessionId: string, providerId: string) {
+  cacheActiveChatMessages();
   activeAiSession.value = null;
   chatMessages.value = [];
   selectedProjectPath.value = path;
@@ -542,6 +586,7 @@ async function attachAiSessionForProject(path: string, terminalSessionId: string
 }
 
 function prepareProjectSession(path: string, action: "create" | "attach") {
+  cacheActiveChatMessages();
   activeAiSession.value = null;
   chatMessages.value = [];
   aiSessionTitle.value = "新的 AI CLI 会话";
@@ -650,12 +695,15 @@ async function restartShellForProject(projectPath: string) {
 
 async function setActiveAiSession(session: AiSession) {
   await initAiEventListeners();
-  if (activeAiSession.value?.id) await saveAssistantDraft(activeAiSession.value.id);
+  if (activeAiSession.value?.id) {
+    cacheActiveChatMessages();
+    await saveAssistantDraft(activeAiSession.value.id);
+  }
   activeAiSession.value = session;
   markSessionRead(session.id);
   syncChatControlsWithSession(session);
   switchView("aiSessions");
-  chatMessages.value = [];
+  chatMessages.value = chatMessagesBySessionId.value[session.id] ?? [];
   void refreshShellLiveState(session.id);
   await loadAiSessionHistory(session.id);
 }
@@ -875,14 +923,14 @@ async function loadAiSessionHistory(sessionId: string, options: { force?: boolea
       restorePendingSessionMessages(sessionId, history);
       return;
     }
-    chatMessages.value = history;
+    setChatMessagesForSession(sessionId, history);
   } catch (error) {
     if (activeAiSession.value?.id !== sessionId) return;
     if (pendingAssistants.has(sessionId) && !options.force) {
       restorePendingSessionMessages(sessionId);
       return;
     }
-    chatMessages.value = [{ role: "error", text: `读取历史失败：${String(error)}` }];
+    setChatMessagesForSession(sessionId, [{ role: "error", text: `读取历史失败：${String(error)}` }]);
   }
 }
 
@@ -896,7 +944,7 @@ function restorePendingSessionMessages(sessionId: string, history: ChatMessage[]
   } else {
     base.push(pending.message);
   }
-  chatMessages.value = dedupeAdjacentChatMessages(base);
+  setChatMessagesForSession(sessionId, dedupeAdjacentChatMessages(base));
   return true;
 }
 
@@ -949,7 +997,7 @@ async function sendPrompt(prompt: string, images: ChatImageAttachment[] = [], co
     return;
   }
   if (activeAiSession.value.archivedAt) {
-    chatMessages.value.push({ role: "error", text: "这个会话已归档。请先在“已归档”列表中恢复，再继续发送消息。" });
+    appendCurrentChatMessage({ role: "error", text: "这个会话已归档。请先在“已归档”列表中恢复，再继续发送消息。" });
     return;
   }
   const sessionId = activeAiSession.value.id;
@@ -958,7 +1006,7 @@ async function sendPrompt(prompt: string, images: ChatImageAttachment[] = [], co
   const runtimeName = providerRuntimeName(providerId);
   const projectPath = activeAiSession.value.summary || selectedProjectPath.value;
   if (!supportedChatProviders.has(providerId)) {
-    chatMessages.value.push({
+    appendCurrentChatMessage({
       role: "error",
       segments: [{
         type: "error",
@@ -970,18 +1018,18 @@ async function sendPrompt(prompt: string, images: ChatImageAttachment[] = [], co
     return;
   }
   if (!projectPath) {
-    chatMessages.value.push({ role: "error", text: `当前 ${providerName} 会话没有项目路径，请先在左侧选择项目。` });
+    appendCurrentChatMessage({ role: "error", text: `当前 ${providerName} 会话没有项目路径，请先在左侧选择项目。` });
     return;
   }
   if (pendingAssistants.has(sessionId)) {
-    chatMessages.value.push({ role: "error", text: "上一条消息还在处理，请等它完成后再发送。" });
+    appendCurrentChatMessage({ role: "error", text: "上一条消息还在处理，请等它完成后再发送。" });
     return;
   }
   await saveAssistantDraft(sessionId);
   const promptForSession = trimmed || `查看这 ${plainImages.length} 张图片`;
   const displayText = trimmed;
   renameUntitledSession(sessionId, promptForSession);
-  chatMessages.value.push({ clientId: chatClientId("user"), role: "user", text: displayText, images: plainImages });
+  appendChatMessageForSession(sessionId, { clientId: chatClientId("user"), role: "user", text: displayText, images: plainImages });
   const assistantClientId = chatClientId("assistant");
   const assistantMessage: ChatMessage = {
     clientId: assistantClientId,
@@ -994,7 +1042,7 @@ async function sendPrompt(prompt: string, images: ChatImageAttachment[] = [], co
       icon: "think",
     }],
   };
-  chatMessages.value.push(assistantMessage);
+  appendChatMessageForSession(sessionId, assistantMessage);
   pendingAssistants.set(sessionId, {
     clientId: assistantClientId,
     message: assistantMessage,
@@ -1129,21 +1177,6 @@ async function sendPrompt(prompt: string, images: ChatImageAttachment[] = [], co
   }
 }
 
-function activateIncomingAiSession(sessionId: string) {
-  if (activeAiSession.value?.id === sessionId) return true;
-  const session = aiSessions.value.find((item) => item.id === sessionId);
-  if (!session) return false;
-  pushChatDebugEvent(`移动端发起执行，桌面端切换到会话：${sessionId.slice(0, 8)}`);
-  if (activeAiSession.value?.id) void saveAssistantDraft(activeAiSession.value.id);
-  activeAiSession.value = session;
-  markSessionRead(session.id);
-  syncChatControlsWithSession(session);
-  switchView("aiSessions");
-  chatMessages.value = [];
-  void refreshShellLiveState(session.id);
-  return true;
-}
-
 async function ensureIncomingPendingAssistantAfterRefresh(sessionId: string) {
   if (pendingAssistants.has(sessionId)) return pendingAssistants.get(sessionId) ?? null;
   await loadLocalWorkspace();
@@ -1154,9 +1187,13 @@ async function ensureIncomingPendingAssistantAfterRefresh(sessionId: string) {
 function ensureIncomingPendingAssistant(sessionId: string, history: ChatMessage[] = []) {
   const existing = pendingAssistants.get(sessionId);
   if (existing) return existing;
-  if (!activateIncomingAiSession(sessionId)) return null;
+  const session = activeAiSession.value?.id === sessionId
+    ? activeAiSession.value
+    : aiSessions.value.find((item) => item.id === sessionId);
+  if (!session) return null;
   const providerName = providerNameForSession(sessionId);
-  if (history.length) chatMessages.value = history;
+  if (history.length) setChatMessagesForSession(sessionId, history);
+  if (activeAiSession.value?.id !== sessionId) markSessionUnread(sessionId);
   const assistantClientId = chatClientId("assistant");
   const assistantMessage: ChatMessage = {
     clientId: assistantClientId,
@@ -1169,7 +1206,7 @@ function ensureIncomingPendingAssistant(sessionId: string, history: ChatMessage[
       icon: "think",
     }],
   };
-  chatMessages.value.push(assistantMessage);
+  appendChatMessageForSession(sessionId, assistantMessage);
   const pending: PendingAssistant = {
     clientId: assistantClientId,
     message: assistantMessage,
@@ -1453,15 +1490,16 @@ function patchPendingAssistant(sessionId: string, patch: Partial<ChatMessage>) {
   pending.message = nextMessage;
   const draft = assistantDrafts.get(sessionId);
   if (draft) assistantDrafts.set(sessionId, { message: nextMessage, savedText: draft.savedText });
-  if (activeAiSession.value?.id !== sessionId) return nextMessage;
   let replaced = false;
-  chatMessages.value = chatMessages.value.map((message) => (
+  const nextMessages = chatMessagesForSession(sessionId).map((message) => (
     message.clientId === pending.clientId || message === currentMessage
       ? (replaced = true, nextMessage)
       : message
   ));
   if (!replaced) {
-    chatMessages.value = [...chatMessages.value, nextMessage];
+    setChatMessagesForSession(sessionId, [...nextMessages, nextMessage]);
+  } else {
+    setChatMessagesForSession(sessionId, nextMessages);
   }
   return nextMessage;
 }
@@ -1569,7 +1607,10 @@ async function handleAiTraceUpdateEvent(event: AiTraceUpdateEvent) {
       segments: mergedSegments,
     });
   } else if (activeAiSession.value?.id === event.aiSessionId) {
-    chatMessages.value = mergeCodexTraceIntoMessages(chatMessages.value, event.trace);
+    setChatMessagesForSession(
+      event.aiSessionId,
+      mergeCodexTraceIntoMessages(chatMessagesForSession(event.aiSessionId), event.trace),
+    );
   }
 
   if (thinkingSessionIds.value[event.aiSessionId] !== pendingState) {
@@ -1791,6 +1832,7 @@ function refreshChatMessages() {
 }
 
 async function saveAssistantDraft(sessionId: string) {
+  if (pendingAssistants.has(sessionId)) return;
   const draft = assistantDrafts.get(sessionId);
   const text = extractAssistantText(draft?.message.text?.trim() ?? "");
   if (!draft || !text || text === draft.savedText) return;
@@ -1841,12 +1883,15 @@ async function archiveAiSession(sessionId: string, archived: boolean) {
     const session = await desktopApi.archiveLocalAiSession(sessionId, archived);
     aiSessions.value = [session, ...aiSessions.value.filter((item) => item.id !== session.id)];
     if (archived && activeAiSession.value?.id === session.id) {
+      cacheActiveChatMessages();
       activeAiSession.value = null;
       chatMessages.value = [{ role: "system", text: "会话已归档。可以在最近 AI 会话的“已归档”中恢复。" }];
     }
     if (!archived) showArchivedSessions.value = false;
   } catch (error) {
-    chatMessages.value.push({ role: "error", text: `${archived ? "归档" : "恢复"}失败：${String(error)}` });
+    if (activeAiSession.value?.id === sessionId) {
+      appendCurrentChatMessage({ role: "error", text: `${archived ? "归档" : "恢复"}失败：${String(error)}` });
+    }
   }
 }
 
@@ -1884,7 +1929,7 @@ function markSessionRead(sessionId: string) {
 async function renameAiSession(session: AiSession, title: string) {
   const trimmed = title.trim();
   if (!trimmed) {
-    chatMessages.value.push({ role: "error", text: "会话名称不能为空。" });
+    appendChatMessageForSession(session.id, { role: "error", text: "会话名称不能为空。" });
     return;
   }
   try {
@@ -1894,9 +1939,9 @@ async function renameAiSession(session: AiSession, title: string) {
       activeAiSession.value = updated;
       aiSessionTitle.value = updated.title;
     }
-    chatMessages.value.push({ role: "system", text: `已重命名为「${updated.title}」。` });
+    appendChatMessageForSession(session.id, { role: "system", text: `已重命名为「${updated.title}」。` });
   } catch (error) {
-    chatMessages.value.push({ role: "error", text: `重命名失败：${String(error)}` });
+    appendChatMessageForSession(session.id, { role: "error", text: `重命名失败：${String(error)}` });
   }
 }
 
@@ -1904,16 +1949,18 @@ async function openAiSessionInNewWindow(session: AiSession) {
   try {
     await desktopApi.openSessionInNewWindow(session.id);
   } catch (error) {
-    chatMessages.value.push({ role: "error", text: `打开新窗口失败：${String(error)}` });
+    appendChatMessageForSession(session.id, { role: "error", text: `打开新窗口失败：${String(error)}` });
   }
 }
 
 function deriveSessionToLocal(session: AiSession) {
+  if (activeAiSession.value?.id !== session.id) cacheActiveChatMessages();
   activeAiSession.value = session;
   selectedProjectPath.value = session.summary ?? selectedProjectPath.value;
   selectedProviderId.value = session.providerId;
+  chatMessages.value = chatMessagesBySessionId.value[session.id] ?? [];
   void startShellForActiveSession(true);
-  chatMessages.value.push({
+  appendChatMessageForSession(session.id, {
     role: "system",
     text: `已为「${session.title}」启动本地终端，会话里看到的代码改动也会落到这个目录。`,
   });
