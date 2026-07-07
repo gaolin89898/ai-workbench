@@ -354,7 +354,7 @@ async function openUserDrawer(user: SystemUserRecord) {
       <a-menu class="side-menu" :default-selected-keys="['users']">
         <a-menu-item key="users">
           <template #icon><icon-user /></template>
-          桌面端 / 移动端用户
+          用户管理
         </a-menu-item>
         <a-menu-item key="devices">
           <template #icon><icon-desktop /></template>
@@ -374,7 +374,7 @@ async function openUserDrawer(user: SystemUserRecord) {
     <a-layout>
       <a-layout-header class="admin-header">
         <div>
-          <h1>桌面端 / 移动端用户</h1>
+          <h1>用户管理</h1>
           <p>展示 AI 工作台真实账号，以及账号下绑定的桌面端和移动端使用情况。</p>
         </div>
         <a-space>

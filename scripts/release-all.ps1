@@ -26,6 +26,27 @@ function Set-JsonVersion {
   [System.IO.File]::WriteAllText((Resolve-Path $Path), $content, [System.Text.UTF8Encoding]::new($false))
 }
 
+function Set-PubspecVersion {
+  param(
+    [string]$Path,
+    [string]$Version
+  )
+  $buildNumber = ($Version -split '\.')[-1]
+  $content = Get-Content -Raw -Path $Path
+  $content = $content -replace '(?m)^version:\s*[^\r\n]+', "version: $Version+$buildNumber"
+  [System.IO.File]::WriteAllText((Resolve-Path $Path), $content, [System.Text.UTF8Encoding]::new($false))
+}
+
+function Set-MobileDefaultVersion {
+  param(
+    [string]$Path,
+    [string]$Version
+  )
+  $content = Get-Content -Raw -Path $Path
+  $content = $content -replace "(String\.fromEnvironment\('MOBILE_VERSION', defaultValue: ')[^']+('\))", "`${1}$Version`${2}"
+  [System.IO.File]::WriteAllText((Resolve-Path $Path), $content, [System.Text.UTF8Encoding]::new($false))
+}
+
 $root = Resolve-Path (Join-Path $PSScriptRoot '..')
 Set-Location $root
 
@@ -47,10 +68,12 @@ Assert-CleanReleaseFiles
 
 Write-Host "Updating release versions..."
 Set-JsonVersion -Path 'apps/desktop/package.json' -Version $Version
+Set-PubspecVersion -Path 'apps/mobile/pubspec.yaml' -Version $Version
+Set-MobileDefaultVersion -Path 'apps/mobile/lib/services/update_service.dart' -Version $Version
 
 if (-not $NoCommit) {
   Write-Host "Committing release version..."
-  git add apps/desktop/package.json
+  git add apps/desktop/package.json apps/mobile/pubspec.yaml apps/mobile/lib/services/update_service.dart scripts/release-all.ps1
   git commit -m "Release $Version"
   Write-Host "Pushing $Branch..."
   git push origin $Branch
