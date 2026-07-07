@@ -494,12 +494,12 @@ async function saveDeviceName(device: UserDevice) {
             </template>
 
             <template #actions="{ record }">
-              <a-space>
-                <a-button type="text" size="small" @click="openEditUser(record)">
+              <a-space @click.stop>
+                <a-button type="text" size="small" @click.stop="openEditUser(record)">
                   <template #icon><icon-edit /></template>
                   编辑
                 </a-button>
-                <a-button type="text" size="small" @click="openResetPassword(record)">
+                <a-button type="text" size="small" @click.stop="openResetPassword(record)">
                   <template #icon><icon-lock /></template>
                   重置密码
                 </a-button>
@@ -507,11 +507,11 @@ async function saveDeviceName(device: UserDevice) {
                   type="text"
                   size="small"
                   :status="record.disabled ? 'success' : 'warning'"
-                  @click="toggleDisableUser(record)"
+                  @click.stop="toggleDisableUser(record)"
                 >
                   {{ record.disabled ? "启用" : "禁用" }}
                 </a-button>
-                <a-button type="text" size="small" status="danger" @click="openDeleteUser(record)">
+                <a-button type="text" size="small" status="danger" @click.stop="openDeleteUser(record)">
                   删除
                 </a-button>
               </a-space>
