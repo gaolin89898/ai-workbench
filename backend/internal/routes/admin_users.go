@@ -427,3 +427,38 @@ func (h *Handler) listUserDevices(w http.ResponseWriter, r *http.Request) {
 	}
 	writeJSON(w, http.StatusOK, devices)
 }
+
+func (h *Handler) updateDevice(w http.ResponseWriter, r *http.Request) {
+	if !h.requireAdminUser(w, r) {
+		return
+	}
+	deviceID := r.PathValue("deviceId")
+
+	var req struct {
+		Name string `json:"name"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeBadRequest(w, "invalid request body")
+		return
+	}
+
+	name := strings.TrimSpace(req.Name)
+	if name == "" {
+		writeBadRequest(w, "name is required")
+		return
+	}
+
+	tag, err := h.DB.Pool.Exec(r.Context(),
+		"UPDATE desktop_devices SET name = $1 WHERE id = $2",
+		name, deviceID,
+	)
+	if err != nil {
+		writeInternal(w)
+		return
+	}
+	if tag.RowsAffected() == 0 {
+		writeError(w, http.StatusNotFound, "not found")
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
+}

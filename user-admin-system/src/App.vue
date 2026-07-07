@@ -54,6 +54,8 @@ const drawerVisible = ref(false);
 const activeUser = ref<SystemUserRecord | null>(null);
 const userDevices = ref<UserDevice[]>([]);
 const devicesLoading = ref(false);
+const editingDeviceId = ref<string | null>(null);
+const editingDeviceName = ref("");
 const loginForm = reactive({
   email: "admin",
   password: "070900gl",
@@ -312,6 +314,42 @@ async function openUserDrawer(user: SystemUserRecord) {
     devicesLoading.value = false;
   }
 }
+
+function startEditDeviceName(device: UserDevice) {
+  editingDeviceId.value = device.id;
+  editingDeviceName.value = device.name;
+}
+
+function cancelEditDeviceName() {
+  editingDeviceId.value = null;
+  editingDeviceName.value = "";
+}
+
+async function saveDeviceName(device: UserDevice) {
+  const name = editingDeviceName.value.trim();
+  if (!name) {
+    Message.warning("设备名称不能为空");
+    return;
+  }
+  if (name === device.name) {
+    cancelEditDeviceName();
+    return;
+  }
+
+  try {
+    await requestAPI<{ ok: boolean }>(`/admin/devices/${device.id}`, {
+      method: "PATCH",
+      body: JSON.stringify({ name }),
+    });
+    userDevices.value = userDevices.value.map((d) =>
+      d.id === device.id ? { ...d, name } : d
+    );
+    Message.success("设备名称已更新");
+    cancelEditDeviceName();
+  } catch (error) {
+    Message.error(error instanceof Error ? error.message : String(error));
+  }
+}
 </script>
 
 <template>
@@ -557,7 +595,27 @@ async function openUserDrawer(user: SystemUserRecord) {
               <template #title>
                 <a-space>
                   <icon-desktop />
-                  <span>{{ device.name }}</span>
+                  <template v-if="editingDeviceId === device.id">
+                    <a-input
+                      v-model="editingDeviceName"
+                      size="small"
+                      style="width: 200px"
+                      @keyup.enter="saveDeviceName(device)"
+                      @keyup.escape="cancelEditDeviceName"
+                    />
+                    <a-button type="text" size="mini" status="success" @click="saveDeviceName(device)">
+                      保存
+                    </a-button>
+                    <a-button type="text" size="mini" @click="cancelEditDeviceName">
+                      取消
+                    </a-button>
+                  </template>
+                  <template v-else>
+                    <span>{{ device.name }}</span>
+                    <a-button type="text" size="mini" @click="startEditDeviceName(device)">
+                      <template #icon><icon-edit /></template>
+                    </a-button>
+                  </template>
                   <a-tag :color="device.online ? 'green' : 'gray'" size="small">
                     {{ device.online ? "在线" : "离线" }}
                   </a-tag>
