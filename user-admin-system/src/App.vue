@@ -630,6 +630,12 @@ function backToDevices() {
       :footer="false"
     >
       <template v-if="!activeDevice">
+        <div style="margin-bottom: 16px; display: flex; justify-content: flex-end">
+          <a-button size="small" @click="activeUser && openUserDrawer(activeUser)" :loading="devicesLoading">
+            <template #icon><icon-refresh /></template>
+            刷新设备
+          </a-button>
+        </div>
         <a-spin :loading="devicesLoading" style="width: 100%">
           <a-empty v-if="!devicesLoading && userDevices.length === 0" description="暂无设备" />
           <a-list v-else :bordered="false">
@@ -680,14 +686,18 @@ function backToDevices() {
       </template>
 
       <template v-else>
-        <div style="margin-bottom: 16px">
+        <div style="margin-bottom: 16px; display: flex; align-items: center">
           <a-button type="text" @click="backToDevices">
             <template #icon><icon-refresh /></template>
             返回设备列表
           </a-button>
-          <span style="margin-left: 12px; color: #4e5969">
+          <span style="margin-left: 12px; color: #4e5969; flex: 1">
             {{ activeDevice.name }} 的会话
           </span>
+          <a-button size="small" @click="openDeviceSessions(activeDevice)" :loading="sessionsLoading">
+            <template #icon><icon-refresh /></template>
+            刷新会话
+          </a-button>
         </div>
         <a-spin :loading="sessionsLoading" style="width: 100%">
           <a-empty v-if="!sessionsLoading && deviceSessions.length === 0" description="暂无会话" />
