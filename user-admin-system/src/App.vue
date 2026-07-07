@@ -709,7 +709,7 @@ function backToDevices() {
               <a-table-column title="状态" data-index="status" :width="100">
                 <template #cell="{ record }">
                   <a-tag :color="record.status === 'completed' ? 'green' : record.status === 'active' ? 'blue' : record.status === 'failed' ? 'red' : 'gray'" size="small">
-                    {{ ({} as Record<string, string>)[record.status] || { completed: '已完成', active: '进行中', failed: '失败', idle: '空闲' }[record.status as string] || record.status }}
+                    {{ ({} as Record<string, string>)[record.status] || { completed: '已完成', active: '进行中', running: '运行中', failed: '失败', idle: '空闲' }[record.status as string] || record.status }}
                   </a-tag>
                 </template>
               </a-table-column>
