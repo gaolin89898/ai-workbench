@@ -5118,6 +5118,11 @@ dd {
   line-height: 1.55;
 }
 
+.chat-segment-tool-diff-only {
+  width: 100%;
+  max-width: 100%;
+}
+
 .chat-segment-diff-line {
   min-width: max-content;
   padding: 0 10px;

@@ -634,8 +634,20 @@ async function respondApproval(decision: "approved" | "denied") {
   </article>
 
   <template v-else-if="segment.type === 'tool'">
+    <article v-if="toolHasDiff" class="chat-segment-tool-diff-only">
+      <div class="chat-segment-diff">
+        <div
+          v-for="(line, lineIndex) in toolDiffLines"
+          :key="lineIndex"
+          class="chat-segment-diff-line"
+          :class="line.type"
+        >
+          <code>{{ line.text || " " }}</code>
+        </div>
+      </div>
+    </article>
     <details
-      v-if="toolHasDetails(segment)"
+      v-else-if="toolHasDetails(segment)"
       class="chat-segment-tool expandable"
       :class="segment.status"
     >
@@ -662,18 +674,6 @@ async function respondApproval(decision: "approved" | "denied") {
         <section v-if="toolShowSummary(segment)" class="chat-segment-output-block">
           <strong>说明</strong>
           <pre>{{ segment.summary }}</pre>
-        </section>
-        <section v-if="toolHasDiff" class="chat-segment-diff-section">
-          <div class="chat-segment-diff">
-            <div
-              v-for="(line, lineIndex) in toolDiffLines"
-              :key="lineIndex"
-              class="chat-segment-diff-line"
-              :class="line.type"
-            >
-              <code>{{ line.text || " " }}</code>
-            </div>
-          </div>
         </section>
         <section v-if="toolShowInput(segment)" class="chat-segment-output-block">
           <strong>输入</strong>

@@ -155,6 +155,12 @@ class _ProcessGroupCard extends StatelessWidget {
     final summary = _summaryLabel(segments, pending, summarySegment, nowTick);
     final detailSegments = segments.where(_shouldRenderProcessDetail).toList();
     final bodyItems = _buildProcessBodyItems(detailSegments, pending: pending);
+    final thinkingOnly = pending &&
+        bodyItems.isNotEmpty &&
+        bodyItems.every((item) => item.isStage && _isThinkingStage(item.segments));
+    if (thinkingOnly) {
+      return const _InlineThinkingText();
+    }
     if (detailSegments.isEmpty && !pending) {
       return _ProcessSummaryCard(summary: summary, pending: pending);
     }
@@ -1776,6 +1782,10 @@ class _ToolSegment extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final diff = _toolDiffText(segment);
+    if (diff.trim().isNotEmpty) {
+      return _DiffBlock(diff);
+    }
     final failed = segment.status == 'error';
     final running = segment.status == 'running';
     final title = _toolTitle(segment);
@@ -2324,8 +2334,85 @@ class _TypingText extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return const Text('正在思考',
-        style: TextStyle(color: AppColors.muted, fontSize: 12));
+    return const _InlineThinkingText();
+  }
+}
+
+class _InlineThinkingText extends StatefulWidget {
+  const _InlineThinkingText();
+
+  @override
+  State<_InlineThinkingText> createState() => _InlineThinkingTextState();
+}
+
+class _InlineThinkingTextState extends State<_InlineThinkingText>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1450),
+    )..repeat();
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 3),
+      child: AnimatedBuilder(
+        animation: _controller,
+        builder: (context, child) {
+          return ShaderMask(
+            blendMode: BlendMode.srcIn,
+            shaderCallback: (bounds) {
+              final width = bounds.width <= 0 ? 1.0 : bounds.width;
+              final dx = (_controller.value * 2.4 - 1.2) * width;
+              return LinearGradient(
+                colors: const [
+                  AppColors.muted,
+                  AppColors.secondary,
+                  AppColors.muted,
+                ],
+                stops: const [0.0, 0.5, 1.0],
+                begin: Alignment.centerLeft,
+                end: Alignment.centerRight,
+                transform: _SlidingGradientTransform(dx),
+              ).createShader(bounds);
+            },
+            child: child,
+          );
+        },
+        child: const Text(
+          '正在思考',
+          style: TextStyle(
+            color: AppColors.secondary,
+            fontSize: 12,
+            fontWeight: FontWeight.w700,
+            height: 1.35,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _SlidingGradientTransform extends GradientTransform {
+  const _SlidingGradientTransform(this.dx);
+
+  final double dx;
+
+  @override
+  Matrix4? transform(Rect bounds, {TextDirection? textDirection}) {
+    return Matrix4.translationValues(dx, 0, 0);
   }
 }
 

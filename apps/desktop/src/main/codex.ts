@@ -5,7 +5,9 @@
 
 import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
 import { createInterface, type Interface } from "node:readline";
+import * as fs from "node:fs/promises";
 import * as os from "node:os";
+import * as path from "node:path";
 import type { RunCodexChatRequest, ChatImageAttachment, ChatSegment, CodexApprovalDecision, CodexApprovalMode, CodexTraceSnapshot, CodexModelOption } from "../services/desktop";
 import { reportTokenUsage } from "./sync";
 import { getLocalAiSession, resetLocalAiTrace, upsertLocalAiTrace } from "./db";
@@ -65,6 +67,7 @@ interface CodexSession {
   cancelled: boolean;
   approvalMode: CodexApprovalMode;
   reportedTokenUsageKeys: Set<string>;
+  currentTurnStartedAtMs: number | null;
 }
 
 // ---------- Constants ----------
@@ -77,7 +80,9 @@ const CODEX_RECONNECT_MAX_RETRIES = 5;
 const CLI_INTERRUPT_FALLBACK_MS = 1500;
 const CODEX_CLIENT_INFO = { name: "AI Workbench", version: "0.1.0" };
 const CODEX_APP_SERVER_SESSION_PREFIX = "app-server:";
+const CODEX_SESSIONS_DIR = path.join(os.homedir(), ".codex", "sessions");
 const activeCodexSessions = new Map<string, CodexSession>();
+const codexSessionFileCache = new Map<string, string | null>();
 
 function spawnCodex(args: string[], cwd: string): ChildProcessWithoutNullStreams {
   if (process.platform === "win32") {
@@ -514,6 +519,14 @@ function reportCodexTokenUsage(session: CodexSession, params: unknown): void {
   try {
     const u = findTokenUsageRecord(params);
     if (!u) return;
+    reportCodexTokenUsageRecord(session, u);
+  } catch {
+    // best-effort锛屼笉褰卞搷涓绘祦绋?
+  }
+}
+
+function reportCodexTokenUsageRecord(session: CodexSession, u: Record<string, unknown>): void {
+  try {
     const inputTokens =
       numOrUndef(u["input_tokens"]) ??
       numOrUndef(u["inputTokens"]) ??
@@ -525,6 +538,7 @@ function reportCodexTokenUsage(session: CodexSession, params: unknown): void {
       numOrUndef(u["output"]) ??
       0;
     const reasoningTokens =
+      numOrUndef(u["reasoning_output_tokens"]) ??
       numOrUndef(u["reasoning_tokens"]) ??
       numOrUndef(u["reasoningTokens"]) ??
       numOrUndef(u["reasoning"]) ??
@@ -547,6 +561,107 @@ function reportCodexTokenUsage(session: CodexSession, params: unknown): void {
     });
   } catch {
     // best-effort，不影响主流程
+  }
+}
+
+async function reportCodexSessionFileTokenUsage(session: CodexSession, threadId: string): Promise<void> {
+  const afterMs = session.currentTurnStartedAtMs ?? 0;
+  for (let attempt = 0; attempt < 4; attempt += 1) {
+    const usage = await readLatestCodexTokenUsage(threadId, afterMs).catch(() => null);
+    if (usage) {
+      reportCodexTokenUsageRecord(session, usage);
+      return;
+    }
+    await delay(120);
+  }
+}
+
+async function readLatestCodexTokenUsage(threadId: string, afterMs: number): Promise<Record<string, unknown> | null> {
+  const filePath = await findCodexSessionFile(threadId);
+  if (!filePath) return null;
+  const content = await fs.readFile(filePath, "utf8");
+  let latest: Record<string, unknown> | null = null;
+  let latestAt = 0;
+  for (const line of content.split(/\r?\n/)) {
+    const trimmed = line.trim();
+    if (!trimmed) continue;
+    let parsed: Record<string, unknown>;
+    try {
+      parsed = JSON.parse(trimmed) as Record<string, unknown>;
+    } catch {
+      continue;
+    }
+    const timestamp = typeof parsed["timestamp"] === "string" ? Date.parse(parsed["timestamp"]) : 0;
+    if (Number.isFinite(timestamp) && timestamp < afterMs) continue;
+    const payload = parsed["payload"];
+    if (!payload || typeof payload !== "object") continue;
+    const payloadRecord = payload as Record<string, unknown>;
+    if (payloadRecord["type"] !== "token_count") continue;
+    const info = payloadRecord["info"];
+    if (!info || typeof info !== "object") continue;
+    const usage = (info as Record<string, unknown>)["last_token_usage"];
+    if (!usage || typeof usage !== "object" || !hasTokenUsageShape(usage as Record<string, unknown>)) continue;
+    if (timestamp >= latestAt) {
+      latestAt = timestamp;
+      latest = usage as Record<string, unknown>;
+    }
+  }
+  return latest;
+}
+
+async function findCodexSessionFile(threadId: string): Promise<string | null> {
+  if (codexSessionFileCache.has(threadId)) return codexSessionFileCache.get(threadId) ?? null;
+  const files = await collectCodexRolloutFiles(CODEX_SESSIONS_DIR);
+  for (const filePath of files) {
+    const firstLine = await readFirstLine(filePath).catch(() => "");
+    if (!firstLine) continue;
+    try {
+      const parsed = JSON.parse(firstLine) as { type?: string; payload?: Record<string, unknown> };
+      const payload = parsed.payload;
+      const sessionId = typeof payload?.["session_id"] === "string"
+        ? payload["session_id"]
+        : typeof payload?.["id"] === "string" ? payload["id"] : "";
+      if (parsed.type === "session_meta" && sessionId === threadId) {
+        codexSessionFileCache.set(threadId, filePath);
+        return filePath;
+      }
+    } catch {
+      // ignore malformed rollout files
+    }
+  }
+  codexSessionFileCache.set(threadId, null);
+  return null;
+}
+
+async function collectCodexRolloutFiles(dir: string): Promise<string[]> {
+  let entries: Awaited<ReturnType<typeof fs.readdir>>;
+  try {
+    entries = await fs.readdir(dir, { withFileTypes: true });
+  } catch {
+    return [];
+  }
+  const files: string[] = [];
+  for (const entry of entries) {
+    const fullPath = path.join(dir, entry.name);
+    if (entry.isDirectory()) {
+      files.push(...await collectCodexRolloutFiles(fullPath));
+    } else if (entry.isFile() && entry.name.startsWith("rollout-") && entry.name.endsWith(".jsonl")) {
+      files.push(fullPath);
+    }
+  }
+  return files;
+}
+
+async function readFirstLine(filePath: string): Promise<string> {
+  const handle = await fs.open(filePath, "r");
+  try {
+    const buffer = Buffer.alloc(64 * 1024);
+    const { bytesRead } = await handle.read(buffer, 0, buffer.length, 0);
+    const text = buffer.subarray(0, bytesRead).toString("utf8");
+    const newlineIndex = text.indexOf("\n");
+    return newlineIndex >= 0 ? text.slice(0, newlineIndex) : text;
+  } finally {
+    await handle.close();
   }
 }
 
@@ -667,6 +782,7 @@ function createSession(
     cancelled: false,
     approvalMode,
     reportedTokenUsageKeys: new Set(),
+    currentTurnStartedAtMs: null,
   };
 
   // stdout: parse JSON-RPC lines
@@ -962,10 +1078,12 @@ export async function runCodexChat(
 
     // 4. send turn/start. Plan mode is enforced through the prompt because the
     // current Codex app-server protocol no longer accepts collaborationMode.
+    session.currentTurnStartedAtMs = Date.now();
     await sendRequestWithReconnectRetry(session, "turn/start", buildCodexTurnParams(threadInfo, req, images));
 
     // 5. wait for turn/completed or error
     await turnDone;
+    await reportCodexSessionFileTokenUsage(session, threadInfo.threadId);
 
     clearTimeout(timeout);
     killSession(session);
