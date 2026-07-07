@@ -12,7 +12,7 @@ const _githubReleasesApiUrl =
 const _githubReleasesUrl =
     'https://github.com/gaolin89898/ai-workbench/releases';
 const _currentMobileVersion =
-    String.fromEnvironment('MOBILE_VERSION', defaultValue: '0.1.69');
+    String.fromEnvironment('MOBILE_VERSION', defaultValue: '0.1.75');
 const _downloadHeaders = {
   'Accept': 'application/octet-stream, application/vnd.android.package-archive, */*',
   'User-Agent': 'AI-Workbench-Mobile-Updater',
@@ -53,7 +53,7 @@ class MobileUpdateInfo {
       available: json['available'] == true,
       currentVersion:
           json['currentVersion'] as String? ?? MobileUpdateService.currentVersion,
-      source: json['source'] as String? ?? '服务端',
+      source: json['source'] as String? ?? '鏈嶅姟绔?,
       releaseUrl: releaseUrl,
       version: latestVersion,
       apkUrl: downloadUrl,
@@ -92,14 +92,14 @@ class MobileUpdateService {
       headers: const {'Accept': 'application/vnd.github+json'},
     );
     if (response.statusCode < 200 || response.statusCode >= 300) {
-      throw Exception('检查 GitHub Releases 失败：HTTP ${response.statusCode}');
+      throw Exception('妫€鏌?GitHub Releases 澶辫触锛欻TTP ${response.statusCode}');
     }
 
     final releases =
         jsonDecode(utf8.decode(response.bodyBytes)) as List<dynamic>;
     final release = _latestMobileRelease(releases);
     if (release == null) {
-      throw Exception('GitHub Releases 中没有找到移动端安装包。');
+      throw Exception('GitHub Releases 涓病鏈夋壘鍒扮Щ鍔ㄧ瀹夎鍖呫€?);
     }
     final assets = (release['assets'] as List<dynamic>? ?? const []);
     final apkAsset = assets.cast<Map<String, dynamic>?>().firstWhere(
@@ -107,7 +107,7 @@ class MobileUpdateService {
           orElse: () => null,
         );
     if (apkAsset == null) {
-      throw Exception('GitHub Release 中没有 APK 资产。');
+      throw Exception('GitHub Release 涓病鏈?APK 璧勪骇銆?);
     }
 
     final tagName = release['tag_name'] as String? ?? '';
@@ -117,7 +117,7 @@ class MobileUpdateService {
         apkAsset['name'] as String? ?? 'ai-workbench-mobile-$latestVersion.apk';
     final apkUrl = apkAsset['browser_download_url'] as String?;
     if (apkUrl == null || apkUrl.isEmpty) {
-      throw Exception('GitHub Release APK 缺少下载地址。');
+      throw Exception('GitHub Release APK 缂哄皯涓嬭浇鍦板潃銆?);
     }
 
     return MobileUpdateInfo(
@@ -139,7 +139,7 @@ class MobileUpdateService {
   }) async {
     final apkUrl = update.apkUrl;
     if (apkUrl == null || apkUrl.isEmpty) {
-      throw Exception('没有可下载的 APK 地址。');
+      throw Exception('娌℃湁鍙笅杞界殑 APK 鍦板潃銆?);
     }
 
     final apkFileName = update.apkFileName ??
@@ -161,7 +161,7 @@ class MobileUpdateService {
     try {
       final response = await client.send(request);
       if (response.statusCode < 200 || response.statusCode >= 300) {
-        throw Exception('下载 APK 失败：HTTP ${response.statusCode}');
+        throw Exception('涓嬭浇 APK 澶辫触锛欻TTP ${response.statusCode}');
       }
 
       final sink = apkFile.openWrite();
@@ -180,7 +180,7 @@ class MobileUpdateService {
       if (received <= 0 ||
           !await apkFile.exists() ||
           await apkFile.length() <= 0) {
-        throw Exception('下载 APK 失败：文件为空');
+        throw Exception('涓嬭浇 APK 澶辫触锛氭枃浠朵负绌?);
       }
     } catch (_) {
       if (await apkFile.exists()) {
@@ -192,7 +192,7 @@ class MobileUpdateService {
     }
 
     if (!Platform.isAndroid) {
-      throw Exception('当前平台不支持自动安装 APK。');
+      throw Exception('褰撳墠骞冲彴涓嶆敮鎸佽嚜鍔ㄥ畨瑁?APK銆?);
     }
 
     await _installer.invokeMethod<void>('installApk', {'path': apkFile.path});
@@ -203,7 +203,7 @@ class MobileUpdateService {
     final uri = Uri.parse(url);
     final opened = await launchUrl(uri, mode: LaunchMode.externalApplication);
     if (!opened) {
-      throw Exception('无法打开下载链接：$url');
+      throw Exception('鏃犳硶鎵撳紑涓嬭浇閾炬帴锛?url');
     }
   }
 
