@@ -1029,13 +1029,10 @@ class _ProjectSessionRow extends StatelessWidget {
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
         child: Row(
           children: [
-            AppIconBox(
-              icon: _providerIcon(session.providerId),
+            const AppAiCliIconBox(
               size: 32,
-              iconSize: 16,
+              iconSize: 18,
               borderRadius: 9,
-              background: AppColors.surfaceMuted,
-              foreground: AppColors.primary,
             ),
             const SizedBox(width: 12),
             Expanded(
@@ -1170,14 +1167,7 @@ class _SessionTileBody extends StatelessWidget {
     return Row(
       children: [
         // 40×40 圆形 surfaceMuted 图标方框
-        AppIconBox(
-          icon: _providerIcon(session.providerId),
-          size: 40,
-          iconSize: 20,
-          borderRadius: AppRadius.full,
-          background: AppColors.surfaceMuted,
-          foreground: AppColors.primary,
-        ),
+        const AppAiCliIconBox(),
         const SizedBox(width: 12),
         Expanded(
           child: Column(
@@ -1223,13 +1213,6 @@ class _SessionTileBody extends StatelessWidget {
       ],
     );
   }
-}
-
-IconData _providerIcon(String providerId) {
-  for (final p in _builtInProviders) {
-    if (p.$1 == providerId) return p.$3;
-  }
-  return Icons.extension_outlined;
 }
 
 // 会话状态映射为徽章样式与文案

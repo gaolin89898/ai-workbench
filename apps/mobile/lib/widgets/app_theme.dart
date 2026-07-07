@@ -626,6 +626,85 @@ class AppIconBox extends StatelessWidget {
   }
 }
 
+class AppAiCliIconBox extends StatelessWidget {
+  const AppAiCliIconBox({
+    super.key,
+    this.size = 40,
+    this.iconSize = 20,
+    this.background = AppColors.surfaceMuted,
+    this.borderRadius = AppRadius.full,
+  });
+
+  final double size;
+  final double iconSize;
+  final Color background;
+  final double borderRadius;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: size,
+      height: size,
+      decoration: BoxDecoration(
+        color: background,
+        borderRadius: BorderRadius.circular(borderRadius),
+      ),
+      child: Center(
+        child: CustomPaint(
+          size: Size.square(iconSize),
+          painter: const _AiCliIconPainter(),
+        ),
+      ),
+    );
+  }
+}
+
+class _AiCliIconPainter extends CustomPainter {
+  const _AiCliIconPainter();
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final scaleX = size.width / 20;
+    final scaleY = size.height / 20;
+    canvas.save();
+    canvas.scale(scaleX, scaleY);
+
+    final fill = Paint()
+      ..color = const Color(0xfff5f3ff)
+      ..style = PaintingStyle.fill;
+    final stroke = Paint()
+      ..color = const Color(0xff7c3aed)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.55
+      ..strokeJoin = StrokeJoin.round;
+    final line = Paint()
+      ..color = const Color(0xff7c3aed)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.45
+      ..strokeCap = StrokeCap.round
+      ..strokeJoin = StrokeJoin.round;
+
+    final hex = Path()
+      ..moveTo(10, 2.85)
+      ..lineTo(15.8, 6.2)
+      ..lineTo(15.8, 12.9)
+      ..lineTo(10, 16.25)
+      ..lineTo(4.2, 12.9)
+      ..lineTo(4.2, 6.2)
+      ..close();
+    canvas.drawPath(hex, fill);
+    canvas.drawPath(hex, stroke);
+
+    canvas.drawLine(const Offset(10, 6.35), const Offset(10, 13.65), line);
+    canvas.drawLine(const Offset(6.85, 8.15), const Offset(13.15, 11.8), line);
+    canvas.drawLine(const Offset(13.15, 8.15), const Offset(6.85, 11.8), line);
+    canvas.restore();
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
+}
+
 /// 空状态。
 class EmptyState extends StatelessWidget {
   const EmptyState(this.message, {super.key, this.icon});

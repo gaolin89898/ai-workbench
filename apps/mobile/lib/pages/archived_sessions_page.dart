@@ -74,14 +74,7 @@ class _ArchivedSessionTile extends StatelessWidget {
         child: ListTile(
           contentPadding:
               const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-          leading: AppIconBox(
-            icon: Icons.chat_outlined,
-            size: 40,
-            iconSize: 20,
-            borderRadius: AppRadius.full,
-            background: AppColors.surfaceMuted,
-            foreground: AppColors.primary,
-          ),
+          leading: const AppAiCliIconBox(),
           title: Text(
             title,
             maxLines: 1,
