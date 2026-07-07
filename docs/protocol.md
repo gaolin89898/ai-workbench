@@ -369,7 +369,7 @@ HTTP `PATCH /ai-sessions/:sessionId` 持久化云端标题后，会向桌面端�
 客户端也可以通过 HTTP 主动检查：
 
 ```text
-GET /app/releases?platform=desktop|mobile&currentVersion=<currentVersion>
+GET /app/releases?platform=desktop|mobile&currentVersion=<currentVersion>&os=win32|linux
 ```
 
 WebSocket 消息示例：
@@ -384,7 +384,9 @@ WebSocket 消息示例：
   "available": true,
   "required": true,
   "force": false,
-  "downloadUrl": null,
+  "downloadUrl": "https://github.com/gaolin89898/ai-workbench/releases/download/v0.1.69/AI-Workbench-Setup.exe",
+  "windowsDownloadUrl": "https://github.com/gaolin89898/ai-workbench/releases/download/v0.1.69/AI-Workbench-Setup.exe",
+  "linuxDownloadUrl": "https://github.com/gaolin89898/ai-workbench/releases/download/v0.1.69/AI-Workbench.AppImage",
   "releaseUrl": "https://github.com/gaolin89898/ai-workbench/releases/tag/v0.1.69",
   "releaseNotes": "修复登录和更新提示",
   "source": "manual"
@@ -399,7 +401,9 @@ WebSocket 消息示例：
 - `available`：当前版本低于最新版本。
 - `required`：当前版本必须更新。低于最低可用版本时为 true；后台启用强制更新且当前版本落后时也为 true。
 - `force`：后台是否启用强制更新提示。
-- `downloadUrl`：安装包或 APK 下载地址。
+- `downloadUrl`：当前客户端系统对应的下载地址；移动端为 APK，桌面端会按系统返回 Windows 或 Linux 地址。
+- `windowsDownloadUrl`：桌面端 Windows 安装包下载地址。
+- `linuxDownloadUrl`：桌面端 Linux 安装包下载地址。
 - `releaseUrl`：Release 页面地址。
 - `releaseNotes`：展示给用户的更新说明。
 - `source`：`manual` 表示后台配置，`github` 表示 GitHub Releases 兜底。

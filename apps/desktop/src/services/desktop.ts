@@ -384,6 +384,8 @@ export type AppUpdateInfo = {
   required?: boolean;
   force?: boolean;
   downloadUrl?: string | null;
+  windowsDownloadUrl?: string | null;
+  linuxDownloadUrl?: string | null;
   releaseUrl?: string | null;
   source?: string;
 };

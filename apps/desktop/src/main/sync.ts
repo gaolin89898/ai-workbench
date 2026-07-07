@@ -212,6 +212,7 @@ export async function fetchDesktopAppRelease(currentVersion: string): Promise<Ap
     const url = new URL(`${config.serverUrl.replace(/\/+$/, "")}/app/releases`);
     url.searchParams.set("platform", "desktop");
     url.searchParams.set("currentVersion", currentVersion);
+    url.searchParams.set("os", process.platform);
     const info = await fetchJson(url.toString(), {
       headers: { Authorization: `Bearer ${config.accessToken}` },
     }) as {
@@ -222,6 +223,8 @@ export async function fetchDesktopAppRelease(currentVersion: string): Promise<Ap
       required?: boolean;
       force?: boolean;
       downloadUrl?: string | null;
+      windowsDownloadUrl?: string | null;
+      linuxDownloadUrl?: string | null;
       releaseUrl?: string | null;
       source?: string;
     };
@@ -234,6 +237,8 @@ export async function fetchDesktopAppRelease(currentVersion: string): Promise<Ap
       required: info.required === true,
       force: info.force === true,
       downloadUrl: info.downloadUrl ?? null,
+      windowsDownloadUrl: info.windowsDownloadUrl ?? null,
+      linuxDownloadUrl: info.linuxDownloadUrl ?? null,
       releaseUrl: info.releaseUrl ?? null,
       source: info.source,
     };
@@ -573,6 +578,8 @@ class DesktopCloudSync {
           required: msg.required === true,
           force: msg.force === true,
           downloadUrl: msg.downloadUrl ?? null,
+          windowsDownloadUrl: msg.windowsDownloadUrl ?? null,
+          linuxDownloadUrl: msg.linuxDownloadUrl ?? null,
           releaseUrl: msg.releaseUrl ?? null,
           source: msg.source,
         });

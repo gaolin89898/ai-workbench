@@ -39,7 +39,9 @@ GET /app/releases?platform=desktop|mobile&currentVersion=<currentVersion>
   "available": true,
   "required": true,
   "force": false,
-  "downloadUrl": null,
+  "downloadUrl": "https://github.com/gaolin89898/ai-workbench/releases/download/v0.1.69/AI-Workbench-Setup.exe",
+  "windowsDownloadUrl": "https://github.com/gaolin89898/ai-workbench/releases/download/v0.1.69/AI-Workbench-Setup.exe",
+  "linuxDownloadUrl": "https://github.com/gaolin89898/ai-workbench/releases/download/v0.1.69/AI-Workbench.AppImage",
   "releaseUrl": "https://github.com/gaolin89898/ai-workbench/releases/tag/v0.1.69",
   "releaseNotes": "修复登录和更新提示",
   "source": "manual"
@@ -52,7 +54,9 @@ GET /app/releases?platform=desktop|mobile&currentVersion=<currentVersion>
 - `required`：当前版本已经不兼容或被后台标记为必须更新。
 - `minSupportedVersion`：最低可用版本，低于该版本时客户端提示必须更新。
 - `force`：强制更新提示；当前版本落后时会被视为必须更新。
-- `downloadUrl`：移动端 APK 或安装包下载地址。
+- `downloadUrl`：当前客户端系统对应的下载地址；移动端为 APK，桌面端会按系统返回 Windows 或 Linux 地址。
+- `windowsDownloadUrl`：桌面端 Windows 安装包下载地址。
+- `linuxDownloadUrl`：桌面端 Linux 安装包下载地址。
 - `releaseUrl`：Release 页面地址。
 - `releaseNotes`：展示给用户看的更新说明。
 - `source`：`manual` 表示后台配置，`github` 表示 GitHub Releases 兜底。
@@ -64,7 +68,9 @@ GET /app/releases?platform=desktop|mobile&currentVersion=<currentVersion>
 - 桌面端最新版本。
 - 移动端最新版本。
 - 最低可用版本。
-- 下载地址。
+- 桌面端 Windows 下载地址。
+- 桌面端 Linux 下载地址。
+- 移动端 APK 下载地址。
 - Release 页面。
 - 更新说明。
 - 是否启用配置。

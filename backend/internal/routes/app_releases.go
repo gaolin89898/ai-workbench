@@ -25,6 +25,8 @@ type appReleaseRecord struct {
 	LatestVersion       string    `json:"latestVersion"`
 	MinSupportedVersion *string   `json:"minSupportedVersion"`
 	DownloadUrl         *string   `json:"downloadUrl"`
+	WindowsDownloadUrl  *string   `json:"windowsDownloadUrl"`
+	LinuxDownloadUrl    *string   `json:"linuxDownloadUrl"`
 	ReleaseUrl          *string   `json:"releaseUrl"`
 	ReleaseNotes        *string   `json:"releaseNotes"`
 	Force               bool      `json:"force"`
@@ -42,6 +44,8 @@ type appReleaseInfo struct {
 	Required            bool    `json:"required"`
 	Force               bool    `json:"force"`
 	DownloadUrl         *string `json:"downloadUrl"`
+	WindowsDownloadUrl  *string `json:"windowsDownloadUrl"`
+	LinuxDownloadUrl    *string `json:"linuxDownloadUrl"`
 	ReleaseUrl          *string `json:"releaseUrl"`
 	ReleaseNotes        *string `json:"releaseNotes"`
 	Source              string  `json:"source"`
@@ -51,6 +55,8 @@ type updateAppReleaseRequest struct {
 	LatestVersion       string  `json:"latestVersion"`
 	MinSupportedVersion *string `json:"minSupportedVersion"`
 	DownloadUrl         *string `json:"downloadUrl"`
+	WindowsDownloadUrl  *string `json:"windowsDownloadUrl"`
+	LinuxDownloadUrl    *string `json:"linuxDownloadUrl"`
 	ReleaseUrl          *string `json:"releaseUrl"`
 	ReleaseNotes        *string `json:"releaseNotes"`
 	Force               bool    `json:"force"`
@@ -64,7 +70,8 @@ func (h *Handler) getAppRelease(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	currentVersion := strings.TrimSpace(r.URL.Query().Get("currentVersion"))
-	info, err := h.resolveAppRelease(r.Context(), platform, currentVersion)
+	desktopOS := normalizeDesktopOS(r.URL.Query().Get("os"))
+	info, err := h.resolveAppRelease(r.Context(), platform, currentVersion, desktopOS)
 	if err != nil {
 		writeInternal(w)
 		return
@@ -77,7 +84,7 @@ func (h *Handler) listAppReleases(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	rows, err := h.DB.Pool.Query(r.Context(),
-		`SELECT platform, latest_version, min_supported_version, download_url, release_url, release_notes, force, enabled, source, updated_at
+		`SELECT platform, latest_version, min_supported_version, download_url, windows_download_url, linux_download_url, release_url, release_notes, force, enabled, source, updated_at
 		   FROM app_releases ORDER BY platform`)
 	if err != nil {
 		writeInternal(w)
@@ -87,7 +94,7 @@ func (h *Handler) listAppReleases(w http.ResponseWriter, r *http.Request) {
 	items := []appReleaseRecord{}
 	for rows.Next() {
 		var item appReleaseRecord
-		if err := rows.Scan(&item.Platform, &item.LatestVersion, &item.MinSupportedVersion, &item.DownloadUrl, &item.ReleaseUrl, &item.ReleaseNotes, &item.Force, &item.Enabled, &item.Source, &item.UpdatedAt); err != nil {
+		if err := rows.Scan(&item.Platform, &item.LatestVersion, &item.MinSupportedVersion, &item.DownloadUrl, &item.WindowsDownloadUrl, &item.LinuxDownloadUrl, &item.ReleaseUrl, &item.ReleaseNotes, &item.Force, &item.Enabled, &item.Source, &item.UpdatedAt); err != nil {
 			writeInternal(w)
 			return
 		}
@@ -121,32 +128,36 @@ func (h *Handler) updateAppRelease(w http.ResponseWriter, r *http.Request) {
 	}
 	trimPtr(&req.MinSupportedVersion)
 	trimPtr(&req.DownloadUrl)
+	trimPtr(&req.WindowsDownloadUrl)
+	trimPtr(&req.LinuxDownloadUrl)
 	trimPtr(&req.ReleaseUrl)
 	trimPtr(&req.ReleaseNotes)
 
 	var saved appReleaseRecord
 	err := h.DB.Pool.QueryRow(r.Context(),
-		`INSERT INTO app_releases (platform, latest_version, min_supported_version, download_url, release_url, release_notes, force, enabled, source, updated_at)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'manual', NOW())
+		`INSERT INTO app_releases (platform, latest_version, min_supported_version, download_url, windows_download_url, linux_download_url, release_url, release_notes, force, enabled, source, updated_at)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, 'manual', NOW())
 		 ON CONFLICT (platform) DO UPDATE SET
 		   latest_version = EXCLUDED.latest_version,
 		   min_supported_version = EXCLUDED.min_supported_version,
 		   download_url = EXCLUDED.download_url,
+		   windows_download_url = EXCLUDED.windows_download_url,
+		   linux_download_url = EXCLUDED.linux_download_url,
 		   release_url = EXCLUDED.release_url,
 		   release_notes = EXCLUDED.release_notes,
 		   force = EXCLUDED.force,
 		   enabled = EXCLUDED.enabled,
 		   source = 'manual',
 		   updated_at = NOW()
-		 RETURNING platform, latest_version, min_supported_version, download_url, release_url, release_notes, force, enabled, source, updated_at`,
-		platform, req.LatestVersion, req.MinSupportedVersion, req.DownloadUrl, req.ReleaseUrl, req.ReleaseNotes, req.Force, req.Enabled,
-	).Scan(&saved.Platform, &saved.LatestVersion, &saved.MinSupportedVersion, &saved.DownloadUrl, &saved.ReleaseUrl, &saved.ReleaseNotes, &saved.Force, &saved.Enabled, &saved.Source, &saved.UpdatedAt)
+		 RETURNING platform, latest_version, min_supported_version, download_url, windows_download_url, linux_download_url, release_url, release_notes, force, enabled, source, updated_at`,
+		platform, req.LatestVersion, req.MinSupportedVersion, req.DownloadUrl, req.WindowsDownloadUrl, req.LinuxDownloadUrl, req.ReleaseUrl, req.ReleaseNotes, req.Force, req.Enabled,
+	).Scan(&saved.Platform, &saved.LatestVersion, &saved.MinSupportedVersion, &saved.DownloadUrl, &saved.WindowsDownloadUrl, &saved.LinuxDownloadUrl, &saved.ReleaseUrl, &saved.ReleaseNotes, &saved.Force, &saved.Enabled, &saved.Source, &saved.UpdatedAt)
 	if err != nil {
 		writeInternal(w)
 		return
 	}
 	if saved.Enabled {
-		h.broadcastAppRelease(appReleaseToInfo(saved, ""))
+		h.broadcastAppRelease(appReleaseToInfo(saved, "", ""))
 	}
 	writeJSON(w, http.StatusOK, saved)
 }
@@ -160,7 +171,7 @@ func (h *Handler) importGitHubAppRelease(w http.ResponseWriter, r *http.Request)
 		writeBadRequest(w, "platform must be desktop or mobile")
 		return
 	}
-	info, err := githubReleaseInfo(r.Context(), platform, "")
+	info, err := githubReleaseInfo(r.Context(), platform, "", "")
 	if err != nil {
 		writeError(w, http.StatusBadGateway, err.Error())
 		return
@@ -168,20 +179,20 @@ func (h *Handler) importGitHubAppRelease(w http.ResponseWriter, r *http.Request)
 	writeJSON(w, http.StatusOK, info)
 }
 
-func (h *Handler) resolveAppRelease(ctx context.Context, platform string, currentVersion string) (appReleaseInfo, error) {
+func (h *Handler) resolveAppRelease(ctx context.Context, platform string, currentVersion string, desktopOS string) (appReleaseInfo, error) {
 	var record appReleaseRecord
 	err := h.DB.Pool.QueryRow(ctx,
-		`SELECT platform, latest_version, min_supported_version, download_url, release_url, release_notes, force, enabled, source, updated_at
+		`SELECT platform, latest_version, min_supported_version, download_url, windows_download_url, linux_download_url, release_url, release_notes, force, enabled, source, updated_at
 		   FROM app_releases WHERE platform = $1 AND enabled = TRUE`,
 		platform,
-	).Scan(&record.Platform, &record.LatestVersion, &record.MinSupportedVersion, &record.DownloadUrl, &record.ReleaseUrl, &record.ReleaseNotes, &record.Force, &record.Enabled, &record.Source, &record.UpdatedAt)
+	).Scan(&record.Platform, &record.LatestVersion, &record.MinSupportedVersion, &record.DownloadUrl, &record.WindowsDownloadUrl, &record.LinuxDownloadUrl, &record.ReleaseUrl, &record.ReleaseNotes, &record.Force, &record.Enabled, &record.Source, &record.UpdatedAt)
 	if err == nil {
-		return appReleaseToInfo(record, currentVersion), nil
+		return appReleaseToInfo(record, currentVersion, desktopOS), nil
 	}
 	if err != pgx.ErrNoRows {
 		return appReleaseInfo{}, err
 	}
-	return githubReleaseInfo(ctx, platform, currentVersion)
+	return githubReleaseInfo(ctx, platform, currentVersion, desktopOS)
 }
 
 func (h *Handler) broadcastAppRelease(info appReleaseInfo) {
@@ -195,6 +206,8 @@ func (h *Handler) broadcastAppRelease(info appReleaseInfo) {
 		Required:            info.Required,
 		Force:               info.Force,
 		DownloadUrl:         info.DownloadUrl,
+		WindowsDownloadUrl:  info.WindowsDownloadUrl,
+		LinuxDownloadUrl:    info.LinuxDownloadUrl,
 		ReleaseUrl:          info.ReleaseUrl,
 		ReleaseNotes:        info.ReleaseNotes,
 		Source:              info.Source,
@@ -210,7 +223,7 @@ func (h *Handler) broadcastAppRelease(info appReleaseInfo) {
 	h.State.BroadcastToAllMobiles(data)
 }
 
-func appReleaseToInfo(record appReleaseRecord, currentVersion string) appReleaseInfo {
+func appReleaseToInfo(record appReleaseRecord, currentVersion string, desktopOS string) appReleaseInfo {
 	current := normalizeVersionText(currentVersion)
 	latest := normalizeVersionText(record.LatestVersion)
 	available := current != "" && latest != "" && compareReleaseVersions(latest, current) > 0
@@ -222,14 +235,16 @@ func appReleaseToInfo(record appReleaseRecord, currentVersion string) appRelease
 		Available:           available,
 		Required:            isRequiredRelease(current, record.MinSupportedVersion) || (record.Force && available),
 		Force:               record.Force,
-		DownloadUrl:         record.DownloadUrl,
+		DownloadUrl:         releaseDownloadURL(record, desktopOS),
+		WindowsDownloadUrl:  record.WindowsDownloadUrl,
+		LinuxDownloadUrl:    record.LinuxDownloadUrl,
 		ReleaseUrl:          record.ReleaseUrl,
 		ReleaseNotes:        record.ReleaseNotes,
 		Source:              record.Source,
 	}
 }
 
-func githubReleaseInfo(ctx context.Context, platform string, currentVersion string) (appReleaseInfo, error) {
+func githubReleaseInfo(ctx context.Context, platform string, currentVersion string, desktopOS string) (appReleaseInfo, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, githubReleasesAPI, nil)
 	if err != nil {
 		return appReleaseInfo{}, err
@@ -266,14 +281,17 @@ func githubReleaseInfo(ctx context.Context, platform string, currentVersion stri
 			version := strings.TrimPrefix(release.TagName, "v")
 			releaseURL := release.HTMLURL
 			notes := release.Body
+			windowsURL, linuxURL := desktopAssetURLs(release.Assets)
 			return appReleaseToInfo(appReleaseRecord{
-				Platform:      platform,
-				LatestVersion: version,
-				ReleaseUrl:    nilIfEmpty(releaseURL),
-				ReleaseNotes:  nilIfEmpty(notes),
-				Enabled:       true,
-				Source:        "github",
-			}, currentVersion), nil
+				Platform:           platform,
+				LatestVersion:      version,
+				WindowsDownloadUrl: nilIfEmpty(windowsURL),
+				LinuxDownloadUrl:   nilIfEmpty(linuxURL),
+				ReleaseUrl:         nilIfEmpty(releaseURL),
+				ReleaseNotes:       nilIfEmpty(notes),
+				Enabled:            true,
+				Source:             "github",
+			}, currentVersion, desktopOS), nil
 		}
 		if platform == "mobile" {
 			match := mobileTagPattern.FindStringSubmatch(release.TagName)
@@ -300,7 +318,7 @@ func githubReleaseInfo(ctx context.Context, platform string, currentVersion stri
 				ReleaseNotes:  nilIfEmpty(notes),
 				Enabled:       true,
 				Source:        "github",
-			}, currentVersion), nil
+			}, currentVersion, desktopOS), nil
 		}
 	}
 	return appReleaseInfo{
@@ -311,10 +329,56 @@ func githubReleaseInfo(ctx context.Context, platform string, currentVersion stri
 	}, nil
 }
 
+func releaseDownloadURL(record appReleaseRecord, desktopOS string) *string {
+	if record.Platform != "desktop" {
+		return record.DownloadUrl
+	}
+	switch desktopOS {
+	case "windows":
+		if record.WindowsDownloadUrl != nil {
+			return record.WindowsDownloadUrl
+		}
+	case "linux":
+		if record.LinuxDownloadUrl != nil {
+			return record.LinuxDownloadUrl
+		}
+	}
+	return record.DownloadUrl
+}
+
+func desktopAssetURLs(assets []struct {
+	Name               string `json:"name"`
+	BrowserDownloadURL string `json:"browser_download_url"`
+}) (string, string) {
+	var windowsURL string
+	var linuxURL string
+	for _, asset := range assets {
+		name := strings.ToLower(asset.Name)
+		if windowsURL == "" && (strings.HasSuffix(name, ".exe") || strings.HasSuffix(name, ".msi")) {
+			windowsURL = asset.BrowserDownloadURL
+		}
+		if linuxURL == "" && (strings.HasSuffix(name, ".appimage") || strings.HasSuffix(name, ".deb") || strings.HasSuffix(name, ".rpm")) {
+			linuxURL = asset.BrowserDownloadURL
+		}
+	}
+	return windowsURL, linuxURL
+}
+
 func normalizeReleasePlatform(value string) string {
 	switch strings.ToLower(strings.TrimSpace(value)) {
 	case "desktop", "mobile":
 		return strings.ToLower(strings.TrimSpace(value))
+	default:
+		return ""
+	}
+}
+
+func normalizeDesktopOS(value string) string {
+	switch strings.ToLower(strings.TrimSpace(value)) {
+	case "win", "win32", "windows":
+		return "windows"
+	case "linux":
+		return "linux"
 	default:
 		return ""
 	}

@@ -290,6 +290,8 @@ type AppUpdateAvailable struct {
 	Required            bool    `json:"required"`
 	Force               bool    `json:"force"`
 	DownloadUrl         *string `json:"downloadUrl"`
+	WindowsDownloadUrl  *string `json:"windowsDownloadUrl"`
+	LinuxDownloadUrl    *string `json:"linuxDownloadUrl"`
 	ReleaseUrl          *string `json:"releaseUrl"`
 	ReleaseNotes        *string `json:"releaseNotes"`
 	Source              string  `json:"source"`

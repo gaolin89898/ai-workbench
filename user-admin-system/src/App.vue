@@ -59,6 +59,8 @@ type AppReleaseRecord = {
   latestVersion: string;
   minSupportedVersion: string | null;
   downloadUrl: string | null;
+  windowsDownloadUrl: string | null;
+  linuxDownloadUrl: string | null;
   releaseUrl: string | null;
   releaseNotes: string | null;
   force: boolean;
@@ -107,6 +109,8 @@ const releaseForms = reactive<Record<ReleasePlatform, {
   latestVersion: string;
   minSupportedVersion: string;
   downloadUrl: string;
+  windowsDownloadUrl: string;
+  linuxDownloadUrl: string;
   releaseUrl: string;
   releaseNotes: string;
   force: boolean;
@@ -253,6 +257,8 @@ function emptyRelease(platform: ReleasePlatform): AppReleaseRecord {
     latestVersion: "",
     minSupportedVersion: null,
     downloadUrl: null,
+    windowsDownloadUrl: null,
+    linuxDownloadUrl: null,
     releaseUrl: null,
     releaseNotes: null,
     force: false,
@@ -267,6 +273,8 @@ function emptyReleaseForm() {
     latestVersion: "",
     minSupportedVersion: "",
     downloadUrl: "",
+    windowsDownloadUrl: "",
+    linuxDownloadUrl: "",
     releaseUrl: "",
     releaseNotes: "",
     force: false,
@@ -279,6 +287,8 @@ function applyReleaseToForm(release: AppReleaseRecord) {
   form.latestVersion = release.latestVersion ?? "";
   form.minSupportedVersion = release.minSupportedVersion ?? "";
   form.downloadUrl = release.downloadUrl ?? "";
+  form.windowsDownloadUrl = release.windowsDownloadUrl ?? "";
+  form.linuxDownloadUrl = release.linuxDownloadUrl ?? "";
   form.releaseUrl = release.releaseUrl ?? "";
   form.releaseNotes = release.releaseNotes ?? "";
   form.force = release.force;
@@ -325,12 +335,16 @@ async function importGithubRelease(platform: ReleasePlatform) {
     const info = await requestAPI<{
       latestVersion?: string;
       downloadUrl?: string | null;
+      windowsDownloadUrl?: string | null;
+      linuxDownloadUrl?: string | null;
       releaseUrl?: string | null;
       releaseNotes?: string | null;
     }>(`/admin/app-releases/${platform}/import-github`, { method: "POST" });
     const form = releaseForms[platform];
     form.latestVersion = info.latestVersion ?? "";
     form.downloadUrl = info.downloadUrl ?? "";
+    form.windowsDownloadUrl = info.windowsDownloadUrl ?? "";
+    form.linuxDownloadUrl = info.linuxDownloadUrl ?? "";
     form.releaseUrl = info.releaseUrl ?? "";
     form.releaseNotes = info.releaseNotes ?? "";
     Message.success("已从 GitHub 读取版本信息，请确认后保存");
@@ -351,6 +365,8 @@ async function saveRelease(platform: ReleasePlatform) {
         latestVersion: form.latestVersion,
         minSupportedVersion: form.minSupportedVersion || null,
         downloadUrl: form.downloadUrl || null,
+        windowsDownloadUrl: form.windowsDownloadUrl || null,
+        linuxDownloadUrl: form.linuxDownloadUrl || null,
         releaseUrl: form.releaseUrl || null,
         releaseNotes: form.releaseNotes || null,
         force: form.force,
@@ -747,8 +763,16 @@ function backToDevices() {
               <a-form-item label="最低可用版本">
                 <a-input v-model="releaseForms[platform].minSupportedVersion" placeholder="低于该版本视为不兼容，必须更新，可留空" />
               </a-form-item>
-              <a-form-item label="下载地址">
-                <a-input v-model="releaseForms[platform].downloadUrl" placeholder="安装包或 APK 下载地址" />
+              <template v-if="platform === 'desktop'">
+                <a-form-item label="Windows 下载地址">
+                  <a-input v-model="releaseForms[platform].windowsDownloadUrl" placeholder="Windows 安装包下载地址，例如 .exe" />
+                </a-form-item>
+                <a-form-item label="Linux 下载地址">
+                  <a-input v-model="releaseForms[platform].linuxDownloadUrl" placeholder="Linux 安装包下载地址，例如 .AppImage 或 .deb" />
+                </a-form-item>
+              </template>
+              <a-form-item v-else label="APK 下载地址">
+                <a-input v-model="releaseForms[platform].downloadUrl" placeholder="Android APK 下载地址" />
               </a-form-item>
               <a-form-item label="Release 页面">
                 <a-input v-model="releaseForms[platform].releaseUrl" placeholder="GitHub Release 页面地址" />
