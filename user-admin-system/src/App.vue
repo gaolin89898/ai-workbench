@@ -24,6 +24,7 @@ type SystemUserRecord = {
   displayName: string;
   authMode: string;
   status: UserStatus;
+  disabled: boolean;
   desktopDeviceCount: number;
   onlineDesktopCount: number;
   mobileDeviceCount: number;
@@ -41,6 +42,7 @@ const pageLoading = ref(false);
 const actionLoading = ref(false);
 const editModalVisible = ref(false);
 const passwordModalVisible = ref(false);
+const deleteModalVisible = ref(false);
 const activeUser = ref<SystemUserRecord | null>(null);
 const loginForm = reactive({
   email: "admin",
@@ -71,7 +73,7 @@ const columns = [
   { title: "最近活跃", slotName: "latestSeenAt", width: 180 },
   { title: "注册时间", slotName: "createdAt", width: 180 },
   { title: "用户 ID", slotName: "id", width: 250 },
-  { title: "操作", slotName: "actions", width: 190, fixed: "right" as const },
+  { title: "操作", slotName: "actions", width: 280, fixed: "right" as const },
 ];
 
 const statusMeta: Record<UserStatus, { text: string; color: string; icon: Component }> = {
@@ -274,6 +276,47 @@ async function submitResetPassword() {
     actionLoading.value = false;
   }
 }
+
+function openDeleteUser(user: SystemUserRecord) {
+  activeUser.value = user;
+  deleteModalVisible.value = true;
+}
+
+async function submitDeleteUser() {
+  if (!activeUser.value) return;
+
+  actionLoading.value = true;
+  try {
+    await requestAPI<{ ok: boolean }>(`/admin/users/${activeUser.value.id}`, {
+      method: "DELETE",
+    });
+    users.value = users.value.filter((user) => user.id !== activeUser.value!.id);
+    deleteModalVisible.value = false;
+    Message.success("用户已删除");
+  } catch (error) {
+    Message.error(error instanceof Error ? error.message : String(error));
+  } finally {
+    actionLoading.value = false;
+  }
+}
+
+async function toggleDisableUser(user: SystemUserRecord) {
+  actionLoading.value = true;
+  try {
+    await requestAPI<{ ok: boolean }>(`/admin/users/${user.id}/toggle-disable`, {
+      method: "PATCH",
+      body: JSON.stringify({ disabled: !user.disabled }),
+    });
+    users.value = users.value.map((u) =>
+      u.id === user.id ? { ...u, disabled: !u.disabled } : u
+    );
+    Message.success(user.disabled ? "用户已启用" : "用户已禁用");
+  } catch (error) {
+    Message.error(error instanceof Error ? error.message : String(error));
+  } finally {
+    actionLoading.value = false;
+  }
+}
 </script>
 
 <template>
@@ -419,6 +462,7 @@ async function submitResetPassword() {
                 <div>
                   <strong>{{ record.displayName || record.account }}</strong>
                   <span>{{ record.account }}</span>
+                  <a-tag v-if="record.disabled" color="red" size="small" style="margin-left: 8px">已禁用</a-tag>
                 </div>
               </div>
             </template>
@@ -474,6 +518,17 @@ async function submitResetPassword() {
                   <template #icon><icon-lock /></template>
                   重置密码
                 </a-button>
+                <a-button
+                  type="text"
+                  size="small"
+                  :status="record.disabled ? 'success' : 'warning'"
+                  @click="toggleDisableUser(record)"
+                >
+                  {{ record.disabled ? "启用" : "禁用" }}
+                </a-button>
+                <a-button type="text" size="small" status="danger" @click="openDeleteUser(record)">
+                  删除
+                </a-button>
               </a-space>
             </template>
           </a-table>
@@ -521,6 +576,24 @@ async function submitResetPassword() {
           <a-input-password v-model="passwordForm.confirmPassword" placeholder="再次输入新密码" />
         </a-form-item>
       </a-form>
+    </a-modal>
+
+    <a-modal
+      v-model:visible="deleteModalVisible"
+      title="删除用户"
+      width="420px"
+      :mask-closable="false"
+      :ok-loading="actionLoading"
+      @ok="submitDeleteUser"
+    >
+      <a-alert
+        v-if="activeUser"
+        type="error"
+        content="此操作不可恢复，删除后该用户的所有数据将被永久删除。"
+      />
+      <p v-if="activeUser" style="margin-top: 16px">
+        确定要删除用户 <strong>{{ activeUser.account }}</strong> 吗？
+      </p>
     </a-modal>
   </a-layout>
 </template>

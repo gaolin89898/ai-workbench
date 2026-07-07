@@ -22,6 +22,7 @@ type adminSystemUserResponse struct {
 	DisplayName        string     `json:"displayName"`
 	AuthMode           string     `json:"authMode"`
 	Status             string     `json:"status"`
+	Disabled           bool       `json:"disabled"`
 	DesktopDeviceCount int64      `json:"desktopDeviceCount"`
 	OnlineDesktopCount int64      `json:"onlineDesktopCount"`
 	MobileDeviceCount  int64      `json:"mobileDeviceCount"`
@@ -52,6 +53,7 @@ func (h *Handler) listManagedUsers(w http.ResponseWriter, r *http.Request) {
 		   u.email,
 		   COALESCE(o.display_name, '') AS display_name,
 		   CASE WHEN o.provider IS NULL THEN 'password' ELSE o.provider END AS auth_mode,
+		   u.disabled,
 		   u.created_at,
 		   COALESCE(d.desktop_device_count, 0) AS desktop_device_count,
 		   COALESCE(d.online_desktop_count, 0) AS online_desktop_count,
@@ -103,6 +105,7 @@ func (h *Handler) listManagedUsers(w http.ResponseWriter, r *http.Request) {
 			&user.Email,
 			&user.DisplayName,
 			&user.AuthMode,
+			&user.Disabled,
 			&user.CreatedAt,
 			&user.DesktopDeviceCount,
 			&user.OnlineDesktopCount,
@@ -332,4 +335,51 @@ func (h *Handler) onlineMobileCount(userID string) int {
 func isPgUniqueViolation(err error) bool {
 	var pgErr *pgconn.PgError
 	return errors.As(err, &pgErr) && pgErr.Code == "23505"
+}
+
+func (h *Handler) deleteManagedUser(w http.ResponseWriter, r *http.Request) {
+	if !h.requireAdminUser(w, r) {
+		return
+	}
+	userID := r.PathValue("userId")
+
+	tag, err := h.DB.Pool.Exec(r.Context(), "DELETE FROM users WHERE id = $1", userID)
+	if err != nil {
+		writeInternal(w)
+		return
+	}
+	if tag.RowsAffected() == 0 {
+		writeError(w, http.StatusNotFound, "not found")
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
+}
+
+func (h *Handler) toggleDisableUser(w http.ResponseWriter, r *http.Request) {
+	if !h.requireAdminUser(w, r) {
+		return
+	}
+	userID := r.PathValue("userId")
+
+	var req struct {
+		Disabled bool `json:"disabled"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeBadRequest(w, "invalid request body")
+		return
+	}
+
+	tag, err := h.DB.Pool.Exec(r.Context(),
+		"UPDATE users SET disabled = $1 WHERE id = $2",
+		req.Disabled, userID,
+	)
+	if err != nil {
+		writeInternal(w)
+		return
+	}
+	if tag.RowsAffected() == 0 {
+		writeError(w, http.StatusNotFound, "not found")
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
 }
