@@ -12,7 +12,7 @@ const _githubReleasesApiUrl =
 const _githubReleasesUrl =
     'https://github.com/gaolin89898/ai-workbench/releases';
 const _currentMobileVersion =
-    String.fromEnvironment('MOBILE_VERSION', defaultValue: '0.1.68');
+    String.fromEnvironment('MOBILE_VERSION', defaultValue: '0.1.69');
 
 class MobileUpdateInfo {
   const MobileUpdateInfo({
