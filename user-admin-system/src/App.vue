@@ -60,8 +60,6 @@ const users = ref<SystemUserRecord[]>([]);
 
 const filters = reactive({
   keyword: "",
-  status: "",
-  clientType: "",
 });
 
 const columns = [
@@ -82,40 +80,15 @@ const statusMeta: Record<UserStatus, { text: string; color: string; icon: Compon
 };
 
 const isAuthenticated = computed(() => Boolean(token.value));
-const totalCount = computed(() => users.value.length);
-const onlineCount = computed(() => users.value.filter((user) => user.status === "online").length);
-const desktopUserCount = computed(
-  () => users.value.filter((user) => user.desktopDeviceCount > 0).length
-);
-const mobileUserCount = computed(
-  () => users.value.filter((user) => user.mobileDeviceCount > 0 || user.onlineMobileCount > 0).length
-);
-const onlineDesktopCount = computed(() =>
-  users.value.reduce((sum, user) => sum + user.onlineDesktopCount, 0)
-);
-const onlineMobileCount = computed(() =>
-  users.value.reduce((sum, user) => sum + user.onlineMobileCount, 0)
-);
 
 const filteredUsers = computed(() => {
   const keyword = filters.keyword.trim().toLowerCase();
-  return users.value.filter((user) => {
-    const hitKeyword =
-      !keyword ||
-      [user.account, user.email, user.displayName, user.id].some((value) =>
-        (value || "").toLowerCase().includes(keyword)
-      );
-    const hitStatus = !filters.status || user.status === filters.status;
-    const hitClientType =
-      !filters.clientType ||
-      (filters.clientType === "desktop" && user.desktopDeviceCount > 0) ||
-      (filters.clientType === "mobile" &&
-        (user.mobileDeviceCount > 0 || user.onlineMobileCount > 0)) ||
-      (filters.clientType === "both" &&
-        user.desktopDeviceCount > 0 &&
-        (user.mobileDeviceCount > 0 || user.onlineMobileCount > 0));
-    return hitKeyword && hitStatus && hitClientType;
-  });
+  if (!keyword) return users.value;
+  return users.value.filter((user) =>
+    [user.account, user.email, user.displayName, user.id].some((value) =>
+      (value || "").toLowerCase().includes(keyword)
+    )
+  );
 });
 
 onMounted(() => {
@@ -165,8 +138,6 @@ function authModeText(value: string) {
 
 function resetFilters() {
   filters.keyword = "";
-  filters.status = "";
-  filters.clientType = "";
 }
 
 async function submitAuth() {
@@ -394,34 +365,6 @@ async function toggleDisableUser(user: SystemUserRecord) {
       </a-layout-header>
 
       <a-layout-content class="admin-content">
-        <section class="metrics-grid">
-          <a-card class="metric-card" :bordered="false">
-            <span>系统账号</span>
-            <strong>{{ totalCount }}</strong>
-            <small>后端 users 表账号数</small>
-          </a-card>
-          <a-card class="metric-card" :bordered="false">
-            <span>在线账号</span>
-            <strong>{{ onlineCount }}</strong>
-            <small>桌面端或移动端在线</small>
-          </a-card>
-          <a-card class="metric-card" :bordered="false">
-            <span>桌面端用户</span>
-            <strong>{{ desktopUserCount }}</strong>
-            <small>至少绑定 1 台桌面端</small>
-          </a-card>
-          <a-card class="metric-card" :bordered="false">
-            <span>移动端用户</span>
-            <strong>{{ mobileUserCount }}</strong>
-            <small>有移动端记录或在线连接</small>
-          </a-card>
-          <a-card class="metric-card warning" :bordered="false">
-            <span>在线连接</span>
-            <strong>{{ onlineDesktopCount + onlineMobileCount }}</strong>
-            <small>桌面 {{ onlineDesktopCount }} / 移动 {{ onlineMobileCount }}</small>
-          </a-card>
-        </section>
-
         <a-card class="table-panel" :bordered="false">
           <div class="filter-bar">
             <a-input
@@ -432,15 +375,6 @@ async function toggleDisableUser(user: SystemUserRecord) {
             >
               <template #prefix><icon-search /></template>
             </a-input>
-            <a-select v-model="filters.status" allow-clear placeholder="在线状态" class="filter-select">
-              <a-option value="online">在线</a-option>
-              <a-option value="offline">离线</a-option>
-            </a-select>
-            <a-select v-model="filters.clientType" allow-clear placeholder="客户端类型" class="filter-select">
-              <a-option value="desktop">桌面端用户</a-option>
-              <a-option value="mobile">移动端用户</a-option>
-              <a-option value="both">同时使用</a-option>
-            </a-select>
           </div>
 
           <div class="table-toolbar">
@@ -737,52 +671,6 @@ async function toggleDisableUser(user: SystemUserRecord) {
   padding: 22px 28px 28px;
 }
 
-.metrics-grid {
-  display: grid;
-  grid-template-columns: repeat(5, minmax(150px, 1fr));
-  gap: 14px;
-  margin-bottom: 16px;
-}
-
-.metric-card {
-  min-height: 112px;
-  border: 1px solid #edf0f5;
-  border-radius: 8px;
-  box-shadow: 0 6px 18px rgba(29, 33, 41, 0.04);
-}
-
-.metric-card :deep(.arco-card-body) {
-  display: flex;
-  height: 100%;
-  flex-direction: column;
-  justify-content: center;
-  padding: 18px;
-}
-
-.metric-card span {
-  color: #4e5969;
-  font-size: 13px;
-  font-weight: 600;
-}
-
-.metric-card strong {
-  margin-top: 8px;
-  color: #1d2129;
-  font-size: 28px;
-  font-weight: 760;
-  line-height: 1;
-}
-
-.metric-card small {
-  margin-top: 10px;
-  color: #86909c;
-  font-size: 12px;
-}
-
-.metric-card.warning strong {
-  color: #f53f3f;
-}
-
 .table-panel {
   border: 1px solid #edf0f5;
   border-radius: 8px;
@@ -802,10 +690,6 @@ async function toggleDisableUser(user: SystemUserRecord) {
 
 .keyword-input {
   width: 360px;
-}
-
-.filter-select {
-  width: 160px;
 }
 
 .table-toolbar {
