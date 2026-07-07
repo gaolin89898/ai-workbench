@@ -106,6 +106,11 @@ function detectAuthStatus(providerId: string): string {
     const mimoDir = path.join(home, ".mimocode");
     return dirExists(mimoDir) ? "signedIn" : "unknown";
   }
+  if (providerId === "opencode") {
+    const authFile = path.join(home, ".local", "share", "opencode", "auth.json");
+    const accountFile = path.join(home, ".local", "share", "opencode", "account.json");
+    return fileExists(authFile) || fileExists(accountFile) ? "signedIn" : "unknown";
+  }
   return "unknown";
 }
 

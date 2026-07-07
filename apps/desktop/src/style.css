@@ -6899,6 +6899,17 @@ textarea:focus {
   flex-shrink: 0;
 }
 
+.settings-provider-refresh-note {
+  margin: -6px 0 0;
+  color: var(--color-text-muted);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.settings-provider-refresh-note.error {
+  color: var(--state-danger);
+}
+
 .settings-provider-grid {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
@@ -7000,6 +7011,16 @@ textarea:focus {
   justify-content: space-between;
   gap: 8px;
   margin-top: auto;
+}
+
+.settings-provider-card-checked {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--color-text-muted);
+  font-size: 11px;
+  font-weight: 650;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .settings-provider-card-command {

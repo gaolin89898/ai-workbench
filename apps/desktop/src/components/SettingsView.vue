@@ -39,6 +39,9 @@ const autoReconnect = ref(true);
 const cloudDeviceId = ref<string>("");
 const cloudPaired = ref<boolean>(false);
 const desktopRuntimeInfo = ref<DesktopRuntimeInfo | null>(null);
+const providerRefreshLoading = ref(false);
+const providerRefreshMessage = ref("");
+const providerRefreshError = ref(false);
 
 const settingsPanels: SettingsPanelItem[] = [
   {
@@ -187,6 +190,26 @@ function checkedAt(status?: ProviderStatus) {
   const date = new Date(status.lastCheckedAt);
   if (Number.isNaN(date.getTime())) return "时间未知";
   return date.toLocaleTimeString();
+}
+
+async function refreshProviderDiagnostics() {
+  if (providerRefreshLoading.value) return;
+  providerRefreshLoading.value = true;
+  providerRefreshError.value = false;
+  providerRefreshMessage.value = "正在重新检测本机命令...";
+  try {
+    await Promise.all([ws.detectProviders(), refreshDesktopRuntimeInfo()]);
+    const checkedTimes = ws.providerStatuses.value
+      .map((status) => new Date(status.lastCheckedAt).getTime())
+      .filter((value) => Number.isFinite(value));
+    const lastCheckedAt = checkedTimes.length ? new Date(Math.max(...checkedTimes)).toLocaleTimeString() : "";
+    providerRefreshMessage.value = lastCheckedAt ? `已刷新：${lastCheckedAt}` : "已刷新";
+  } catch (error) {
+    providerRefreshError.value = true;
+    providerRefreshMessage.value = `刷新失败：${error instanceof Error ? error.message : String(error)}`;
+  } finally {
+    providerRefreshLoading.value = false;
+  }
 }
 
 function goBack() {
@@ -472,9 +495,14 @@ async function restoreSession(sessionId: string) {
                   <button class="button secondary mini" type="button" :disabled="ws.updateChecking.value" @click="ws.checkAppUpdate">
                     {{ ws.updateChecking.value ? "检查中" : "诊断更新" }}
                   </button>
-                  <button class="button secondary mini" type="button" @click="ws.detectProviders">刷新</button>
+                  <button class="button secondary mini" type="button" :disabled="providerRefreshLoading" @click="refreshProviderDiagnostics">
+                    {{ providerRefreshLoading ? "刷新中" : "刷新" }}
+                  </button>
                 </div>
               </div>
+              <p v-if="providerRefreshMessage" :class="['settings-provider-refresh-note', { error: providerRefreshError }]">
+                {{ providerRefreshMessage }}
+              </p>
               <div class="settings-provider-grid">
                 <div v-if="!providerRows.length" class="empty-state">暂无 Provider。</div>
                 <article v-for="row in providerRows" :key="row.provider.id" class="settings-provider-card">
@@ -498,6 +526,7 @@ async function restoreSession(sessionId: string) {
                   </div>
                   <div class="settings-provider-card-foot">
                     <span class="badge" :class="installedTone(row.status)">{{ installedLabel(row.status) }}</span>
+                    <span class="settings-provider-card-checked">{{ checkedAt(row.status) }}</span>
                     <code class="settings-provider-card-command">{{ row.provider.command }}</code>
                   </div>
                 </article>
