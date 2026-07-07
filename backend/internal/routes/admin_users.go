@@ -118,12 +118,7 @@ func (h *Handler) listManagedUsers(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		user.Account = user.Email
-		user.OnlineMobileCount = h.onlineMobileCount(user.Id)
-		if user.OnlineDesktopCount > 0 || user.OnlineMobileCount > 0 {
-			user.Status = "online"
-		} else {
-			user.Status = "offline"
-		}
+		h.applyLiveMobileStats(&user, time.Now())
 		users = append(users, user)
 	}
 	if err := rows.Err(); err != nil {
@@ -293,13 +288,30 @@ func (h *Handler) adminUserByID(ctx context.Context, userID string) (adminSystem
 		return user, err
 	}
 	user.Account = user.Email
+	h.applyLiveMobileStats(&user, time.Now())
+	return user, nil
+}
+
+func (h *Handler) applyLiveMobileStats(user *adminSystemUserResponse, now time.Time) {
 	user.OnlineMobileCount = h.onlineMobileCount(user.Id)
+	if int64(user.OnlineMobileCount) > user.MobileDeviceCount {
+		user.MobileDeviceCount = int64(user.OnlineMobileCount)
+	}
+	if user.OnlineMobileCount > 0 {
+		if user.LastMobileSeenAt == nil {
+			seenAt := now
+			user.LastMobileSeenAt = &seenAt
+		}
+		if user.LatestSeenAt == nil || user.LatestSeenAt.Before(now) {
+			latestAt := now
+			user.LatestSeenAt = &latestAt
+		}
+	}
 	if user.OnlineDesktopCount > 0 || user.OnlineMobileCount > 0 {
 		user.Status = "online"
 	} else {
 		user.Status = "offline"
 	}
-	return user, nil
 }
 
 type adminSessionResponse struct {

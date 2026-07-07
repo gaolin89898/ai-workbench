@@ -151,6 +151,18 @@ function formatDate(value: string | null) {
   });
 }
 
+function onlineCountText(onlineCount: number, deviceCount: number) {
+  const normalizedDeviceCount = Math.max(deviceCount, onlineCount);
+  return `${onlineCount} / ${normalizedDeviceCount} 在线`;
+}
+
+function formatMobileLastSeen(record: SystemUserRecord) {
+  if (!record.lastMobileSeenAt && record.onlineMobileCount > 0) {
+    return "当前在线";
+  }
+  return formatDate(record.lastMobileSeenAt);
+}
+
 function getStatusMeta(status: UserStatus) {
   return statusMeta[status] ?? statusMeta.offline;
 }
@@ -490,7 +502,7 @@ function backToDevices() {
             <template #desktop="{ record }">
               <div class="device-cell">
                 <icon-desktop />
-                <span>{{ record.onlineDesktopCount }} / {{ record.desktopDeviceCount }} 在线</span>
+                <span>{{ onlineCountText(record.onlineDesktopCount, record.desktopDeviceCount) }}</span>
                 <small>最近：{{ formatDate(record.lastDesktopSeenAt) }}</small>
               </div>
             </template>
@@ -498,8 +510,8 @@ function backToDevices() {
             <template #mobile="{ record }">
               <div class="device-cell">
                 <icon-mobile />
-                <span>{{ record.onlineMobileCount }} / {{ record.mobileDeviceCount }} 在线</span>
-                <small>最近：{{ formatDate(record.lastMobileSeenAt) }}</small>
+                <span>{{ onlineCountText(record.onlineMobileCount, record.mobileDeviceCount) }}</span>
+                <small>最近：{{ formatMobileLastSeen(record) }}</small>
               </div>
             </template>
 
