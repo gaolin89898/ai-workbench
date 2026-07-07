@@ -635,6 +635,7 @@ class DesktopCloudSync {
 
       this.notify("workspace-changed");
       this.notify("ai-history-changed", { aiSessionId });
+      this.pushSessionSnapshot();
       if ((providerId || "claude") === "codex") {
         void this.warmupCreatedCodexSession(aiSessionId);
       }
@@ -1013,6 +1014,7 @@ class DesktopCloudSync {
         });
       } finally {
         this.notify("ai-history-changed", { aiSessionId });
+        this.pushSessionSnapshot();
       }
     } catch (e) {
       console.error("handleAiMessageSend failed:", e);
@@ -1066,6 +1068,7 @@ class DesktopCloudSync {
     }
     this.notify("workspace-changed");
     this.notify("ai-history-changed", { aiSessionId });
+    this.pushSessionSnapshot();
   }
 
   /** ai.session.rename: a mobile client renamed the session via HTTP PATCH.
@@ -1081,6 +1084,7 @@ class DesktopCloudSync {
     }
     this.notify("workspace-changed");
     this.notify("ai-history-changed", { aiSessionId });
+    this.pushSessionSnapshot();
   }
 
   // ----- low-level send / notify -----

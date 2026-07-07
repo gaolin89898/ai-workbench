@@ -323,6 +323,7 @@ export function registerIpcHandlers(win?: BrowserWindow): void {
       providerSessionId: providerSessionId || existingSessionId,
       status: "completed",
     });
+    void sync?.pushSessionSnapshot();
     void sync?.pushAiHistory(req.aiSessionId);
     return providerSessionId;
   });
@@ -339,6 +340,7 @@ export function registerIpcHandlers(win?: BrowserWindow): void {
       providerSessionId: providerSessionId || existingSessionId,
       status: "completed",
     });
+    void sync?.pushSessionSnapshot();
     void sync?.pushAiHistory(req.aiSessionId);
     return providerSessionId;
   });
