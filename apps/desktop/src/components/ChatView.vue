@@ -4,7 +4,7 @@ import ChatMessageRow from "./ChatMessageRow.vue";
 import ApprovalSegment from "./ChatSegment.vue";
 import TerminalView from "./TerminalView.vue";
 import { useWorkspace } from "../composables/useWorkspace";
-import { desktopApi, type AiProvider, type ChatImageAttachment, type ChatMessage, type ChatSegment, type CodexApprovalMode, type CodexChatOptions, type CodexModelOption, type CodexRunMode } from "../services/desktop";
+import { desktopApi, type AiProvider, type ChatImageAttachment, type ChatMessage, type ChatSegment, type CodexApprovalMode, type CodexChatOptions, type CodexModelOption, type CodexReasoningEffort, type CodexRunMode } from "../services/desktop";
 
 const providerClaudeIcon = new URL("../assets/icons/provider-claude.svg", import.meta.url).href;
 const providerCodexIcon = new URL("../assets/icons/provider-codex.svg", import.meta.url).href;
@@ -23,14 +23,29 @@ const chatComposer = ref<HTMLDivElement | null>(null);
 const activeTab = ref<"chat" | "terminal">("chat");
 const startMenuOpen = ref(false);
 const approvalMenuOpen = ref(false);
+const composerToolsOpen = ref(false);
+const modelMenuOpen = ref(false);
+const modelSubmenuOpen = ref(false);
 const codexApprovalMode = ref<CodexApprovalMode>("autoEdit");
 const codexMode = ref<CodexRunMode>("default");
 const codexSelectedModel = ref("");
+const codexReasoningLevel = ref<CodexReasoningEffort>("high");
 const codexGoalEnabled = ref(false);
 const codexGoal = ref("");
 const codexModels = ref<CodexModelOption[]>([]);
 const codexModelsLoading = ref(false);
 const codexModelsLoaded = ref(false);
+const floatingMenuTargetSelector = [
+  ".codex-start-add",
+  ".codex-start-menu",
+  ".codex-approval-trigger",
+  ".codex-approval-menu",
+  ".codex-composer-add",
+  ".codex-composer-add-menu",
+  ".codex-model-picker",
+  ".codex-model-menu",
+  ".codex-model-submenu",
+].join(", ");
 
 const approvalModes = [
   {
@@ -92,7 +107,6 @@ const chatHeaderMeta = computed(() => {
   return `${currentProject.value.gitBranch ?? "未知分支"} · ${currentProject.value.gitDirty ? "有变更" : "Git 干净"}`;
 });
 const conversationTitle = computed(() => ws.activeAiSession.value?.title ?? currentProject.value?.name ?? "新对话");
-const startTitle = computed(() => `我们该在 ${currentProject.value?.name ?? "项目"} 中做什么?`);
 const showCreateHint = computed(() => !ws.activeAiSession.value && ws.createAiResult.value);
 const pendingApprovalSegment = computed<Extract<ChatSegment, { type: "approval" }> | null>(() => {
   for (let messageIndex = ws.chatMessages.value.length - 1; messageIndex >= 0; messageIndex -= 1) {
@@ -107,6 +121,28 @@ const pendingApprovalSegment = computed<Extract<ChatSegment, { type: "approval" 
 
 const canSend = computed(() => Boolean(prompt.value.trim() || imageAttachments.value.length || ws.activeChatIsRunning.value));
 const selectedApprovalMode = computed(() => approvalModes.find((mode) => mode.id === codexApprovalMode.value) ?? approvalModes[1]);
+const reasoningOptions = [
+  { id: "low", label: "低" },
+  { id: "medium", label: "中" },
+  { id: "high", label: "高" },
+  { id: "ultra", label: "超高" },
+] as const;
+const selectedReasoningLabel = computed(() => reasoningOptions.find((option) => option.id === codexReasoningLevel.value)?.label ?? "高");
+const selectedCodexModelLabel = computed(() => {
+  if (codexModelsLoading.value) return "加载中";
+  if (!codexSelectedModel.value) return "默认";
+  const selected = codexModelOptions.value.find((model) => model.model === codexSelectedModel.value);
+  return selected?.displayName ?? codexSelectedModel.value;
+});
+const selectedCodexModelShortLabel = computed(() => {
+  const label = selectedCodexModelLabel.value.trim();
+  return label
+    .replace(/^gpt[-_\s]*/i, "")
+    .replace(/^claude[-_\s]*/i, "")
+    .replace(/^codex[-_\s]*/i, "")
+    .replace(/^openai[-_\s]*/i, "");
+});
+const selectedCodexModelButtonLabel = computed(() => `${selectedCodexModelShortLabel.value} · ${selectedReasoningLabel.value}`);
 const providerIcons: Record<string, string> = {
   claude: providerClaudeIcon,
   codex: providerCodexIcon,
@@ -343,23 +379,87 @@ function providerIcon(providerId: string) {
   return providerIcons[providerId] ?? providerCodexIcon;
 }
 
+function isFloatingMenuTarget(target: EventTarget | null) {
+  return target instanceof Element && Boolean(target.closest(floatingMenuTargetSelector));
+}
+
 function closeFloatingMenusOnOutsideClick(event: PointerEvent) {
-  if (!startMenuOpen.value && !approvalMenuOpen.value) return;
-  const target = event.target;
-  if (target instanceof Node && (startPromptBox.value?.contains(target) || chatComposer.value?.contains(target))) return;
+  if (!startMenuOpen.value && !approvalMenuOpen.value && !composerToolsOpen.value && !modelMenuOpen.value && !modelSubmenuOpen.value) return;
+  if (isFloatingMenuTarget(event.target)) return;
   startMenuOpen.value = false;
   approvalMenuOpen.value = false;
+  composerToolsOpen.value = false;
+  modelMenuOpen.value = false;
+  modelSubmenuOpen.value = false;
 }
 
 function toggleApprovalMenu() {
   if (!showCodexRunControls.value) return;
   approvalMenuOpen.value = !approvalMenuOpen.value;
-  if (approvalMenuOpen.value) startMenuOpen.value = false;
+  if (approvalMenuOpen.value) {
+    startMenuOpen.value = false;
+    composerToolsOpen.value = false;
+    modelMenuOpen.value = false;
+    modelSubmenuOpen.value = false;
+  }
 }
 
 function selectApprovalMode(mode: CodexApprovalMode) {
   codexApprovalMode.value = mode;
   approvalMenuOpen.value = false;
+}
+
+function toggleComposerToolsMenu() {
+  if (!showCodexRunControls.value) return;
+  composerToolsOpen.value = !composerToolsOpen.value;
+  if (composerToolsOpen.value) {
+    startMenuOpen.value = false;
+    approvalMenuOpen.value = false;
+    modelMenuOpen.value = false;
+    modelSubmenuOpen.value = false;
+  }
+}
+
+function openComposerApprovalMenu() {
+  composerToolsOpen.value = false;
+  approvalMenuOpen.value = true;
+}
+
+function toggleComposerPlanMode() {
+  codexMode.value = codexMode.value === "plan" ? "default" : "plan";
+  composerToolsOpen.value = false;
+}
+
+function toggleComposerGoalMode() {
+  codexGoalEnabled.value = !codexGoalEnabled.value;
+  composerToolsOpen.value = false;
+}
+
+function toggleModelMenu() {
+  if (!showCodexRunControls.value || codexModelsLoading.value) return;
+  modelMenuOpen.value = !modelMenuOpen.value;
+  modelSubmenuOpen.value = false;
+  if (modelMenuOpen.value) {
+    startMenuOpen.value = false;
+    approvalMenuOpen.value = false;
+    composerToolsOpen.value = false;
+  }
+}
+
+function toggleModelSubmenu() {
+  if (!modelMenuOpen.value) return;
+  modelSubmenuOpen.value = !modelSubmenuOpen.value;
+}
+
+function selectCodexModel(model: string) {
+  codexSelectedModel.value = model;
+  modelSubmenuOpen.value = false;
+  modelMenuOpen.value = false;
+}
+
+function selectReasoningLevel(level: typeof reasoningOptions[number]["id"]) {
+  codexReasoningLevel.value = level;
+  modelSubmenuOpen.value = false;
 }
 
 async function loadCodexModels() {
@@ -389,6 +489,7 @@ function buildCodexOptions(): CodexChatOptions {
     approvalMode: codexApprovalMode.value,
     codexMode: codexMode.value,
     codexModel: codexSelectedModel.value || null,
+    codexReasoningEffort: codexReasoningLevel.value,
     codexGoal: goal || null,
   };
 }
@@ -399,10 +500,13 @@ function onWindowKeydown(event: KeyboardEvent) {
     previewImage.value = null;
     return;
   }
-  if (event.key === "Escape" && (startMenuOpen.value || approvalMenuOpen.value)) {
+  if (event.key === "Escape" && (startMenuOpen.value || approvalMenuOpen.value || composerToolsOpen.value || modelMenuOpen.value || modelSubmenuOpen.value)) {
     event.preventDefault();
     startMenuOpen.value = false;
     approvalMenuOpen.value = false;
+    composerToolsOpen.value = false;
+    modelMenuOpen.value = false;
+    modelSubmenuOpen.value = false;
     return;
   }
   if (event.key !== "Escape" || !ws.activeChatIsRunning.value) return;
@@ -579,7 +683,12 @@ watch(
   () => showCodexRunControls.value,
   (visible) => {
     if (visible) void loadCodexModels();
-    else approvalMenuOpen.value = false;
+    else {
+      approvalMenuOpen.value = false;
+      composerToolsOpen.value = false;
+      modelMenuOpen.value = false;
+      modelSubmenuOpen.value = false;
+    }
   },
   { immediate: true },
 );
@@ -653,7 +762,12 @@ async function send() {
 
 function toggleStartMenu() {
   startMenuOpen.value = !startMenuOpen.value;
-  if (startMenuOpen.value) approvalMenuOpen.value = false;
+  if (startMenuOpen.value) {
+    approvalMenuOpen.value = false;
+    composerToolsOpen.value = false;
+    modelMenuOpen.value = false;
+    modelSubmenuOpen.value = false;
+  }
 }
 
 function selectStartProvider(providerId = "codex") {
@@ -675,7 +789,11 @@ function onPromptKeydown(event: KeyboardEvent) {
   <section class="view active" data-view-panel="aiSessions">
     <section v-if="!ws.activeAiSession.value" class="codex-start">
       <div class="codex-start-inner">
-        <h1>{{ startTitle }}</h1>
+        <h1>
+          我们该在
+          <span class="codex-start-project">{{ currentProject?.name ?? "项目" }}</span>
+          中做什么?
+        </h1>
         <form ref="startPromptBox" class="codex-prompt-box" @submit.prevent="send">
           <div v-if="imageAttachments.length" class="chat-image-attachments start-attachments">
             <div
@@ -698,6 +816,48 @@ function onPromptKeydown(event: KeyboardEvent) {
             @keydown="onPromptKeydown"
             @paste="onPromptPaste"
           ></textarea>
+          <div class="codex-start-toolbar">
+          <div v-if="showCodexRunControls" class="codex-composer-add-wrap codex-start-tools-wrap">
+            <button
+              class="codex-composer-add"
+              :class="{ open: composerToolsOpen }"
+              title="添加工具"
+              type="button"
+              @click="toggleComposerToolsMenu"
+              aria-label="添加工具"
+            >
+              <svg viewBox="0 0 16 16" fill="none" aria-hidden="true">
+                <path d="M8 3.5v9M3.5 8h9" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" />
+              </svg>
+            </button>
+            <div v-if="composerToolsOpen" class="codex-composer-add-menu">
+              <button type="button" @click="openComposerApprovalMenu">
+                <svg viewBox="0 0 16 16" fill="none" aria-hidden="true">
+                  <path d="M8 2.25 13 4.1v3.7c0 3-2.05 5.05-5 5.95-2.95-.9-5-2.95-5-5.95V4.1l5-1.85Z" stroke="currentColor" stroke-width="1.35" stroke-linejoin="round" />
+                  <path d="M5.75 7.95 7.25 9.4l3.05-3.05" stroke="currentColor" stroke-width="1.45" stroke-linecap="round" stroke-linejoin="round" />
+                </svg>
+                <span>审批方式</span>
+                <small>{{ selectedApprovalMode.label }}</small>
+              </button>
+              <button type="button" :class="{ active: codexMode === 'plan' }" @click="toggleComposerPlanMode">
+                <svg viewBox="0 0 16 16" fill="none" aria-hidden="true">
+                  <path d="M4 4h3.5M8.5 4H12M4 8h8M4 12h3.5M8.5 12H12" stroke="currentColor" stroke-width="1.35" stroke-linecap="round" />
+                  <path d="M7.5 2.75v2.5M7.5 10.75v2.5" stroke="currentColor" stroke-width="1.35" stroke-linecap="round" />
+                </svg>
+                <span>计划模式</span>
+                <small>{{ codexMode === "plan" ? "已开启" : "未开启" }}</small>
+              </button>
+              <button type="button" :class="{ active: codexGoalEnabled }" @click="toggleComposerGoalMode">
+                <svg viewBox="0 0 16 16" fill="none" aria-hidden="true">
+                  <circle cx="8" cy="8" r="5.5" stroke="currentColor" stroke-width="1.35" />
+                  <circle cx="8" cy="8" r="2.1" stroke="currentColor" stroke-width="1.35" />
+                  <path d="M8 1.8v2M8 12.2v2M1.8 8h2M12.2 8h2" stroke="currentColor" stroke-width="1.35" stroke-linecap="round" />
+                </svg>
+                <span>目标</span>
+                <small>{{ codexGoalEnabled ? "已开启" : "未开启" }}</small>
+              </button>
+            </div>
+          </div>
           <button
             class="codex-start-add"
             :class="{ open: startMenuOpen }"
@@ -765,19 +925,62 @@ function onPromptKeydown(event: KeyboardEvent) {
               <button type="button" :class="{ active: codexMode === 'default' }" @click="setCodexMode('default')">默认</button>
               <button type="button" :class="{ active: codexMode === 'plan' }" @click="setCodexMode('plan')">计划</button>
             </div>
-            <label class="codex-model-picker" title="选择 Codex 模型">
-              <span>模型</span>
-              <select v-model="codexSelectedModel" :disabled="codexModelsLoading">
-                <option value="">{{ codexModelsLoading ? "加载中" : "默认" }}</option>
-                <option
-                  v-for="model in codexModelOptions"
-                  :key="model.id"
-                  :value="model.model"
-                >
-                  {{ model.displayName }}
-                </option>
-              </select>
-            </label>
+            <div class="codex-model-picker codex-model-picker-custom" title="选择 Codex 模型">
+              <button
+                class="codex-model-button"
+                :class="{ open: modelMenuOpen }"
+                :disabled="codexModelsLoading"
+                type="button"
+                @click="toggleModelMenu"
+                aria-label="选择 Codex 模型"
+              >
+                <span>{{ selectedCodexModelButtonLabel }}</span>
+                <svg viewBox="0 0 16 16" fill="none" aria-hidden="true">
+                  <path d="M5 6.5 8 9.5l3-3" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" />
+                </svg>
+              </button>
+              <div v-if="modelMenuOpen" class="codex-model-menu codex-model-menu-dual">
+                <div class="codex-model-menu-column models">
+                  <button
+                    type="button"
+                    class="codex-model-submenu-trigger"
+                    :class="{ open: modelSubmenuOpen }"
+                    @click.stop="toggleModelSubmenu"
+                  >
+                    <span>{{ selectedCodexModelLabel }}</span>
+                    <svg class="codex-model-submenu-chevron" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+                      <path d="M6 4.5 9.5 8 6 11.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" />
+                    </svg>
+                  </button>
+                  <div v-if="modelSubmenuOpen" class="codex-model-submenu">
+                    <div class="codex-model-menu-heading">模型</div>
+                    <button
+                      v-for="model in codexModelOptions"
+                      :key="model.id"
+                      type="button"
+                      :class="{ active: model.model === codexSelectedModel }"
+                      @click="selectCodexModel(model.model)"
+                    >
+                      <span>{{ model.displayName }}</span>
+                      <span class="codex-model-menu-check" aria-hidden="true">{{ model.model === codexSelectedModel ? "✓" : "" }}</span>
+                    </button>
+                  </div>
+                </div>
+                <div class="codex-model-menu-column reasoning">
+                  <div class="codex-model-menu-heading">推理</div>
+                  <button
+                    v-for="option in reasoningOptions"
+                    :key="option.id"
+                    type="button"
+                    :class="{ active: option.id === codexReasoningLevel }"
+                    @click="selectReasoningLevel(option.id)"
+                  >
+                    <span>{{ option.label }}</span>
+                    <span class="codex-model-menu-check" aria-hidden="true">{{ option.id === codexReasoningLevel ? "✓" : "" }}</span>
+                  </button>
+                </div>
+              </div>
+            </div>
             <label class="codex-goal-toggle" title="开启目标模式">
               <input v-model="codexGoalEnabled" type="checkbox" />
               <span>目标</span>
@@ -806,6 +1009,7 @@ function onPromptKeydown(event: KeyboardEvent) {
           <button class="codex-send-button" :disabled="!prompt.trim() && !imageAttachments.length" title="发送" type="submit" aria-label="发送">
             <img :src="sendIcon" alt="" aria-hidden="true" />
           </button>
+          </div>
         </form>
         <div v-if="ws.createAiError.value && showCreateHint" class="chat-toast start-toast error">{{ ws.createAiResult.value }}</div>
       </div>
@@ -911,57 +1115,141 @@ function onPromptKeydown(event: KeyboardEvent) {
               </button>
             </div>
           </div>
-          <textarea v-model="prompt" rows="3" placeholder="询问任何问题，或输入 / 使用命令、@ 提及文件" @keydown="onPromptKeydown" @paste="onPromptPaste"></textarea>
+          <textarea v-model="prompt" rows="3" placeholder="输入你的消息..." @keydown="onPromptKeydown" @paste="onPromptPaste"></textarea>
           <div class="chat-composer-divider"></div>
           <div class="chat-composer-toolbar">
             <div class="chat-composer-toolbar-left">
+              <div v-if="showCodexRunControls" class="codex-composer-add-wrap">
+                <button
+                  class="codex-composer-add"
+                  :class="{ open: composerToolsOpen }"
+                  title="添加工具"
+                  type="button"
+                  @click="toggleComposerToolsMenu"
+                  aria-label="添加工具"
+                >
+                  <svg viewBox="0 0 16 16" fill="none" aria-hidden="true">
+                    <path d="M8 3.5v9M3.5 8h9" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" />
+                  </svg>
+                </button>
+                <div v-if="composerToolsOpen" class="codex-composer-add-menu">
+                  <button type="button" @click="openComposerApprovalMenu">
+                    <svg viewBox="0 0 16 16" fill="none" aria-hidden="true">
+                      <path d="M8 2.25 13 4.1v3.7c0 3-2.05 5.05-5 5.95-2.95-.9-5-2.95-5-5.95V4.1l5-1.85Z" stroke="currentColor" stroke-width="1.35" stroke-linejoin="round" />
+                      <path d="M5.75 7.95 7.25 9.4l3.05-3.05" stroke="currentColor" stroke-width="1.45" stroke-linecap="round" stroke-linejoin="round" />
+                    </svg>
+                    <span>审批方式</span>
+                    <small>{{ selectedApprovalMode.label }}</small>
+                  </button>
+                  <button type="button" :class="{ active: codexMode === 'plan' }" @click="toggleComposerPlanMode">
+                    <svg viewBox="0 0 16 16" fill="none" aria-hidden="true">
+                      <path d="M4 4h3.5M8.5 4H12M4 8h8M4 12h3.5M8.5 12H12" stroke="currentColor" stroke-width="1.35" stroke-linecap="round" />
+                      <path d="M7.5 2.75v2.5M7.5 10.75v2.5" stroke="currentColor" stroke-width="1.35" stroke-linecap="round" />
+                    </svg>
+                    <span>计划模式</span>
+                    <small>{{ codexMode === "plan" ? "已开启" : "未开启" }}</small>
+                  </button>
+                  <button type="button" :class="{ active: codexGoalEnabled }" @click="toggleComposerGoalMode">
+                    <svg viewBox="0 0 16 16" fill="none" aria-hidden="true">
+                      <circle cx="8" cy="8" r="5.5" stroke="currentColor" stroke-width="1.35" />
+                      <circle cx="8" cy="8" r="2.1" stroke="currentColor" stroke-width="1.35" />
+                      <path d="M8 1.8v2M8 12.2v2M1.8 8h2M12.2 8h2" stroke="currentColor" stroke-width="1.35" stroke-linecap="round" />
+                    </svg>
+                    <span>目标</span>
+                    <small>{{ codexGoalEnabled ? "已开启" : "未开启" }}</small>
+                  </button>
+                </div>
+              </div>
               <button
-                class="codex-approval-trigger chat-approval-trigger"
-                v-if="showCodexRunControls"
-                :class="{ open: approvalMenuOpen }"
-                title="选择 Codex 操作批准方式"
+                v-if="showCodexRunControls && codexMode === 'plan'"
+                class="codex-mode-chip"
+                title="关闭计划模式"
                 type="button"
-                @click="toggleApprovalMenu"
-                aria-label="选择 Codex 操作批准方式"
+                @click="setCodexMode('default')"
               >
                 <svg viewBox="0 0 16 16" fill="none" aria-hidden="true">
-                  <path d="M8 2.25 13 4.1v3.7c0 3-2.05 5.05-5 5.95-2.95-.9-5-2.95-5-5.95V4.1l5-1.85Z" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round" />
-                  <path d="M5.75 7.95 7.25 9.4l3.05-3.05" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" />
+                  <path d="M4 4h3.5M8.5 4H12M4 8h8M4 12h3.5M8.5 12H12" stroke="currentColor" stroke-width="1.35" stroke-linecap="round" />
                 </svg>
-                <span>{{ selectedApprovalMode.label }}</span>
+                <span>计划</span>
               </button>
-              <div v-if="showCodexRunControls" class="codex-run-controls composer-run-controls">
-                <div class="codex-run-mode" role="group" aria-label="Codex 运行模式">
-                  <button type="button" :class="{ active: codexMode === 'default' }" @click="setCodexMode('default')">默认</button>
-                  <button type="button" :class="{ active: codexMode === 'plan' }" @click="setCodexMode('plan')">计划</button>
-                </div>
-                <label class="codex-goal-toggle" title="开启目标模式">
-                  <input v-model="codexGoalEnabled" type="checkbox" />
-                  <span>目标</span>
-                </label>
-                <input
-                  v-if="codexGoalEnabled"
-                  v-model="codexGoal"
-                  class="codex-goal-input"
-                  type="text"
-                  placeholder="这轮工作的目标"
-                />
-              </div>
+              <button
+                v-if="showCodexRunControls && codexGoalEnabled"
+                class="codex-mode-chip"
+                title="关闭目标模式"
+                type="button"
+                @click="toggleComposerGoalMode"
+              >
+                <svg viewBox="0 0 16 16" fill="none" aria-hidden="true">
+                  <circle cx="8" cy="8" r="5.5" stroke="currentColor" stroke-width="1.35" />
+                  <circle cx="8" cy="8" r="2.1" stroke="currentColor" stroke-width="1.35" />
+                </svg>
+                <span>目标</span>
+              </button>
+              <input
+                v-if="showCodexRunControls && codexGoalEnabled"
+                v-model="codexGoal"
+                class="codex-goal-input"
+                type="text"
+                placeholder="这轮工作的目标"
+              />
             </div>
             <div class="chat-composer-toolbar-right">
-              <label v-if="showCodexRunControls" class="codex-model-picker" title="选择 Codex 模型">
-                <span>模型</span>
-                <select v-model="codexSelectedModel" :disabled="codexModelsLoading">
-                  <option value="">{{ codexModelsLoading ? "加载中" : "默认" }}</option>
-                  <option
-                    v-for="model in codexModelOptions"
-                    :key="model.id"
-                    :value="model.model"
-                  >
-                    {{ model.displayName }}
-                  </option>
-                </select>
-              </label>
+              <div v-if="showCodexRunControls" class="codex-model-picker codex-model-picker-custom" title="选择 Codex 模型">
+                <button
+                  class="codex-model-button"
+                  :class="{ open: modelMenuOpen }"
+                  :disabled="codexModelsLoading"
+                  type="button"
+                  @click="toggleModelMenu"
+                  aria-label="选择 Codex 模型"
+                >
+                  <span>{{ selectedCodexModelButtonLabel }}</span>
+                  <svg viewBox="0 0 16 16" fill="none" aria-hidden="true">
+                    <path d="M5 6.5 8 9.5l3-3" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" />
+                  </svg>
+                </button>
+                <div v-if="modelMenuOpen" class="codex-model-menu codex-model-menu-dual">
+                  <div class="codex-model-menu-column models">
+                    <button
+                      type="button"
+                      class="codex-model-submenu-trigger"
+                      :class="{ open: modelSubmenuOpen }"
+                      @click.stop="toggleModelSubmenu"
+                    >
+                      <span>{{ selectedCodexModelLabel }}</span>
+                      <svg class="codex-model-submenu-chevron" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+                        <path d="M6 4.5 9.5 8 6 11.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" />
+                      </svg>
+                    </button>
+                    <div v-if="modelSubmenuOpen" class="codex-model-submenu">
+                      <div class="codex-model-menu-heading">模型</div>
+                      <button
+                        v-for="model in codexModelOptions"
+                        :key="model.id"
+                        type="button"
+                        :class="{ active: model.model === codexSelectedModel }"
+                        @click="selectCodexModel(model.model)"
+                      >
+                        <span>{{ model.displayName }}</span>
+                        <span class="codex-model-menu-check" aria-hidden="true">{{ model.model === codexSelectedModel ? "✓" : "" }}</span>
+                      </button>
+                    </div>
+                  </div>
+                  <div class="codex-model-menu-column reasoning">
+                    <div class="codex-model-menu-heading">推理</div>
+                    <button
+                      v-for="option in reasoningOptions"
+                      :key="option.id"
+                      type="button"
+                      :class="{ active: option.id === codexReasoningLevel }"
+                      @click="selectReasoningLevel(option.id)"
+                    >
+                      <span>{{ option.label }}</span>
+                      <span class="codex-model-menu-check" aria-hidden="true">{{ option.id === codexReasoningLevel ? "✓" : "" }}</span>
+                    </button>
+                  </div>
+                </div>
+              </div>
               <button
                 class="codex-send-button chat-send-button"
                 :class="{ stopping: ws.activeChatIsRunning.value }"
@@ -1010,7 +1298,7 @@ function onPromptKeydown(event: KeyboardEvent) {
             </button>
           </div>
         </div>
-        <div class="chat-composer-hint">回车发送 · Shift+回车换行 · / 唤起命令</div>
+        <div class="chat-composer-hint">回车发送 · Shift+回车换行</div>
       </article>
     </section>
     </template>

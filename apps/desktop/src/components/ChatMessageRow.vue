@@ -321,13 +321,24 @@ function processGroupKey(groupIndex: number) {
   return `process-${groupIndex}`;
 }
 
-function processGroupDefaultOpen(groupIndex: number) {
-  return Boolean(props.message.pending && !processGroupHasFinalText(groupIndex));
+function processGroupIsThinkingOnly(group: Extract<RenderGroup, { type: "process" }>) {
+  return !group.segments.length || group.segments.every(isThinkingStageSegment);
 }
 
-function processGroupOpen(groupIndex: number) {
+function processGroupStaticTitle(group: Extract<RenderGroup, { type: "process" }>, groupIndex: number) {
+  if (!processGroupIsThinkingOnly(group)) return processGroupTitle(group, groupIndex);
+  const thinkingStage = processBodyItems(group).find((item): item is Extract<ProcessBodyItem, { type: "stage" }> => item.type === "stage");
+  return thinkingStage?.title ?? "正在思考...";
+}
+
+function processGroupDefaultOpen(group: Extract<RenderGroup, { type: "process" }>, groupIndex: number) {
+  if (!props.message.pending || processGroupHasFinalText(groupIndex)) return false;
+  return group.segments.some((segment) => !isThinkingStageSegment(segment));
+}
+
+function processGroupOpen(group: Extract<RenderGroup, { type: "process" }>, groupIndex: number) {
   const key = processGroupKey(groupIndex);
-  return processGroupOpenOverrides.value[key] ?? processGroupDefaultOpen(groupIndex);
+  return processGroupOpenOverrides.value[key] ?? processGroupDefaultOpen(group, groupIndex);
 }
 
 function onProcessGroupToggle(event: Event, groupIndex: number) {
@@ -475,7 +486,7 @@ function isProcessStageSegment(segment: ChatSegmentType) {
 }
 
 function isExecutionConclusionSegment(segment: ChatSegmentType) {
-  return segment.type === "thought" && segment.title === "执行结论";
+  return segment.type === "thought" && (segment.stepId ?? "").startsWith("agent-message-");
 }
 
 function isCompletedThinkingSegment(segment: ChatSegmentType) {
@@ -548,7 +559,7 @@ function toolStageTitle(segment: Extract<ChatSegmentType, { type: "tool" }>) {
   const verb = segment.status === "running" ? "正在" : "已";
   const commandText = normalizeCommandForTitle(segment.command ?? "");
   const fileChanges = segment.diff ? extractFileChangePaths(segment.diff) : null;
-  if (segment.toolName.includes("修改") || segment.toolName.includes("文件") || fileChanges) {
+  if (segment.toolName.includes("修改") || fileChanges) {
     if (segment.status === "error") return "修改文件失败";
     const filePath = fileChanges?.[0];
     if (filePath) {
@@ -563,14 +574,18 @@ function toolStageTitle(segment: Extract<ChatSegmentType, { type: "tool" }>) {
   }
   if (segment.toolName.includes("命令") || commandText) {
     if (segment.status === "error") return "运行命令失败";
-    if (commandText) {
-      const shortCommand = commandText.split(/\s+/).slice(0, 3).join(" ");
-      return `${verb}运行 ${shortCommand}`;
-    }
+    if (commandText) return `${verb}${toolOperationTitleVerb(toolOperationKind(segment))} ${commandText}`;
     return `${verb}运行命令`;
   }
   if (segment.status === "error") return segment.summary || `处理失败 ${segment.toolName}`;
   return segment.summary || `${verb}处理 ${segment.toolName}`;
+}
+
+function toolOperationTitleVerb(kind: ReturnType<typeof toolOperationKind>) {
+  if (kind === "read") return "读取";
+  if (kind === "search") return "搜索";
+  if (kind === "edit") return "修改";
+  return "运行";
 }
 
 function normalizeCommandForTitle(command: string) {
@@ -812,7 +827,13 @@ function countCommandOutputSignals(text: string) {
     <div class="chat-message-body">
       <template v-for="(group, index) in contentGroups" :key="index">
         <ChatSegment v-if="group.type === 'segment'" :segment="group.segment" :ai-session-id="aiSessionId" />
-        <details v-else class="chat-process-group" :open="processGroupOpen(index)" @toggle="onProcessGroupToggle($event, index)">
+        <div v-else-if="processGroupIsThinkingOnly(group)" class="chat-process-group thinking-only">
+          <div class="chat-process-group-summary static">
+            <span class="chat-process-group-icon" :class="{ running: message.pending }" aria-hidden="true"></span>
+            <span>{{ processGroupStaticTitle(group, index) }}</span>
+          </div>
+        </div>
+        <details v-else class="chat-process-group" :open="processGroupOpen(group, index)" @toggle="onProcessGroupToggle($event, index)">
           <summary class="chat-process-group-summary" @click="onProcessSummaryClick($event, group, index)">
             <span class="chat-process-group-icon" :class="{ running: message.pending }" aria-hidden="true"></span>
             <span>{{ processGroupTitle(group, index) }}</span>
@@ -827,6 +848,12 @@ function countCommandOutputSignals(text: string) {
             </div>
             <template v-else v-for="(item, itemIndex) in processBodyItems(group)" :key="itemIndex">
               <ChatSegment v-if="item.type === 'segment'" :segment="item.segment" :ai-session-id="aiSessionId" />
+              <div v-else-if="isThinkingStage(item.segments)" class="chat-process-stage thinking-only">
+                <div class="chat-process-stage-header static">
+                  <span class="chat-process-stage-dot" :class="{ running: processStageRunning(item.segments) }" aria-hidden="true"></span>
+                  <strong>{{ item.title }}</strong>
+                </div>
+              </div>
               <details v-else class="chat-process-stage" open>
                 <summary class="chat-process-stage-header">
                   <span class="chat-process-stage-dot" :class="{ running: processStageRunning(item.segments) }" aria-hidden="true"></span>
@@ -887,6 +914,12 @@ function countCommandOutputSignals(text: string) {
           <div class="chat-process-sheet-body">
             <template v-for="(item, itemIndex) in processBodyItems(activeMobileProcessGroup.group)" :key="itemIndex">
               <ChatSegment v-if="item.type === 'segment'" :segment="item.segment" :ai-session-id="aiSessionId" />
+              <div v-else-if="isThinkingStage(item.segments)" class="chat-process-stage thinking-only">
+                <div class="chat-process-stage-header static">
+                  <span class="chat-process-stage-dot" :class="{ running: processStageRunning(item.segments) }" aria-hidden="true"></span>
+                  <strong>{{ item.title }}</strong>
+                </div>
+              </div>
               <details v-else class="chat-process-stage" open>
                 <summary class="chat-process-stage-header">
                   <span class="chat-process-stage-dot" :class="{ running: processStageRunning(item.segments) }" aria-hidden="true"></span>

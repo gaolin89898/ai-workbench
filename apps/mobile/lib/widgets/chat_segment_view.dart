@@ -241,6 +241,39 @@ class _ProcessStageView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    if (_isThinkingStage(item.segments)) {
+      return Container(
+        padding: const EdgeInsets.fromLTRB(10, 9, 10, 10),
+        decoration: BoxDecoration(
+          color: AppColors.surface,
+          borderRadius: BorderRadius.circular(AppRadius.md),
+          border: Border.all(color: AppColors.border),
+        ),
+        child: Row(
+          children: [
+            Container(
+              width: 6,
+              height: 6,
+              decoration: const BoxDecoration(
+                color: AppColors.warning,
+                shape: BoxShape.circle,
+              ),
+            ),
+            const SizedBox(width: 6),
+            Expanded(
+              child: Text(
+                _processStageTitle(item.segments, pending),
+                style: const TextStyle(
+                  color: AppColors.secondary,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
     return InkWell(
       borderRadius: BorderRadius.circular(AppRadius.md),
       onTap: () => _showStageSheet(context),
@@ -543,7 +576,7 @@ List<_ProcessBodyItem> _buildProcessBodyItems(List<ChatSegment> segments,
       continue;
     }
     if (_isProcessStageSegment(segment)) {
-      if (hasExecution && _isThinkingStatusSegment(segment)) continue;
+      if (hasExecution && _isThinkingStageSegment(segment)) continue;
       final nextKind =
           _isThinkingStageSegment(segment) ? 'thinking' : 'execution';
       if (stageKind != null && stageKind != nextKind) flushStageRun();
@@ -565,7 +598,8 @@ List<_ProcessBodyItem> _buildProcessBodyItems(List<ChatSegment> segments,
             (s.type == 'status' && s.status == 'running') ||
             (s.type == 'tool' && s.status == 'running') ||
             (s.type == 'approval' && s.status == 'pending'));
-    if (!lastStageHasRunning) {
+    final lastStageHasConclusion = lastItem?.conclusion != null;
+    if (!lastStageHasRunning && !lastStageHasConclusion) {
       items.add(_ProcessBodyItem.stage([
         ChatSegment(
           type: 'status',
@@ -592,12 +626,14 @@ bool _isProcessStageSegment(ChatSegment segment) {
 
 bool _isThinkingStageSegment(ChatSegment segment) {
   return (segment.type == 'thought' &&
+          !_isProcessCommentaryThought(segment) &&
           !_isExecutionConclusionSegment(segment)) ||
       _isThinkingStatusSegment(segment);
 }
 
 bool _isExecutionConclusionSegment(ChatSegment segment) {
-  return segment.type == 'thought' && segment.title == '执行结论';
+  return segment.type == 'thought' &&
+      (segment.stepId ?? '').startsWith('agent-message-');
 }
 
 bool _isThinkingStatusSegment(ChatSegment segment) {
@@ -613,7 +649,12 @@ bool _isExecutionStageSegment(ChatSegment segment) {
 }
 
 bool _isProcessConclusionSegment(ChatSegment segment) {
-  return _isProcessTextSegment(segment);
+  return _isProcessTextSegment(segment) || _isProcessCommentaryThought(segment);
+}
+
+bool _isProcessCommentaryThought(ChatSegment segment) {
+  return segment.type == 'thought' &&
+      (segment.title == '执行说明' || segment.title == '中间结论');
 }
 
 String _processStageTitle(List<ChatSegment> segments, bool pending) {
@@ -654,7 +695,9 @@ String _processStageTitle(List<ChatSegment> segments, bool pending) {
   if (statusLabel != null && statusLabel.isNotEmpty) return statusLabel;
 
   if (segments.any((segment) =>
-      segment.type == 'thought' && !_isExecutionConclusionSegment(segment))) {
+      segment.type == 'thought' &&
+      !_isProcessCommentaryThought(segment) &&
+      !_isExecutionConclusionSegment(segment))) {
     return '正在思考...';
   }
   return pending ? '正在处理' : '已处理';
@@ -1874,8 +1917,7 @@ class _ToolDetailsSheet extends StatelessWidget {
               if ((segment.command ?? '').trim().isNotEmpty)
                 _SheetSection(title: '命令', child: _CodeBlock(segment.command!)),
               if ((segment.summary ?? '').trim().isNotEmpty)
-                _SheetSection(
-                    title: '执行结论', child: _DetailBlock(segment.summary!)),
+                _SheetSection(child: _DetailBlock(segment.summary!)),
               if (visibleInput.trim().isNotEmpty)
                 _SheetSection(title: '输入', child: _CodeBlock(visibleInput)),
               if (visibleOutput.trim().isNotEmpty)
@@ -1891,9 +1933,9 @@ class _ToolDetailsSheet extends StatelessWidget {
 }
 
 class _SheetSection extends StatelessWidget {
-  const _SheetSection({required this.title, required this.child});
+  const _SheetSection({this.title, required this.child});
 
-  final String title;
+  final String? title;
   final Widget child;
 
   @override
@@ -1903,17 +1945,18 @@ class _SheetSection extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Padding(
-            padding: const EdgeInsets.only(bottom: 6),
-            child: Text(
-              title,
-              style: const TextStyle(
-                color: AppColors.secondary,
-                fontSize: 12,
-                fontWeight: FontWeight.w800,
+          if (title != null)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 6),
+              child: Text(
+                title!,
+                style: const TextStyle(
+                  color: AppColors.secondary,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w800,
+                ),
               ),
             ),
-          ),
           child,
         ],
       ),

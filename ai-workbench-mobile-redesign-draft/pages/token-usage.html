@@ -1,0 +1,279 @@
+<!DOCTYPE html>
+<html lang="zh-CN" class="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>用量统计</title>
+    <style id="theme-vars">
+/* AI Workbench Mobile — Light Task-Oriented Theme */
+/* Inspired by Trae Work clean aesthetic */
+:root {
+  /* Brand */
+  --color-primary: #2563eb;
+  --color-primary-hover: #1d4ed8;
+  --color-primary-muted: rgba(37, 99, 235, 0.12);
+  --color-primary-soft: rgba(37, 99, 235, 0.06);
+
+  /* Surface & Background */
+  --color-bg-app: #f8fafc;
+  --color-bg-sidebar: #ffffff;
+  --color-bg-main: #f8fafc;
+  --color-bg-surface: #ffffff;
+  --color-bg-elevated: #ffffff;
+  --color-bg-input: #f1f5f9;
+  --color-bg-hover: rgba(0, 0, 0, 0.02);
+  --color-bg-active: rgba(37, 99, 235, 0.08);
+
+  /* Text */
+  --color-text-primary: #0f172a;
+  --color-text-secondary: #475569;
+  --color-text-muted: #94a3b8;
+  --color-text-inverse: #ffffff;
+
+  /* Border */
+  --color-border: #e2e8f0;
+  --color-border-active: rgba(37, 99, 235, 0.4);
+
+  /* State Colors */
+  --state-success: #22c55e;
+  --state-warning: #f59e0b;
+  --state-error: #ef4444;
+  --state-info: #3b82f6;
+
+  /* Radius */
+  --radius-sm: 4px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --radius-full: 9999px;
+
+  /* Typography */
+  --font-sans: "Inter", ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --font-mono: "JetBrains Mono", "Fira Code", ui-monospace, "Cascadia Code", monospace;
+
+  --text-xs: 11px;
+  --text-sm: 12px;
+  --text-base: 13px;
+  --text-md: 14px;
+  --text-lg: 16px;
+  --text-xl: 20px;
+  --text-2xl: 28px;
+
+  --leading-tight: 1.25;
+  --leading-normal: 1.5;
+  --leading-relaxed: 1.625;
+
+  --font-weight-normal: 400;
+  --font-weight-medium: 500;
+  --font-weight-semibold: 600;
+  --font-weight-bold: 700;
+  --font-weight-extrabold: 800;
+
+  /* Shadow */
+  --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.05);
+  --shadow-elevated: 0 4px 12px rgba(0, 0, 0, 0.08);
+  --shadow-modal: 0 8px 32px rgba(0, 0, 0, 0.12);
+
+  /* Spacing */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-10: 40px;
+}
+
+    </style>
+    <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4.3.1/dist/index.global.js"></script>
+    <script src="https://unpkg.com/lucide@1.8.0/dist/umd/lucide.min.js"></script>
+    <style type="text/tailwindcss">
+  @theme inline {
+    --color-primary: var(--color-primary);
+    --color-border: var(--color-border);
+  }
+  @layer base {
+    body { background: var(--color-background); color: var(--color-text-primary); }
+    td, th { @apply break-words; word-break: break-all; word-break: auto-phrase; }
+    th { @apply whitespace-nowrap; }
+  }
+    </style>
+    <style>
+      .no-scrollbar::-webkit-scrollbar { display: none; }
+      .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+      [data-icon] {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        -webkit-mask-size: contain;
+        mask-size: contain;
+        -webkit-mask-repeat: no-repeat;
+        mask-repeat: no-repeat;
+        -webkit-mask-position: center;
+        mask-position: center;
+        background-color: currentColor;
+      }
+    </style>
+</head>
+<body class="min-h-screen font-sans antialiased">
+    <main>
+      <!-- AppBar: Back + Title + Refresh -->
+      <header class="sticky top-0 z-20 border-b border-[var(--color-border)] bg-[var(--color-bg-app)]/95 backdrop-blur-[14px]">
+        <div class="flex h-14 items-center px-4">
+          <button class="flex h-9 w-9 items-center justify-center rounded-[var(--radius-md)] transition-colors duration-150 hover:bg-[var(--color-bg-hover)] active:bg-[var(--color-primary-soft)]" data-dom-id="btn-back" aria-label="返回">
+            <i data-lucide="arrow-left" class="h-[18px] w-[18px] text-[var(--color-text-primary)]"></i>
+          </button>
+          <div class="ml-2 min-w-0 flex-1">
+            <h1 class="truncate text-[var(--color-text-primary)]" style="font-size: var(--text-xl); font-weight: var(--font-weight-bold); line-height: var(--leading-tight); letter-spacing: -0.02em;">用量统计</h1>
+            <p class="truncate text-[var(--color-text-secondary)]" style="font-size: var(--text-sm); line-height: var(--leading-normal);">按 AI 工具聚合</p>
+          </div>
+          <button class="flex h-9 w-9 items-center justify-center rounded-[var(--radius-md)] transition-colors duration-150 hover:bg-[var(--color-bg-hover)] active:bg-[var(--color-primary-soft)]" data-dom-id="btn-refresh" aria-label="刷新">
+            <i data-lucide="refresh-cw" class="h-[18px] w-[18px] text-[var(--color-text-secondary)]"></i>
+          </button>
+        </div>
+      </header>
+
+      <!-- Page Body -->
+      <div class="px-4 pb-[88px] pt-4">
+
+        <!-- Overview Stats: 2x2 Grid -->
+        <div class="grid grid-cols-2 gap-3">
+          <!-- 总输入 -->
+          <div class="rounded-[var(--radius-lg)] border border-[var(--color-border)] bg-[var(--color-bg-surface)] p-3">
+            <div class="flex items-center gap-2">
+              <div class="flex h-8 w-8 items-center justify-center rounded-full" style="background: rgba(59, 130, 246, 0.12);">
+                <i data-lucide="arrow-down-to-line" class="h-4 w-4 text-[var(--state-info)]"></i>
+              </div>
+              <span class="text-[var(--color-text-secondary)]" style="font-size: var(--text-sm);">总输入</span>
+            </div>
+            <p class="mt-2 truncate font-medium tabular-nums text-[var(--color-text-primary)]" style="font-size: var(--text-xl); font-weight: var(--font-weight-bold); letter-spacing: -0.01em;">1.24M</p>
+          </div>
+
+          <!-- 总输出 -->
+          <div class="rounded-[var(--radius-lg)] border border-[var(--color-border)] bg-[var(--color-bg-surface)] p-3">
+            <div class="flex items-center gap-2">
+              <div class="flex h-8 w-8 items-center justify-center rounded-full" style="background: rgba(34, 197, 94, 0.12);">
+                <i data-lucide="arrow-up-from-line" class="h-4 w-4 text-[var(--state-success)]"></i>
+              </div>
+              <span class="text-[var(--color-text-secondary)]" style="font-size: var(--text-sm);">总输出</span>
+            </div>
+            <p class="mt-2 truncate font-medium tabular-nums text-[var(--color-text-primary)]" style="font-size: var(--text-xl); font-weight: var(--font-weight-bold); letter-spacing: -0.01em;">356.8K</p>
+          </div>
+
+          <!-- 推理 -->
+          <div class="rounded-[var(--radius-lg)] border border-[var(--color-border)] bg-[var(--color-bg-surface)] p-3">
+            <div class="flex items-center gap-2">
+              <div class="flex h-8 w-8 items-center justify-center rounded-full" style="background: rgba(245, 158, 11, 0.12);">
+                <i data-lucide="brain" class="h-4 w-4 text-[var(--state-warning)]"></i>
+              </div>
+              <span class="text-[var(--color-text-secondary)]" style="font-size: var(--text-sm);">推理</span>
+            </div>
+            <p class="mt-2 truncate font-medium tabular-nums text-[var(--color-text-primary)]" style="font-size: var(--text-xl); font-weight: var(--font-weight-bold); letter-spacing: -0.01em;">89.2K</p>
+          </div>
+
+          <!-- 合计 (Primary Highlight) -->
+          <div class="rounded-[var(--radius-lg)] border border-[var(--color-primary-muted)] bg-[var(--color-primary-soft)] p-3">
+            <div class="flex items-center gap-2">
+              <div class="flex h-8 w-8 items-center justify-center rounded-full" style="background: var(--color-primary-muted);">
+                <i data-lucide="sigma" class="h-4 w-4 text-[var(--color-primary)]"></i>
+              </div>
+              <span class="text-[var(--color-primary)]" style="font-size: var(--text-sm); font-weight: var(--font-weight-semibold);">合计</span>
+            </div>
+            <p class="mt-2 truncate font-medium tabular-nums text-[var(--color-primary)]" style="font-size: var(--text-xl); font-weight: var(--font-weight-bold); letter-spacing: -0.01em;">1.69M</p>
+          </div>
+        </div>
+
+        <!-- Section: 按工具 -->
+        <div class="mt-5">
+          <h2 class="mb-3 pl-0.5 text-[var(--color-text-muted)]" style="font-size: var(--text-sm); font-weight: var(--font-weight-semibold);">按工具</h2>
+
+          <div class="flex flex-col gap-3">
+
+            <!-- Provider: Codex -->
+            <div class="rounded-[var(--radius-lg)] border border-[var(--color-border)] bg-[var(--color-bg-surface)] p-4" style="box-shadow: var(--shadow-card);">
+              <div class="flex items-center gap-3">
+                <div class="flex h-[34px] w-[34px] flex-shrink-0 items-center justify-center rounded-[14px] bg-[var(--color-primary-soft)]">
+                  <i data-lucide="terminal" class="h-[18px] w-[18px] text-[var(--color-primary)]"></i>
+                </div>
+                <div class="min-w-0 flex-1">
+                  <p class="truncate text-[var(--color-text-primary)]" style="font-size: var(--text-md); font-weight: var(--font-weight-bold);">Codex</p>
+                </div>
+                <p class="flex-shrink-0 tabular-nums text-[var(--color-primary)]" style="font-size: var(--text-md); font-weight: var(--font-weight-bold);">1.12M</p>
+              </div>
+              <div class="mt-3 flex flex-wrap gap-2">
+                <span class="inline-flex items-center gap-1 rounded-[var(--radius-md)] bg-[var(--color-bg-input)] px-2 py-1 text-[var(--color-text-secondary)]" style="font-size: var(--text-sm);">输入 · 820.5K</span>
+                <span class="inline-flex items-center gap-1 rounded-[var(--radius-md)] bg-[var(--color-bg-input)] px-2 py-1 text-[var(--color-text-secondary)]" style="font-size: var(--text-sm);">输出 · 245.3K</span>
+                <span class="inline-flex items-center gap-1 rounded-[var(--radius-md)] bg-[var(--color-bg-input)] px-2 py-1 text-[var(--color-text-secondary)]" style="font-size: var(--text-sm);">推理 · 52.1K</span>
+                <span class="inline-flex items-center gap-1 rounded-[var(--radius-md)] bg-[var(--color-bg-input)] px-2 py-1 text-[var(--color-text-secondary)]" style="font-size: var(--text-sm);">次数 · 847</span>
+              </div>
+            </div>
+
+            <!-- Provider: Claude Code -->
+            <div class="rounded-[var(--radius-lg)] border border-[var(--color-border)] bg-[var(--color-bg-surface)] p-4" style="box-shadow: var(--shadow-card);">
+              <div class="flex items-center gap-3">
+                <div class="flex h-[34px] w-[34px] flex-shrink-0 items-center justify-center rounded-[14px] bg-[var(--color-primary-soft)]">
+                  <i data-lucide="smart-toy" class="h-[18px] w-[18px] text-[var(--color-primary)]"></i>
+                </div>
+                <div class="min-w-0 flex-1">
+                  <p class="truncate text-[var(--color-text-primary)]" style="font-size: var(--text-md); font-weight: var(--font-weight-bold);">Claude Code</p>
+                </div>
+                <p class="flex-shrink-0 tabular-nums text-[var(--color-primary)]" style="font-size: var(--text-md); font-weight: var(--font-weight-bold);">433.8K</p>
+              </div>
+              <div class="mt-3 flex flex-wrap gap-2">
+                <span class="inline-flex items-center gap-1 rounded-[var(--radius-md)] bg-[var(--color-bg-input)] px-2 py-1 text-[var(--color-text-secondary)]" style="font-size: var(--text-sm);">输入 · 312.8K</span>
+                <span class="inline-flex items-center gap-1 rounded-[var(--radius-md)] bg-[var(--color-bg-input)] px-2 py-1 text-[var(--color-text-secondary)]" style="font-size: var(--text-sm);">输出 · 89.4K</span>
+                <span class="inline-flex items-center gap-1 rounded-[var(--radius-md)] bg-[var(--color-bg-input)] px-2 py-1 text-[var(--color-text-secondary)]" style="font-size: var(--text-sm);">推理 · 31.6K</span>
+                <span class="inline-flex items-center gap-1 rounded-[var(--radius-md)] bg-[var(--color-bg-input)] px-2 py-1 text-[var(--color-text-secondary)]" style="font-size: var(--text-sm);">次数 · 312</span>
+              </div>
+            </div>
+
+            <!-- Provider: OpenCode -->
+            <div class="rounded-[var(--radius-lg)] border border-[var(--color-border)] bg-[var(--color-bg-surface)] p-4" style="box-shadow: var(--shadow-card);">
+              <div class="flex items-center gap-3">
+                <div class="flex h-[34px] w-[34px] flex-shrink-0 items-center justify-center rounded-[14px] bg-[var(--color-primary-soft)]">
+                  <i data-lucide="code" class="h-[18px] w-[18px] text-[var(--color-primary)]"></i>
+                </div>
+                <div class="min-w-0 flex-1">
+                  <p class="truncate text-[var(--color-text-primary)]" style="font-size: var(--text-md); font-weight: var(--font-weight-bold);">OpenCode</p>
+                </div>
+                <p class="flex-shrink-0 tabular-nums text-[var(--color-primary)]" style="font-size: var(--text-md); font-weight: var(--font-weight-bold);">135.8K</p>
+              </div>
+              <div class="mt-3 flex flex-wrap gap-2">
+                <span class="inline-flex items-center gap-1 rounded-[var(--radius-md)] bg-[var(--color-bg-input)] px-2 py-1 text-[var(--color-text-secondary)]" style="font-size: var(--text-sm);">输入 · 108.2K</span>
+                <span class="inline-flex items-center gap-1 rounded-[var(--radius-md)] bg-[var(--color-bg-input)] px-2 py-1 text-[var(--color-text-secondary)]" style="font-size: var(--text-sm);">输出 · 22.1K</span>
+                <span class="inline-flex items-center gap-1 rounded-[var(--radius-md)] bg-[var(--color-bg-input)] px-2 py-1 text-[var(--color-text-secondary)]" style="font-size: var(--text-sm);">推理 · 5.5K</span>
+                <span class="inline-flex items-center gap-1 rounded-[var(--radius-md)] bg-[var(--color-bg-input)] px-2 py-1 text-[var(--color-text-secondary)]" style="font-size: var(--text-sm);">次数 · 156</span>
+              </div>
+            </div>
+
+          </div>
+        </div>
+
+        <!-- Empty State (hidden) -->
+        <div class="hidden flex-col items-center pt-16" data-state="empty">
+          <div class="flex h-16 w-16 items-center justify-center rounded-full bg-[var(--color-bg-input)]">
+            <i data-lucide="bar-chart-3" class="h-7 w-7 text-[var(--color-text-muted)]"></i>
+          </div>
+          <p class="mt-4 text-[var(--color-text-primary)]" style="font-size: var(--text-md); font-weight: var(--font-weight-semibold);">暂无用量数据</p>
+          <p class="mt-1 text-[var(--color-text-muted)]" style="font-size: var(--text-sm);">发起一次 AI 会话后会自动统计</p>
+        </div>
+
+        <!-- Error State (hidden) -->
+        <div class="hidden mt-3 rounded-[var(--radius-lg)] border p-4" data-state="error" style="border-color: rgba(239, 68, 68, 0.2); background: rgba(239, 68, 68, 0.06);">
+          <div class="flex items-start gap-3">
+            <div class="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full" style="background: rgba(239, 68, 68, 0.12);">
+              <i data-lucide="alert-circle" class="h-4 w-4 text-[var(--state-error)]"></i>
+            </div>
+            <div class="min-w-0 flex-1">
+              <p class="text-[var(--color-text-primary)]" style="font-size: var(--text-md); font-weight: var(--font-weight-semibold);">加载失败</p>
+              <p class="mt-1 text-[var(--color-text-secondary)]" style="font-size: var(--text-sm);">网络异常，请稍后重试</p>
+            </div>
+            <button class="flex h-8 flex-shrink-0 items-center rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-bg-surface)] px-3 text-[var(--color-primary)] transition-colors duration-150 hover:bg-[var(--color-bg-hover)] active:bg-[var(--color-primary-soft)]" style="font-size: var(--text-sm); font-weight: var(--font-weight-semibold);" data-dom-id="btn-retry">重试</button>
+          </div>
+        </div>
+
+      </div>
+    </main>
+    <script>lucide.createIcons();</script>
+</body>
+</html>
