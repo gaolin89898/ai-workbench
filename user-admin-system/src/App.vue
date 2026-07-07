@@ -401,7 +401,7 @@ async function openUserDrawer(user: SystemUserRecord) {
             :bordered="false"
             :pagination="{ pageSize: 8, showTotal: true, showJumper: true }"
             stripe
-            @row-click="openUserDrawer"
+            @row-click="(record: any) => openUserDrawer(record as SystemUserRecord)"
           >
             <template #user="{ record }">
               <div class="user-cell">
