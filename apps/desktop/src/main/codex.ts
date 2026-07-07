@@ -64,6 +64,7 @@ interface CodexSession {
   errorEmitted: boolean;
   cancelled: boolean;
   approvalMode: CodexApprovalMode;
+  reportedTokenUsageKeys: Set<string>;
 }
 
 // ---------- Constants ----------
@@ -473,6 +474,7 @@ function handleLine(session: CodexSession, line: string): void {
         }
         pending.reject(error);
       } else {
+        reportCodexTokenUsage(session, msg);
         pending.resolve(msg as unknown as JsonRpcResponse);
       }
     }
@@ -508,7 +510,7 @@ async function sendRequestWithReconnectRetry(
 
 // Codex app-server turn/completed 的 params 原生带 output_token_usage，
 // 形如 { input_tokens, output_tokens, reasoning_tokens }。提取并上报。
-function reportTurnTokenUsage(session: CodexSession, params: unknown): void {
+function reportCodexTokenUsage(session: CodexSession, params: unknown): void {
   try {
     const u = findTokenUsageRecord(params);
     if (!u) return;
@@ -529,8 +531,12 @@ function reportTurnTokenUsage(session: CodexSession, params: unknown): void {
       0;
     const total = numOrUndef(u["total_tokens"]) ??
       numOrUndef(u["totalTokens"]) ??
+      numOrUndef(u["total"]) ??
       (inputTokens + outputTokens + reasoningTokens);
     if (total <= 0) return;
+    const dedupeKey = `${inputTokens}:${outputTokens}:${reasoningTokens}:${total}`;
+    if (session.reportedTokenUsageKeys.has(dedupeKey)) return;
+    session.reportedTokenUsageKeys.add(dedupeKey);
     void reportTokenUsage({
       aiSessionId: session.aiSessionId,
       providerId: "codex",
@@ -555,6 +561,7 @@ function findTokenUsageRecord(value: unknown, depth = 0): Record<string, unknown
     "token_usage",
     "tokenUsage",
     "usage",
+    "tokens",
   ];
   for (const key of directKeys) {
     const nested = findTokenUsageRecord(record[key], depth + 1);
@@ -571,12 +578,16 @@ function findTokenUsageRecord(value: unknown, depth = 0): Record<string, unknown
 function hasTokenUsageShape(record: Record<string, unknown>): boolean {
   return tokenNumber(record["input_tokens"]) ||
     tokenNumber(record["inputTokens"]) ||
+    tokenNumber(record["input"]) ||
     tokenNumber(record["output_tokens"]) ||
     tokenNumber(record["outputTokens"]) ||
+    tokenNumber(record["output"]) ||
     tokenNumber(record["reasoning_tokens"]) ||
     tokenNumber(record["reasoningTokens"]) ||
+    tokenNumber(record["reasoning"]) ||
     tokenNumber(record["total_tokens"]) ||
-    tokenNumber(record["totalTokens"]);
+    tokenNumber(record["totalTokens"]) ||
+    tokenNumber(record["total"]);
 }
 
 function tokenNumber(value: unknown): boolean {
@@ -607,7 +618,7 @@ function handleNotification(
       break;
     }
     case "turn/completed": {
-      reportTurnTokenUsage(session, params);
+      reportCodexTokenUsage(session, params);
       if (session.turnResolver) {
         session.turnResolver.resolve();
         session.turnResolver = null;
@@ -655,6 +666,7 @@ function createSession(
     errorEmitted: false,
     cancelled: false,
     approvalMode,
+    reportedTokenUsageKeys: new Set(),
   };
 
   // stdout: parse JSON-RPC lines
@@ -699,6 +711,7 @@ function handleExit(
   }
   session.pendingRequests.clear();
   resolvePendingApprovals(session, "expired", "Codex session ended; approval requests expired.");
+  flushTrace(session);
   if (session.turnResolver) {
     session.turnResolver.reject(err);
     session.turnResolver = null;
@@ -718,6 +731,7 @@ function handleSpawnError(session: CodexSession, err: Error): void {
   }
   session.pendingRequests.clear();
   resolvePendingApprovals(session, "failed", message);
+  flushTrace(session);
   if (session.turnResolver) {
     session.turnResolver.reject(err);
     session.turnResolver = null;

@@ -1624,13 +1624,16 @@ async function handleAiTraceUpdateEvent(event: AiTraceUpdateEvent) {
 
   if (!codexTracePending(event.trace) && pending) {
     const finalText = codexTraceFinalText(event.trace);
-    if (finalText) {
+    const finalSegments = [...pending.steps.values()];
+    const shouldPersist = Boolean(finalText || finalSegments.some((segment) => segment.type === "error"));
+    if (shouldPersist) {
+      const storageKey = finalText || JSON.stringify(finalSegments);
       const draft = assistantDrafts.get(event.aiSessionId);
-      if (!draft || finalText !== draft.savedText) {
-        assistantDrafts.set(event.aiSessionId, { message: pending.message, savedText: finalText });
+      if (!draft || storageKey !== draft.savedText) {
+        assistantDrafts.set(event.aiSessionId, { message: pending.message, savedText: storageKey });
         await desktopApi.appendLocalAiMessage(event.aiSessionId, "assistant", encodeAssistantMessageForStorage({
           text: finalText,
-          segments: [...pending.steps.values()],
+          segments: finalSegments,
         })).catch((error) => {
           pushChatDebugEvent(`保存 Codex 回答失败：${String(error)}`);
         });

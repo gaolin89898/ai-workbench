@@ -431,9 +431,14 @@ export function reduceCodexTraceSnapshot(
       snapshot = {
         ...snapshot,
         status: "failed",
+        completedAt: now,
         errors: [...snapshot.errors, { message, at: now }],
         items: [
-          ...snapshot.items,
+          ...snapshot.items.map((item) => item.status === "running" ? {
+            ...item,
+            status: "failed" as const,
+            completedAt: item.completedAt ?? now,
+          } : item),
           {
             id: `error-${snapshot.errors.length + 1}`,
             type: "error",

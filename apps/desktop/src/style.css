@@ -4142,6 +4142,10 @@ dd {
   cursor: default;
 }
 
+.chat-process-group-summary.danger {
+  color: var(--state-error);
+}
+
 .chat-process-group-icon {
   width: 6px;
   height: 6px;
@@ -4153,6 +4157,11 @@ dd {
 .chat-process-group-icon.running {
   background: var(--color-warning);
   animation: chat-process-pulse 1.2s ease-in-out infinite;
+}
+
+.chat-process-group-icon.danger {
+  background: var(--state-error);
+  animation: none;
 }
 
 @keyframes chat-process-pulse {

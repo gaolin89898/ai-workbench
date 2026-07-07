@@ -313,8 +313,19 @@ function processGroupHasFinalText(groupIndex: number) {
 
 function processGroupTitle(group: Extract<RenderGroup, { type: "process" }>, groupIndex: number) {
   const duration = processGroupDurationMs(group.segments);
-  const prefix = props.message.pending && !processGroupHasFinalText(groupIndex) ? "正在处理" : "已处理";
+  const prefix = processGroupHasError(group)
+    ? "执行失败"
+    : props.message.pending && !processGroupHasFinalText(groupIndex) ? "正在处理" : "已处理";
   return duration ? `${prefix} ${formatCompactDuration(duration)}` : prefix;
+}
+
+function processGroupHasError(group: Extract<RenderGroup, { type: "process" }>) {
+  return group.segments.some((segment) => (
+    segment.type === "error"
+    || (segment.type === "tool" && segment.status === "error")
+    || (segment.type === "status" && segment.status === "failed")
+    || (segment.type === "approval" && segment.status === "failed")
+  ));
 }
 
 function processGroupKey(groupIndex: number) {
@@ -336,6 +347,7 @@ function processGroupIsThinking(group: Extract<RenderGroup, { type: "process" }>
 }
 
 function processGroupDefaultOpen(group: Extract<RenderGroup, { type: "process" }>, groupIndex: number) {
+  if (processGroupHasError(group)) return true;
   if (!props.message.pending || processGroupHasFinalText(groupIndex)) return false;
   return group.segments.some((segment) => !isThinkingStageSegment(segment));
 }
@@ -506,6 +518,8 @@ function isProcessConclusionSegment(segment: ChatSegmentType) {
 }
 
 function processStageTitle(segments: ChatSegmentType[]) {
+  const errorSegment = segments.find((segment) => segment.type === "error");
+  if (errorSegment?.type === "error") return errorSegment.title || "执行失败";
   const runningThinking = segments.find((segment) => isThinkingStatusSegment(segment) && segment.status === "running");
   if (runningThinking) return "正在思考";
   const toolSegments = segments.filter((segment): segment is Extract<ChatSegmentType, { type: "tool" }> => segment.type === "tool");
@@ -654,6 +668,15 @@ function processStageRunning(segments: ChatSegmentType[]) {
 
 function processStageStoppedByUser(segments: ChatSegmentType[]) {
   return segments.some((segment) => segment.type === "status" && isUserStoppedStatus(segment));
+}
+
+function processStageHasError(segments: ChatSegmentType[]) {
+  return segments.some((segment) => (
+    segment.type === "error"
+    || (segment.type === "tool" && segment.status === "error")
+    || (segment.type === "status" && segment.status === "failed")
+    || (segment.type === "approval" && segment.status === "failed")
+  ));
 }
 
 function isUserStoppedStatus(segment: Extract<ChatSegmentType, { type: "status" }>) {
@@ -853,8 +876,8 @@ function countCommandOutputSignals(text: string) {
           </div>
         </div>
         <details v-else class="chat-process-group" :open="processGroupOpen(group, index)" @toggle="onProcessGroupToggle($event, index)">
-          <summary class="chat-process-group-summary" @click="onProcessSummaryClick($event, group, index)">
-            <span class="chat-process-group-icon" :class="{ running: message.pending }" aria-hidden="true"></span>
+          <summary class="chat-process-group-summary" :class="{ danger: processGroupHasError(group) }" @click="onProcessSummaryClick($event, group, index)">
+            <span class="chat-process-group-icon" :class="{ running: message.pending, danger: processGroupHasError(group) }" aria-hidden="true"></span>
             <span>{{ processGroupTitle(group, index) }}</span>
             <svg class="chat-process-chevron" viewBox="0 0 16 16" fill="none" aria-hidden="true">
               <path d="M5 6.5 8 9.5l3-3" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" />
@@ -867,14 +890,14 @@ function countCommandOutputSignals(text: string) {
             <template v-else v-for="(item, itemIndex) in processBodyItems(group)" :key="itemIndex">
               <ChatSegment v-if="item.type === 'segment'" :segment="item.segment" :ai-session-id="aiSessionId" />
               <div v-else-if="isThinkingStage(item.segments)" class="chat-process-stage thinking-only">
-                <div class="chat-process-stage-header static" :class="{ danger: processStageStoppedByUser(item.segments) }">
-                  <span class="chat-process-stage-dot" :class="{ running: processStageRunning(item.segments), danger: processStageStoppedByUser(item.segments) }" aria-hidden="true"></span>
+                <div class="chat-process-stage-header static" :class="{ danger: processStageStoppedByUser(item.segments) || processStageHasError(item.segments) }">
+                  <span class="chat-process-stage-dot" :class="{ running: processStageRunning(item.segments), danger: processStageStoppedByUser(item.segments) || processStageHasError(item.segments) }" aria-hidden="true"></span>
                   <strong :class="{ 'chat-shimmer': thinkingStageRunning(item.segments) }">{{ item.title }}</strong>
                 </div>
               </div>
               <details v-else class="chat-process-stage" open>
-                <summary class="chat-process-stage-header" :class="{ danger: processStageStoppedByUser(item.segments) }">
-                  <span class="chat-process-stage-dot" :class="{ running: processStageRunning(item.segments), danger: processStageStoppedByUser(item.segments) }" aria-hidden="true"></span>
+                <summary class="chat-process-stage-header" :class="{ danger: processStageStoppedByUser(item.segments) || processStageHasError(item.segments) }">
+                  <span class="chat-process-stage-dot" :class="{ running: processStageRunning(item.segments), danger: processStageStoppedByUser(item.segments) || processStageHasError(item.segments) }" aria-hidden="true"></span>
                   <strong :class="{ 'chat-shimmer': thinkingStageRunning(item.segments) }">{{ item.title }}</strong>
                   <svg class="chat-process-stage-chevron" viewBox="0 0 16 16" fill="none" aria-hidden="true">
                     <path d="M5 6.5 8 9.5l3-3" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" />
@@ -933,14 +956,14 @@ function countCommandOutputSignals(text: string) {
             <template v-for="(item, itemIndex) in processBodyItems(activeMobileProcessGroup.group)" :key="itemIndex">
               <ChatSegment v-if="item.type === 'segment'" :segment="item.segment" :ai-session-id="aiSessionId" />
               <div v-else-if="isThinkingStage(item.segments)" class="chat-process-stage thinking-only">
-                <div class="chat-process-stage-header static" :class="{ danger: processStageStoppedByUser(item.segments) }">
-                  <span class="chat-process-stage-dot" :class="{ running: processStageRunning(item.segments), danger: processStageStoppedByUser(item.segments) }" aria-hidden="true"></span>
+                <div class="chat-process-stage-header static" :class="{ danger: processStageStoppedByUser(item.segments) || processStageHasError(item.segments) }">
+                  <span class="chat-process-stage-dot" :class="{ running: processStageRunning(item.segments), danger: processStageStoppedByUser(item.segments) || processStageHasError(item.segments) }" aria-hidden="true"></span>
                   <strong>{{ item.title }}</strong>
                 </div>
               </div>
               <details v-else class="chat-process-stage" open>
-                <summary class="chat-process-stage-header" :class="{ danger: processStageStoppedByUser(item.segments) }">
-                  <span class="chat-process-stage-dot" :class="{ running: processStageRunning(item.segments), danger: processStageStoppedByUser(item.segments) }" aria-hidden="true"></span>
+                <summary class="chat-process-stage-header" :class="{ danger: processStageStoppedByUser(item.segments) || processStageHasError(item.segments) }">
+                  <span class="chat-process-stage-dot" :class="{ running: processStageRunning(item.segments), danger: processStageStoppedByUser(item.segments) || processStageHasError(item.segments) }" aria-hidden="true"></span>
                   <strong>{{ item.title }}</strong>
                   <svg class="chat-process-stage-chevron" viewBox="0 0 16 16" fill="none" aria-hidden="true">
                     <path d="M5 6.5 8 9.5l3-3" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" />
