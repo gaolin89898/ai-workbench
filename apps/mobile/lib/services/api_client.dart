@@ -201,8 +201,34 @@ class ApiClient {
     );
   }
 
+  Future<http.Response> _delete(String path) {
+    final requestUri = uri(path);
+    return _requestWithTimeout(
+      http.delete(requestUri, headers: headers),
+      requestUri,
+    );
+  }
+
   Future<List<DesktopDevice>> devices() =>
       _getList('/devices', DesktopDevice.fromJson);
+  Future<DesktopDevice> renameDevice(
+    String deviceId, {
+    required String name,
+  }) async {
+    final response = await _patch(
+      '/devices/${Uri.encodeComponent(deviceId)}',
+      body: jsonEncode({'name': name}),
+    );
+    _throwIfBad(response);
+    return DesktopDevice.fromJson(
+        jsonDecode(response.body) as Map<String, dynamic>);
+  }
+
+  Future<void> deleteDevice(String deviceId) async {
+    final response = await _delete('/devices/${Uri.encodeComponent(deviceId)}');
+    _throwIfBad(response);
+  }
+
   Future<List<AiProvider>> providers() =>
       _getList('/providers', AiProvider.fromJson);
   Future<List<ProviderStatus>> deviceProviders(String deviceId) =>

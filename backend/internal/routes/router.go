@@ -52,6 +52,8 @@ func (h *Handler) Router() http.Handler {
 	authed.HandleFunc("GET /providers", h.listProviders)
 	authed.HandleFunc("GET /devices", h.listDevices)
 	authed.HandleFunc("GET /devices/{deviceId}", h.getDeviceDetail)
+	authed.HandleFunc("PATCH /devices/{deviceId}", h.renameDevice)
+	authed.HandleFunc("DELETE /devices/{deviceId}", h.deleteDevice)
 	authed.HandleFunc("GET /devices/{deviceId}/sessions", h.listSessions)
 	authed.HandleFunc("GET /devices/{deviceId}/providers", h.listDeviceProviders)
 	authed.HandleFunc("GET /devices/{deviceId}/projects", h.listProjects)

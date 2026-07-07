@@ -23,12 +23,13 @@ import {
   getCloudConfig,
   getDesktopCloudSync,
   fetchTokenUsageSummary,
+  fetchDesktopAppRelease,
 } from "./sync";
 import { saveCredentials, loadCredentials, clearCredentials } from "./credentials";
 import { listCodexModels, respondCodexApproval, runCodexChat, stopCodexChat } from "./codex";
 import { syncCodexHistoryMirror } from "./codex_sessions";
 import { runAiChat, stopAiChat } from "./claude";
-import { checkAppUpdate, installAppUpdate, initUpdater } from "./updater";
+import { checkAppUpdate, getUpdateDownloadSize, installAppUpdate, initUpdater } from "./updater";
 import type {
   CreateAiSessionRequest,
   StartShellPtyRequest,
@@ -418,6 +419,14 @@ export function registerIpcHandlers(win?: BrowserWindow): void {
   // ---------- app update ----------
 
   handle("get_app_version", async () => app.getVersion());
+
+  handle("check_server_app_update", async () => fetchDesktopAppRelease(app.getVersion()));
+
+  handle("get_update_download_size", async (_event, args) => {
+    const [url] = args as [string];
+    if (typeof url !== "string" || !url.trim()) return null;
+    return getUpdateDownloadSize(url);
+  });
 
   handle("check_app_update", async () => checkAppUpdate());
 

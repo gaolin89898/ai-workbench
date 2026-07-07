@@ -7,7 +7,10 @@ import type { ViewName } from "./services/desktop";
 
 const ws = useWorkspace();
 const route = useRoute();
+const UPDATE_NOTICE_INTERVAL_MS = 5 * 60 * 1000;
+const PROVIDER_DETECT_INTERVAL_MS = 24 * 60 * 60 * 1000;
 let updateNoticeTimer: ReturnType<typeof window.setInterval> | null = null;
+let providerDetectTimer: ReturnType<typeof window.setInterval> | null = null;
 
 const activeView = computed<ViewName>(() => {
   const name = route.name;
@@ -33,17 +36,23 @@ onMounted(() => {
   ws.refreshWorkspace().catch((error) => {
     ws.chatMessages.value = [{ role: "error", text: `初始化失败：${String(error)}` }];
   });
-  void ws.checkAppUpdate();
+  void ws.refreshAppUpdateNotice();
   updateNoticeTimer = window.setInterval(() => {
+    void ws.refreshAppUpdateNotice();
+  }, UPDATE_NOTICE_INTERVAL_MS);
+  providerDetectTimer = window.setInterval(() => {
     void ws.detectProviders();
-    void ws.checkAppUpdate();
-  }, 24 * 60 * 60 * 1000);
+  }, PROVIDER_DETECT_INTERVAL_MS);
 });
 
 onUnmounted(() => {
   if (updateNoticeTimer) {
     window.clearInterval(updateNoticeTimer);
     updateNoticeTimer = null;
+  }
+  if (providerDetectTimer) {
+    window.clearInterval(providerDetectTimer);
+    providerDetectTimer = null;
   }
 });
 </script>

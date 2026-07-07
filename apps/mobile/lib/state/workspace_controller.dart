@@ -181,6 +181,57 @@ class WorkspaceController extends ChangeNotifier {
     realtime.connect();
   }
 
+  Future<DesktopDevice?> renameDevice(
+    DesktopDevice device, {
+    required String name,
+  }) {
+    return _runValue(() async {
+      final updated = await api.renameDevice(device.id, name: name);
+      devices = _sortDevices([
+        updated,
+        ...devices.where((item) => item.id != updated.id),
+      ]);
+      if (selectedDevice?.id == updated.id) {
+        selectedDevice = updated;
+      }
+      _lastDevicesLoadedAt = DateTime.now();
+      _notifySafely();
+      return updated;
+    });
+  }
+
+  Future<bool> deleteDevice(DesktopDevice device) async {
+    var deleted = false;
+    await _run(() async {
+      await api.deleteDevice(device.id);
+      deleted = true;
+      devices = devices.where((item) => item.id != device.id).toList();
+      _lastDevicesLoadedAt = DateTime.now();
+      if (selectedDevice?.id == device.id) {
+        selectedDevice = null;
+        _lastSelectedDeviceId = null;
+        _openSessionId = null;
+        _historyRefreshTimer?.cancel();
+        _historyRefreshTimer = null;
+        _historyTimeoutTimer?.cancel();
+        _historyTimeoutTimer = null;
+        _historyTimeoutSessionId = null;
+        providers = [];
+        providerStatuses = [];
+        projects = [];
+        sessions = [];
+        logs = [];
+        messagesBySession.clear();
+        runStatusBySession.clear();
+        _currentAgentMessageStepIds.clear();
+        _lastCommittedAssistantTexts.clear();
+        _saveSelectedDevice();
+        realtime.close();
+      }
+    });
+    return deleted && error == null;
+  }
+
   DesktopDevice? preferredInitialDevice() {
     final savedDeviceId = _lastSelectedDeviceId;
     if (savedDeviceId != null && savedDeviceId.isNotEmpty) {

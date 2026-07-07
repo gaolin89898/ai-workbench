@@ -13,6 +13,10 @@ const _githubReleasesUrl =
     'https://github.com/gaolin89898/ai-workbench/releases';
 const _currentMobileVersion =
     String.fromEnvironment('MOBILE_VERSION', defaultValue: '0.1.69');
+const _downloadHeaders = {
+  'Accept': 'application/octet-stream, application/vnd.android.package-archive, */*',
+  'User-Agent': 'AI-Workbench-Mobile-Updater',
+};
 
 class MobileUpdateInfo {
   const MobileUpdateInfo({
@@ -140,25 +144,51 @@ class MobileUpdateService {
 
     final apkFileName = update.apkFileName ??
         'ai-workbench-mobile-${update.version ?? update.currentVersion}.apk';
-    final apkFile = File('${Directory.systemTemp.path}/$apkFileName');
-    final request = http.Request('GET', Uri.parse(apkUrl));
-
-    final response = await request.send();
-    if (response.statusCode < 200 || response.statusCode >= 300) {
-      throw Exception('下载 APK 失败：HTTP ${response.statusCode}');
+    final safeApkFileName =
+        apkFileName.replaceAll(RegExp(r'[\\/:*?"<>|]'), '_');
+    final tempDir = Directory.systemTemp;
+    if (!await tempDir.exists()) {
+      await tempDir.create(recursive: true);
+    }
+    final apkFile = File('${tempDir.path}/$safeApkFileName');
+    if (await apkFile.exists()) {
+      await apkFile.delete();
     }
 
-    final sink = apkFile.openWrite();
-    var received = 0;
-    final total = response.contentLength;
+    final request = http.Request('GET', Uri.parse(apkUrl))
+      ..headers.addAll(_downloadHeaders);
+    final client = http.Client();
     try {
-      await for (final chunk in response.stream) {
-        received += chunk.length;
-        sink.add(chunk);
-        onProgress?.call(received, total);
+      final response = await client.send(request);
+      if (response.statusCode < 200 || response.statusCode >= 300) {
+        throw Exception('下载 APK 失败：HTTP ${response.statusCode}');
       }
+
+      final sink = apkFile.openWrite();
+      var received = 0;
+      final total = response.contentLength;
+      try {
+        await for (final chunk in response.stream) {
+          received += chunk.length;
+          sink.add(chunk);
+          onProgress?.call(received, total);
+        }
+      } finally {
+        await sink.close();
+      }
+
+      if (received <= 0 ||
+          !await apkFile.exists() ||
+          await apkFile.length() <= 0) {
+        throw Exception('下载 APK 失败：文件为空');
+      }
+    } catch (_) {
+      if (await apkFile.exists()) {
+        await apkFile.delete();
+      }
+      rethrow;
     } finally {
-      await sink.close();
+      client.close();
     }
 
     if (!Platform.isAndroid) {

@@ -50,7 +50,7 @@
     },
     {
       "id": "page-chat",
-      "title": "会话详情",
+      "title": "项目列表",
       "type": "page",
       "version": 1,
       "createdAt": 1782513600000,
@@ -65,13 +65,29 @@
       }
     },
     {
+      "id": "page-chat-detail",
+      "title": "会话详情 - 输入框",
+      "type": "page",
+      "version": 1,
+      "createdAt": 1783441200000,
+      "canvasData": {
+        "x": 1680,
+        "y": 0,
+        "group": 0
+      },
+      "devMetadata": {
+        "htmlSrc": "pages/chat-detail.html",
+        "interactions": []
+      }
+    },
+    {
       "id": "page-providers",
       "title": "AI 工具管理",
       "type": "page",
       "version": 1,
       "createdAt": 1782513600000,
       "canvasData": {
-        "x": 1680,
+        "x": 2100,
         "y": 0,
         "group": 0
       },
@@ -87,12 +103,44 @@
       "version": 1,
       "createdAt": 1782513600000,
       "canvasData": {
-        "x": 2100,
+        "x": 2520,
         "y": 0,
         "group": 0
       },
       "devMetadata": {
         "htmlSrc": "pages/settings.html",
+        "interactions": []
+      }
+    },
+    {
+      "id": "page-chat-approval-cover",
+      "title": "审批确认",
+      "type": "page",
+      "version": 1,
+      "createdAt": 1782513600000,
+      "canvasData": {
+        "x": 2940,
+        "y": 0,
+        "group": 0
+      },
+      "devMetadata": {
+        "htmlSrc": "pages/chat-approval-cover.html",
+        "interactions": []
+      }
+    },
+    {
+      "id": "page-token-usage",
+      "title": "用量统计",
+      "type": "page",
+      "version": 1,
+      "createdAt": 1782513600000,
+      "canvasData": {
+        "x": 3360,
+        "y": 0,
+        "group": 0
+      },
+      "devMetadata": {
+        "htmlSrc": "pages/token-usage.html",
         "interactions": []
       }
     }

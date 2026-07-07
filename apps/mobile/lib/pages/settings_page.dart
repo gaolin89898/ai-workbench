@@ -6,6 +6,7 @@ import '../state/workspace_scope.dart';
 import '../widgets/app_theme.dart';
 import 'account_management_page.dart';
 import 'archived_sessions_page.dart';
+import 'device_management_page.dart';
 import 'login_page.dart';
 import 'token_usage_page.dart';
 import 'update_page.dart';
@@ -92,6 +93,33 @@ class _SettingsPageState extends State<SettingsPage> {
                     ),
                   ),
                 ],
+              ),
+            ),
+            const SizedBox(height: AppSpacing.xl),
+
+            AppSectionTitle(
+              '设备',
+              titleStyle: sectionStyle,
+              padding: const EdgeInsets.only(left: 2, bottom: AppSpacing.sm),
+            ),
+            AppCard(
+              borderRadius: AppRadius.xl,
+              padding: EdgeInsets.zero,
+              child: _Row(
+                icon: Icons.devices_other_outlined,
+                background: AppColors.infoSoft,
+                foreground: AppColors.info,
+                title: '设备管理',
+                subtitle: '重命名或移除已绑定桌面设备',
+                onTap: () => Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (_) => WorkspaceScope(
+                      controller: ws,
+                      child: const DeviceManagementPage(),
+                    ),
+                  ),
+                ),
+                trailing: const _Chevron(),
               ),
             ),
             const SizedBox(height: AppSpacing.xl),

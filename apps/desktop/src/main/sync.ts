@@ -569,7 +569,7 @@ class DesktopCloudSync {
         this.handleAiApprovalRespond(msg, deviceId);
         break;
       case "app.update.available":
-        this.emitToRenderer("app-update-available", {
+        this.notify("app-update-available", {
           available: msg.available === true,
           version: msg.latestVersion,
           currentVersion: msg.currentVersion,

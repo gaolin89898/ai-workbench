@@ -360,42 +360,219 @@ class _ComposerInput extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.end,
+    return Column(
+      mainAxisSize: MainAxisSize.min,
       children: [
-        Expanded(
+        Container(
+          decoration: BoxDecoration(
+            color: AppColors.surfaceMuted,
+            border: Border.all(
+              color: archived ? AppColors.border : AppColors.borderActive,
+              width: archived ? 1 : 2,
+            ),
+            borderRadius: BorderRadius.circular(AppRadius.lg),
+          ),
+          clipBehavior: Clip.antiAlias,
           child: TextField(
             controller: controller,
             enabled: !archived,
             minLines: 1,
             maxLines: 5,
-            style: const TextStyle(fontSize: 14, height: 1.4),
-            decoration: const InputDecoration(
-              hintText: '输入消息...',
-              border: InputBorder.none,
-              fillColor: AppColors.surfaceMuted,
+            textInputAction: TextInputAction.newline,
+            style: const TextStyle(
+              fontSize: 14,
+              height: 1.5,
+              color: AppColors.ink,
             ),
-          ),
-        ),
-        const SizedBox(width: AppSpacing.sm),
-        SizedBox(
-          width: 36,
-          height: 36,
-          child: FilledButton(
-            onPressed: !archived ? onSend : null,
-            style: FilledButton.styleFrom(
-              padding: EdgeInsets.zero,
-              minimumSize: const Size(36, 36),
-              maximumSize: const Size(36, 36),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(AppRadius.lg),
+            decoration: const InputDecoration(
+              hintText: '输入你的消息...',
+              isDense: true,
+              filled: false,
+              border: InputBorder.none,
+              enabledBorder: InputBorder.none,
+              focusedBorder: InputBorder.none,
+              disabledBorder: InputBorder.none,
+              contentPadding: EdgeInsets.symmetric(
+                horizontal: 14,
+                vertical: 12,
               ),
             ),
-            child: const Icon(Icons.arrow_upward,
-                size: 17, color: AppColors.inverse),
           ),
         ),
+        const SizedBox(height: AppSpacing.sm),
+        Row(
+          children: [
+            Flexible(
+              child: Wrap(
+                spacing: 6,
+                runSpacing: 6,
+                children: [
+                  _ComposerIconButton(
+                    icon: Icons.add,
+                    tooltip: '添加附件',
+                    onPressed: archived ? null : () {},
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: AppSpacing.sm),
+            _ComposerPillButton(
+              label: 'claude-sonnet-4',
+              maxWidth: 140,
+              onPressed: archived ? null : () {},
+            ),
+            const SizedBox(width: AppSpacing.sm),
+            ValueListenableBuilder<TextEditingValue>(
+              valueListenable: controller,
+              builder: (context, value, _) {
+                final canSend = !archived && value.text.trim().isNotEmpty;
+                return _ComposerSendButton(
+                  enabled: canSend,
+                  onPressed: onSend,
+                );
+              },
+            ),
+          ],
+        ),
       ],
+    );
+  }
+}
+
+class _ComposerIconButton extends StatelessWidget {
+  const _ComposerIconButton({
+    required this.icon,
+    required this.tooltip,
+    required this.onPressed,
+  });
+
+  final IconData icon;
+  final String tooltip;
+  final VoidCallback? onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: 32,
+      height: 32,
+      child: IconButton(
+        tooltip: tooltip,
+        onPressed: onPressed,
+        style: IconButton.styleFrom(
+          padding: EdgeInsets.zero,
+          backgroundColor: Colors.transparent,
+          disabledBackgroundColor: Colors.transparent,
+          foregroundColor: AppColors.secondary,
+          disabledForegroundColor: AppColors.muted,
+          side: const BorderSide(color: AppColors.border),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(AppRadius.lg),
+          ),
+        ),
+        icon: Icon(icon, size: 16),
+      ),
+    );
+  }
+}
+
+class _ComposerPillButton extends StatelessWidget {
+  const _ComposerPillButton({
+    required this.label,
+    required this.onPressed,
+    this.maxWidth,
+  });
+
+  final String label;
+  final VoidCallback? onPressed;
+  final double? maxWidth;
+
+  @override
+  Widget build(BuildContext context) {
+    return ConstrainedBox(
+      constraints: BoxConstraints(
+        minHeight: 32,
+        maxWidth: maxWidth ?? double.infinity,
+      ),
+      child: OutlinedButton(
+        onPressed: onPressed,
+        style: OutlinedButton.styleFrom(
+          minimumSize: const Size(0, 32),
+          padding: const EdgeInsets.symmetric(horizontal: 10),
+          foregroundColor: AppColors.secondary,
+          disabledForegroundColor: AppColors.muted,
+          backgroundColor: Colors.transparent,
+          side: const BorderSide(color: AppColors.border),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(AppRadius.full),
+          ),
+          textStyle: const TextStyle(
+            fontSize: 11,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Flexible(
+              child: Text(
+                label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+            const SizedBox(width: 4),
+            const Icon(Icons.keyboard_arrow_down, size: 14),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _ComposerSendButton extends StatelessWidget {
+  const _ComposerSendButton({
+    required this.enabled,
+    required this.onPressed,
+  });
+
+  final bool enabled;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: 36,
+      height: 36,
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(AppRadius.full),
+        boxShadow: enabled
+            ? [
+                BoxShadow(
+                  color: AppColors.primary.withValues(alpha: 0.30),
+                  blurRadius: 8,
+                  offset: const Offset(0, 2),
+                ),
+              ]
+            : null,
+      ),
+      child: FilledButton(
+        onPressed: enabled ? onPressed : null,
+        style: FilledButton.styleFrom(
+          padding: EdgeInsets.zero,
+          minimumSize: const Size(36, 36),
+          maximumSize: const Size(36, 36),
+          disabledBackgroundColor: AppColors.surfaceMuted,
+          disabledForegroundColor: AppColors.muted,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(AppRadius.full),
+          ),
+        ),
+        child: Icon(
+          Icons.arrow_upward,
+          size: 18,
+          color: enabled ? AppColors.inverse : AppColors.muted,
+        ),
+      ),
     );
   }
 }

@@ -43,9 +43,10 @@ class DesktopDevice {
         lastSeenAt: json['lastSeenAt'] as String?,
       );
 
-  DesktopDevice copyWith({bool? online, String? lastSeenAt}) => DesktopDevice(
+  DesktopDevice copyWith({String? name, bool? online, String? lastSeenAt}) =>
+      DesktopDevice(
         id: id,
-        name: name,
+        name: name ?? this.name,
         os: os,
         online: online ?? this.online,
         lastSeenAt: lastSeenAt ?? this.lastSeenAt,

@@ -8,8 +8,10 @@
 package routes
 
 import (
+	"encoding/json"
 	"errors"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -62,6 +64,10 @@ type desktopProviderStatusResponse struct {
 	Version       *string   `json:"version"`
 	AuthStatus    string    `json:"authStatus"`
 	LastCheckedAt time.Time `json:"lastCheckedAt"`
+}
+
+type renameDeviceRequest struct {
+	Name string `json:"name"`
 }
 
 // listDevices mirrors devices::list_devices. Returns all desktop devices
@@ -144,6 +150,69 @@ func (h *Handler) getDeviceDetail(w http.ResponseWriter, r *http.Request) {
 	d.ViewerCount = h.mobileViewerCount(userID)
 
 	writeJSON(w, http.StatusOK, d)
+}
+
+func (h *Handler) renameDevice(w http.ResponseWriter, r *http.Request) {
+	userID := auth.UserIDFromContext(r.Context())
+	if userID == "" {
+		writeError(w, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+	deviceID := r.PathValue("deviceId")
+
+	var req renameDeviceRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeBadRequest(w, "invalid request body")
+		return
+	}
+	name := strings.TrimSpace(req.Name)
+	if name == "" {
+		writeBadRequest(w, "name is required")
+		return
+	}
+
+	var d deviceResponse
+	err := h.DB.Pool.QueryRow(r.Context(),
+		`UPDATE desktop_devices
+		 SET name = $1
+		 WHERE id = $2 AND user_id = $3
+		 RETURNING id, name, os, online, last_seen_at`,
+		name, deviceID, userID,
+	).Scan(&d.Id, &d.Name, &d.Os, &d.Online, &d.LastSeenAt)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			writeForbidden(w)
+			return
+		}
+		writeInternal(w)
+		return
+	}
+
+	writeJSON(w, http.StatusOK, d)
+}
+
+func (h *Handler) deleteDevice(w http.ResponseWriter, r *http.Request) {
+	userID := auth.UserIDFromContext(r.Context())
+	if userID == "" {
+		writeError(w, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+	deviceID := r.PathValue("deviceId")
+
+	tag, err := h.DB.Pool.Exec(r.Context(),
+		"DELETE FROM desktop_devices WHERE id = $1 AND user_id = $2",
+		deviceID, userID,
+	)
+	if err != nil {
+		writeInternal(w)
+		return
+	}
+	if tag.RowsAffected() == 0 {
+		writeForbidden(w)
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
 }
 
 // listSessions mirrors devices::list_sessions. Returns terminal sessions for

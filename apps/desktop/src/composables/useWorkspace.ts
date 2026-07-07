@@ -1,6 +1,6 @@
 import { computed, ref, watch } from "vue";
 import router from "../router";
-import { desktopApi, type AiChatOutputEvent, type AiProvider, type AiProviderTrace, type AiSession, type AiTraceUpdateEvent, type AppUpdateDownloadProgress, type ChatImageAttachment, type CodexChatOptions, type ChatMessage, type ChatSegment, type ProviderStatus, type TerminalSession, type ViewName, type WorkspaceProject } from "../services/desktop";
+import { desktopApi, type AiChatOutputEvent, type AiProvider, type AiProviderTrace, type AiSession, type AiTraceUpdateEvent, type AppUpdateDownloadProgress, type AppUpdateInfo, type ChatImageAttachment, type CodexChatOptions, type ChatMessage, type ChatSegment, type ProviderStatus, type TerminalSession, type ViewName, type WorkspaceProject } from "../services/desktop";
 import { decodeAssistantMessageFromStorage, encodeAssistantMessageForStorage, extractAssistantText } from "../utils/chat";
 
 const providers = ref<AiProvider[]>([]);
@@ -31,6 +31,7 @@ const updateCurrentVersion = ref("—");
 const updateAvailableVersion = ref("");
 const updateInstallable = ref(false);
 const updateDownloadProgress = ref<AppUpdateDownloadProgress | null>(null);
+const updatePackageSizeBytes = ref<number | null>(null);
 const chatMessages = ref<ChatMessage[]>([
   { role: "system", text: "创建 AI 会话后，这里会变成聊天界面。" },
 ]);
@@ -138,6 +139,7 @@ let workspaceEventsInitialized = false;
 let workspaceEventsInitPromise: Promise<void> | null = null;
 let updateEventsInitialized = false;
 let updateEventsInitPromise: Promise<void> | null = null;
+let updatePackageSizeLookupSeq = 0;
 let runningElapsedTimer: number | null = null;
 const supportedChatProviders = new Set(["codex", "claude", "mimo"]);
 
@@ -180,7 +182,7 @@ const updateDownloadSizeLabel = computed(() => {
   const progress = updateDownloadProgress.value;
   if (!progress) return "";
   const transferred = formatUpdateBytes(progress.transferred);
-  const total = formatUpdateBytes(progress.total);
+  const total = formatUpdateBytes(updatePackageSizeBytes.value ?? progress.total);
   const speed = formatUpdateBytes(progress.bytesPerSecond);
   const sizeLabel = transferred && total ? `${transferred} / ${total}` : transferred || total;
   if (sizeLabel && speed) return `${sizeLabel}，${speed}/s`;
@@ -1805,19 +1807,49 @@ async function initUpdateEventListeners() {
       updateResult.value = `安装更新失败：${event.message ?? "未知错误"}`;
     }),
     desktopApi.onAppUpdateAvailableNotice((event) => {
-      updateDownloadProgress.value = null;
-      updateResultError.value = false;
-      updateAvailableVersion.value = event.version ?? "";
-      updateInstallable.value = event.installable === true;
-      updateCurrentVersion.value = event.currentVersion || updateCurrentVersion.value;
-      updateResult.value = event.required
-        ? `当前版本过低，需要更新到 ${event.version ?? "最新版本"} 后继续使用。${event.body ?? ""}`
-        : `发现新版本 ${event.version ?? ""}${event.body ? `。${event.body}` : "。"}`;
+      applyAppUpdateNotice(event);
     }),
   ]).then(() => {
     updateEventsInitialized = true;
   });
   return updateEventsInitPromise;
+}
+
+function applyAppUpdateNotice(update: AppUpdateInfo) {
+  updateDownloadProgress.value = null;
+  updateResultError.value = false;
+  updateAvailableVersion.value = update.version ?? "";
+  updateInstallable.value = update.installable === true;
+  updateCurrentVersion.value = update.currentVersion || updateCurrentVersion.value;
+  void refreshUpdatePackageSize(update);
+  updateResult.value = update.required
+    ? `当前版本过低，需要更新到 ${update.version ?? "最新版本"} 后继续使用。${update.body ?? ""}`
+    : `发现新版本 ${update.version ?? ""}${update.body ? `。${update.body}` : "。"}`;
+}
+
+function updateDownloadUrlForCurrentPlatform(update: AppUpdateInfo) {
+  const platform = window.navigator.platform.toLowerCase();
+  if (platform.includes("win") && update.windowsDownloadUrl) return update.windowsDownloadUrl;
+  if (platform.includes("linux") && update.linuxDownloadUrl) return update.linuxDownloadUrl;
+  return update.downloadUrl ?? update.windowsDownloadUrl ?? update.linuxDownloadUrl ?? "";
+}
+
+async function refreshUpdatePackageSize(update: AppUpdateInfo) {
+  const seq = ++updatePackageSizeLookupSeq;
+  updatePackageSizeBytes.value = typeof update.downloadSize === "number" && update.downloadSize > 0
+    ? update.downloadSize
+    : null;
+  if (updatePackageSizeBytes.value) return;
+  const url = updateDownloadUrlForCurrentPlatform(update);
+  if (!url) return;
+  try {
+    const size = await desktopApi.getUpdateDownloadSize(url);
+    if (seq === updatePackageSizeLookupSeq && typeof size === "number" && size > 0) {
+      updatePackageSizeBytes.value = size;
+    }
+  } catch {
+    // Keep progress.total as the fallback if the asset size cannot be resolved.
+  }
 }
 
 async function refreshShellLiveState(sessionId: string) {
@@ -2004,6 +2036,28 @@ async function loginDesktop(server: string, email: string, password: string) {
   }
 }
 
+async function refreshAppUpdateNotice() {
+  await initUpdateEventListeners();
+  if (updateChecking.value || updateInstalling.value) return;
+  try {
+    const update = await desktopApi.checkServerAppUpdate();
+    if (!update) return;
+    updateCurrentVersion.value = update.currentVersion || updateCurrentVersion.value;
+    if (!update.available) {
+      if (updateAvailableVersion.value) {
+        updateAvailableVersion.value = "";
+        updateInstallable.value = false;
+        updateDownloadProgress.value = null;
+        updatePackageSizeBytes.value = null;
+      }
+      return;
+    }
+    applyAppUpdateNotice(update);
+  } catch {
+    // Background update notices should not surface transient network errors.
+  }
+}
+
 async function checkAppUpdate() {
   await initUpdateEventListeners();
   updateChecking.value = true;
@@ -2017,11 +2071,13 @@ async function checkAppUpdate() {
       updateAvailableVersion.value = "";
       updateInstallable.value = false;
       updateDownloadProgress.value = null;
+      updatePackageSizeBytes.value = null;
       updateResult.value = `当前已经是最新版本${update.currentVersion ? `（当前 ${update.currentVersion}` : ""}${update.version ? `，最新 ${update.version}` : ""}${update.currentVersion ? "）" : ""}${update.body ? `。${update.body}` : "。"}`;
       return;
     }
     updateAvailableVersion.value = update.version ?? "";
     updateInstallable.value = update.installable === true;
+    void refreshUpdatePackageSize(update);
     updateResult.value = `发现新版本 ${update.version ?? ""}${update.currentVersion ? `（当前 ${update.currentVersion}）` : ""}${update.body ? `。${update.body}` : "。"}`;
   } catch (error) {
     updateInstallable.value = false;
@@ -2050,6 +2106,7 @@ async function installAppUpdate() {
     if (!installed) {
       updateAvailableVersion.value = "";
       updateInstallable.value = false;
+      updatePackageSizeBytes.value = null;
       updateResult.value = "没有可安装的更新。";
     } else {
       updateResult.value = "更新已下载，应用将退出并安装。";
@@ -2153,6 +2210,7 @@ export function useWorkspace() {
     openAiSessionInNewWindow,
     deriveSessionToLocal,
     loginDesktop,
+    refreshAppUpdateNotice,
     checkAppUpdate,
     installAppUpdate,
     switchView,

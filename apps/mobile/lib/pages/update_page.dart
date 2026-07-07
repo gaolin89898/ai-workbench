@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../services/update_service.dart';
 import '../state/workspace_scope.dart';
@@ -160,12 +161,36 @@ class _UpdatePageState extends State<UpdatePage> {
           _status = '已打开系统安装器，请按提示安装。';
         });
       }
-    } catch (error) {
+    } on PlatformException catch (error) {
       if (mounted) {
         setState(() {
           _progress = null;
-          _status = '下载安装失败：$error';
+          _status = error.code == 'INSTALL_PERMISSION_REQUIRED'
+              ? (error.message ?? '请允许安装未知来源应用后重新安装。')
+              : '打开系统安装器失败：${error.message ?? error.code}';
         });
+      }
+    } catch (error) {
+      if (mounted) {
+        setState(() => _status = '应用内下载安装失败，正在打开浏览器下载...');
+      }
+      try {
+        await _updates.openDownload(update);
+        if (mounted) {
+          setState(() {
+            _progress = null;
+            _status = '应用内下载安装失败，已打开浏览器下载链接。';
+          });
+        }
+        return;
+      } catch (openError) {
+        if (mounted) {
+          setState(() {
+            _progress = null;
+            _status = '下载安装失败：$error；打开浏览器也失败：$openError';
+          });
+        }
+        return;
       }
     } finally {
       if (mounted) setState(() => _opening = false);

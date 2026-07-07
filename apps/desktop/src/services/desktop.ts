@@ -419,6 +419,7 @@ export type AppUpdateInfo = {
   downloadUrl?: string | null;
   windowsDownloadUrl?: string | null;
   linuxDownloadUrl?: string | null;
+  downloadSize?: number | null;
   releaseUrl?: string | null;
   source?: string;
 };
@@ -569,6 +570,10 @@ export const desktopApi = {
     ipc<DesktopRuntimeInfo>("get_desktop_runtime_info"),
   getAppVersion: (): Promise<string> =>
     ipc<string>("get_app_version"),
+  checkServerAppUpdate: (): Promise<AppUpdateInfo | null> =>
+    ipc<AppUpdateInfo | null>("check_server_app_update"),
+  getUpdateDownloadSize: (url: string): Promise<number | null> =>
+    ipc<number | null>("get_update_download_size", url),
   checkAppUpdate: (): Promise<AppUpdateInfo> =>
     ipc<AppUpdateInfo>("check_app_update"),
   installAppUpdate: (): Promise<boolean> =>

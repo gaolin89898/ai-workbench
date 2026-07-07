@@ -78,6 +78,58 @@ function isNewerVersion(candidate: string, current: string): boolean {
   return false;
 }
 
+function parseContentLength(value: string | null): number | null {
+  if (!value) return null;
+  const size = Number.parseInt(value, 10);
+  return Number.isFinite(size) && size > 0 ? size : null;
+}
+
+function parseContentRangeSize(value: string | null): number | null {
+  if (!value) return null;
+  const match = value.match(/\/(\d+)$/);
+  if (!match) return null;
+  const size = Number.parseInt(match[1], 10);
+  return Number.isFinite(size) && size > 0 ? size : null;
+}
+
+function updateInfoDownloadSize(updateInfo: unknown): number | null {
+  if (!updateInfo || typeof updateInfo !== "object") return null;
+  const files = (updateInfo as { files?: unknown }).files;
+  if (!Array.isArray(files)) return null;
+  const sizes = files
+    .map((file) => {
+      if (!file || typeof file !== "object") return null;
+      const size = (file as { size?: unknown }).size;
+      return typeof size === "number" && Number.isFinite(size) && size > 0 ? size : null;
+    })
+    .filter((size): size is number => typeof size === "number");
+  if (sizes.length === 0) return null;
+  return Math.max(...sizes);
+}
+
+export async function getUpdateDownloadSize(url: string): Promise<number | null> {
+  const parsed = new URL(url);
+  if (parsed.protocol !== "http:" && parsed.protocol !== "https:") return null;
+  try {
+    const response = await fetch(parsed.toString(), { method: "HEAD", redirect: "follow" });
+    const size = parseContentLength(response.headers.get("content-length"));
+    if (size) return size;
+  } catch {
+    // Some asset hosts do not support HEAD; fall back to a one-byte range.
+  }
+  try {
+    const response = await fetch(parsed.toString(), {
+      method: "GET",
+      redirect: "follow",
+      headers: { Range: "bytes=0-0" },
+    });
+    return parseContentRangeSize(response.headers.get("content-range"))
+      ?? parseContentLength(response.headers.get("content-length"));
+  } catch {
+    return null;
+  }
+}
+
 async function checkGitHubReleases(note?: string): Promise<AppUpdateInfo> {
   const response = await fetch("https://api.github.com/repos/gaolin89898/ai-workbench/releases?per_page=20", {
     headers: {
@@ -94,6 +146,11 @@ async function checkGitHubReleases(note?: string): Promise<AppUpdateInfo> {
     name?: string;
     published_at?: string;
     body?: string;
+    assets?: Array<{
+      name?: string;
+      browser_download_url?: string;
+      size?: number;
+    }>;
   }>;
   const latestDesktop = releases.find((release) => /^v\d+\.\d+\.\d+$/.test(release.tag_name ?? ""));
   if (!latestDesktop?.tag_name) {
@@ -108,6 +165,7 @@ async function checkGitHubReleases(note?: string): Promise<AppUpdateInfo> {
     currentVersion,
     date: latestDesktop.published_at ?? null,
     body: note ?? latestDesktop.body ?? null,
+    downloadSize: updateInfoDownloadSize({ files: latestDesktop.assets ?? [] }),
     installable: false,
   };
 }
@@ -139,6 +197,7 @@ export async function checkAppUpdate(): Promise<AppUpdateInfo> {
       currentVersion,
       date: updateInfo.releaseDate ?? null,
       body: normalizeBody(updateInfo.releaseNotes),
+      downloadSize: updateInfoDownloadSize(updateInfo),
       installable: available,
     };
   } catch (e) {

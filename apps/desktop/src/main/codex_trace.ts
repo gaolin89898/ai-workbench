@@ -164,6 +164,11 @@ function traceItemType(rawType: string): CodexTraceItem["type"] {
 function isInternalUserMessageRawType(rawType: string | null | undefined): boolean {
   return /^(?:userMessage|user_message)$/i.test(rawType ?? "");
 }
+
+function isNoisyTraceRawType(rawType: string | null | undefined): boolean {
+  return /^(?:webSearch|web_search)$/i.test(rawType ?? "");
+}
+
 function traceItemTitle(rawType: string, item: Record<string, unknown>, parent: Record<string, unknown>) {
   if (/^(?:contextCompaction|context_compaction)$/i.test(rawType)) return "正在压缩上下文";
   switch (traceItemType(rawType)) {
@@ -295,7 +300,7 @@ export function reduceCodexTraceSnapshot(
     }
     case "item/started": {
       const item = itemFromParams(event.params, now);
-      if (!isInternalUserMessageRawType(item.rawItemType)) {
+      if (!isInternalUserMessageRawType(item.rawItemType) && !isNoisyTraceRawType(item.rawItemType)) {
         snapshot = upsertItem(snapshot, item);
       }
       break;
@@ -348,6 +353,7 @@ export function reduceCodexTraceSnapshot(
     case "item/completed": {
       const completed = itemFromParams(event.params, now);
       if (isInternalUserMessageRawType(completed.rawItemType)) break;
+      if (isNoisyTraceRawType(completed.rawItemType)) break;
       const current = snapshot.items.find((item) => item.id === completed.id);
       const completedItem = {
         ...(current ?? completed),
@@ -527,6 +533,7 @@ export function codexTraceSnapshotToSegments(snapshot: CodexTraceSnapshot): Chat
 
   for (const item of snapshot.items) {
     if (isInternalUserMessageRawType(item.rawItemType)) continue;
+    if (isNoisyTraceRawType(item.rawItemType)) continue;
     if (item.type === "agent_message") {
       if (item.text.trim() && !isFinalAnswerPhase(item.phase)) {
         segments.push({

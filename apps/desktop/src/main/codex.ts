@@ -79,6 +79,10 @@ const CODEX_RECONNECT_RETRY_MS = 1200;
 const CODEX_RECONNECT_MAX_RETRIES = 5;
 const CLI_INTERRUPT_FALLBACK_MS = 1500;
 const CODEX_CLIENT_INFO = { name: "AI Workbench", version: "0.1.0" };
+const CODEX_INITIALIZE_PARAMS = {
+  clientInfo: CODEX_CLIENT_INFO,
+  capabilities: { experimentalApi: true },
+};
 const CODEX_APP_SERVER_SESSION_PREFIX = "app-server:";
 const CODEX_SESSIONS_DIR = path.join(os.homedir(), ".codex", "sessions");
 const activeCodexSessions = new Map<string, CodexSession>();
@@ -212,6 +216,11 @@ function extractThreadInfo(value: unknown, fallbackThreadId?: string | null): Co
     const r = value as Record<string, unknown>;
     const directModel = r["model"];
     if (typeof directModel === "string" && directModel.trim()) model = directModel;
+    const threadSettings = r["threadSettings"];
+    if (!model && threadSettings && typeof threadSettings === "object") {
+      const settingsModel = (threadSettings as Record<string, unknown>)["model"];
+      if (typeof settingsModel === "string" && settingsModel.trim()) model = settingsModel;
+    }
   }
   return { threadId, model };
 }
@@ -962,6 +971,24 @@ async function ensureThread(
   return info;
 }
 
+function buildCodexCollaborationMode(
+  threadInfo: CodexThreadInfo,
+  req: RunCodexChatRequest,
+  reasoningEffort: string | null
+): Record<string, unknown> | null {
+  const model = trimmedOrNull(req.codexModel) ?? threadInfo.model;
+  if (!model) return null;
+  const mode = req.codexMode === "plan" ? "plan" : "default";
+  return {
+    mode,
+    settings: {
+      model,
+      reasoning_effort: mode === "plan" ? (reasoningEffort ?? "medium") : reasoningEffort,
+      developer_instructions: null,
+    },
+  };
+}
+
 function buildCodexTurnParams(
   threadInfo: CodexThreadInfo,
   req: RunCodexChatRequest,
@@ -969,20 +996,15 @@ function buildCodexTurnParams(
 ): Record<string, unknown> {
   const model = trimmedOrNull(req.codexModel);
   const reasoningEffort = codexReasoningEffort(req.codexReasoningEffort);
-  const inputPrompt = req.codexMode === "plan"
-    ? [
-        "请以计划模式处理这轮请求：先分析问题并给出清晰计划，不要修改文件、不要运行会改变环境的命令；如果需要进入实现，请等待用户明确确认。",
-        "",
-        req.prompt,
-      ].join("\n")
-    : req.prompt;
-  const params: Record<string, unknown> = {
+  const collaborationMode = buildCodexCollaborationMode(threadInfo, req, reasoningEffort);
+  const turnParams: Record<string, unknown> = {
     threadId: threadInfo.threadId,
-    input: buildUserInput(inputPrompt, images),
+    input: buildUserInput(req.prompt, images),
   };
-  if (model) params["model"] = model;
-  if (reasoningEffort) params["effort"] = reasoningEffort;
-  return params;
+  if (model) turnParams["model"] = model;
+  if (reasoningEffort) turnParams["effort"] = reasoningEffort;
+  if (collaborationMode) turnParams["collaborationMode"] = collaborationMode;
+  return turnParams;
 }
 
 async function applyCodexGoal(
@@ -1064,7 +1086,7 @@ export async function runCodexChat(
 
   try {
     // 1. initialize
-    await sendRequestWithReconnectRetry(session, "initialize", { clientInfo: CODEX_CLIENT_INFO });
+    await sendRequestWithReconnectRetry(session, "initialize", CODEX_INITIALIZE_PARAMS);
 
     // 2. start or resume thread
     const threadInfo = await ensureThread(session, aiSessionId);
@@ -1076,8 +1098,7 @@ export async function runCodexChat(
       session.turnResolver = { resolve, reject };
     });
 
-    // 4. send turn/start. Plan mode is enforced through the prompt because the
-    // current Codex app-server protocol no longer accepts collaborationMode.
+    // 4. send turn/start.
     session.currentTurnStartedAtMs = Date.now();
     await sendRequestWithReconnectRetry(session, "turn/start", buildCodexTurnParams(threadInfo, req, images));
 
@@ -1140,7 +1161,7 @@ export async function listCodexModels(sender: Sender = { send: () => undefined }
   }, CODEX_WARMUP_TIMEOUT_MS);
 
   try {
-    await sendRequestWithReconnectRetry(session, "initialize", { clientInfo: CODEX_CLIENT_INFO });
+    await sendRequestWithReconnectRetry(session, "initialize", CODEX_INITIALIZE_PARAMS);
     const models = new Map<string, CodexModelOption>();
     let cursor: string | null = null;
     do {
@@ -1257,7 +1278,7 @@ export async function warmupCodexSession(
   }, CODEX_WARMUP_TIMEOUT_MS);
 
   try {
-    await sendRequestWithReconnectRetry(session, "initialize", { clientInfo: CODEX_CLIENT_INFO });
+    await sendRequestWithReconnectRetry(session, "initialize", CODEX_INITIALIZE_PARAMS);
     const threadInfo = await ensureThread(session, aiSessionId);
     clearTimeout(timeout);
     killSession(session);
