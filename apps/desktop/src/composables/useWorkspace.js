@@ -20,12 +20,8 @@ const projectResult = ref("请选择一个本机项目目录。");
 const projectResultError = ref(false);
 const pairResult = ref("登录桌面端后会自动绑定到同账号移动端。");
 const pairResultError = ref(false);
-const qrPairingCode = ref("");
-const qrPairingPayload = ref("");
-const qrPairingExpiresAt = ref("");
-const qrPairingStatus = ref("idle");
-const settingsServer = ref("http://118.196.78.91:3000");
-const settingsResult = ref("尚未读取配对配置");
+const settingsServer = ref("");
+const settingsResult = ref("尚未读取连接配置");
 const updateResult = ref("尚未检查更新。");
 const updateResultError = ref(false);
 const updateChecking = ref(false);
@@ -102,7 +98,6 @@ let workspaceEventsInitialized = false;
 let workspaceEventsInitPromise = null;
 let updateEventsInitialized = false;
 let updateEventsInitPromise = null;
-let qrPairingTimer = null;
 let runningElapsedTimer = null;
 const supportedChatProviders = new Set(["codex", "claude", "mimo"]);
 function updateProgressPercentFrom(progress) {
@@ -340,10 +335,10 @@ async function loadCloudConfig() {
         settingsServer.value = config.serverUrl;
         pairResult.value = `已读取保存的登录设备：${config.deviceId.slice(0, 8)}...`;
         pairResultError.value = false;
-        settingsResult.value = `已连接到保存的服务器：${config.serverUrl}`;
+        settingsResult.value = "已读取保存的连接配置。";
     }
     catch (error) {
-        settingsResult.value = `读取配对配置失败：${String(error)}`;
+        settingsResult.value = `读取连接配置失败：${String(error)}`;
     }
 }
 async function loadProviders() {
@@ -1846,7 +1841,7 @@ async function loginDesktop(server, email, password) {
     pairResult.value = "正在登录桌面端...";
     pairResultError.value = false;
     if (!trimmedServer || !trimmedEmail || !password) {
-        pairResult.value = "请填写服务器地址、账号和密码。";
+        pairResult.value = !trimmedServer ? "请填写服务器地址。" : "请填写账号和密码。";
         pairResultError.value = true;
         return false;
     }
@@ -1855,7 +1850,7 @@ async function loginDesktop(server, email, password) {
         pairResult.value = value.deviceId ? `已登录并自动绑定：${value.deviceId.slice(0, 8)}...` : "已登录并自动绑定。";
         pairResultError.value = false;
         settingsServer.value = trimmedServer;
-        settingsResult.value = `桌面端已登录：${trimmedServer}`;
+        settingsResult.value = "桌面端已登录。";
         await loadCloudConfig();
         return true;
     }
@@ -1876,80 +1871,6 @@ async function loginDesktop(server, email, password) {
         pairResultError.value = true;
         return false;
     }
-}
-function clearQrPairingTimer() {
-    if (qrPairingTimer !== null) {
-        window.clearTimeout(qrPairingTimer);
-        qrPairingTimer = null;
-    }
-}
-function describeQrPairingStatus(status) {
-    if (status.status === "approved")
-        return "手机端已确认，桌面配对配置已保存。";
-    if (status.status === "expired")
-        return "二维码已过期，请重新生成。";
-    return "等待手机扫码确认。";
-}
-async function pollQrPairing(server, code) {
-    clearQrPairingTimer();
-    if (!code || qrPairingStatus.value !== "pending")
-        return;
-    try {
-        const status = await desktopApi.getDesktopPairingStatus(server, code);
-        pairResult.value = describeQrPairingStatus(status);
-        pairResultError.value = false;
-        if (status.status === "approved") {
-            qrPairingStatus.value = "approved";
-            settingsServer.value = server;
-            settingsResult.value = `配对配置已保存：${server}`;
-            await loadCloudConfig();
-            return;
-        }
-        if (status.status === "expired") {
-            qrPairingStatus.value = "expired";
-            qrPairingPayload.value = "";
-            return;
-        }
-    }
-    catch (error) {
-        pairResult.value = `查询配对状态失败：${String(error)}`;
-        pairResultError.value = true;
-    }
-    qrPairingTimer = window.setTimeout(() => void pollQrPairing(server, code), 2000);
-}
-async function createQrPairingRequest(server) {
-    const trimmedServer = server.trim().replace(/\/$/, "");
-    clearQrPairingTimer();
-    pairResultError.value = false;
-    if (!trimmedServer) {
-        pairResult.value = "请先填写手机可访问的服务器地址。";
-        pairResultError.value = true;
-        return;
-    }
-    qrPairingStatus.value = "creating";
-    pairResult.value = "正在生成二维码...";
-    try {
-        const request = await desktopApi.createDesktopPairingRequest(trimmedServer);
-        const payload = await desktopApi.buildDesktopPairingQrPayload(trimmedServer, request.code);
-        qrPairingCode.value = request.code;
-        qrPairingPayload.value = payload;
-        qrPairingExpiresAt.value = request.expiresAt;
-        qrPairingStatus.value = "pending";
-        pairResult.value = "二维码已生成，等待手机扫码确认。";
-        pairResultError.value = false;
-        settingsServer.value = trimmedServer;
-        void pollQrPairing(trimmedServer, request.code);
-    }
-    catch (error) {
-        qrPairingStatus.value = "error";
-        qrPairingPayload.value = "";
-        pairResult.value = `生成二维码失败：${String(error)}`;
-        pairResultError.value = true;
-    }
-}
-function saveSettings() {
-    const server = settingsServer.value.trim();
-    settingsResult.value = `已在本地预览保存。服务器地址：${server || "未设置"}；完整历史仍保存在本机 SQLite。`;
 }
 async function checkAppUpdate() {
     await initUpdateEventListeners();
@@ -2038,10 +1959,6 @@ export function useWorkspace() {
         projectResultError,
         pairResult,
         pairResultError,
-        qrPairingCode,
-        qrPairingPayload,
-        qrPairingExpiresAt,
-        qrPairingStatus,
         settingsServer,
         settingsResult,
         updateResult,
@@ -2106,8 +2023,6 @@ export function useWorkspace() {
         openAiSessionInNewWindow,
         deriveSessionToLocal,
         loginDesktop,
-        createQrPairingRequest,
-        saveSettings,
         checkAppUpdate,
         installAppUpdate,
         switchView,

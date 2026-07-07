@@ -3,6 +3,7 @@ import { app, shell, BrowserWindow } from "electron";
 import { join } from "node:path";
 import { registerIpcHandlers } from "./ipc";
 import { initDesktopCloudSync } from "./sync";
+import { startProviderAutoDetect } from "./providers";
 
 function createWindow(): BrowserWindow {
   const mainWindow = new BrowserWindow({
@@ -55,6 +56,7 @@ app.whenReady().then(() => {
   const mainWindow = createWindow();
   registerIpcHandlers(mainWindow);
   initDesktopCloudSync(mainWindow);
+  startProviderAutoDetect();
 
   app.on("activate", () => {
     if (BrowserWindow.getAllWindows().length === 0) {

@@ -52,18 +52,6 @@ class DesktopDevice {
       );
 }
 
-class PairingCode {
-  const PairingCode({required this.code, required this.expiresAt});
-
-  final String code;
-  final String expiresAt;
-
-  factory PairingCode.fromJson(Map<String, dynamic> json) => PairingCode(
-        code: json['code'] as String,
-        expiresAt: json['expiresAt'] as String,
-      );
-}
-
 class AiProvider {
   const AiProvider({
     required this.id,
@@ -131,7 +119,8 @@ class WorkspaceProject {
   final String updatedAt;
   final String? gitBranch;
 
-  factory WorkspaceProject.fromJson(Map<String, dynamic> json) => WorkspaceProject(
+  factory WorkspaceProject.fromJson(Map<String, dynamic> json) =>
+      WorkspaceProject(
         id: json['id'] as String,
         deviceId: json['deviceId'] as String,
         name: json['name'] as String,
@@ -219,9 +208,11 @@ class AiHistoryMessage {
     );
   }
 
-  static _StructuredHistoryContent? _decodeStructuredContent(dynamic rawContent) {
+  static _StructuredHistoryContent? _decodeStructuredContent(
+      dynamic rawContent) {
     try {
-      final content = rawContent is String && rawContent.startsWith(_structuredMessagePrefix)
+      final content = rawContent is String &&
+              rawContent.startsWith(_structuredMessagePrefix)
           ? jsonDecode(
               rawContent.substring(_structuredMessagePrefix.length),
             )
@@ -502,7 +493,8 @@ class TokenUsageSummary {
   factory TokenUsageSummary.fromJson(Map<String, dynamic> json) =>
       TokenUsageSummary(
         providers: ((json['providers'] as List<dynamic>?) ?? const [])
-            .map((e) => TokenUsageSummaryItem.fromJson(e as Map<String, dynamic>))
+            .map((e) =>
+                TokenUsageSummaryItem.fromJson(e as Map<String, dynamic>))
             .toList(),
         totals: TokenUsageSummaryItem.fromJson(
           (json['totals'] as Map<String, dynamic>?) ?? const {},

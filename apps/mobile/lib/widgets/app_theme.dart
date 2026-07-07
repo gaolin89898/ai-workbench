@@ -5,7 +5,7 @@ import 'package:flutter/material.dart';
 // 依据 ai-workbench-mobile-design/colors_and_type.css 与各页面 HTML 提取
 // ===========================================================================
 
-/// 颜色系统。包含主色、状态色、软色板（背景 + 前景配对）。
+/// 颜色系统。包含主色、状态色、软色板（背景 + 前景组合）。
 class AppColors {
   AppColors._();
 
@@ -48,9 +48,6 @@ class AppColors {
   static const dangerSoft = Color(0xfffef2f2);
   static const info = Color(0xff3b82f6);
   static const infoSoft = Color(0xfff0f9ff);
-
-  // ---- 品牌色（钉钉等） ----
-  static const dingtalk = Color(0xff1677ff);
 
   // ---- 渐变 ----
   static const primaryGradient = LinearGradient(
@@ -104,19 +101,24 @@ class AppShadows {
   ]; // 0 12px 24px rgba(37,99,235,0.25)
 }
 
-/// 状态徽章的配对配色。用于 status pill、status dot、_Badge 等场景。
+/// 状态徽章的组合配色。用于 status pill、status dot、_Badge 等场景。
 class AppStatusStyle {
   final Color bg;
   final Color fg;
   final Color? border;
   const AppStatusStyle(this.bg, this.fg, [this.border]);
 
-  static const success = AppStatusStyle(AppColors.successSoft, AppColors.successDeep, Color(0xffbbf7d0));
-  static const warning = AppStatusStyle(AppColors.warningSoft, AppColors.warningDeep);
-  static const danger = AppStatusStyle(AppColors.dangerSoft, AppColors.dangerDeep);
+  static const success = AppStatusStyle(
+      AppColors.successSoft, AppColors.successDeep, Color(0xffbbf7d0));
+  static const warning =
+      AppStatusStyle(AppColors.warningSoft, AppColors.warningDeep);
+  static const danger =
+      AppStatusStyle(AppColors.dangerSoft, AppColors.dangerDeep);
   static const info = AppStatusStyle(AppColors.infoSoft, AppColors.info);
-  static const primary = AppStatusStyle(AppColors.primarySoftSolid, AppColors.primary, AppColors.primarySoftSolid2);
-  static const neutral = AppStatusStyle(AppColors.surfaceMuted, AppColors.secondary, AppColors.border);
+  static const primary = AppStatusStyle(AppColors.primarySoftSolid,
+      AppColors.primary, AppColors.primarySoftSolid2);
+  static const neutral = AppStatusStyle(
+      AppColors.surfaceMuted, AppColors.secondary, AppColors.border);
 }
 
 // ===========================================================================
@@ -244,7 +246,10 @@ ThemeData buildAppTheme() {
       fillColor: AppColors.surfaceMuted,
       contentPadding: const EdgeInsets.symmetric(horizontal: 15, vertical: 14),
       hintStyle: const TextStyle(color: AppColors.muted, fontSize: 14),
-      labelStyle: const TextStyle(color: AppColors.secondary, fontSize: 13, fontWeight: FontWeight.w500),
+      labelStyle: const TextStyle(
+          color: AppColors.secondary,
+          fontSize: 13,
+          fontWeight: FontWeight.w500),
       border: OutlineInputBorder(
         borderRadius: BorderRadius.circular(AppRadius.lg),
         borderSide: const BorderSide(color: AppColors.border),
@@ -278,9 +283,11 @@ ThemeData buildAppTheme() {
         backgroundColor: AppColors.primary,
         foregroundColor: AppColors.inverse,
         minimumSize: const Size.fromHeight(48),
-        padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg, vertical: AppSpacing.md),
+        padding: const EdgeInsets.symmetric(
+            horizontal: AppSpacing.lg, vertical: AppSpacing.md),
         textStyle: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppRadius.lg)),
+        shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(AppRadius.lg)),
         elevation: 0,
       ),
     ),
@@ -290,9 +297,11 @@ ThemeData buildAppTheme() {
         backgroundColor: AppColors.surface,
         minimumSize: const Size.fromHeight(48),
         side: const BorderSide(color: AppColors.border),
-        padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg, vertical: AppSpacing.md),
+        padding: const EdgeInsets.symmetric(
+            horizontal: AppSpacing.lg, vertical: AppSpacing.md),
         textStyle: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppRadius.lg)),
+        shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(AppRadius.lg)),
       ),
     ),
     textButtonTheme: TextButtonThemeData(
@@ -327,7 +336,8 @@ ThemeData buildAppTheme() {
     // ---- 列表项 ----
     listTileTheme: const ListTileThemeData(
       iconColor: AppColors.secondary,
-      contentPadding: EdgeInsets.symmetric(horizontal: AppSpacing.lg, vertical: AppSpacing.sm),
+      contentPadding: EdgeInsets.symmetric(
+          horizontal: AppSpacing.lg, vertical: AppSpacing.sm),
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.all(Radius.circular(AppRadius.lg)),
       ),
@@ -336,24 +346,32 @@ ThemeData buildAppTheme() {
     chipTheme: ChipThemeData(
       backgroundColor: AppColors.surfaceMuted,
       side: const BorderSide(color: AppColors.border),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppRadius.full)),
-      labelStyle: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: AppColors.secondary),
+      shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(AppRadius.full)),
+      labelStyle: const TextStyle(
+          fontSize: 11,
+          fontWeight: FontWeight.w600,
+          color: AppColors.secondary),
       padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
     ),
     // ---- 对话框 ----
     dialogTheme: DialogThemeData(
       backgroundColor: AppColors.surface,
       elevation: 0,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppRadius.x2l)),
-      titleTextStyle: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: AppColors.ink),
-      contentTextStyle: const TextStyle(fontSize: 13, color: AppColors.secondary, height: 1.5),
+      shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(AppRadius.x2l)),
+      titleTextStyle: const TextStyle(
+          fontSize: 16, fontWeight: FontWeight.w700, color: AppColors.ink),
+      contentTextStyle: const TextStyle(
+          fontSize: 13, color: AppColors.secondary, height: 1.5),
     ),
     // ---- 底部 Sheet ----
     bottomSheetTheme: const BottomSheetThemeData(
       backgroundColor: AppColors.surface,
       elevation: 0,
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(AppRadius.x2l)),
+        borderRadius:
+            BorderRadius.vertical(top: Radius.circular(AppRadius.x2l)),
       ),
       showDragHandle: true,
       dragHandleColor: AppColors.muted,
@@ -369,13 +387,18 @@ ThemeData buildAppTheme() {
     switchTheme: SwitchThemeData(
       thumbColor: WidgetStateProperty.all(AppColors.inverse),
       trackColor: WidgetStateProperty.resolveWith((states) {
-        return states.contains(WidgetState.selected) ? AppColors.primary : const Color(0xffcbd5e1);
+        return states.contains(WidgetState.selected)
+            ? AppColors.primary
+            : const Color(0xffcbd5e1);
       }),
       trackOutlineColor: WidgetStateProperty.resolveWith((states) {
-        return states.contains(WidgetState.selected) ? AppColors.primary : const Color(0xffcbd5e1);
+        return states.contains(WidgetState.selected)
+            ? AppColors.primary
+            : const Color(0xffcbd5e1);
       }),
       overlayColor: WidgetStateProperty.all(Colors.transparent),
-      thumbIcon: WidgetStateProperty.all(const Icon(Icons.circle, color: AppColors.inverse, size: 18)),
+      thumbIcon: WidgetStateProperty.all(
+          const Icon(Icons.circle, color: AppColors.inverse, size: 18)),
     ),
     // ---- 滑块 ----
     sliderTheme: SliderThemeData(
@@ -484,7 +507,8 @@ class AppSectionTitle extends StatelessWidget {
                 if (subtitle != null)
                   Padding(
                     padding: const EdgeInsets.only(top: 2),
-                    child: Text(subtitle!, style: Theme.of(context).textTheme.bodyMedium),
+                    child: Text(subtitle!,
+                        style: Theme.of(context).textTheme.bodyMedium),
                   ),
               ],
             ),
@@ -527,7 +551,8 @@ class AppStatusBadge extends StatelessWidget {
               child: Container(
                 width: 6,
                 height: 6,
-                decoration: BoxDecoration(color: style.fg, shape: BoxShape.circle),
+                decoration:
+                    BoxDecoration(color: style.fg, shape: BoxShape.circle),
               ),
             ),
           Text(
@@ -624,7 +649,8 @@ class EmptyState extends StatelessWidget {
             Text(
               message,
               textAlign: TextAlign.center,
-              style: const TextStyle(color: AppColors.muted, height: 1.5, fontSize: 13),
+              style: const TextStyle(
+                  color: AppColors.muted, height: 1.5, fontSize: 13),
             ),
           ],
         ),

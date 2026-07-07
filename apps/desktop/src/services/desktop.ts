@@ -32,6 +32,37 @@ export type ProviderStatus = {
   lastCheckedAt: string;
 };
 
+export type ProviderActionKind = "install" | "update";
+
+export type ProviderActionResult = {
+  providerId: string;
+  action: ProviderActionKind;
+  command: string;
+  success: boolean;
+  status: number | null;
+  output: string;
+};
+
+export type NpmRegistryInfo = {
+  registry: string;
+  options?: NpmRegistryOption[];
+  probeResults?: NpmRegistryProbeResult[];
+  success: boolean;
+  error?: string | null;
+};
+
+export type NpmRegistryOption = {
+  label: string;
+  registry: string;
+};
+
+export type NpmRegistryProbeResult = {
+  registry: string;
+  latencyMs?: number | null;
+  ok: boolean;
+  error?: string | null;
+};
+
 type SafeIpcError = {
   __AI_WORKBENCH_IPC_ERROR__: true;
   name: string;
@@ -72,35 +103,6 @@ export type PairResponse = {
   device_id?: string;
   accessToken?: string;
   access_token?: string;
-};
-
-export type DesktopPairingRequest = {
-  code: string;
-  expiresAt: string;
-};
-
-export type DesktopPairingStatus = {
-  status: "pending" | "approved" | "expired" | string;
-  expiresAt: string;
-  deviceId?: string | null;
-  accessToken?: string | null;
-};
-
-export type OAuthStartResponse = {
-  authUrl: string;
-  state: string;
-};
-
-export type OAuthPollStatus = "pending" | "success" | "error" | "expired";
-
-export type OAuthPollResponse = {
-  status: OAuthPollStatus;
-  accessToken?: string;
-  refreshToken?: string;
-  userId?: string;
-  displayName?: string;
-  provider?: string;
-  error?: string;
 };
 
 export type SavedCloudConfig = {
@@ -379,6 +381,11 @@ export type AppUpdateInfo = {
   date?: string | null;
   body?: string | null;
   installable?: boolean;
+  required?: boolean;
+  force?: boolean;
+  downloadUrl?: string | null;
+  releaseUrl?: string | null;
+  source?: string;
 };
 
 export type AppUpdateDownloadProgress = {
@@ -430,31 +437,6 @@ function on(channel: string, handler: (...args: unknown[]) => void): () => void 
   return requireDesktopApi().on(channel, handler as (...args: unknown[]) => void);
 }
 
-// OAuth HTTP helpers — these call the relay server directly (no IPC) since
-// they're just plain HTTP. The desktop renderer can call them when the user
-// picks "钉钉登录".
-async function oauthHttp<T>(url: string, init?: RequestInit): Promise<T> {
-  const resp = await fetch(url, init);
-  if (!resp.ok) {
-    let detail = resp.statusText;
-    try {
-      const text = await resp.text();
-      if (text) detail = text;
-    } catch {
-      /* ignore body read error */
-    }
-    throw new Error(`HTTP ${resp.status}: ${detail}`);
-  }
-  return resp.json() as Promise<T>;
-}
-
-export const oauthApi = {
-  dingTalkStart: (serverUrl: string): Promise<OAuthStartResponse> =>
-    oauthHttp<OAuthStartResponse>(`${serverUrl}/oauth/dingtalk/start`, { method: "GET", credentials: "include" }),
-  dingTalkPoll: (serverUrl: string, state: string): Promise<OAuthPollResponse> =>
-    oauthHttp<OAuthPollResponse>(`${serverUrl}/oauth/dingtalk/poll?state=${encodeURIComponent(state)}`, { method: "GET" }),
-};
-
 export const desktopApi = {
   listSessions: (): Promise<TerminalSession[]> =>
     ipc<TerminalSession[]>("list_sessions"),
@@ -468,18 +450,8 @@ export const desktopApi = {
     ipc<{ email: string; password: string } | null>("load_credentials"),
   clearCredentials: (): Promise<void> =>
     ipc<void>("clear_credentials"),
-  saveOAuthLogin: (serverUrl: string, accessToken: string, userId: string, displayName: string): Promise<void> =>
-    ipc<void>("save_oauth_login", serverUrl, accessToken, userId, displayName),
   openExternalUrl: (url: string): Promise<void> =>
     ipc<void>("open_external_url", url),
-  pairDesktop: (server: string, code: string): Promise<PairResponse> =>
-    ipc<PairResponse>("pair_desktop", server, code),
-  createDesktopPairingRequest: (server: string): Promise<DesktopPairingRequest> =>
-    ipc<DesktopPairingRequest>("create_desktop_pairing_request", server),
-  getDesktopPairingStatus: (server: string, code: string): Promise<DesktopPairingStatus> =>
-    ipc<DesktopPairingStatus>("get_desktop_pairing_status", server, code),
-  buildDesktopPairingQrPayload: (server: string, code: string): Promise<string> =>
-    ipc<string>("build_desktop_pairing_qr_payload", server, code),
   getCloudConfig: (): Promise<SavedCloudConfig | null> =>
     ipc<SavedCloudConfig | null>("get_cloud_config"),
   getTokenUsageSummary: (): Promise<TokenUsageSummary | null> =>
@@ -490,6 +462,14 @@ export const desktopApi = {
     ipc<AiProvider[]>("list_ai_providers"),
   detectAiProviders: (): Promise<ProviderStatus[]> =>
     ipc<ProviderStatus[]>("detect_ai_providers"),
+  runProviderAction: (providerId: string, action: ProviderActionKind): Promise<ProviderActionResult> =>
+    ipc<ProviderActionResult>("run_provider_action", providerId, action),
+  getNpmRegistry: (): Promise<NpmRegistryInfo> =>
+    ipc<NpmRegistryInfo>("get_npm_registry"),
+  setNpmRegistry: (registry: string): Promise<NpmRegistryInfo> =>
+    ipc<NpmRegistryInfo>("set_npm_registry", registry),
+  probeNpmRegistries: (): Promise<NpmRegistryInfo> =>
+    ipc<NpmRegistryInfo>("probe_npm_registries"),
   addWorkspaceProject: (path: string): Promise<WorkspaceProject> =>
     ipc<WorkspaceProject>("add_workspace_project", path),
   chooseWorkspaceProject: (): Promise<WorkspaceProject | null> =>
@@ -564,6 +544,8 @@ export const desktopApi = {
     Promise.resolve(on("update-downloaded", handler as (event: unknown) => void)),
   onAppUpdateError: (handler: (event: AppUpdateError) => void): Promise<() => void> =>
     Promise.resolve(on("update-error", handler as (event: unknown) => void)),
+  onAppUpdateAvailableNotice: (handler: (event: AppUpdateInfo) => void): Promise<() => void> =>
+    Promise.resolve(on("app-update-available", handler as (event: unknown) => void)),
   onShellTerminalOutput: (handler: (event: ShellTerminalEvent) => void): Promise<() => void> =>
     Promise.resolve(on("shell-terminal-output", handler as (event: unknown) => void)),
   onShellSessionStatus: (handler: (event: ShellSessionStatusEvent) => void): Promise<() => void> =>

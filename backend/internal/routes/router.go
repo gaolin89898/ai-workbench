@@ -20,28 +20,11 @@ type Handler struct {
 	DB     *db.DB
 	State  *state.AppState
 	Secret string
-	// OAuthConfig holds the optional third-party OAuth credentials. nil
-	// means OAuth is disabled (the handlers return 503 when invoked).
-	OAuthConfig *OAuthConfig
-}
-
-// OAuthConfig holds third-party OAuth credentials and redirect URLs.
-type OAuthConfig struct {
-	DingTalkClientID     string
-	DingTalkClientSecret string
-	DingTalkRedirectURL  string
 }
 
 // NewHandler constructs a Handler with the given dependencies.
 func NewHandler(d *db.DB, st *state.AppState, secret string) *Handler {
 	return &Handler{DB: d, State: st, Secret: secret}
-}
-
-// WithOAuth attaches OAuth credentials to the handler. If client_id or
-// secret is missing, the corresponding provider will respond 503.
-func (h *Handler) WithOAuth(cfg OAuthConfig) *Handler {
-	h.OAuthConfig = &cfg
-	return h
 }
 
 // Router builds the top-level http.Handler, wiring every route from
@@ -61,16 +44,10 @@ func (h *Handler) Router() http.Handler {
 	mux.HandleFunc("POST /desktop/pairing-requests/{code}/approve", h.approveDesktopPairingRequest)
 	mux.HandleFunc("POST /desktop/pair", h.pairDesktop)
 
-	// OAuth 第三方登录（钉钉等）。
-	mux.HandleFunc("GET /oauth/dingtalk/start", h.dingTalkOAuthStart)
-	mux.HandleFunc("GET /oauth/dingtalk/callback", h.dingTalkOAuthCallback)
-	mux.HandleFunc("GET /oauth/dingtalk/poll", h.dingTalkOAuthPoll)
-
 	// Authenticated routes — wrapped in AuthMiddleware so every handler can
 	// read the user id from the request context via auth.UserIDFromContext.
 	authed := http.NewServeMux()
 	authed.HandleFunc("POST /pairing/codes", h.createPairingCode)
-	// OAuth 登录后的桌面端设备绑定：用 access token 鉴权，不需要密码
 	authed.HandleFunc("POST /desktop/register-device", h.registerDesktopDevice)
 	authed.HandleFunc("GET /providers", h.listProviders)
 	authed.HandleFunc("GET /devices", h.listDevices)
@@ -87,6 +64,7 @@ func (h *Handler) Router() http.Handler {
 	authed.HandleFunc("GET /activity-logs", h.listActivityLogs)
 	authed.HandleFunc("GET /settings", h.getSettings)
 	authed.HandleFunc("PUT /settings", h.updateSettings)
+	authed.HandleFunc("GET /app/releases", h.getAppRelease)
 	authed.HandleFunc("GET /admin/users", h.listManagedUsers)
 	authed.HandleFunc("PATCH /admin/users/{userId}", h.updateManagedUser)
 	authed.HandleFunc("POST /admin/users/{userId}/reset-password", h.resetManagedUserPassword)
@@ -95,6 +73,9 @@ func (h *Handler) Router() http.Handler {
 	authed.HandleFunc("GET /admin/users/{userId}/devices", h.listUserDevices)
 	authed.HandleFunc("PATCH /admin/devices/{deviceId}", h.updateDevice)
 	authed.HandleFunc("GET /admin/devices/{deviceId}/sessions", h.adminListDeviceSessions)
+	authed.HandleFunc("GET /admin/app-releases", h.listAppReleases)
+	authed.HandleFunc("PUT /admin/app-releases/{platform}", h.updateAppRelease)
+	authed.HandleFunc("POST /admin/app-releases/{platform}/import-github", h.importGitHubAppRelease)
 	// Token 用量：桌面端上报、按工具聚合查询
 	authed.HandleFunc("POST /token-usage", h.reportTokenUsage)
 	authed.HandleFunc("GET /token-usage/summary", h.getTokenUsageSummary)

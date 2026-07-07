@@ -7,10 +7,9 @@ import { randomUUID } from "node:crypto";
 import WebSocket from "ws";
 import type {
   PairResponse,
-  DesktopPairingRequest,
-  DesktopPairingStatus,
   SavedCloudConfig,
   AiChatOutputEvent,
+  AppUpdateInfo,
 } from "../services/desktop";
 import {
   listWorkspaceProjects,
@@ -35,7 +34,6 @@ import { codexTraceSnapshotToSegments } from "./codex_trace";
 // ---------- Cloud config persistence ----------
 
 const STRUCTURED_MESSAGE_PREFIX = "__AI_WORKBENCH_MESSAGE_V1__";
-const DEFAULT_CLOUD_SERVER_URL = "http://118.196.78.91:3000";
 const configPath = path.join(app.getPath("userData"), "cloud-config.json");
 const machineIdPath = path.join(app.getPath("userData"), "machine-id");
 
@@ -176,22 +174,9 @@ function loadStoredConfig(): StoredCloudConfig | null {
     if (!fs.existsSync(configPath)) return null;
     const raw = fs.readFileSync(configPath, "utf-8");
     const config = JSON.parse(raw) as StoredCloudConfig;
-    if (!sameServerUrl(config.serverUrl, DEFAULT_CLOUD_SERVER_URL)) {
-      console.info(`Ignoring cloud config for ${config.serverUrl}; expected ${DEFAULT_CLOUD_SERVER_URL}.`);
-      return null;
-    }
     return config;
   } catch {
     return null;
-  }
-}
-
-function sameServerUrl(left: string | undefined, right: string | undefined): boolean {
-  if (!left || !right) return false;
-  try {
-    return normalizeServerUrl(left) === normalizeServerUrl(right);
-  } catch {
-    return false;
   }
 }
 
@@ -218,6 +203,47 @@ export function getCloudConfig(): SavedCloudConfig | null {
 function getStoredAccessToken(): string | null {
   const config = loadStoredConfig();
   return config?.accessToken ?? null;
+}
+
+export async function fetchDesktopAppRelease(currentVersion: string): Promise<AppUpdateInfo | null> {
+  const config = loadStoredConfig();
+  if (!config?.serverUrl || !config.accessToken) return null;
+  try {
+    const url = new URL(`${config.serverUrl.replace(/\/+$/, "")}/app/releases`);
+    url.searchParams.set("platform", "desktop");
+    url.searchParams.set("currentVersion", currentVersion);
+    const info = await fetchJson(url.toString(), {
+      headers: { Authorization: `Bearer ${config.accessToken}` },
+    }) as {
+      available?: boolean;
+      latestVersion?: string;
+      currentVersion?: string;
+      releaseNotes?: string | null;
+      required?: boolean;
+      force?: boolean;
+      downloadUrl?: string | null;
+      releaseUrl?: string | null;
+      source?: string;
+    };
+    return {
+      available: info.available === true,
+      version: info.latestVersion,
+      currentVersion: info.currentVersion || currentVersion,
+      body: info.releaseNotes ?? null,
+      installable: appIsPackaged(),
+      required: info.required === true,
+      force: info.force === true,
+      downloadUrl: info.downloadUrl ?? null,
+      releaseUrl: info.releaseUrl ?? null,
+      source: info.source,
+    };
+  } catch {
+    return null;
+  }
+}
+
+function appIsPackaged(): boolean {
+  return app.isPackaged;
 }
 
 // ---------- HTTP helpers (Node.js built-in fetch) ----------
@@ -314,113 +340,6 @@ export function logoutDesktop(): void {
     console.error("Failed to remove cloud config on logout:", e);
   }
   clearCredentials();
-}
-
-// OAuth desktop login completes in the renderer, then calls this to register
-// the current desktop device and persist the real device id in cloud-config.
-export async function saveOAuthLogin(
-  serverUrl: string,
-  accessToken: string,
-  userId: string,
-  displayName: string
-): Promise<void> {
-  const normalizedServer = normalizeServerUrl(serverUrl);
-  const machineId = getMachineId();
-  const resp = await fetchJson(`${normalizedServer}/desktop/register-device`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${accessToken}`,
-    },
-    body: JSON.stringify({ name: os.hostname(), os: process.platform, machineId }),
-  });
-  const deviceId: string | undefined = resp.deviceId ?? resp.device_id;
-  const finalToken: string = resp.accessToken ?? resp.access_token ?? accessToken;
-  if (!deviceId) {
-    throw new Error("server did not return deviceId; cannot complete device binding");
-  }
-  saveCloudConfig(normalizedServer, deviceId, finalToken, "desktop-login", displayName || userId);
-  syncInstance?.restart(normalizedServer, finalToken, deviceId);
-}
-export async function pairDesktop(
-  server: string,
-  code: string
-): Promise<PairResponse> {
-  const normalizedServer = normalizeServerUrl(server);
-  const machineId = getMachineId();
-  const url = `${normalizedServer}/desktop/pair`;
-  const resp = await fetchJson(url, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      code,
-      name: os.hostname(),
-      os: process.platform,
-      machineId,
-    }),
-  });
-  const deviceId: string | undefined = resp.deviceId ?? resp.device_id;
-  const accessToken: string | undefined = resp.accessToken ?? resp.access_token;
-
-  const result: PairResponse = {
-    deviceId,
-    device_id: deviceId,
-    accessToken,
-    access_token: accessToken,
-  };
-
-  saveCloudConfig(normalizedServer, deviceId, accessToken, "pairing");
-
-  return result;
-}
-
-export async function createDesktopPairingRequest(
-  server: string
-): Promise<DesktopPairingRequest> {
-  const normalizedServer = normalizeServerUrl(server);
-  const machineId = getMachineId();
-  const url = `${normalizedServer}/desktop/pairing-requests`;
-  const resp = await fetchJson(url, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ name: os.hostname(), os: process.platform, machineId }),
-  });
-  return {
-    code: resp.code,
-    expiresAt: resp.expiresAt ?? resp.expires_at,
-  };
-}
-
-export async function getDesktopPairingStatus(
-  server: string,
-  code: string
-): Promise<DesktopPairingStatus> {
-  const normalizedServer = normalizeServerUrl(server);
-  const url = `${normalizedServer}/desktop/pairing-requests/${encodeURIComponent(code)}`;
-  const resp = await fetchJson(url, { method: "GET" });
-  const deviceId: string | undefined = resp.deviceId ?? resp.device_id;
-  const accessToken: string | undefined = resp.accessToken ?? resp.access_token;
-  if (resp.status === "approved") {
-    saveCloudConfig(normalizedServer, deviceId, accessToken, "pairing");
-  }
-  return {
-    status: resp.status,
-    expiresAt: resp.expiresAt ?? resp.expires_at,
-    deviceId: deviceId ?? null,
-    accessToken: accessToken ?? null,
-  };
-}
-
-export async function buildDesktopPairingQrPayload(
-  server: string,
-  code: string
-): Promise<string> {
-  const normalizedServer = normalizeServerUrl(server);
-  return JSON.stringify({
-    kind: "ai-workbench.desktop-pairing",
-    serverUrl: normalizedServer,
-    code,
-  });
 }
 
 // ---------- WebSocket cloud sync ----------
@@ -643,6 +562,20 @@ class DesktopCloudSync {
         break;
       case "ai.approval.respond":
         this.handleAiApprovalRespond(msg, deviceId);
+        break;
+      case "app.update.available":
+        this.emitToRenderer("app-update-available", {
+          available: msg.available === true,
+          version: msg.latestVersion,
+          currentVersion: msg.currentVersion,
+          body: msg.releaseNotes ?? null,
+          installable: appIsPackaged(),
+          required: msg.required === true,
+          force: msg.force === true,
+          downloadUrl: msg.downloadUrl ?? null,
+          releaseUrl: msg.releaseUrl ?? null,
+          source: msg.source,
+        });
         break;
       default:
         // unknown message type — ignore

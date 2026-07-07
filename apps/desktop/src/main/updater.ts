@@ -1,6 +1,7 @@
 import { autoUpdater } from "electron-updater";
 import { app, type BrowserWindow } from "electron";
 import type { AppUpdateInfo } from "../services/desktop";
+import { fetchDesktopAppRelease } from "./sync";
 
 // 配置
 autoUpdater.autoDownload = false; // 不自动下载，用户点击后才下载
@@ -114,6 +115,13 @@ async function checkGitHubReleases(note?: string): Promise<AppUpdateInfo> {
 // 检查更新（对应 tauri.ts 的 checkAppUpdate）
 export async function checkAppUpdate(): Promise<AppUpdateInfo> {
   const currentVersion = app.getVersion();
+  const serverRelease = await fetchDesktopAppRelease(currentVersion);
+  if (serverRelease) {
+    return {
+      ...serverRelease,
+      installable: app.isPackaged,
+    };
+  }
   if (!app.isPackaged) {
     return checkGitHubReleases("当前是开发模式，只能诊断是否有新版本；安装更新需要使用已打包的 exe。");
   }

@@ -2,7 +2,7 @@
 import { computed, onMounted, ref, watch } from "vue";
 import { useRouter } from "vue-router";
 import { useWorkspace } from "../composables/useWorkspace";
-import { desktopApi, type AiProvider, type DesktopRuntimeInfo, type ProviderStatus, type TokenUsageSummary, type TokenUsageSummaryItem } from "../services/desktop";
+import { desktopApi, type AiProvider, type DesktopRuntimeInfo, type ProviderActionKind, type ProviderStatus, type TokenUsageSummary, type TokenUsageSummaryItem } from "../services/desktop";
 
 const settingsIcon = new URL("../assets/icons/settings.svg", import.meta.url).href;
 const riskGuardIcon = new URL("../assets/icons/risk-guard.svg", import.meta.url).href;
@@ -30,7 +30,6 @@ type SettingsPanelItem = {
 const ws = useWorkspace();
 const router = useRouter();
 
-const localServer = ref(ws.settingsServer.value);
 const settingsPanel = ref<SettingsPanel>("connection");
 const riskGuard = ref(true);
 const commandLog = ref(true);
@@ -43,13 +42,43 @@ const providerRefreshLoading = ref(false);
 const providerRefreshMessage = ref("");
 const providerRefreshError = ref(false);
 const providerActionMessages = ref<Record<string, string>>({});
+const providerActionLoading = ref<Record<string, boolean>>({});
+const npmRegistry = ref("");
+const npmRegistryLoading = ref(false);
+const npmRegistryMessage = ref("");
+const npmRegistryError = ref(false);
+const npmRegistryOptions = ref([
+  { label: "npm 官方源", registry: "https://registry.npmjs.org/" },
+  { label: "清华 TUNA", registry: "https://mirrors.tuna.tsinghua.edu.cn/npm/" },
+  { label: "淘宝 npmmirror", registry: "https://registry.npmmirror.com/" },
+  { label: "腾讯云镜像", registry: "https://mirrors.cloud.tencent.com/npm/" },
+  { label: "华为云镜像", registry: "https://repo.huaweicloud.com/repository/npm/" },
+]);
+const npmRegistryProbeResults = ref<Record<string, number | null>>({});
+const npmRegistryDropdownOpen = ref(false);
+const manualInstallCommands = computed(() => {
+  const registryArg = npmRegistry.value ? ` --registry=${npmRegistry.value}` : "";
+  const mimoCommand = desktopRuntimeInfo.value?.platform === "linux"
+    ? "curl -fsSL https://mimo.xiaomi.com/install | bash"
+    : `npm install -g @mimo-ai/cli${registryArg}`;
+  return [
+    "# Claude Code",
+    `npm i -g @anthropic-ai/claude-code@latest${registryArg}`,
+    "# Codex",
+    `npm i -g @openai/codex@latest${registryArg}`,
+    "# OpenCode",
+    `npm i -g opencode-ai@latest${registryArg}`,
+    "# MiMo Code",
+    mimoCommand,
+  ].join("\n");
+});
 
 const settingsPanels: SettingsPanelItem[] = [
   {
     id: "connection",
     label: "连接",
     eyebrow: "基础",
-    description: "服务器、设备名称和本机历史位置",
+    description: "账号状态、设备信息和本机历史位置",
     icon: settingsIcon,
   },
   {
@@ -58,13 +87,6 @@ const settingsPanels: SettingsPanelItem[] = [
     eyebrow: "保护",
     description: "高危确认、命令摘要和重连策略",
     icon: riskGuardIcon,
-  },
-  {
-    id: "about",
-    label: "关于",
-    eyebrow: "信息",
-    description: "版本更新、Provider 诊断和桌面端信息",
-    icon: aiProvidersIcon,
   },
   {
     id: "archive",
@@ -80,20 +102,20 @@ const settingsPanels: SettingsPanelItem[] = [
     description: "按 AI 工具聚合的 Token 用量,数据来自云端",
     icon: aiProvidersIcon,
   },
+  {
+    id: "about",
+    label: "关于",
+    eyebrow: "信息",
+    description: "版本更新、Provider 诊断和桌面端信息",
+    icon: aiProvidersIcon,
+  },
 ];
-
-watch(() => ws.settingsServer.value, (next) => {
-  localServer.value = next;
-});
-
-watch(localServer, (next) => {
-  ws.settingsServer.value = next;
-});
 
 const builtInProviders: AiProvider[] = [
   { id: "codex", name: "Codex", command: "codex", builtIn: true, enabled: true },
   { id: "claude", name: "Claude Code", command: "claude", builtIn: true, enabled: true },
   { id: "opencode", name: "OpenCode", command: "opencode", builtIn: true, enabled: true },
+  { id: "mimo", name: "MiMo Code", command: "mimo", builtIn: true, enabled: true },
 ];
 const providerOrder = new Map(builtInProviders.map((provider, index) => [provider.id, index]));
 
@@ -127,16 +149,25 @@ const activePanelMeta = computed(() => {
   return settingsPanels.find((panel) => panel.id === settingsPanel.value) ?? settingsPanels[0];
 });
 
-const installedProviderCount = computed(() => {
-  return providerRows.value.filter((row) => row.status?.installed).length;
+const selectedNpmRegistryOption = computed(() => {
+  return npmRegistryOptions.value.find((option) => option.registry === npmRegistry.value) ?? null;
 });
 
-const missingProviderCount = computed(() => {
-  return providerRows.value.filter((row) => !row.status?.installed).length;
+const updateSummaryText = computed(() => {
+  if (ws.updateInstalling.value) return "正在下载并安装";
+  if (ws.updateChecking.value) return "正在检查更新";
+  if (ws.updateAvailableVersion.value) return `发现新版本 ${ws.updateAvailableVersion.value}`;
+  if (ws.updateResultError.value) return "检查失败";
+  if (ws.updateResult.value === "尚未检查更新。") return "尚未检查";
+  return "已是最新";
 });
 
-const signedInProviderCount = computed(() => {
-  return providerRows.value.filter((row) => row.status?.authStatus === "signedIn").length;
+const updateDetailText = computed(() => {
+  const text = ws.updateResult.value.trim();
+  if (!text || text === "尚未检查更新。") return "";
+  if (ws.updateChecking.value && text === "正在检查 GitHub Releases...") return "";
+  if (!ws.updateResultError.value && !ws.updateAvailableVersion.value && text.startsWith("当前已经是最新版本")) return "";
+  return text;
 });
 
 const desktopPlatformLabel = computed(() => {
@@ -204,7 +235,7 @@ function providerVersionNote(status?: ProviderStatus) {
   return "";
 }
 
-function providerActionKind(row: ProviderRow): "install" | "update" | null {
+function providerActionKind(row: ProviderRow): ProviderActionKind | null {
   if (!row.status) return null;
   if (!row.status.installed && (row.status.installCommand || row.status.installUrl)) return "install";
   if (row.status.installed && row.status.updateAvailable && (row.status.updateCommand || row.status.installUrl)) return "update";
@@ -218,52 +249,61 @@ function providerActionLabel(row: ProviderRow) {
   return "";
 }
 
-function providerActionCommand(row: ProviderRow) {
-  const kind = providerActionKind(row);
-  if (kind === "install") return row.status?.installCommand ?? "";
-  if (kind === "update") return row.status?.updateCommand ?? row.status?.installCommand ?? "";
-  return "";
-}
-
 function providerActionFeedback(row: ProviderRow) {
   return providerActionMessages.value[row.provider.id] ?? providerVersionNote(row.status);
 }
 
+function runningSessionUpdateMessage() {
+  return "当前有会话正在运行，请先停止当前会话后再更新。";
+}
+
+async function installAppUpdateSafely() {
+  if (ws.hasRunningAiSession.value) {
+    ws.updateResultError.value = true;
+    ws.updateResult.value = runningSessionUpdateMessage();
+    return;
+  }
+  await ws.installAppUpdate();
+}
+
 async function runProviderAction(row: ProviderRow) {
+  const kind = providerActionKind(row);
   const label = providerActionLabel(row);
-  if (!label || !row.status) return;
-  const command = providerActionCommand(row);
-  const installUrl = row.status.installUrl;
-  let copied = false;
-  let opened = false;
-  if (command) {
-    try {
-      await navigator.clipboard.writeText(command);
-      copied = true;
-    } catch {
-      copied = false;
-    }
+  if (!kind || !label || !row.status || providerActionLoading.value[row.provider.id]) return;
+  if (ws.hasRunningAiSession.value) {
+    providerActionMessages.value = {
+      ...providerActionMessages.value,
+      [row.provider.id]: runningSessionUpdateMessage(),
+    };
+    return;
   }
-  if (installUrl) {
-    try {
-      await desktopApi.openExternalUrl(installUrl);
-      opened = true;
-    } catch {
-      opened = false;
+  providerActionLoading.value = { ...providerActionLoading.value, [row.provider.id]: true };
+  providerActionMessages.value = { ...providerActionMessages.value, [row.provider.id]: `正在${label}...` };
+  try {
+    const hasCommand = kind === "install"
+      ? Boolean(row.status.installCommand)
+      : Boolean(row.status.updateCommand || row.status.installCommand);
+    if (!hasCommand && row.status.installUrl) {
+      await desktopApi.openExternalUrl(row.status.installUrl);
+      providerActionMessages.value = { ...providerActionMessages.value, [row.provider.id]: "已打开安装说明" };
+      return;
     }
+    const result = await desktopApi.runProviderAction(row.provider.id, kind);
+    if (!result.success) {
+      const detail = result.output ? `：${result.output.slice(0, 180)}` : "";
+      throw new Error(`${label}命令执行失败${detail}`);
+    }
+    providerActionMessages.value = { ...providerActionMessages.value, [row.provider.id]: `${label}完成，正在重新检测...` };
+    await refreshProviderDiagnostics();
+    providerActionMessages.value = { ...providerActionMessages.value, [row.provider.id]: `${label}完成` };
+  } catch (error) {
+    providerActionMessages.value = {
+      ...providerActionMessages.value,
+      [row.provider.id]: `${label}失败：${error instanceof Error ? error.message : String(error)}`,
+    };
+  } finally {
+    providerActionLoading.value = { ...providerActionLoading.value, [row.provider.id]: false };
   }
-  const fallback = command || installUrl ? "" : "暂无安装说明";
-  const message = copied && opened
-    ? `已复制${label}命令，并打开说明`
-    : copied
-      ? `已复制${label}命令`
-      : opened
-        ? "已打开安装说明"
-        : fallback || "操作失败";
-  providerActionMessages.value = {
-    ...providerActionMessages.value,
-    [row.provider.id]: message,
-  };
 }
 
 function providerIcon(providerId: string) {
@@ -301,6 +341,103 @@ async function refreshProviderDiagnostics() {
   }
 }
 
+function updateNpmRegistryState(info: Awaited<ReturnType<typeof desktopApi.getNpmRegistry>>) {
+  npmRegistry.value = info.registry;
+  if (info.options?.length) npmRegistryOptions.value = info.options;
+  if (info.probeResults?.length) {
+    npmRegistryProbeResults.value = Object.fromEntries(info.probeResults.map((result) => [
+      result.registry,
+      result.ok ? result.latencyMs ?? null : null,
+    ]));
+  }
+}
+
+function npmRegistryLatencyLabel(registry: string) {
+  const latency = npmRegistryProbeResults.value[registry];
+  return latency ? ` · ${latency}ms` : "";
+}
+
+function npmRegistryLatencyText(registry: string) {
+  const latency = npmRegistryProbeResults.value[registry];
+  return latency ? `${latency}ms` : "";
+}
+
+async function loadNpmRegistry() {
+  npmRegistryLoading.value = true;
+  npmRegistryError.value = false;
+  npmRegistryMessage.value = "正在检测 npm 源...";
+  try {
+    const info = await desktopApi.getNpmRegistry();
+    updateNpmRegistryState(info);
+    npmRegistryError.value = !info.success;
+    npmRegistryMessage.value = info.success ? `当前源：${info.registry}` : info.error ?? "读取 npm 源失败";
+  } catch (error) {
+    npmRegistryError.value = true;
+    npmRegistryMessage.value = `读取 npm 源失败：${error instanceof Error ? error.message : String(error)}`;
+  } finally {
+    npmRegistryLoading.value = false;
+  }
+}
+
+async function changeNpmRegistry(registry: string) {
+  if (!registry || npmRegistryLoading.value) return;
+  npmRegistryDropdownOpen.value = false;
+  npmRegistryLoading.value = true;
+  npmRegistryError.value = false;
+  npmRegistryMessage.value = "正在切换 npm 源...";
+  try {
+    const info = await desktopApi.setNpmRegistry(registry);
+    updateNpmRegistryState(info);
+    npmRegistryError.value = !info.success;
+    npmRegistryMessage.value = info.success ? `已切换 npm 源：${info.registry}` : info.error ?? "切换 npm 源失败";
+    if (info.success) await refreshProviderDiagnostics();
+  } catch (error) {
+    npmRegistryError.value = true;
+    npmRegistryMessage.value = `切换 npm 源失败：${error instanceof Error ? error.message : String(error)}`;
+  } finally {
+    npmRegistryLoading.value = false;
+  }
+}
+
+function toggleNpmRegistryDropdown() {
+  if (npmRegistryLoading.value) return;
+  npmRegistryDropdownOpen.value = !npmRegistryDropdownOpen.value;
+}
+
+function closeNpmRegistryDropdown() {
+  npmRegistryDropdownOpen.value = false;
+}
+
+function handleNpmRegistryDropdownFocusout(event: FocusEvent) {
+  const current = event.currentTarget as HTMLElement | null;
+  const next = event.relatedTarget as Node | null;
+  if (current && next && current.contains(next)) return;
+  closeNpmRegistryDropdown();
+}
+
+function selectNpmRegistry(registry: string) {
+  void changeNpmRegistry(registry);
+}
+
+async function probeNpmRegistries() {
+  if (npmRegistryLoading.value) return;
+  npmRegistryLoading.value = true;
+  npmRegistryError.value = false;
+  npmRegistryMessage.value = "正在测速 npm 源...";
+  try {
+    const info = await desktopApi.probeNpmRegistries();
+    updateNpmRegistryState(info);
+    npmRegistryError.value = !info.success;
+    npmRegistryMessage.value = info.success ? `已选择最快源：${info.registry}` : info.error ?? "npm 源测速失败";
+    if (info.success) await refreshProviderDiagnostics();
+  } catch (error) {
+    npmRegistryError.value = true;
+    npmRegistryMessage.value = `npm 源测速失败：${error instanceof Error ? error.message : String(error)}`;
+  } finally {
+    npmRegistryLoading.value = false;
+  }
+}
+
 function goBack() {
   if (router.currentRoute.value.path !== "/chat") {
     void router.push("/chat");
@@ -311,6 +448,14 @@ async function copyDeviceId() {
   if (!cloudDeviceId.value) return;
   try {
     await navigator.clipboard.writeText(cloudDeviceId.value);
+  } catch {
+    /* ignore clipboard errors */
+  }
+}
+
+async function copyManualInstallCommands() {
+  try {
+    await navigator.clipboard.writeText(manualInstallCommands.value);
   } catch {
     /* ignore clipboard errors */
   }
@@ -399,8 +544,14 @@ watch(settingsPanel, (panel) => {
 });
 
 onMounted(() => {
+  const requestedPanel = window.localStorage.getItem("ai-workbench.settingsPanel");
+  if (requestedPanel && settingsPanels.some((panel) => panel.id === requestedPanel)) {
+    settingsPanel.value = requestedPanel as SettingsPanel;
+    window.localStorage.removeItem("ai-workbench.settingsPanel");
+  }
   void refreshCloudConfig();
   void refreshDesktopRuntimeInfo();
+  void loadNpmRegistry();
 });
 
 function archivedAtLabel(value?: string | null) {
@@ -456,8 +607,8 @@ async function restoreSession(sessionId: string) {
         </nav>
 
         <div class="settings-nav-foot">
-          <span>当前服务器</span>
-          <strong>{{ localServer || "未设置" }}</strong>
+          <span>连接状态</span>
+          <strong>{{ cloudPaired ? "已登录" : "未登录" }}</strong>
         </div>
       </aside>
 
@@ -469,8 +620,7 @@ async function restoreSession(sessionId: string) {
               <h1>{{ activePanelMeta.label }}</h1>
               <p>{{ activePanelMeta.description }}。</p>
             </div>
-            <button v-if="settingsPanel === 'connection'" class="button primary narrow" type="button" @click="ws.saveSettings">保存设置</button>
-            <button v-else-if="settingsPanel === 'tokenUsage'" class="button secondary narrow" type="button" :disabled="tokenUsageLoading" @click="refreshTokenUsage">
+            <button v-if="settingsPanel === 'tokenUsage'" class="button secondary narrow" type="button" :disabled="tokenUsageLoading" @click="refreshTokenUsage">
               {{ tokenUsageLoading ? "刷新中…" : "刷新" }}
             </button>
           </header>
@@ -500,27 +650,23 @@ async function restoreSession(sessionId: string) {
                 </button>
               </div>
             </article>
-            <article class="settings-overview-card">
-              <div class="settings-overview-card-head">
-                <span>服务器</span>
-              </div>
-              <strong class="stat-primary">{{ localServer || "未设置" }}</strong>
-            </article>
           </div>
 
           <section v-if="settingsPanel === 'connection'" class="settings-section">
             <div class="settings-section-heading">
               <div>
                 <h2 class="settings-section-title">连接设置</h2>
-                <p class="settings-section-description">配置桌面工作台的服务器连接，保存后用于移动端转发。</p>
+                <p class="settings-section-description">查看桌面工作台连接状态和本机同步设置。</p>
               </div>
               <span class="settings-section-chip">本机优先</span>
             </div>
             <div class="settings-card settings-connection-card">
-              <label class="settings-field">
-                <span>服务器地址</span>
-                <input v-model="localServer" class="settings-field-input" placeholder="http://118.196.78.91:3000" />
-                <small>桌面端和移动端转发使用的云端地址。</small>
+              <label class="settings-row">
+                <span class="settings-row-copy">
+                  <strong>服务器地址</strong>
+                  <small>当前登录使用的后端地址</small>
+                </span>
+                <input class="settings-input settings-server-input" type="text" :value="ws.settingsServer.value" readonly placeholder="未设置" />
               </label>
               <label class="settings-row settings-toggle-row settings-toggle-divider">
                 <span class="settings-row-copy">
@@ -559,36 +705,104 @@ async function restoreSession(sessionId: string) {
           </section>
 
           <section v-else-if="settingsPanel === 'about'" class="settings-section settings-about-page">
-            <div class="settings-about-summary">
-              <article class="settings-about-stat-card">
-                <span>可用</span>
-                <strong class="stat-success">{{ installedProviderCount }}</strong>
-              </article>
-              <article class="settings-about-stat-card">
-                <span>缺失</span>
-                <strong class="stat-warning">{{ missingProviderCount }}</strong>
-              </article>
-              <article class="settings-about-stat-card">
-                <span>总计</span>
-                <strong class="stat-primary">{{ providerRows.length || 0 }}</strong>
-              </article>
+            <div class="settings-about-update">
+              <h2 class="settings-block-title">应用更新</h2>
+              <div class="settings-about-update-card">
+                <div class="settings-about-update-main">
+                  <div class="settings-about-update-copy">
+                    <span class="settings-about-update-label">当前版本</span>
+                    <div class="settings-about-update-version-row">
+                      <strong>{{ ws.updateCurrentVersion.value }}</strong>
+                      <span class="settings-about-update-state" :class="{ error: ws.updateResultError.value, available: ws.updateAvailableVersion.value }">
+                        {{ updateSummaryText }}
+                      </span>
+                    </div>
+                  </div>
+                  <div class="settings-about-update-actions">
+                    <button class="button secondary" type="button" :disabled="ws.updateChecking.value || ws.updateInstalling.value" @click="ws.checkAppUpdate">
+                      {{ ws.updateChecking.value ? "检查中" : "检查更新" }}
+                    </button>
+                    <button class="button primary" type="button" :disabled="!ws.updateAvailableVersion.value || !ws.updateInstallable.value || ws.updateInstalling.value" @click="installAppUpdateSafely">
+                      {{ ws.updateInstalling.value ? "安装中" : "下载并安装" }}
+                    </button>
+                  </div>
+                </div>
+                <div v-if="ws.updateInstalling.value || ws.updateDownloadProgress.value" class="settings-about-update-progress">
+                  <div
+                    class="settings-about-update-progress-track"
+                    :class="{ indeterminate: ws.updateDownloadPercent.value === null }"
+                    role="progressbar"
+                    aria-label="下载进度"
+                    aria-valuemin="0"
+                    aria-valuemax="100"
+                    :aria-valuenow="ws.updateDownloadPercent.value ?? undefined"
+                  >
+                    <span
+                      class="settings-about-update-progress-fill"
+                      :style="{ width: `${ws.updateDownloadPercent.value ?? 100}%` }"
+                    ></span>
+                  </div>
+                  <p class="settings-about-update-progress-meta">
+                    <span>{{ ws.updateDownloadProgressLabel.value }}</span>
+                    <small v-if="ws.updateDownloadSizeLabel.value">{{ ws.updateDownloadSizeLabel.value }}</small>
+                  </p>
+                </div>
+                <p v-if="updateDetailText" class="settings-about-update-result" :class="{ error: ws.updateResultError.value }">{{ updateDetailText }}</p>
+              </div>
             </div>
 
             <div class="settings-provider-grid-block">
               <div class="settings-provider-grid-head">
                 <div>
-                  <h2 class="settings-pairing-block-title">本地环境检查</h2>
+                  <h2 class="settings-block-title">本地环境检查</h2>
                   <p class="settings-provider-grid-sub">管理和监控已安装的 AI 编程工具</p>
                 </div>
                 <div class="settings-provider-grid-actions">
-                  <button class="button secondary mini" type="button" :disabled="ws.updateChecking.value" @click="ws.checkAppUpdate">
-                    {{ ws.updateChecking.value ? "检查中" : "诊断更新" }}
+                  <div class="settings-npm-registry-dropdown" @focusout="handleNpmRegistryDropdownFocusout">
+                    <button
+                      class="settings-npm-registry-trigger"
+                      :class="{ open: npmRegistryDropdownOpen }"
+                      type="button"
+                      :disabled="npmRegistryLoading"
+                      aria-haspopup="listbox"
+                      :aria-expanded="npmRegistryDropdownOpen"
+                      @click="toggleNpmRegistryDropdown"
+                    >
+                      <span>{{ selectedNpmRegistryOption?.label ?? "选择 npm 源" }}</span>
+                      <small v-if="selectedNpmRegistryOption">{{ npmRegistryLatencyText(selectedNpmRegistryOption.registry) }}</small>
+                      <svg viewBox="0 0 20 20" fill="none" aria-hidden="true">
+                        <path d="M5 7.5 10 12.5 15 7.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" />
+                      </svg>
+                    </button>
+                    <div v-if="npmRegistryDropdownOpen" class="settings-npm-registry-menu" role="listbox">
+                      <button
+                        v-for="option in npmRegistryOptions"
+                        :key="option.registry"
+                        class="settings-npm-registry-option"
+                        :class="{ active: option.registry === npmRegistry }"
+                        type="button"
+                        role="option"
+                        :aria-selected="option.registry === npmRegistry"
+                        @mousedown.prevent
+                        @click="selectNpmRegistry(option.registry)"
+                      >
+                        <span>{{ option.label }}</span>
+                        <small>{{ option.registry }}</small>
+                        <em v-if="npmRegistryLatencyText(option.registry)">{{ npmRegistryLatencyText(option.registry) }}</em>
+                      </button>
+                    </div>
+                  </div>
+                  <button class="button secondary mini" type="button" :disabled="npmRegistryLoading" @click="probeNpmRegistries">
+                    {{ npmRegistryLoading ? "检测中" : "测速选源" }}
                   </button>
                   <button class="button secondary mini" type="button" :disabled="providerRefreshLoading" @click="refreshProviderDiagnostics">
                     {{ providerRefreshLoading ? "刷新中" : "刷新" }}
                   </button>
                 </div>
               </div>
+              <p v-if="npmRegistryMessage" :class="['settings-provider-refresh-note', { error: npmRegistryError }]">
+                {{ npmRegistryMessage }}
+              </p>
               <p v-if="providerRefreshMessage" :class="['settings-provider-refresh-note', { error: providerRefreshError }]">
                 {{ providerRefreshMessage }}
               </p>
@@ -622,9 +836,10 @@ async function restoreSession(sessionId: string) {
                       v-if="providerActionKind(row)"
                       :class="['button', providerActionKind(row) === 'install' ? 'primary' : 'secondary', 'mini', 'narrow']"
                       type="button"
+                      :disabled="providerActionLoading[row.provider.id]"
                       @click="runProviderAction(row)"
                     >
-                      {{ providerActionLabel(row) }}
+                      {{ providerActionLoading[row.provider.id] ? `${providerActionLabel(row)}中` : providerActionLabel(row) }}
                     </button>
                     <span v-if="providerActionFeedback(row)" class="settings-provider-card-action-note">{{ providerActionFeedback(row) }}</span>
                   </div>
@@ -635,50 +850,25 @@ async function restoreSession(sessionId: string) {
                   </div>
                 </article>
               </div>
+              <details class="settings-manual-install">
+                <summary>
+                  <span>手动安装命令</span>
+                </summary>
+                <div class="settings-manual-install-card">
+                  <div class="settings-manual-install-head">
+                    <span>安装或升级 Claude Code / Codex / OpenCode / MiMo Code</span>
+                    <button class="button secondary mini settings-manual-install-copy" type="button" aria-label="复制手动安装命令" @click="copyManualInstallCommands">
+                      <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                        <rect x="9" y="9" width="11" height="11" rx="2" stroke="currentColor" stroke-width="2" />
+                        <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" stroke="currentColor" stroke-width="2" stroke-linecap="round" />
+                      </svg>
+                    </button>
+                  </div>
+                  <pre><code>{{ manualInstallCommands }}</code></pre>
+                </div>
+              </details>
             </div>
 
-            <div class="settings-about-update">
-              <h2 class="settings-pairing-block-title">应用更新</h2>
-              <div class="settings-about-update-card">
-                <div class="settings-about-update-row">
-                  <div class="settings-about-update-copy">
-                    <strong>当前版本</strong>
-                    <small>{{ ws.updateAvailableVersion.value ? `发现可更新版本 ${ws.updateAvailableVersion.value}` : "已是最新或尚未检查" }}</small>
-                  </div>
-                  <code class="settings-about-update-tag">{{ ws.updateCurrentVersion.value }}</code>
-                </div>
-                <div class="settings-about-update-divider" aria-hidden="true"></div>
-                <div class="settings-about-update-actions">
-                  <button class="button secondary" type="button" :disabled="ws.updateChecking.value || ws.updateInstalling.value" @click="ws.checkAppUpdate">
-                    {{ ws.updateChecking.value ? "检查中" : "检查更新" }}
-                  </button>
-                  <button class="button primary" type="button" :disabled="!ws.updateAvailableVersion.value || !ws.updateInstallable.value || ws.updateInstalling.value" @click="ws.installAppUpdate">
-                    {{ ws.updateInstalling.value ? "安装中" : "下载并安装" }}
-                  </button>
-                </div>
-                <div v-if="ws.updateInstalling.value || ws.updateDownloadProgress.value" class="settings-about-update-progress">
-                  <div
-                    class="settings-about-update-progress-track"
-                    :class="{ indeterminate: ws.updateDownloadPercent.value === null }"
-                    role="progressbar"
-                    aria-label="下载进度"
-                    aria-valuemin="0"
-                    aria-valuemax="100"
-                    :aria-valuenow="ws.updateDownloadPercent.value ?? undefined"
-                  >
-                    <span
-                      class="settings-about-update-progress-fill"
-                      :style="{ width: `${ws.updateDownloadPercent.value ?? 100}%` }"
-                    ></span>
-                  </div>
-                  <p class="settings-about-update-progress-meta">
-                    <span>{{ ws.updateDownloadProgressLabel.value }}</span>
-                    <small v-if="ws.updateDownloadSizeLabel.value">{{ ws.updateDownloadSizeLabel.value }}</small>
-                  </p>
-                </div>
-                <p v-if="ws.updateResult.value" class="settings-about-update-result" :class="{ error: ws.updateResultError.value }">{{ ws.updateResult.value }}</p>
-              </div>
-            </div>
           </section>
 
           <section v-else-if="settingsPanel === 'archive'" class="settings-section">

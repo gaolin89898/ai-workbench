@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted } from "vue";
+import { computed, onMounted, onUnmounted } from "vue";
 import { useRoute } from "vue-router";
 import SidebarProjectTree from "./components/SidebarProjectTree.vue";
 import { useWorkspace } from "./composables/useWorkspace";
@@ -7,6 +7,7 @@ import type { ViewName } from "./services/desktop";
 
 const ws = useWorkspace();
 const route = useRoute();
+let updateNoticeTimer: ReturnType<typeof window.setInterval> | null = null;
 
 const activeView = computed<ViewName>(() => {
   const name = route.name;
@@ -32,6 +33,18 @@ onMounted(() => {
   ws.refreshWorkspace().catch((error) => {
     ws.chatMessages.value = [{ role: "error", text: `初始化失败：${String(error)}` }];
   });
+  void ws.checkAppUpdate();
+  updateNoticeTimer = window.setInterval(() => {
+    void ws.detectProviders();
+    void ws.checkAppUpdate();
+  }, 24 * 60 * 60 * 1000);
+});
+
+onUnmounted(() => {
+  if (updateNoticeTimer) {
+    window.clearInterval(updateNoticeTimer);
+    updateNoticeTimer = null;
+  }
 });
 </script>
 
@@ -44,6 +57,8 @@ onMounted(() => {
       :terminal-sessions="ws.terminalSessions.value"
       :active-sessions="ws.activeSessions.value"
       :active-ai-session="ws.activeAiSession.value"
+      :provider-statuses="ws.providerStatuses.value"
+      :app-update-available-version="ws.updateAvailableVersion.value"
       :selected-project-path="ws.selectedProjectPath.value"
       :thinking-session-ids="ws.thinkingSessionIds.value"
       :pinned-session-ids="pinnedSessionIdsRecord"

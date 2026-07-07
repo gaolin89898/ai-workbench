@@ -7,6 +7,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../models/workbench_models.dart';
 import '../services/api_client.dart';
 import '../services/realtime_client.dart';
+import '../services/update_service.dart';
 
 class WorkspaceController extends ChangeNotifier {
   WorkspaceController({
@@ -30,6 +31,7 @@ class WorkspaceController extends ChangeNotifier {
   String? _historyTimeoutSessionId;
   String? _openSessionId;
   Future<void>? _loadDevicesInFlight;
+  Future<void>? _checkUpdateInFlight;
   late final Future<void> _persistenceLoaded;
   DateTime? _lastDevicesLoadedAt;
   final Map<String, Future<AiSessionMeta?>> _createSessionInFlight = {};
@@ -55,6 +57,7 @@ class WorkspaceController extends ChangeNotifier {
   String? _lastSelectedDeviceId;
   String accountDisplayName = 'AI 工作台用户';
   int accountAvatarIndex = 0;
+  MobileUpdateInfo? appUpdateNotice;
 
   // Client-side session state (matching desktop's localStorage pattern)
   final Set<String> _pinnedSessionIds = {};
@@ -133,6 +136,7 @@ class WorkspaceController extends ChangeNotifier {
     final future = _run(() async {
       await _persistenceLoaded;
       devices = _sortDevices(await api.devices());
+      _checkMobileUpdateNotice();
       _lastDevicesLoadedAt = DateTime.now();
       if (selectedDevice != null) {
         selectedDevice = _findDevice(selectedDevice!.id);
@@ -147,6 +151,24 @@ class WorkspaceController extends ChangeNotifier {
         _loadDevicesInFlight = null;
       }
     }
+  }
+
+  void _checkMobileUpdateNotice() {
+    if (_checkUpdateInFlight != null) return;
+    _checkUpdateInFlight = const MobileUpdateService()
+        .check(api: api)
+        .then((update) {
+          if (update.available || update.isRequired) {
+            appUpdateNotice = update;
+            _notifySafely();
+          }
+        })
+        .catchError((_) {
+          // Update checks are advisory; workspace loading must not fail.
+        })
+        .whenComplete(() {
+          _checkUpdateInFlight = null;
+        });
   }
 
   Future<void> selectDevice(DesktopDevice device) async {
@@ -589,6 +611,12 @@ class WorkspaceController extends ChangeNotifier {
             );
             runStatusBySession[sessionId] = _codexTraceStatusLabel(trace);
           }
+        }
+        break;
+      case 'app.update.available':
+        if (json['platform'] == 'mobile') {
+          appUpdateNotice = MobileUpdateInfo.fromServer(json);
+          notifyListeners();
         }
         break;
       case 'ai.chat.output':

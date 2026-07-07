@@ -254,9 +254,9 @@
 
                 <!-- Header -->
                 <div class="flex flex-col" style="gap:6px; margin-bottom:28px;">
-                    <span style="font-size:11px; font-weight:880; color:var(--color-primary); text-transform:uppercase; letter-spacing:0.05em;">服务器</span>
-                    <h1 style="font-size:28px; font-weight:880; color:var(--color-text-primary); line-height:1.2;">服务器连接</h1>
-                    <p class="max-w-[660px]" style="font-size:13px; color:var(--color-text-secondary); line-height:var(--leading-normal);">配置桌面工作台的服务器连接。</p>
+                    <span style="font-size:11px; font-weight:880; color:var(--color-primary); text-transform:uppercase; letter-spacing:0.05em;">连接</span>
+                    <h1 style="font-size:28px; font-weight:880; color:var(--color-text-primary); line-height:1.2;">连接设置</h1>
+                    <p class="max-w-[660px]" style="font-size:13px; color:var(--color-text-secondary); line-height:var(--leading-normal);">查看桌面工作台连接状态和本机同步设置。</p>
                 </div>
 
                 <!-- Overview Cards -->
@@ -302,14 +302,8 @@
                     <!-- Settings Card -->
                     <div class="rounded-lg flex flex-col" style="background:var(--color-bg-surface); border:1px solid var(--color-border); padding:18px; gap:16px;">
 
-                        <!-- Field: 服务器地址 -->
-                        <div class="flex flex-col" style="gap:6px;">
-                            <label style="font-size:14px; font-weight:780; color:var(--color-text-body);">服务器地址</label>
-                            <input type="text" value="http://127.0.0.1:8080" readonly class="outline-none" style="height:42px; border:1px solid var(--color-border); border-radius:var(--radius-lg); background:var(--color-bg-input); padding:0 12px; font-size:13px; color:var(--color-text-primary); font-family:var(--font-mono); width:100%;">
-                        </div>
-
                         <!-- Toggle Row: 自动重连 -->
-                        <div class="grid items-center" style="grid-template-columns:minmax(0,1fr) auto; gap:18px; min-height:78px; border-top:1px solid var(--color-border-subtle); padding-top:16px;">
+                        <div class="grid items-center" style="grid-template-columns:minmax(0,1fr) auto; gap:18px; min-height:78px;">
                             <div class="flex flex-col min-w-0" style="gap:2px;">
                                 <strong style="font-size:14px; font-weight:780; color:var(--color-text-body);">自动重连</strong>
                                 <small style="font-size:13px; color:var(--color-text-secondary);">断开后自动尝试重新连接</small>

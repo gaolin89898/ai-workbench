@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
-import { desktopApi, type AiProvider, type AiSession, type SavedCloudConfig, type TerminalSession, type ViewName, type WorkspaceFileEntry, type WorkspaceProject } from "../services/desktop";
+import { desktopApi, type AiProvider, type AiSession, type ProviderStatus, type SavedCloudConfig, type TerminalSession, type ViewName, type WorkspaceFileEntry, type WorkspaceProject } from "../services/desktop";
 
 const archiveBoxIcon = new URL("../assets/icons/archive-box.svg", import.meta.url).href;
 const projectFolderIcon = new URL("../assets/icons/project-folder.svg", import.meta.url).href;
@@ -33,6 +33,8 @@ const props = defineProps<{
   terminalSessions: TerminalSession[];
   activeSessions: AiSession[];
   activeAiSession: AiSession | null;
+  providerStatuses: ProviderStatus[];
+  appUpdateAvailableVersion?: string;
   selectedProjectPath: string;
   thinkingSessionIds: Record<string, boolean>;
   pinnedSessionIds?: Record<string, boolean>;
@@ -79,10 +81,29 @@ const loginAccountName = computed(() => {
   if (!raw) return "";
   return raw.includes("@") ? raw.split("@")[0] : raw;
 });
-const accountDisplayName = computed(() => loginAccountName.value || (cloudConfig.value?.authMode === "desktop-login" ? "桌面账号" : "配对设备"));
-const accountDetail = computed(() => cloudConfig.value?.serverUrl ?? "未连接云端");
+const accountDisplayName = computed(() => loginAccountName.value || (cloudConfig.value?.authMode === "desktop-login" ? "桌面账号" : "关联设备"));
+const accountDetail = computed(() => {
+  if (!cloudConfig.value?.paired) return "未登录";
+  return cloudConfig.value.authMode === "desktop-login" ? "已登录" : "已关联";
+});
 const accountInitial = computed(() => accountDisplayName.value.slice(0, 2).toUpperCase());
 const themeActionText = computed(() => themeMode.value === "dark" ? "切换浅色主题" : "切换深色主题");
+const providerUpdateStatuses = computed(() => props.providerStatuses.filter((status) => status.installed && status.updateAvailable));
+const providerUpdateCount = computed(() => providerUpdateStatuses.value.length);
+const providerUpdateNames = computed(() => {
+  return providerUpdateStatuses.value
+    .map((status) => props.providers.find((provider) => provider.id === status.providerId)?.name ?? status.providerId)
+    .slice(0, 2)
+    .join("、");
+});
+const hasAppUpdate = computed(() => Boolean(props.appUpdateAvailableVersion));
+const hasUpdatePrompt = computed(() => hasAppUpdate.value || providerUpdateCount.value > 0);
+const appUpdatePromptText = computed(() => props.appUpdateAvailableVersion ? `新版本 ${props.appUpdateAvailableVersion}` : "");
+const providerUpdatePromptText = computed(() => {
+  const count = providerUpdateCount.value;
+  if (!count) return "";
+  return `${providerUpdateNames.value}${count > 2 ? ` 等 ${count} 个` : ""} 可更新`;
+});
 
 function isProjectCollapsedLocal(path: string) {
   return Boolean(collapsedProjects.value[path]);
@@ -571,6 +592,12 @@ function openAccountSettings() {
   emit("switchView", "settings");
 }
 
+function openUpdateSettings() {
+  accountMenuOpen.value = false;
+  window.localStorage.setItem("ai-workbench.settingsPanel", "about");
+  emit("switchView", "settings");
+}
+
 function toggleTheme() {
   applyTheme(themeMode.value === "dark" ? "light" : "dark");
 }
@@ -830,6 +857,26 @@ onBeforeUnmount(() => {
       </div>
     </section>
     <div class="account-menu-wrap">
+      <button
+        v-if="hasUpdatePrompt"
+        class="sidebar-update-prompt"
+        type="button"
+        title="查看更新"
+        @click="openUpdateSettings"
+      >
+        <span class="sidebar-update-icon" aria-hidden="true">
+          <svg viewBox="0 0 20 20" fill="none">
+            <path d="M10 3v9" />
+            <path d="M6.5 8.5 10 12l3.5-3.5" />
+            <path d="M4 15.5h12" />
+          </svg>
+        </span>
+        <span class="sidebar-update-copy">
+          <strong>发现更新</strong>
+          <small v-if="hasAppUpdate">软件 {{ appUpdatePromptText }}</small>
+          <small v-if="providerUpdateCount > 0">CLI {{ providerUpdatePromptText }}</small>
+        </span>
+      </button>
       <div v-if="accountMenuOpen" class="account-menu-popover" role="menu" aria-label="个人账户菜单">
         <div class="account-menu-profile">
           <span class="account-avatar">{{ accountInitial }}</span>

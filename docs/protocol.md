@@ -362,6 +362,48 @@ HTTP `PATCH /ai-sessions/:sessionId` 持久化云端标题后，会向桌面端�
 }
 ```
 
+### 应用更新通知
+
+管理员在后台保存桌面端或移动端版本配置后，服务端会向对应平台的在线客户端广播 `app.update.available`。
+
+客户端也可以通过 HTTP 主动检查：
+
+```text
+GET /app/releases?platform=desktop|mobile&currentVersion=<currentVersion>
+```
+
+WebSocket 消息示例：
+
+```json
+{
+  "type": "app.update.available",
+  "platform": "desktop",
+  "currentVersion": "0.1.68",
+  "latestVersion": "0.1.69",
+  "minSupportedVersion": "0.1.69",
+  "available": true,
+  "required": true,
+  "force": false,
+  "downloadUrl": null,
+  "releaseUrl": "https://github.com/gaolin89898/ai-workbench/releases/tag/v0.1.69",
+  "releaseNotes": "修复登录和更新提示",
+  "source": "manual"
+}
+```
+
+字段含义：
+
+- `platform`：`desktop` 或 `mobile`。
+- `latestVersion`：后台配置或 GitHub Releases 检测到的最新版本。
+- `minSupportedVersion`：最低可用版本，低于该版本表示当前客户端不兼容，需要更新。
+- `available`：当前版本低于最新版本。
+- `required`：当前版本必须更新。低于最低可用版本时为 true；后台启用强制更新且当前版本落后时也为 true。
+- `force`：后台是否启用强制更新提示。
+- `downloadUrl`：安装包或 APK 下载地址。
+- `releaseUrl`：Release 页面地址。
+- `releaseNotes`：展示给用户的更新说明。
+- `source`：`manual` 表示后台配置，`github` 表示 GitHub Releases 兜底。
+
 ### 拉取本地历史
 
 移动端打开聊天页时向桌面端请求历史。云端只转发，不落库保存完整内容。

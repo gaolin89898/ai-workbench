@@ -11,10 +11,7 @@ import '../models/workbench_models.dart';
 class ApiClient {
   ApiClient({required String baseUrl}) : baseUrl = normalizeBaseUrl(baseUrl);
 
-  static String get defaultBaseUrl =>
-      defaultTargetPlatform == TargetPlatform.android
-          ? 'http://118.196.78.91:3000'
-          : 'http://118.196.78.91:3000';
+  static const _serverBaseUrlKey = 'server_base_url';
   static const _tokenKey = 'auth_token';
   static const _tokenServerKey = 'auth_token_server_url';
   static const _emailKey = 'saved_email';
@@ -24,6 +21,18 @@ class ApiClient {
 
   final String baseUrl;
   String? token;
+
+  static Future<String?> loadStoredBaseUrl() async {
+    final prefs = await SharedPreferences.getInstance();
+    final value = prefs.getString(_serverBaseUrlKey);
+    if (value == null || value.trim().isEmpty) return null;
+    return normalizeBaseUrl(value);
+  }
+
+  static Future<void> saveStoredBaseUrl(String baseUrl) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_serverBaseUrlKey, normalizeBaseUrl(baseUrl));
+  }
 
   static Future<String?> loadStoredToken({String? baseUrl}) async {
     final prefs = await SharedPreferences.getInstance();
@@ -148,9 +157,9 @@ class ApiClient {
     try {
       return await request.timeout(_networkTimeout);
     } on TimeoutException {
-      throw Exception('服务器响应超时：$requestUri');
+      throw Exception('连接响应超时');
     } catch (error) {
-      throw Exception('无法连接服务器：$requestUri\n$error');
+      throw Exception('无法连接服务：$error');
     }
   }
 
@@ -192,21 +201,6 @@ class ApiClient {
     );
   }
 
-  Future<http.Response> _postUri(
-    Uri requestUri, {
-    Object? body,
-    Map<String, String>? requestHeaders,
-  }) {
-    return _requestWithTimeout(
-      http.post(
-        requestUri,
-        headers: requestHeaders ?? headers,
-        body: body,
-      ),
-      requestUri,
-    );
-  }
-
   Future<List<DesktopDevice>> devices() =>
       _getList('/devices', DesktopDevice.fromJson);
   Future<List<AiProvider>> providers() =>
@@ -220,24 +214,6 @@ class ApiClient {
   Future<List<ActivityLog>> activityLogs({String? deviceId}) => _getList(
       deviceId == null ? '/activity-logs' : '/activity-logs?deviceId=$deviceId',
       ActivityLog.fromJson);
-
-  Future<PairingCode> createPairingCode() async {
-    final response = await _post('/pairing/codes');
-    _throwIfBad(response);
-    return PairingCode.fromJson(
-        jsonDecode(response.body) as Map<String, dynamic>);
-  }
-
-  Future<void> approveDesktopPairing({
-    required String serverUrl,
-    required String code,
-  }) async {
-    final response = await _postUri(
-      Uri.parse(
-          '${serverUrl.replaceFirst(RegExp(r'/$'), '')}/desktop/pairing-requests/${Uri.encodeComponent(code)}/approve'),
-    );
-    _throwIfBad(response);
-  }
 
   Future<AiSessionMeta> createAiSession(
     String deviceId, {
@@ -302,35 +278,15 @@ class ApiClient {
         jsonDecode(response.body) as Map<String, dynamic>);
   }
 
-  // ---- OAuth 钉钉登录 ----
-
-  /// 启动钉钉 OAuth 流程，返回授权 URL + state。
-  Future<OAuthStartResult> startDingTalkOAuth() async {
-    final response = await _get('/oauth/dingtalk/start');
-    _throwIfBad(response);
-    final data = jsonDecode(response.body) as Map<String, dynamic>;
-    return OAuthStartResult(
-      authUrl: data['authUrl'] as String,
-      state: data['state'] as String,
+  Future<Map<String, dynamic>> appRelease({
+    required String platform,
+    required String currentVersion,
+  }) async {
+    final response = await _get(
+      '/app/releases?platform=${Uri.encodeQueryComponent(platform)}&currentVersion=${Uri.encodeQueryComponent(currentVersion)}',
     );
-  }
-
-  /// 轮询钉钉 OAuth 登录结果。
-  Future<OAuthPollResult> pollDingTalkOAuth(String state) async {
-    final response =
-        await _get('/oauth/dingtalk/poll?state=${Uri.encodeComponent(state)}');
     _throwIfBad(response);
-    final data = jsonDecode(response.body) as Map<String, dynamic>;
-    final status = data['status'] as String;
-    return OAuthPollResult(
-      status: status,
-      accessToken: data['accessToken'] as String?,
-      refreshToken: data['refreshToken'] as String?,
-      userId: data['userId'] as String?,
-      displayName: data['displayName'] as String?,
-      provider: data['provider'] as String?,
-      error: data['error'] as String?,
-    );
+    return jsonDecode(response.body) as Map<String, dynamic>;
   }
 
   Future<List<T>> _getList<T>(
@@ -381,33 +337,4 @@ class ApiClient {
     }
     return message;
   }
-}
-
-/// OAuth 启动响应：客户端用 url_launcher 打开 authUrl。
-class OAuthStartResult {
-  const OAuthStartResult({required this.authUrl, required this.state});
-
-  final String authUrl;
-  final String state;
-}
-
-/// OAuth 轮询响应：status 可能是 pending/success/error/expired。
-class OAuthPollResult {
-  const OAuthPollResult({
-    required this.status,
-    this.accessToken,
-    this.refreshToken,
-    this.userId,
-    this.displayName,
-    this.provider,
-    this.error,
-  });
-
-  final String status;
-  final String? accessToken;
-  final String? refreshToken;
-  final String? userId;
-  final String? displayName;
-  final String? provider;
-  final String? error;
 }

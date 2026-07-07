@@ -204,6 +204,22 @@ func (s *AppState) SendToMobiles(userID uuid.UUID, data []byte) {
 	}
 }
 
+// BroadcastToAllMobiles sends data to every online mobile connection.
+func (s *AppState) BroadcastToAllMobiles(data []byte) {
+	s.mu.RLock()
+	targets := make([]*MobileConnection, 0)
+	for _, userMobiles := range s.Mobiles {
+		for _, c := range userMobiles {
+			targets = append(targets, c)
+		}
+	}
+	s.mu.RUnlock()
+
+	for _, c := range targets {
+		_ = c.Send(data)
+	}
+}
+
 // SendToDesktop sends data to the desktop connection for deviceID. It returns
 // false if no such connection exists or the send was dropped.
 func (s *AppState) SendToDesktop(deviceID uuid.UUID, data []byte) bool {
@@ -222,6 +238,20 @@ func (s *AppState) BroadcastToDesktop(userID uuid.UUID, data []byte) {
 		if c.UserID == userID {
 			targets = append(targets, c)
 		}
+	}
+	s.mu.RUnlock()
+
+	for _, c := range targets {
+		_ = c.Send(data)
+	}
+}
+
+// BroadcastToAllDesktops sends data to every online desktop connection.
+func (s *AppState) BroadcastToAllDesktops(data []byte) {
+	s.mu.RLock()
+	targets := make([]*DesktopConnection, 0, len(s.Desktops))
+	for _, c := range s.Desktops {
+		targets = append(targets, c)
 	}
 	s.mu.RUnlock()
 

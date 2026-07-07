@@ -5,6 +5,8 @@ import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
 import 'package:url_launcher/url_launcher.dart';
 
+import 'api_client.dart';
+
 const _githubReleasesApiUrl =
     'https://api.github.com/repos/gaolin89898/ai-workbench/releases?per_page=30';
 const _githubReleasesUrl =
@@ -23,6 +25,8 @@ class MobileUpdateInfo {
     this.apkUrl,
     this.apkFileName,
     this.body,
+    this.isRequired = false,
+    this.force = false,
   });
 
   final bool available;
@@ -34,6 +38,29 @@ class MobileUpdateInfo {
   final String? apkUrl;
   final String? apkFileName;
   final String? body;
+  final bool isRequired;
+  final bool force;
+
+  factory MobileUpdateInfo.fromServer(Map<String, dynamic> json) {
+    final latestVersion = json['latestVersion'] as String?;
+    final downloadUrl = json['downloadUrl'] as String?;
+    final releaseUrl = json['releaseUrl'] as String? ?? _githubReleasesUrl;
+    return MobileUpdateInfo(
+      available: json['available'] == true,
+      currentVersion:
+          json['currentVersion'] as String? ?? MobileUpdateService.currentVersion,
+      source: json['source'] as String? ?? '服务端',
+      releaseUrl: releaseUrl,
+      version: latestVersion,
+      apkUrl: downloadUrl,
+      apkFileName: latestVersion == null
+          ? null
+          : 'ai-workbench-mobile-$latestVersion.apk',
+      body: json['releaseNotes'] as String?,
+      isRequired: json['required'] == true,
+      force: json['force'] == true,
+    );
+  }
 }
 
 class MobileUpdateService {
@@ -42,7 +69,20 @@ class MobileUpdateService {
   static const currentVersion = _currentMobileVersion;
   static const _installer = MethodChannel('ai_workbench_mobile/installer');
 
-  Future<MobileUpdateInfo> check() async {
+  Future<MobileUpdateInfo> check({ApiClient? api}) async {
+    if (api != null) {
+      try {
+        final release = await api.appRelease(
+          platform: 'mobile',
+          currentVersion: _currentMobileVersion,
+        );
+        final info = MobileUpdateInfo.fromServer(release);
+        return info;
+      } catch (_) {
+        // Fall back to GitHub Releases below.
+      }
+    }
+
     final response = await http.get(
       Uri.parse(_githubReleasesApiUrl),
       headers: const {'Accept': 'application/vnd.github+json'},

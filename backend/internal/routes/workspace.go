@@ -26,11 +26,11 @@ import (
 
 // aiProviderResponse mirrors the shared AiProviderDefinition.
 type aiProviderResponse struct {
-	Id       string `json:"id"`
-	Name     string `json:"name"`
-	Command  string `json:"command"`
-	BuiltIn  bool   `json:"builtIn"`
-	Enabled  bool   `json:"enabled"`
+	Id      string `json:"id"`
+	Name    string `json:"name"`
+	Command string `json:"command"`
+	BuiltIn bool   `json:"builtIn"`
+	Enabled bool   `json:"enabled"`
 }
 
 // workspaceProjectResponse mirrors the shared WorkspaceProject.
@@ -445,7 +445,7 @@ func (h *Handler) renameAiSession(w http.ResponseWriter, r *http.Request) {
 //
 // 查找策略：先按 deviceID 精确查找（桌面端 token 带 deviceId claim 时）；
 // 找不到则按 userID 查第一个在线桌面（兼容 token 没有 deviceId claim
-// 的登录方式，例如 OAuth 登录后 access token 直接连 WS 的场景）。
+// 的登录方式）。
 func (h *Handler) forwardToDesktop(ctx context.Context, userID, deviceID string, msg protocol.Message) {
 	deviceUUID, err := uuid.Parse(deviceID)
 	if err != nil {

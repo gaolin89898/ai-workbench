@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:url_launcher/url_launcher.dart';
 
 import '../services/api_client.dart';
 import '../state/workspace_controller.dart';
@@ -15,13 +14,12 @@ class LoginPage extends StatefulWidget {
 }
 
 class _LoginPageState extends State<LoginPage> {
+  final _server = TextEditingController();
   final _email = TextEditingController();
   final _password = TextEditingController();
   bool _loading = false;
-  bool _oauthLoading = false;
   bool _showPassword = false;
   bool _rememberPassword = false;
-  String? _oauthStatus;
   String? _error;
 
   @override
@@ -32,15 +30,23 @@ class _LoginPageState extends State<LoginPage> {
 
   @override
   void dispose() {
+    _server.dispose();
     _email.dispose();
     _password.dispose();
     super.dispose();
   }
 
   Future<void> _loadSavedCredentials() async {
+    final server = await ApiClient.loadStoredBaseUrl();
     final email = await ApiClient.loadSavedEmail();
     final password = await ApiClient.loadSavedPassword();
-    if (email != null && password != null && mounted) {
+    if (!mounted) return;
+    setState(() {
+      if (server != null) {
+        _server.text = server;
+      }
+    });
+    if (email != null && password != null) {
       setState(() {
         _email.text = email;
         _password.text = password;
@@ -160,6 +166,13 @@ class _LoginPageState extends State<LoginPage> {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.stretch,
                           children: [
+                            _IconPrefixTextField(
+                              controller: _server,
+                              icon: Icons.dns_outlined,
+                              hint: '服务器地址',
+                              keyboardType: TextInputType.url,
+                            ),
+                            const SizedBox(height: AppSpacing.md),
                             // 邮箱输入框（前缀图标 + TextField）
                             _IconPrefixTextField(
                               controller: _email,
@@ -241,78 +254,8 @@ class _LoginPageState extends State<LoginPage> {
                             // 主按钮"继续"：纯色 AppColors.primary + arrow_right 图标
                             _PrimaryButton(
                               loading: _loading,
-                              disabled: _oauthLoading,
+                              disabled: false,
                               onPressed: _login,
-                            ),
-                            const SizedBox(height: AppSpacing.lg),
-                            // 分隔符：Divider + "或" + Divider
-                            const Row(
-                              children: [
-                                Expanded(child: Divider()),
-                                Padding(
-                                  padding: EdgeInsets.symmetric(
-                                      horizontal: AppSpacing.md),
-                                  child: Text(
-                                    '或',
-                                    style: TextStyle(
-                                      color: AppColors.muted,
-                                      fontSize: 12,
-                                    ),
-                                  ),
-                                ),
-                                Expanded(child: Divider()),
-                              ],
-                            ),
-                            const SizedBox(height: AppSpacing.lg),
-                            // 钉钉登录按钮：OutlinedButton + 28×28 方块 + "钉"
-                            OutlinedButton(
-                              onPressed: _loading || _oauthLoading
-                                  ? null
-                                  : _loginWithDingTalk,
-                              style: OutlinedButton.styleFrom(
-                                minimumSize: const Size.fromHeight(48),
-                                backgroundColor: AppColors.surface,
-                                side: const BorderSide(color: AppColors.border),
-                                shape: RoundedRectangleBorder(
-                                  borderRadius:
-                                      BorderRadius.circular(AppRadius.lg),
-                                ),
-                                padding: const EdgeInsets.symmetric(
-                                    horizontal: AppSpacing.lg),
-                              ),
-                              child: Row(
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                children: [
-                                  Container(
-                                    width: 28,
-                                    height: 28,
-                                    decoration: BoxDecoration(
-                                      color: AppColors.dingtalk,
-                                      borderRadius:
-                                          BorderRadius.circular(AppRadius.md),
-                                    ),
-                                    child: const Center(
-                                      child: Text(
-                                        '钉',
-                                        style: TextStyle(
-                                          color: AppColors.inverse,
-                                          fontSize: 13,
-                                          fontWeight: FontWeight.w700,
-                                        ),
-                                      ),
-                                    ),
-                                  ),
-                                  const SizedBox(width: 10),
-                                  Text(
-                                    _oauthLoading ? '等待扫码...' : '钉钉登录',
-                                    style: const TextStyle(
-                                      color: AppColors.secondary,
-                                      fontSize: 14,
-                                      fontWeight: FontWeight.w600,
-                                    ),
-                                  ),
-                                ],
-                              ),
                             ),
                           ],
                         ),
@@ -321,7 +264,7 @@ class _LoginPageState extends State<LoginPage> {
                       // ---- status-area：状态提示或错误 ----
                       _StatusArea(
                         error: _error,
-                        hint: _oauthStatus ?? '使用桌面端账号登录，将自动同步已配对设备。',
+                        hint: '使用桌面端账号登录，将自动同步同账号设备。',
                       ),
                       const SizedBox(height: AppSpacing.lg),
                       // ---- device-note：底部说明 ----
@@ -369,7 +312,12 @@ class _LoginPageState extends State<LoginPage> {
       _error = null;
     });
     try {
-      final api = ApiClient(baseUrl: ApiClient.defaultBaseUrl);
+      final serverUrl = _server.text.trim();
+      if (serverUrl.isEmpty) {
+        throw Exception('请输入服务器地址');
+      }
+      await ApiClient.saveStoredBaseUrl(serverUrl);
+      final api = ApiClient(baseUrl: serverUrl);
       await api.login(_email.text.trim(), _password.text);
       if (_rememberPassword) {
         await ApiClient.saveCredentials(_email.text.trim(), _password.text);
@@ -384,55 +332,6 @@ class _LoginPageState extends State<LoginPage> {
       setState(() => _error = error.toString().replaceFirst('Exception: ', ''));
     } finally {
       if (mounted) setState(() => _loading = false);
-    }
-  }
-
-  // 钉钉 OAuth 登录：启动 → 浏览器扫码 → 轮询拿 token
-  Future<void> _loginWithDingTalk() async {
-    setState(() {
-      _oauthLoading = true;
-      _oauthStatus = '正在获取授权链接...';
-      _error = null;
-    });
-    final api = ApiClient(baseUrl: ApiClient.defaultBaseUrl);
-    try {
-      final start = await api.startDingTalkOAuth();
-      await launchUrl(Uri.parse(start.authUrl),
-          mode: LaunchMode.externalApplication);
-      setState(() => _oauthStatus = '请在浏览器中扫码完成授权');
-
-      final deadline = DateTime.now().add(const Duration(minutes: 10));
-      OAuthPollResult? result;
-      while (DateTime.now().isBefore(deadline)) {
-        await Future.delayed(const Duration(seconds: 2));
-        if (!mounted) return;
-        final poll = await api.pollDingTalkOAuth(start.state);
-        if (poll.status == 'success' && poll.accessToken != null) {
-          result = poll;
-          break;
-        }
-        if (poll.status == 'error') {
-          throw Exception(poll.error ?? '钉钉登录失败');
-        }
-        if (poll.status == 'expired') {
-          throw Exception('授权超时，请重试');
-        }
-      }
-      if (result == null) throw Exception('授权超时');
-
-      api.token = result.accessToken;
-      await ApiClient.saveStoredToken(result.accessToken!, baseUrl: api.baseUrl);
-      final controller = WorkspaceController(api: api);
-      await controller.loadDevices();
-      if (!mounted) return;
-      await _openWorkspace(controller);
-    } catch (error) {
-      setState(() {
-        _error = error.toString().replaceFirst('Exception: ', '');
-        _oauthStatus = null;
-      });
-    } finally {
-      if (mounted) setState(() => _oauthLoading = false);
     }
   }
 

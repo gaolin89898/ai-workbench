@@ -51,7 +51,25 @@ type DeviceSession = {
   updatedAt: string;
 };
 
+type AdminSection = "users" | "releases";
+type ReleasePlatform = "desktop" | "mobile";
+
+type AppReleaseRecord = {
+  platform: "desktop" | "mobile";
+  latestVersion: string;
+  minSupportedVersion: string | null;
+  downloadUrl: string | null;
+  releaseUrl: string | null;
+  releaseNotes: string | null;
+  force: boolean;
+  enabled: boolean;
+  source: string;
+  updatedAt: string;
+};
+
 const token = ref(localStorage.getItem("user-admin-token") ?? "");
+const activeSection = ref<AdminSection>("users");
+const releasePlatforms: ReleasePlatform[] = ["desktop", "mobile"];
 const loginMode = ref<"login" | "register">("login");
 const authLoading = ref(false);
 const pageLoading = ref(false);
@@ -81,6 +99,24 @@ const passwordForm = reactive({
   confirmPassword: "",
 });
 const users = ref<SystemUserRecord[]>([]);
+const releases = ref<Record<ReleasePlatform, AppReleaseRecord>>({
+  desktop: emptyRelease("desktop"),
+  mobile: emptyRelease("mobile"),
+});
+const releaseForms = reactive<Record<ReleasePlatform, {
+  latestVersion: string;
+  minSupportedVersion: string;
+  downloadUrl: string;
+  releaseUrl: string;
+  releaseNotes: string;
+  force: boolean;
+  enabled: boolean;
+}>>({
+  desktop: emptyReleaseForm(),
+  mobile: emptyReleaseForm(),
+});
+const releasesLoading = ref(false);
+const releaseSaving = ref<Record<ReleasePlatform, boolean>>({ desktop: false, mobile: false });
 
 const filters = reactive({
   keyword: "",
@@ -118,6 +154,7 @@ const filteredUsers = computed(() => {
 onMounted(() => {
   if (token.value) {
     void fetchUsers();
+    void fetchReleases();
   }
 });
 
@@ -168,8 +205,8 @@ function getStatusMeta(status: UserStatus) {
 
 function authModeText(value: string) {
   if (value === "password") return "账号密码";
-  if (value === "dingtalk") return "钉钉";
-  return value || "未知";
+  if (value) return "第三方登录";
+  return "未知";
 }
 
 function resetFilters() {
@@ -189,7 +226,7 @@ async function submitAuth() {
     token.value = result.accessToken;
     localStorage.setItem("user-admin-token", result.accessToken);
     Message.success(loginMode.value === "login" ? "登录成功" : "注册成功");
-    await fetchUsers();
+    await Promise.all([fetchUsers(), fetchReleases()]);
   } catch (error) {
     Message.error(error instanceof Error ? error.message : String(error));
   } finally {
@@ -201,6 +238,51 @@ function logout() {
   token.value = "";
   localStorage.removeItem("user-admin-token");
   users.value = [];
+  releases.value = { desktop: emptyRelease("desktop"), mobile: emptyRelease("mobile") };
+}
+
+function switchSection(key: string) {
+  if (key === "users" || key === "releases") {
+    activeSection.value = key;
+  }
+}
+
+function emptyRelease(platform: ReleasePlatform): AppReleaseRecord {
+  return {
+    platform,
+    latestVersion: "",
+    minSupportedVersion: null,
+    downloadUrl: null,
+    releaseUrl: null,
+    releaseNotes: null,
+    force: false,
+    enabled: false,
+    source: "manual",
+    updatedAt: "",
+  };
+}
+
+function emptyReleaseForm() {
+  return {
+    latestVersion: "",
+    minSupportedVersion: "",
+    downloadUrl: "",
+    releaseUrl: "",
+    releaseNotes: "",
+    force: false,
+    enabled: false,
+  };
+}
+
+function applyReleaseToForm(release: AppReleaseRecord) {
+  const form = releaseForms[release.platform];
+  form.latestVersion = release.latestVersion ?? "";
+  form.minSupportedVersion = release.minSupportedVersion ?? "";
+  form.downloadUrl = release.downloadUrl ?? "";
+  form.releaseUrl = release.releaseUrl ?? "";
+  form.releaseNotes = release.releaseNotes ?? "";
+  form.force = release.force;
+  form.enabled = release.enabled;
 }
 
 async function fetchUsers() {
@@ -215,6 +297,78 @@ async function fetchUsers() {
   } finally {
     pageLoading.value = false;
   }
+}
+
+async function fetchReleases() {
+  releasesLoading.value = true;
+  try {
+    const items = await requestAPI<AppReleaseRecord[]>("/admin/app-releases");
+    const next: Record<ReleasePlatform, AppReleaseRecord> = { desktop: emptyRelease("desktop"), mobile: emptyRelease("mobile") };
+    for (const item of items) {
+      if (item.platform === "desktop" || item.platform === "mobile") {
+        next[item.platform] = item;
+      }
+    }
+    releases.value = next;
+    applyReleaseToForm(next.desktop);
+    applyReleaseToForm(next.mobile);
+  } catch (error) {
+    Message.error(error instanceof Error ? error.message : String(error));
+  } finally {
+    releasesLoading.value = false;
+  }
+}
+
+async function importGithubRelease(platform: ReleasePlatform) {
+  releaseSaving.value = { ...releaseSaving.value, [platform]: true };
+  try {
+    const info = await requestAPI<{
+      latestVersion?: string;
+      downloadUrl?: string | null;
+      releaseUrl?: string | null;
+      releaseNotes?: string | null;
+    }>(`/admin/app-releases/${platform}/import-github`, { method: "POST" });
+    const form = releaseForms[platform];
+    form.latestVersion = info.latestVersion ?? "";
+    form.downloadUrl = info.downloadUrl ?? "";
+    form.releaseUrl = info.releaseUrl ?? "";
+    form.releaseNotes = info.releaseNotes ?? "";
+    Message.success("已从 GitHub 读取版本信息，请确认后保存");
+  } catch (error) {
+    Message.error(error instanceof Error ? error.message : String(error));
+  } finally {
+    releaseSaving.value = { ...releaseSaving.value, [platform]: false };
+  }
+}
+
+async function saveRelease(platform: ReleasePlatform) {
+  const form = releaseForms[platform];
+  releaseSaving.value = { ...releaseSaving.value, [platform]: true };
+  try {
+    const saved = await requestAPI<AppReleaseRecord>(`/admin/app-releases/${platform}`, {
+      method: "PUT",
+      body: JSON.stringify({
+        latestVersion: form.latestVersion,
+        minSupportedVersion: form.minSupportedVersion || null,
+        downloadUrl: form.downloadUrl || null,
+        releaseUrl: form.releaseUrl || null,
+        releaseNotes: form.releaseNotes || null,
+        force: form.force,
+        enabled: form.enabled,
+      }),
+    });
+    releases.value = { ...releases.value, [platform]: saved };
+    applyReleaseToForm(saved);
+    Message.success("版本配置已保存，在线客户端会收到更新提示");
+  } catch (error) {
+    Message.error(error instanceof Error ? error.message : String(error));
+  } finally {
+    releaseSaving.value = { ...releaseSaving.value, [platform]: false };
+  }
+}
+
+function platformTitle(platform: ReleasePlatform) {
+  return platform === "desktop" ? "桌面端" : "移动端";
 }
 
 function openEditUser(user: SystemUserRecord) {
@@ -429,10 +583,14 @@ function backToDevices() {
         </div>
       </div>
 
-      <a-menu class="side-menu" :default-selected-keys="['users']">
+      <a-menu class="side-menu" :selected-keys="[activeSection]" @menu-item-click="switchSection">
         <a-menu-item key="users">
           <template #icon><icon-user /></template>
           用户管理
+        </a-menu-item>
+        <a-menu-item key="releases">
+          <template #icon><icon-refresh /></template>
+          版本发布
         </a-menu-item>
       </a-menu>
     </a-layout-sider>
@@ -440,15 +598,19 @@ function backToDevices() {
     <a-layout>
       <a-layout-header class="admin-header">
         <div>
-          <h1>用户管理</h1>
-          <p>展示 AI 工作台真实账号，以及账号下绑定的桌面端和移动端使用情况。</p>
+          <h1>{{ activeSection === "users" ? "用户管理" : "版本发布" }}</h1>
+          <p>{{ activeSection === "users" ? "展示 AI 工作台真实账号，以及账号下绑定的桌面端和移动端使用情况。" : "配置桌面端和移动端最新版本，保存后通知在线客户端。" }}</p>
         </div>
         <a-space>
-          <a-button @click="fetchUsers" :loading="pageLoading">
+          <a-button v-if="activeSection === 'users'" @click="fetchUsers" :loading="pageLoading">
             <template #icon><icon-refresh /></template>
             刷新
           </a-button>
-          <a-button @click="resetFilters">
+          <a-button v-if="activeSection === 'releases'" @click="fetchReleases" :loading="releasesLoading">
+            <template #icon><icon-refresh /></template>
+            刷新
+          </a-button>
+          <a-button v-if="activeSection === 'users'" @click="resetFilters">
             <template #icon><icon-refresh /></template>
             重置筛选
           </a-button>
@@ -457,7 +619,7 @@ function backToDevices() {
       </a-layout-header>
 
       <a-layout-content class="admin-content">
-        <a-card class="table-panel" :bordered="false">
+        <a-card v-if="activeSection === 'users'" class="table-panel" :bordered="false">
           <div class="filter-bar">
             <a-input
               v-model="filters.keyword"
@@ -560,6 +722,59 @@ function backToDevices() {
             </template>
           </a-table>
         </a-card>
+        <div v-else class="release-grid">
+          <a-card
+            v-for="platform in releasePlatforms"
+            :key="platform"
+            class="release-card"
+            :title="`${platformTitle(platform)}更新`"
+            :bordered="false"
+          >
+            <template #extra>
+              <a-space>
+                <a-tag :color="releaseForms[platform].enabled ? 'green' : 'gray'">
+                  {{ releaseForms[platform].enabled ? "已启用" : "未启用" }}
+                </a-tag>
+                <a-button size="small" :loading="releaseSaving[platform]" @click="importGithubRelease(platform)">
+                  从 GitHub 读取
+                </a-button>
+              </a-space>
+            </template>
+            <a-form :model="releaseForms[platform]" layout="vertical">
+              <a-form-item label="最新版本">
+                <a-input v-model="releaseForms[platform].latestVersion" placeholder="例如 0.1.69" />
+              </a-form-item>
+              <a-form-item label="最低可用版本">
+                <a-input v-model="releaseForms[platform].minSupportedVersion" placeholder="低于该版本视为不兼容，必须更新，可留空" />
+              </a-form-item>
+              <a-form-item label="下载地址">
+                <a-input v-model="releaseForms[platform].downloadUrl" placeholder="安装包或 APK 下载地址" />
+              </a-form-item>
+              <a-form-item label="Release 页面">
+                <a-input v-model="releaseForms[platform].releaseUrl" placeholder="GitHub Release 页面地址" />
+              </a-form-item>
+              <a-form-item label="更新说明">
+                <a-textarea v-model="releaseForms[platform].releaseNotes" :auto-size="{ minRows: 4, maxRows: 8 }" placeholder="展示给用户看的更新说明" />
+              </a-form-item>
+              <a-space direction="vertical" fill>
+                <a-checkbox v-model="releaseForms[platform].enabled">启用此配置</a-checkbox>
+                <a-checkbox v-model="releaseForms[platform].force">强制更新提示</a-checkbox>
+              </a-space>
+              <div class="release-meta">
+                <span>来源：{{ releases[platform].source || "manual" }}</span>
+                <span>更新时间：{{ formatDate(releases[platform].updatedAt || null) }}</span>
+              </div>
+              <a-button
+                type="primary"
+                long
+                :loading="releaseSaving[platform]"
+                @click="saveRelease(platform)"
+              >
+                保存并通知在线{{ platformTitle(platform) }}
+              </a-button>
+            </a-form>
+          </a-card>
+        </div>
       </a-layout-content>
     </a-layout>
 
@@ -576,7 +791,7 @@ function backToDevices() {
           <a-input v-model="editForm.account" placeholder="请输入登录账号" />
         </a-form-item>
         <a-form-item label="显示名">
-          <a-input v-model="editForm.displayName" placeholder="钉钉用户可显示昵称，账号密码用户可留空" />
+          <a-input v-model="editForm.displayName" placeholder="可填写用户昵称，账号密码用户可留空" />
         </a-form-item>
       </a-form>
     </a-modal>
@@ -884,6 +1099,27 @@ function backToDevices() {
   border: 1px solid #edf0f5;
   border-radius: 8px;
   box-shadow: 0 8px 22px rgba(29, 33, 41, 0.05);
+}
+
+.release-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 18px;
+}
+
+.release-card {
+  border: 1px solid #edf0f5;
+  border-radius: 8px;
+  box-shadow: 0 8px 22px rgba(29, 33, 41, 0.05);
+}
+
+.release-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 14px 0;
+  color: #86909c;
+  font-size: 12px;
 }
 
 .filter-bar,

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../services/update_service.dart';
+import '../state/workspace_scope.dart';
 import '../widgets/app_theme.dart';
 
 class UpdatePage extends StatefulWidget {
@@ -17,6 +18,17 @@ class _UpdatePageState extends State<UpdatePage> {
   bool _checking = false;
   bool _opening = false;
   double? _progress;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _update ??= WorkspaceScope.of(context).appUpdateNotice;
+    if (_update != null && _status == '尚未检查更新。') {
+      _status = _update!.isRequired
+          ? '当前版本过低，需要更新到 v${_update!.version ?? _update!.currentVersion} 后继续使用。'
+          : '发现移动端安装包 v${_update!.version ?? _update!.currentVersion}，可直接下载并安装。';
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -37,7 +49,7 @@ class _UpdatePageState extends State<UpdatePage> {
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 AppSectionTitle('移动端安装包',
-                    subtitle: '从 GitHub Releases 下载最新 APK'),
+                    subtitle: '优先从服务端获取版本通知，失败时使用 GitHub Releases'),
                 const SizedBox(height: AppSpacing.lg),
                 FilledButton.icon(
                   onPressed: _checking ? null : _checkUpdate,
@@ -77,7 +89,7 @@ class _UpdatePageState extends State<UpdatePage> {
                 if (update != null) ...[
                   const SizedBox(height: 14),
                   _UpdateStatus(update: update),
-                  if (update.available) ...[
+                  if (update.available || update.isRequired) ...[
                     const SizedBox(height: AppSpacing.md),
                     FilledButton.icon(
                       onPressed: _opening ? null : _installUpdate,
@@ -103,15 +115,17 @@ class _UpdatePageState extends State<UpdatePage> {
     setState(() {
       _checking = true;
       _progress = null;
-      _status = '正在检查 GitHub Releases...';
+      _status = '正在检查更新...';
     });
     try {
-      final update = await _updates.check();
+      final update = await _updates.check(api: WorkspaceScope.of(context).api);
       if (!mounted) return;
       setState(() {
         _update = update;
-        _status = update.available
-            ? '发现移动端安装包 v${update.version ?? update.currentVersion}，可直接下载并安装。'
+        _status = update.available || update.isRequired
+            ? update.isRequired
+                ? '当前版本过低，需要更新到 v${update.version ?? update.currentVersion} 后继续使用。'
+                : '发现移动端安装包 v${update.version ?? update.currentVersion}，可直接下载并安装。'
             : '当前已是最新版本 v${update.currentVersion}。';
       });
     } catch (error) {

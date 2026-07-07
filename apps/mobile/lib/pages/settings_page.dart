@@ -203,7 +203,9 @@ class _SettingsPageState extends State<SettingsPage> {
                     background: AppColors.successSoft,
                     foreground: AppColors.successDeep,
                     title: '应用更新',
-                    subtitle: '检查新版 APK 并打开下载链接。',
+                    subtitle: ws.appUpdateNotice?.available == true || ws.appUpdateNotice?.isRequired == true
+                        ? '发现 v${ws.appUpdateNotice!.version ?? ws.appUpdateNotice!.currentVersion}${ws.appUpdateNotice!.isRequired ? '，需要更新' : ''}'
+                        : '检查新版 APK 并打开下载链接。',
                     onTap: () => Navigator.of(context).push(
                       MaterialPageRoute(
                         builder: (_) => WorkspaceScope(

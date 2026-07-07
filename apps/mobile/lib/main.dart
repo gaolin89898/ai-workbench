@@ -42,7 +42,11 @@ class _BootstrapPageState extends State<BootstrapPage> {
   }
 
   Future<void> _bootstrap() async {
-    final baseUrl = ApiClient.defaultBaseUrl;
+    final baseUrl = await ApiClient.loadStoredBaseUrl();
+    if (baseUrl == null || baseUrl.isEmpty) {
+      _goLogin();
+      return;
+    }
     final token = await ApiClient.loadStoredToken(baseUrl: baseUrl);
     if (token == null || token.isEmpty) {
       _goLogin();

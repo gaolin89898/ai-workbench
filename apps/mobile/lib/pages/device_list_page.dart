@@ -66,7 +66,7 @@ class _DeviceListPageState extends State<DeviceListPage> {
             onRefresh: ws.loadDevices,
             child: ListView(
               padding: const EdgeInsets.fromLTRB(
-                AppSpacing.lg, AppSpacing.md, AppSpacing.lg, AppSpacing.x3l),
+                  AppSpacing.lg, AppSpacing.md, AppSpacing.lg, AppSpacing.x3l),
               physics: const AlwaysScrollableScrollPhysics(),
               children: [
                 // 错误提示（保留原逻辑）
@@ -105,12 +105,10 @@ class _DeviceListPageState extends State<DeviceListPage> {
                     ),
                     const SizedBox(height: AppSpacing.sm),
                     ...onlineDevices.map((device) => Padding(
-                          padding:
-                              const EdgeInsets.only(bottom: AppSpacing.md),
+                          padding: const EdgeInsets.only(bottom: AppSpacing.md),
                           child: _DeviceCard(
                             device: device,
-                            isConnecting:
-                                _connectingIds.contains(device.id),
+                            isConnecting: _connectingIds.contains(device.id),
                             onTap: () => _openDevice(device),
                           ),
                         )),
@@ -127,8 +125,7 @@ class _DeviceListPageState extends State<DeviceListPage> {
                     ),
                     const SizedBox(height: AppSpacing.sm),
                     ...offlineDevices.map((device) => Padding(
-                          padding:
-                              const EdgeInsets.only(bottom: AppSpacing.md),
+                          padding: const EdgeInsets.only(bottom: AppSpacing.md),
                           child: _OfflineDeviceCard(device: device),
                         )),
                   ],
@@ -214,7 +211,7 @@ class _GuideCard extends StatelessWidget {
                 ),
                 SizedBox(height: AppSpacing.xs),
                 Text(
-                  '仅显示已配对的设备',
+                  '仅显示同账号设备',
                   style: TextStyle(fontSize: 12, color: AppColors.muted),
                 ),
               ],
@@ -371,8 +368,7 @@ class _DeviceCard extends StatelessWidget {
                 const SizedBox(height: AppSpacing.xs),
                 Text(
                   '${device.os} · 在线',
-                  style: const TextStyle(
-                      fontSize: 12, color: AppColors.muted),
+                  style: const TextStyle(fontSize: 12, color: AppColors.muted),
                   overflow: TextOverflow.ellipsis,
                 ),
               ],
@@ -428,8 +424,8 @@ class _OfflineDeviceCard extends StatelessWidget {
                   const SizedBox(height: AppSpacing.xs),
                   Text(
                     '${device.os} · 离线',
-                    style: const TextStyle(
-                        fontSize: 12, color: AppColors.muted),
+                    style:
+                        const TextStyle(fontSize: 12, color: AppColors.muted),
                     overflow: TextOverflow.ellipsis,
                   ),
                 ],
@@ -481,8 +477,7 @@ class _EmptyDeviceCard extends StatelessWidget {
           const SizedBox(height: AppSpacing.xs),
           const Text(
             '请确认桌面端已启动并联网',
-            style: TextStyle(
-                fontSize: 12, color: AppColors.muted, height: 1.5),
+            style: TextStyle(fontSize: 12, color: AppColors.muted, height: 1.5),
           ),
           const SizedBox(height: AppSpacing.lg),
           Row(

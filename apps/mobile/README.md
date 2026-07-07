@@ -1,17 +1,83 @@
-# remote_term_mobile
+# AI 工作台移动端
 
-A new Flutter project.
+这是 AI 工作台的 Flutter 移动端，用于远程查看和控制同账号下的桌面端设备。
 
-## Getting Started
+移动端不会直接运行 AI CLI，也不会直接读取桌面端本地 SQLite。它通过云端中转服务连接在线桌面端，完成项目列表、AI 会话、聊天历史、审批和更新提示等同步。
 
-This project is a starting point for a Flutter application.
+## 主要能力
 
-A few resources to get you started if this is your first Flutter project:
+- 使用账号密码登录。
+- 首次登录填写服务器地址，并保存到本地。
+- 同账号自动发现桌面端设备，不再使用配对页面。
+- 查看桌面端项目和 AI 会话。
+- 向桌面端发送 AI 消息。
+- 查看 AI 执行过程和最终回答。
+- 响应 Codex 审批。
+- 接收服务端应用更新通知。
+- 检查并打开移动端 APK 下载地址。
 
-- [Learn Flutter](https://docs.flutter.dev/get-started/learn-flutter)
-- [Write your first Flutter app](https://docs.flutter.dev/get-started/codelab)
-- [Flutter learning resources](https://docs.flutter.dev/reference/learning-resources)
+## 服务器地址
 
-For help getting started with Flutter development, view the
-[online documentation](https://docs.flutter.dev/), which offers tutorials,
-samples, guidance on mobile development, and a full API reference.
+移动端不再内置默认服务器地址。
+
+启动时逻辑：
+
+1. 如果本地保存了服务器地址和 token，尝试恢复登录。
+2. 如果没有保存服务器地址，进入登录页。
+3. 登录页必须填写服务器地址、账号和密码。
+4. 登录成功后，服务器地址和 token 会保存到本地。
+
+服务器地址可以填写：
+
+```text
+http://127.0.0.1:3000
+```
+
+真机调试时，`127.0.0.1` 表示手机自己，不是电脑。请填写电脑在局域网里的 IP，例如：
+
+```text
+http://192.168.1.20:3000
+```
+
+Android 模拟器访问宿主机时，也可以填写：
+
+```text
+http://10.0.2.2:3000
+```
+
+如果没有写端口，客户端会默认补 `3000`。
+
+## 开发启动
+
+准备 Flutter SDK 后运行：
+
+```bash
+flutter pub get
+flutter run
+```
+
+静态检查：
+
+```bash
+flutter analyze
+```
+
+测试：
+
+```bash
+flutter test
+```
+
+## 应用更新
+
+移动端优先从当前登录服务器读取版本策略：
+
+```text
+GET /app/releases?platform=mobile&currentVersion=<currentVersion>
+```
+
+服务端返回新版本、最低可用版本、APK 下载地址和更新说明。
+
+如果当前版本低于最低可用版本，移动端会显示必须更新。用户点击后会打开 APK 下载链接，不会静默安装。
+
+如果服务端没有返回可用配置或请求失败，移动端会兜底查询 GitHub Releases 中的 APK。

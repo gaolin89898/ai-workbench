@@ -6,8 +6,8 @@
 //   ipcRenderer.invoke(channel, args)
 // where `args` is the array of frontend arguments. So every handler receives
 // a single `args` array as the second parameter (after the IpcMainInvokeEvent).
-// Example: window.desktop.ipc.pairDesktop("http://...", "ABC123") ->
-//   ipcMain.handle("pair_desktop", (_event, args) => { const [server, code] = args; ... })
+// Example: window.desktop.ipc.loginDesktop("http://...", "user@example.com", "password") ->
+//   ipcMain.handle("login_desktop", (_event, args) => { const [server, email, password] = args; ... })
 
 import { app, ipcMain, BrowserWindow, clipboard, shell, type IpcMainInvokeEvent, type WebContents } from "electron";
 import { randomUUID } from "node:crypto";
@@ -20,11 +20,6 @@ import * as projects from "./projects";
 import {
   loginDesktop,
   logoutDesktop,
-  saveOAuthLogin,
-  pairDesktop,
-  createDesktopPairingRequest,
-  getDesktopPairingStatus,
-  buildDesktopPairingQrPayload,
   getCloudConfig,
   getDesktopCloudSync,
   fetchTokenUsageSummary,
@@ -159,35 +154,13 @@ export function registerIpcHandlers(win?: BrowserWindow): void {
 
   handle("clear_credentials", async () => clearCredentials());
 
-  // OAuth 登录完成后，前端把 token/userId 传过来保存
-  handle("save_oauth_login", async (_event, args: [string, string, string, string]) => {
-    const [serverUrl, accessToken, userId, displayName] = args;
-    await saveOAuthLogin(serverUrl, accessToken, userId, displayName);
-  });
-
-  // 在系统默认浏览器中打开 URL（用于 OAuth 授权跳转，避免 BrowserWindow 限制）
+  // 在系统默认浏览器中打开 URL（用于外部文档和授权跳转）。
   handle("open_external_url", async (_event, args: [string]) => {
     const url = args[0];
     if (typeof url === "string" && /^https?:\/\//i.test(url)) {
       await shell.openExternal(url);
     }
   });
-
-  handle("pair_desktop", async (_event, args: [string, string]) =>
-    pairDesktop(args[0], args[1])
-  );
-
-  handle("create_desktop_pairing_request", async (_event, args: [string]) =>
-    createDesktopPairingRequest(args[0])
-  );
-
-  handle("get_desktop_pairing_status", async (_event, args: [string, string]) =>
-    getDesktopPairingStatus(args[0], args[1])
-  );
-
-  handle("build_desktop_pairing_qr_payload", async (_event, args: [string, string]) =>
-    buildDesktopPairingQrPayload(args[0], args[1])
-  );
 
   handle("get_cloud_config", async () => getCloudConfig());
 
@@ -208,6 +181,18 @@ export function registerIpcHandlers(win?: BrowserWindow): void {
   handle("list_ai_providers", async () => providers.listAiProviders());
 
   handle("detect_ai_providers", async () => providers.detectAiProviders());
+
+  handle("run_provider_action", async (_event, args: [string, providers.ProviderActionKind]) =>
+    providers.runProviderAction(args[0], args[1])
+  );
+
+  handle("get_npm_registry", async () => providers.getNpmRegistry());
+
+  handle("set_npm_registry", async (_event, args: [string]) =>
+    providers.setNpmRegistry(args[0])
+  );
+
+  handle("probe_npm_registries", async () => providers.probeNpmRegistries());
 
   // ---------- workspace projects ----------
 

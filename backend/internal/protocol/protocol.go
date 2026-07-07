@@ -278,6 +278,23 @@ type AiSessionRename struct {
 	Title       string `json:"title"`
 }
 
+// AppUpdateAvailable: "app.update.available". Sent by the server to online
+// desktop/mobile clients when an administrator publishes update metadata.
+type AppUpdateAvailable struct {
+	BaseMessage
+	Platform            string  `json:"platform"`
+	CurrentVersion      string  `json:"currentVersion,omitempty"`
+	LatestVersion       string  `json:"latestVersion"`
+	MinSupportedVersion *string `json:"minSupportedVersion"`
+	Available           bool    `json:"available"`
+	Required            bool    `json:"required"`
+	Force               bool    `json:"force"`
+	DownloadUrl         *string `json:"downloadUrl"`
+	ReleaseUrl          *string `json:"releaseUrl"`
+	ReleaseNotes        *string `json:"releaseNotes"`
+	Source              string  `json:"source"`
+}
+
 // GitStatusSnapshotMessage: "git.status.snapshot".
 // The Rust variant wraps a `snapshot` field of type GitStatusSnapshot; the
 // message struct is named with a Message suffix to avoid clashing with the
@@ -359,6 +376,10 @@ func ParseMessage(data []byte) (Message, error) {
 		return m, err
 	case "ai.session.rename":
 		var m AiSessionRename
+		err := json.Unmarshal(data, &m)
+		return m, err
+	case "app.update.available":
+		var m AppUpdateAvailable
 		err := json.Unmarshal(data, &m)
 		return m, err
 	case "git.status.snapshot":

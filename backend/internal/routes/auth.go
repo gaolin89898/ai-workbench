@@ -380,8 +380,7 @@ func (h *Handler) verifyUserPassword(w http.ResponseWriter, r *http.Request, ema
 	return userID, true
 }
 
-// registerDesktopDevice 是 OAuth 登录后桌面端调用的端点：
-// 用 access token 鉴权（用户已经通过钉钉拿到 token），不需要再输密码。
+// registerDesktopDevice 用 access token 鉴权注册桌面端设备。
 // 创建 desktop_devices 行并返回 deviceId，让桌面端能正常发 WebSocket 快照。
 func (h *Handler) registerDesktopDevice(w http.ResponseWriter, r *http.Request) {
 	userID := auth.UserIDFromContext(r.Context())
