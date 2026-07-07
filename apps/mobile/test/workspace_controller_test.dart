@@ -90,7 +90,7 @@ void main() {
     controller.dispose();
   });
 
-  test('loadDevices hides duplicate desktop device rows', () async {
+  test('loadDevices keeps same-name desktop devices visible', () async {
     final controller = WorkspaceController(
       api: _FakeDeviceApiClient([
         const DesktopDevice(
@@ -121,6 +121,7 @@ void main() {
 
     expect(controller.devices.map((device) => device.id), [
       'current-online',
+      'old-offline',
       'other-device',
     ]);
 

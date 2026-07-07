@@ -74,66 +74,9 @@ func (h *Handler) listDevices(w http.ResponseWriter, r *http.Request) {
 	}
 
 	rows, err := h.DB.Pool.Query(r.Context(),
-		`WITH base AS (
-		   SELECT
-		     id,
-		     name,
-		     os,
-		     online,
-		     last_seen_at,
-		     created_at,
-		     NULLIF(BTRIM(machine_id), '') AS machine_key,
-		     LOWER(BTRIM(name)) || E'\x1f' || LOWER(BTRIM(os)) AS display_key
-		   FROM desktop_devices
-		   WHERE user_id = $1
-		 ),
-		 known_machine_devices AS (
-		   SELECT
-		     id,
-		     name,
-		     os,
-		     online,
-		     last_seen_at,
-		     created_at,
-		     ROW_NUMBER() OVER (
-		       PARTITION BY machine_key
-		       ORDER BY online DESC, last_seen_at DESC NULLS LAST, created_at DESC
-		     ) AS rn
-		   FROM base
-		   WHERE machine_key IS NOT NULL
-		 ),
-		 legacy_devices AS (
-		   SELECT
-		     id,
-		     name,
-		     os,
-		     online,
-		     last_seen_at,
-		     created_at,
-		     ROW_NUMBER() OVER (
-		       PARTITION BY display_key
-		       ORDER BY online DESC, last_seen_at DESC NULLS LAST, created_at DESC
-		     ) AS rn
-		   FROM base b
-		   WHERE machine_key IS NULL
-		     AND NOT EXISTS (
-		       SELECT 1
-		       FROM base known
-		       WHERE known.machine_key IS NOT NULL
-		         AND known.display_key = b.display_key
-		     )
-		 ),
-		 visible_devices AS (
-		   SELECT id, name, os, online, last_seen_at, created_at
-		   FROM known_machine_devices
-		   WHERE rn = 1
-		   UNION ALL
-		   SELECT id, name, os, online, last_seen_at, created_at
-		   FROM legacy_devices
-		   WHERE rn = 1
-		 )
-		 SELECT id, name, os, online, last_seen_at
-		 FROM visible_devices
+		`SELECT id, name, os, online, last_seen_at
+		 FROM desktop_devices
+		 WHERE user_id = $1
 		 ORDER BY online DESC, last_seen_at DESC NULLS LAST, created_at DESC`,
 		userID,
 	)

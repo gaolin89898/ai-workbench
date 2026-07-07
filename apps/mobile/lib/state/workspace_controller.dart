@@ -132,7 +132,7 @@ class WorkspaceController extends ChangeNotifier {
 
     final future = _run(() async {
       await _persistenceLoaded;
-      devices = _dedupeDevices(await api.devices());
+      devices = _sortDevices(await api.devices());
       _lastDevicesLoadedAt = DateTime.now();
       if (selectedDevice != null) {
         selectedDevice = _findDevice(selectedDevice!.id);
@@ -1475,42 +1475,18 @@ class WorkspaceController extends ChangeNotifier {
     return null;
   }
 
-  List<DesktopDevice> _dedupeDevices(List<DesktopDevice> source) {
-    final byDisplayIdentity = <String, DesktopDevice>{};
-    for (final device in source) {
-      final key = _deviceDisplayIdentity(device);
-      final existing = byDisplayIdentity[key];
-      if (existing == null || _isPreferredDevice(device, existing)) {
-        byDisplayIdentity[key] = device;
-      }
-    }
-    return byDisplayIdentity.values.toList()
-      ..sort((a, b) {
-        if (a.online != b.online) return a.online ? -1 : 1;
-        final aSeen = _parseDeviceSeenAt(a.lastSeenAt);
-        final bSeen = _parseDeviceSeenAt(b.lastSeenAt);
-        if (aSeen != null && bSeen != null) return bSeen.compareTo(aSeen);
-        if (aSeen != null) return -1;
-        if (bSeen != null) return 1;
-        return a.name.compareTo(b.name);
-      });
-  }
-
-  String _deviceDisplayIdentity(DesktopDevice device) {
-    final name = device.name.trim().toLowerCase();
-    final os = device.os.trim().toLowerCase();
-    return '$name\x1f$os';
-  }
-
-  bool _isPreferredDevice(DesktopDevice candidate, DesktopDevice current) {
-    if (candidate.online != current.online) return candidate.online;
-    final candidateSeen = _parseDeviceSeenAt(candidate.lastSeenAt);
-    final currentSeen = _parseDeviceSeenAt(current.lastSeenAt);
-    if (candidateSeen != null && currentSeen != null) {
-      return candidateSeen.isAfter(currentSeen);
-    }
-    if (candidateSeen != null) return true;
-    return false;
+  List<DesktopDevice> _sortDevices(List<DesktopDevice> source) {
+    final sorted = [...source];
+    sorted.sort((a, b) {
+      if (a.online != b.online) return a.online ? -1 : 1;
+      final aSeen = _parseDeviceSeenAt(a.lastSeenAt);
+      final bSeen = _parseDeviceSeenAt(b.lastSeenAt);
+      if (aSeen != null && bSeen != null) return bSeen.compareTo(aSeen);
+      if (aSeen != null) return -1;
+      if (bSeen != null) return 1;
+      return a.name.compareTo(b.name);
+    });
+    return sorted;
   }
 
   DateTime? _parseDeviceSeenAt(String? value) {
