@@ -266,7 +266,7 @@ export type CodexTraceGoal = {
 };
 
 export type CodexTraceSnapshot = {
-  provider: "codex";
+  provider: string;
   status: "idle" | "running" | "completed" | "failed" | "canceled";
   threadId?: string | null;
   turnId?: string | null;

@@ -641,12 +641,12 @@ class WorkspaceController extends ChangeNotifier {
             ? _mergeHistoryWithPending(current, historyMessages)
             : historyMessages;
         messagesBySession[sessionId] = _normalizeSessionMessages(
-          trace == null || !trace.isCodex
+          trace == null || !trace.isProviderTrace
               ? mergedHistory
               : _applyProviderTraceToMessages(sessionId, mergedHistory, trace),
         );
-        if (trace != null && trace.isCodex) {
-          runStatusBySession[sessionId] = _codexTraceStatusLabel(trace);
+        if (trace != null && trace.isProviderTrace) {
+          runStatusBySession[sessionId] = _providerTraceStatusLabel(trace);
         }
         break;
       case 'ai.trace.update':
@@ -654,13 +654,13 @@ class WorkspaceController extends ChangeNotifier {
         final traceJson = json['trace'];
         if (traceJson is Map<String, dynamic>) {
           final trace = AiProviderTrace.fromJson(traceJson);
-          if (trace.isCodex) {
+          if (trace.isProviderTrace) {
             final current =
                 messagesBySession[sessionId] ?? const <ChatMessage>[];
             messagesBySession[sessionId] = _normalizeSessionMessages(
               _applyProviderTraceToMessages(sessionId, current, trace),
             );
-            runStatusBySession[sessionId] = _codexTraceStatusLabel(trace);
+            runStatusBySession[sessionId] = _providerTraceStatusLabel(trace);
           }
         }
         break;
@@ -732,18 +732,19 @@ class WorkspaceController extends ChangeNotifier {
     return [...currentPrefix, pending];
   }
 
-  String _codexTraceStatusLabel(AiProviderTrace trace) {
+  String _providerTraceStatusLabel(AiProviderTrace trace) {
+    final providerName = trace.providerId == 'claude' ? 'Claude' : 'Codex';
     switch (trace.status) {
       case 'running':
-        return 'Codex 正在执行';
+        return '$providerName 正在执行';
       case 'failed':
-        return 'Codex 执行失败';
+        return '$providerName 执行失败';
       case 'canceled':
-        return 'Codex 已取消';
+        return '$providerName 已取消';
       case 'completed':
-        return 'Codex 已完成';
+        return '$providerName 已完成';
       default:
-        return trace.status.isEmpty ? 'Codex 状态未知' : 'Codex ${trace.status}';
+        return trace.status.isEmpty ? '$providerName 状态未知' : '$providerName ${trace.status}';
     }
   }
 

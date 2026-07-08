@@ -350,7 +350,9 @@ class AiProviderTrace {
   final String? finalText;
   final List<ChatSegment> segments;
 
-  bool get isCodex => providerId == 'codex' && traceKind == 'codex';
+  bool get isProviderTrace =>
+      (providerId == 'codex' && traceKind == 'codex') ||
+      (providerId == 'claude' && traceKind == 'claude');
   bool get pending => status == 'running';
 
   String get displayText {

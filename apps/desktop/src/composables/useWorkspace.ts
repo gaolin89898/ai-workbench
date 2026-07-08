@@ -239,7 +239,16 @@ function providerNameForSession(sessionId?: string | null) {
 
 function providerRuntimeName(providerId?: string | null) {
   if (providerId === "codex") return "Codex app-server";
+  if (providerId === "claude") return "Claude Agent SDK";
   return providerDisplayName(providerId);
+}
+
+function isTraceProvider(providerId?: string | null) {
+  return providerId === "codex" || providerId === "claude";
+}
+
+function traceKindForProvider(providerId?: string | null) {
+  return providerId === "claude" ? "claude" : "codex";
 }
 
 function setChatRunState(sessionId: string, patch: Partial<ChatRunState>) {
@@ -746,12 +755,12 @@ async function loadAiSessionHistorySnapshot(sessionId: string) {
     };
   }));
   const session = aiSessions.value.find((item) => item.id === sessionId) ?? activeAiSession.value;
-  if (session?.id !== sessionId || session.providerId !== "codex") return messages;
-  const trace = await desktopApi.getLocalAiTrace(sessionId).catch(() => null);
-  return mergeCodexTraceIntoMessages(messages, trace);
+  if (session?.id !== sessionId || !isTraceProvider(session.providerId)) return messages;
+  const trace = await desktopApi.getLocalAiTrace(sessionId, traceKindForProvider(session.providerId)).catch(() => null);
+  return mergeProviderTraceIntoMessages(messages, trace);
 }
 
-function codexTraceFinalText(trace: AiProviderTrace | null | undefined) {
+function providerTraceFinalText(trace: AiProviderTrace | null | undefined) {
   if (!trace) return "";
   const snapshot = trace.snapshot as { finalText?: unknown };
   return (typeof trace.finalText === "string" && trace.finalText.trim())
@@ -759,54 +768,55 @@ function codexTraceFinalText(trace: AiProviderTrace | null | undefined) {
     : (typeof snapshot.finalText === "string" ? snapshot.finalText.trim() : "");
 }
 
-function codexTraceSegments(trace: AiProviderTrace | null | undefined) {
+function providerTraceSegments(trace: AiProviderTrace | null | undefined) {
   return Array.isArray(trace?.segments) ? trace.segments : [];
 }
 
-function codexTracePending(trace: AiProviderTrace | null | undefined) {
+function providerTracePending(trace: AiProviderTrace | null | undefined) {
   return trace?.status === "running";
 }
 
-function codexTraceRunState(trace: AiProviderTrace) {
+function providerTraceRunState(trace: AiProviderTrace) {
+  const providerName = providerDisplayName(trace.providerId);
   if (trace.status === "running") {
     return {
       active: true,
       phase: "running" as const,
-      title: "Codex 正在执行",
-      detail: "正在同步 Codex 执行记录。",
+      title: `${providerName} 正在执行`,
+      detail: `正在同步 ${providerName} 执行记录。`,
     };
   }
   if (trace.status === "failed") {
     return {
       active: false,
       phase: "error" as const,
-      title: "Codex 执行失败",
-      detail: "Codex 原生状态显示本次执行失败。",
+      title: `${providerName} 执行失败`,
+      detail: `${providerName} 原生状态显示本次执行失败。`,
     };
   }
   if (trace.status === "canceled") {
     return {
       active: false,
       phase: "done" as const,
-      title: "Codex 已取消",
-      detail: "Codex 原生状态显示本次执行已取消。",
+      title: `${providerName} 已取消`,
+      detail: `${providerName} 原生状态显示本次执行已取消。`,
     };
   }
   return {
     active: false,
     phase: "done" as const,
-    title: "Codex 已完成",
+    title: `${providerName} 已完成`,
     detail: "执行记录和最终回答已同步。",
   };
 }
 
-function codexTraceToChatMessage(trace: AiProviderTrace): ChatMessage | null {
-  const segments = codexTraceSegments(trace);
-  const text = codexTraceFinalText(trace);
+function providerTraceToChatMessage(trace: AiProviderTrace): ChatMessage | null {
+  const segments = providerTraceSegments(trace);
+  const text = providerTraceFinalText(trace);
   if (!segments.length && !text) return null;
   return {
     role: "assistant",
-    pending: codexTracePending(trace),
+    pending: providerTracePending(trace),
     text,
     segments,
   };
@@ -829,9 +839,9 @@ function mergeTraceSegments(existing: ChatSegment[] = [], incoming: ChatSegment[
     .map((segment) => finalizeSegmentForDone(segment, done));
 }
 
-function mergeCodexTraceIntoMessages(messages: ChatMessage[], trace: AiProviderTrace | null) {
-  if (!trace || trace.providerId !== "codex") return messages;
-  const traceMessage = codexTraceToChatMessage(trace);
+function mergeProviderTraceIntoMessages(messages: ChatMessage[], trace: AiProviderTrace | null) {
+  if (!trace || !isTraceProvider(trace.providerId)) return messages;
+  const traceMessage = providerTraceToChatMessage(trace);
   if (!traceMessage) return messages;
   const next = [...messages];
   const lastAssistantIndex = next.map((message) => message.role).lastIndexOf("assistant");
@@ -1111,8 +1121,8 @@ async function sendPrompt(prompt: string, images: ChatImageAttachment[] = [], co
         return;
       }
       pushChatDebugEvent(`${providerName} 进程已退出：用时 ${formatElapsedMs(elapsedMs)}`);
-      if (providerId === "codex") {
-        void desktopApi.getLocalAiTrace(sessionId).then((trace) => {
+      if (isTraceProvider(providerId)) {
+        void desktopApi.getLocalAiTrace(sessionId, traceKindForProvider(providerId)).then((trace) => {
           if (trace) void handleAiTraceUpdateEvent({ aiSessionId: sessionId, trace });
         });
         window.setTimeout(() => {
@@ -1566,26 +1576,26 @@ async function initAiEventListeners() {
   return aiEventsInitPromise;
 }
 
-function isCodexSessionId(sessionId: string) {
+function isTraceProviderSessionId(sessionId: string) {
   const session = activeAiSession.value?.id === sessionId
     ? activeAiSession.value
     : aiSessions.value.find((item) => item.id === sessionId);
-  return session?.providerId === "codex";
+  return isTraceProvider(session?.providerId);
 }
 
 async function handleAiTraceUpdateEvent(event: AiTraceUpdateEvent) {
-  if (event.trace.providerId !== "codex" || event.trace.traceKind !== "codex") return;
+  if (!isTraceProvider(event.trace.providerId) || event.trace.traceKind !== traceKindForProvider(event.trace.providerId)) return;
   let pending = pendingAssistants.get(event.aiSessionId);
-  if (!pending && codexTracePending(event.trace)) {
+  if (!pending && providerTracePending(event.trace)) {
     pending = await ensureIncomingPendingAssistantAfterRefresh(event.aiSessionId) ?? undefined;
   }
-  const traceMessage = codexTraceToChatMessage(event.trace);
+  const traceMessage = providerTraceToChatMessage(event.trace);
   const stopped = stoppedAiSessions.has(event.aiSessionId);
-  if (stopped && !codexTracePending(event.trace)) {
+  if (stopped && !providerTracePending(event.trace)) {
     if (pending) {
       if (traceMessage?.text) pending.finalText = traceMessage.text;
       for (const [index, segment] of (traceMessage?.segments ?? []).entries()) {
-        pending.steps.set(segment.stepId ?? `codex-trace-${index}`, segment);
+        pending.steps.set(segment.stepId ?? `${event.trace.providerId}-trace-${index}`, segment);
       }
       interruptPendingAssistant(event.aiSessionId);
     }
@@ -1599,12 +1609,12 @@ async function handleAiTraceUpdateEvent(event: AiTraceUpdateEvent) {
     return;
   }
   if (!traceMessage) return;
-  const pendingState = codexTracePending(event.trace);
+  const pendingState = providerTracePending(event.trace);
   if (pending) {
     pending.finalText = traceMessage.text ?? pending.finalText;
     const mergedSegments = mergeTraceSegments([...pending.steps.values()], traceMessage.segments ?? [], !traceMessage.pending);
     pending.steps = new Map(mergedSegments.map((segment, index) => [
-      segment.stepId ?? `codex-trace-${index}`,
+      segment.stepId ?? `${event.trace.providerId}-trace-${index}`,
       segment,
     ]));
     patchPendingAssistant(event.aiSessionId, {
@@ -1616,7 +1626,7 @@ async function handleAiTraceUpdateEvent(event: AiTraceUpdateEvent) {
   } else if (activeAiSession.value?.id === event.aiSessionId) {
     setChatMessagesForSession(
       event.aiSessionId,
-      mergeCodexTraceIntoMessages(chatMessagesForSession(event.aiSessionId), event.trace),
+      mergeProviderTraceIntoMessages(chatMessagesForSession(event.aiSessionId), event.trace),
     );
   }
 
@@ -1626,10 +1636,10 @@ async function handleAiTraceUpdateEvent(event: AiTraceUpdateEvent) {
       [event.aiSessionId]: pendingState,
     };
   }
-  setChatRunState(event.aiSessionId, codexTraceRunState(event.trace));
+  setChatRunState(event.aiSessionId, providerTraceRunState(event.trace));
 
-  if (!codexTracePending(event.trace) && pending) {
-    const finalText = codexTraceFinalText(event.trace);
+  if (!providerTracePending(event.trace) && pending) {
+    const finalText = providerTraceFinalText(event.trace);
     const finalSegments = [...pending.steps.values()];
     const shouldPersist = Boolean(finalText || finalSegments.some((segment) => segment.type === "error"));
     if (shouldPersist) {
@@ -1641,7 +1651,7 @@ async function handleAiTraceUpdateEvent(event: AiTraceUpdateEvent) {
           text: finalText,
           segments: finalSegments,
         })).catch((error) => {
-          pushChatDebugEvent(`保存 Codex 回答失败：${String(error)}`);
+          pushChatDebugEvent(`保存 ${providerDisplayName(event.trace.providerId)} 回答失败：${String(error)}`);
         });
       }
     }
@@ -1655,7 +1665,7 @@ async function handleAiTraceUpdateEvent(event: AiTraceUpdateEvent) {
 }
 
 async function handleAiChatOutputEvent(event: AiChatOutputEvent) {
-  if (isCodexSessionId(event.aiSessionId) && event.kind !== "error") return;
+  if (isTraceProviderSessionId(event.aiSessionId) && event.kind !== "error") return;
   if (event.kind === "status" && shouldHideBackendStatus(event.text ?? "")) return;
   let pending = pendingAssistants.get(event.aiSessionId);
   if (!pending && event.kind !== "done" && event.kind !== "error") {

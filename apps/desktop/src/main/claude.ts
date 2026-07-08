@@ -1,22 +1,25 @@
 // Claude Code integration for the Electron main process.
-// Spawns the `claude` CLI with `--output-format stream-json`, parses the
-// streaming JSON output, and emits AiChatOutputEvent to the renderer.
-// Mirrors the original Tauri Rust run_ai_chat implementation.
+// Uses the official Claude Agent SDK and emits provider trace updates that
+// share the same renderer/mobile path as Codex traces.
 
 import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
-import { createInterface, type Interface } from "node:readline";
-import type { RunAiChatRequest, AiChatOutputEvent } from "../services/desktop";
+import { query, type SDKMessage } from "@anthropic-ai/claude-agent-sdk";
+import type { RunAiChatRequest, CodexTraceSnapshot } from "../services/desktop";
 import { reportTokenUsage } from "./sync";
+import { upsertLocalAiTrace } from "./db";
+import { codexTraceSnapshotToSegments } from "./codex_trace";
+import { reduceClaudeTraceSnapshot, type ClaudeRawTraceEvent } from "./claude_trace";
 
-// Structural sender — WebContents / BrowserWindow satisfy this, and test
-// stubs can be passed too.
 type Sender = { send: (channel: string, ...args: unknown[]) => void };
 
-// ---------- Constants ----------
+type ActiveClaudeRun = {
+  abortController: AbortController;
+  sender: Sender;
+  snapshot: CodexTraceSnapshot | null;
+};
 
-const CLAUDE_TIMEOUT_MS = 120_000;
-const CLI_INTERRUPT_FALLBACK_MS = 1500;
-const activeClaudeRuns = new Map<string, { stop: () => void; sender: Sender }>();
+const CLAUDE_TURN_TIMEOUT_MS = 30 * 60_000;
+const activeClaudeRuns = new Map<string, ActiveClaudeRun>();
 
 function spawnClaude(args: string[], options?: { cwd?: string }): ChildProcessWithoutNullStreams {
   if (process.platform === "win32") {
@@ -32,8 +35,6 @@ function spawnClaude(args: string[], options?: { cwd?: string }): ChildProcessWi
   });
 }
 
-// ---------- System instructions ----------
-
 function claudeDesktopPrompt(): string {
   return [
     "你是 AI Workbench 桌面端的编程助手。",
@@ -45,457 +46,211 @@ function claudeDesktopPrompt(): string {
   ].join("\n");
 }
 
-// ---------- Helpers ----------
-
-function emit(sender: Sender, event: AiChatOutputEvent): void {
-  sender.send("ai-chat-output", event);
+function imagePromptNote(imageCount: number | undefined): string {
+  if (!imageCount) return "";
+  return `\n\n[用户还粘贴了 ${imageCount} 张图片；当前 Claude Agent SDK 集成暂未直接传递图片二进制，请根据用户文字继续，并在需要时提示用户改用 Codex 或描述图片内容。]`;
 }
 
-function strOrUndef(v: unknown): string | undefined {
-  return typeof v === "string" ? v : undefined;
+function isUserStopError(error: unknown): boolean {
+  return error instanceof Error && error.message === "AI chat stopped by user";
 }
 
-function isUserStopError(err: unknown): boolean {
-  return err instanceof Error && err.message === "AI chat stopped by user";
+function isResumeFailure(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error);
+  return /\b(resume|session|conversation)\b/i.test(message)
+    && /\b(not found|missing|invalid|failed|unable|cannot|can't)\b/i.test(message);
 }
 
-// Extract incremental text from a content_block_delta message.
-//   { type: "content_block_delta", delta: { type: "text_delta", text: "..." } }
-function extractDeltaText(message: Record<string, unknown>): string | undefined {
-  const delta = message["delta"] as Record<string, unknown> | undefined;
-  const text = delta?.["text"] ?? message["text"];
-  return typeof text === "string" ? text : undefined;
+function emitTrace(aiSessionId: string, sender: Sender, snapshot: CodexTraceSnapshot, rawEvent?: ClaudeRawTraceEvent): void {
+  const trace = upsertLocalAiTrace({
+    aiSessionId,
+    providerId: "claude",
+    traceKind: "claude",
+    status: snapshot.status,
+    rawEvent,
+    snapshot,
+    finalText: snapshot.finalText,
+  });
+  sender.send("ai-trace-update", {
+    aiSessionId,
+    trace: {
+      ...trace,
+      segments: codexTraceSnapshotToSegments(snapshot),
+    },
+  });
 }
 
-// Extract full text from an assistant message.
-//   { type: "assistant", message: { content: [{ type: "text", text: "..." }] } }
-function extractAssistantText(message: Record<string, unknown>): string | undefined {
-  const msg = message["message"] as Record<string, unknown> | undefined;
-  const content = msg?.["content"];
-  if (!Array.isArray(content)) return undefined;
-  const texts: string[] = [];
-  for (const block of content) {
-    if (block && typeof block === "object") {
-      const b = block as Record<string, unknown>;
-      if (b["type"] === "text" && typeof b["text"] === "string") {
-        texts.push(b["text"]);
-      }
-    }
-  }
-  return texts.length > 0 ? texts.join("") : undefined;
+function reduceAndEmit(aiSessionId: string, sender: Sender, message: SDKMessage): CodexTraceSnapshot {
+  const run = activeClaudeRuns.get(aiSessionId);
+  const rawEvent = {
+    message,
+    receivedAt: new Date().toISOString(),
+  };
+  const snapshot = reduceClaudeTraceSnapshot(run?.snapshot, rawEvent);
+  if (run) run.snapshot = snapshot;
+  emitTrace(aiSessionId, sender, snapshot, rawEvent);
+  return snapshot;
 }
 
-// Extract session_id from a result message.
-function extractSessionId(message: Record<string, unknown>): string | undefined {
-  const sid = message["session_id"] ?? message["sessionId"];
-  return typeof sid === "string" ? sid : undefined;
+function markCanceled(aiSessionId: string, run: ActiveClaudeRun): void {
+  const now = new Date().toISOString();
+  const base = run.snapshot ?? {
+    provider: "claude",
+    status: "running" as const,
+    threadId: null,
+    turnId: null,
+    startedAt: now,
+    updatedAt: now,
+    completedAt: null,
+    items: [],
+    approvals: [],
+    errors: [],
+    finalText: "",
+  };
+  const snapshot: CodexTraceSnapshot = {
+    ...base,
+    provider: "claude",
+    status: "canceled",
+    updatedAt: now,
+    completedAt: now,
+    items: base.items.map((item) => item.status === "running"
+      ? { ...item, status: "canceled", completedAt: item.completedAt ?? now }
+      : item),
+  };
+  run.snapshot = snapshot;
+  emitTrace(aiSessionId, run.sender, snapshot);
 }
 
-// Claude stream-json 的 result 消息原生带 usage：
-// { usage: { input_tokens, output_tokens, cache_creation_input_tokens, cache_read_input_tokens } }
-function reportClaudeTokenUsage(aiSessionId: string, message: Record<string, unknown>): void {
-  try {
-    const usage = message["usage"];
-    if (!usage || typeof usage !== "object") return;
-    const u = usage as Record<string, unknown>;
-    const inputTokens = numOrZero(u["input_tokens"])
-      + numOrZero(u["cache_creation_input_tokens"])
-      + numOrZero(u["cache_read_input_tokens"]);
-    const outputTokens = numOrZero(u["output_tokens"]);
-    const total = inputTokens + outputTokens;
-    if (total <= 0) return;
-    void reportTokenUsage({
-      aiSessionId,
-      providerId: "claude",
-      inputTokens,
-      outputTokens,
-      reasoningTokens: 0,
-      totalTokens: total,
-    });
-  } catch {
-    // best-effort
-  }
+function reportClaudeTokenUsage(aiSessionId: string, message: SDKMessage): void {
+  if (message.type !== "result") return;
+  const usage = message.usage as Record<string, unknown> | undefined;
+  if (!usage) return;
+  const inputTokens = numOrZero(usage.input_tokens)
+    + numOrZero(usage.cache_creation_input_tokens)
+    + numOrZero(usage.cache_read_input_tokens);
+  const outputTokens = numOrZero(usage.output_tokens);
+  const totalTokens = inputTokens + outputTokens;
+  if (totalTokens <= 0) return;
+  void reportTokenUsage({
+    aiSessionId,
+    providerId: "claude",
+    inputTokens,
+    outputTokens,
+    reasoningTokens: 0,
+    totalTokens,
+  });
 }
 
-function numOrZero(v: unknown): number {
-  if (typeof v === "number" && Number.isFinite(v)) return Math.floor(v);
-  if (typeof v === "string" && /^\d+$/.test(v)) return parseInt(v, 10);
+function numOrZero(value: unknown): number {
+  if (typeof value === "number" && Number.isFinite(value)) return Math.floor(value);
+  if (typeof value === "string" && /^\d+$/.test(value)) return Number.parseInt(value, 10);
   return 0;
 }
 
-// ---------- Internal: single claude invocation ----------
-
-/**
- * Spawn `claude` once, parse stream-json output, and emit events.
- * Returns the session_id from the result message.
- *
- * If `existingSessionId` is provided, `--resume` is used. On failure (non-zero
- * exit or error output), the error is marked with `resumeFailure: true` so the
- * caller can retry without `--resume`.
- */
-function runClaudeOnce(
-  req: RunAiChatRequest,
-  sender: Sender,
-  existingSessionId: string | null
-): Promise<string> {
-  const { aiSessionId, projectPath, prompt } = req;
-  const imageNote = req.images?.length
-    ? `\n\n[用户还粘贴了 ${req.images.length} 张图片；当前 Claude CLI 集成暂未直接传递图片二进制，请根据用户文字继续，并在需要时提示用户改用 Codex 或描述图片内容。]`
-    : "";
-
-  // Build CLI args
-  const args = [
-    "--print",
-    "--output-format", "stream-json",
-    "--verbose",
-    "--include-partial-messages",
-    "--permission-mode", "plan",
-    "--append-system-prompt", claudeDesktopPrompt(),
-  ];
-  if (existingSessionId) {
-    args.push("--resume", existingSessionId);
-  }
-  args.push(`${prompt}${imageNote}`);
-
-  const child: ChildProcessWithoutNullStreams = spawnClaude(args, { cwd: projectPath });
-
-  const rl: Interface = createInterface({
-    input: child.stdout,
-    terminal: false,
-  });
-
-  // Mutable state shared across event handlers
-  let stderrBuffer = "";
-  let sessionId = "";
-  let closed = false;
-  let hasReceivedDeltas = false;
-  let errorEmitted = false;
-  let resultReceived = false;
-
-  // Emit initial status
-  emit(sender, {
-    aiSessionId,
-    kind: "status",
-    text: "running",
-    segment: { type: "status", label: "Claude 正在思考", icon: "think" },
-  });
-
-  return new Promise<string>((resolve, reject) => {
-    // ----- timeout -----
-    const timeout = setTimeout(() => {
-      if (closed) return;
-      if (!errorEmitted) {
-        errorEmitted = true;
-        emit(sender, {
-          aiSessionId,
-          kind: "error",
-          segment: { type: "error", message: "Claude 会话超时（120s）" },
-        });
-      }
-      killChild();
-      reject(new Error("timeout"));
-    }, CLAUDE_TIMEOUT_MS);
-
-    // ----- helper: mark resume failure -----
-    function rejectWithError(
-      message: string,
-      opts?: { resumeFailure?: boolean }
-    ): void {
-      const err = new Error(message) as Error & {
-        resumeFailure?: boolean;
-      };
-      if (opts?.resumeFailure) err.resumeFailure = true;
-      reject(err);
-    }
-
-    // ----- helper: kill child -----
-    function killChild(): void {
-      if (closed) return;
-      closed = true;
-      clearTimeout(timeout);
-      activeClaudeRuns.delete(aiSessionId);
-      try {
-        rl.close();
-      } catch {
-        // ignore
-      }
-      try {
-        child.stdin.end();
-      } catch {
-        // ignore
-      }
-      try {
-        child.kill();
-      } catch {
-        // ignore
-      }
-    }
-
-    function interruptChild(): void {
-      if (closed) return;
-      closed = true;
-      clearTimeout(timeout);
-      activeClaudeRuns.delete(aiSessionId);
-      try {
-        rl.close();
-      } catch {
-        // ignore
-      }
-      try {
-        child.kill("SIGINT");
-      } catch {
-        // ignore
-      }
-      setTimeout(() => {
-        if (child.killed || child.exitCode !== null || child.signalCode !== null) return;
-        try {
-          child.stdin.end();
-        } catch {
-          // ignore
-        }
-        try {
-          child.kill();
-        } catch {
-          // ignore
-        }
-      }, CLI_INTERRUPT_FALLBACK_MS);
-    }
-
-    activeClaudeRuns.set(aiSessionId, {
-      sender,
-      stop: () => {
-        interruptChild();
-        reject(new Error("AI chat stopped by user"));
-      },
-    });
-
-    // ----- stdout: parse stream-json lines -----
-    rl.on("line", (line: string) => {
-      if (closed) return; // session already ended — ignore stale lines
-      const trimmed = line.trim();
-      if (trimmed.length === 0) return;
-
-      let message: unknown;
-      try {
-        message = JSON.parse(trimmed);
-      } catch {
-        // non-JSON line — ignore
-        return;
-      }
-
-      if (!message || typeof message !== "object") return;
-      const msg = message as Record<string, unknown>;
-      const type =
-        typeof msg["type"] === "string" ? (msg["type"] as string) : "";
-
-      switch (type) {
-        case "content_block_delta": {
-          const text = extractDeltaText(msg);
-          if (text) {
-            hasReceivedDeltas = true;
-            emit(sender, {
-              aiSessionId,
-              kind: "delta",
-              text,
-              segment: { type: "text", text },
-            });
-          }
-          break;
-        }
-        case "assistant": {
-          // Only emit from assistant messages if we haven't received
-          // incremental deltas (avoids duplicate text).
-          if (!hasReceivedDeltas) {
-            const text = extractAssistantText(msg);
-            if (text) {
-              hasReceivedDeltas = true;
-              emit(sender, {
-                aiSessionId,
-                kind: "delta",
-                text,
-                segment: { type: "text", text },
-              });
-            }
-          }
-          break;
-        }
-        case "result": {
-          resultReceived = true;
-          clearTimeout(timeout);
-
-          // Claude stream-json 的 result 消息原生带 usage 字段
-          reportClaudeTokenUsage(aiSessionId, msg);
-
-          const subtype = strOrUndef(msg["subtype"]);
-          const isErrorFlag = msg["is_error"];
-
-          if (subtype === "error" || isErrorFlag === true) {
-            const errMsg =
-              strOrUndef(msg["result"]) ?? "Claude 返回错误";
-            if (!errorEmitted) {
-              errorEmitted = true;
-              emit(sender, {
-                aiSessionId,
-                kind: "error",
-                segment: { type: "error", message: errMsg },
-              });
-            }
-            killChild();
-            rejectWithError(errMsg, {
-              resumeFailure: !!existingSessionId,
-            });
-          } else {
-            sessionId = extractSessionId(msg) ?? "";
-            emit(sender, { aiSessionId, kind: "done" });
-            killChild();
-            resolve(sessionId);
-          }
-          break;
-        }
-        default:
-          // system / message_start / message_delta / content_block_start /
-          // content_block_stop / etc. — ignore
-          break;
-      }
-    });
-
-    // ----- stderr: accumulate for error reporting -----
-    child.stderr.on("data", (chunk: Buffer) => {
-      stderrBuffer += chunk.toString();
-    });
-
-    // ----- stdin errors (e.g. EPIPE) — swallow -----
-    child.stdin.on("error", () => {
-      // best-effort; child probably already exited
-    });
-
-    // ----- child close (fires after stdio streams are closed) -----
-    child.on("close", (code: number | null) => {
-      if (closed) return;
-      closed = true;
-      clearTimeout(timeout);
-      activeClaudeRuns.delete(aiSessionId);
-
-      if (resultReceived) return; // already resolved/rejected via result message
-
-      if (code === 0) {
-        // No result message but clean exit — resolve with whatever sessionId we have
-        resolve(sessionId);
-      } else {
-        const detail =
-          stderrBuffer.trim() || `exit code ${code}`;
-        if (!errorEmitted) {
-          errorEmitted = true;
-          emit(sender, {
-            aiSessionId,
-            kind: "error",
-            segment: {
-              type: "error",
-              message: `Claude 进程退出：${detail}`,
-            },
-          });
-        }
-        rejectWithError(`claude exited with code ${code}: ${detail}`, {
-          resumeFailure: !!existingSessionId,
-        });
-      }
-    });
-
-    // ----- spawn error (e.g. ENOENT when claude is not installed) -----
-    child.on("error", (err: Error) => {
-      if (closed) return;
-      closed = true;
-      clearTimeout(timeout);
-      activeClaudeRuns.delete(aiSessionId);
-
-      const errno = err as NodeJS.ErrnoException;
-      const message =
-        errno.code === "ENOENT"
-          ? "未找到 claude 命令，请先安装 Claude Code CLI"
-          : `Claude 进程错误：${err.message}`;
-      if (!errorEmitted) {
-        errorEmitted = true;
-        emit(sender, {
-          aiSessionId,
-          kind: "error",
-          segment: { type: "error", message },
-        });
-      }
-      reject(err);
-    });
+function emitFailure(aiSessionId: string, sender: Sender, error: unknown): void {
+  const message = error instanceof Error ? error.message : String(error);
+  reduceAndEmit(aiSessionId, sender, {
+    type: "result",
+    subtype: "error_during_execution",
+    duration_ms: 0,
+    duration_api_ms: 0,
+    is_error: true,
+    num_turns: 0,
+    stop_reason: null,
+    total_cost_usd: 0,
+    usage: {} as never,
+    modelUsage: {},
+    permission_denials: [],
+    errors: [message],
+    uuid: `error-${Date.now()}`,
+    session_id: activeClaudeRuns.get(aiSessionId)?.snapshot?.threadId ?? "",
   });
 }
 
-// ---------- Public API ----------
+async function runClaudeOnce(
+  req: RunAiChatRequest,
+  sender: Sender,
+  existingSessionId: string | null,
+): Promise<string> {
+  const abortController = new AbortController();
+  const run: ActiveClaudeRun = { abortController, sender, snapshot: null };
+  activeClaudeRuns.set(req.aiSessionId, run);
+  let timedOut = false;
+  const timeout = setTimeout(() => {
+    timedOut = true;
+    abortController.abort();
+  }, CLAUDE_TURN_TIMEOUT_MS);
 
-/**
- * Run a Claude Code chat turn. Spawns `claude --print --output-format
- * stream-json`, parses the streaming output, and emits AiChatOutputEvent.
- *
- * If `existingSessionId` is provided, `--resume` is used; on failure a fresh
- * session is started automatically.
- *
- * Returns the session_id (providerSessionId).
- */
+  let latestSessionId = existingSessionId ?? "";
+  try {
+    for await (const message of query({
+      prompt: `${req.prompt}${imagePromptNote(req.images?.length)}`,
+      options: {
+        cwd: req.projectPath,
+        resume: existingSessionId || undefined,
+        permissionMode: "plan",
+        includePartialMessages: true,
+        includeHookEvents: true,
+        abortController,
+        systemPrompt: { type: "preset", preset: "claude_code", append: claudeDesktopPrompt() },
+        env: {
+          ...process.env,
+          CLAUDE_AGENT_SDK_CLIENT_APP: "ai-workbench-desktop/0.1.0",
+        },
+      },
+    })) {
+      latestSessionId = message.session_id || latestSessionId;
+      reportClaudeTokenUsage(req.aiSessionId, message);
+      reduceAndEmit(req.aiSessionId, sender, message);
+    }
+    return latestSessionId;
+  } catch (error) {
+    if (abortController.signal.aborted) {
+      if (timedOut) {
+        const timeoutError = new Error("Claude 会话超时（30 分钟）");
+        emitFailure(req.aiSessionId, sender, timeoutError);
+        throw timeoutError;
+      }
+      markCanceled(req.aiSessionId, run);
+      throw new Error("AI chat stopped by user");
+    }
+    emitFailure(req.aiSessionId, sender, error);
+    throw error;
+  } finally {
+    clearTimeout(timeout);
+    activeClaudeRuns.delete(req.aiSessionId);
+  }
+}
+
 export async function runAiChat(
   req: RunAiChatRequest,
   sender: Sender,
-  existingSessionId?: string | null
+  existingSessionId?: string | null,
 ): Promise<string> {
   const sessionId = existingSessionId ?? null;
-
-  if (sessionId) {
+  if (!sessionId) {
     try {
-      return await runClaudeOnce(req, sender, sessionId);
-    } catch (err) {
-      if (isUserStopError(err)) return sessionId;
-      // Retry without --resume only for resume-specific failures
-      if (
-        err &&
-        typeof err === "object" &&
-        "resumeFailure" in err &&
-        (err as { resumeFailure: boolean }).resumeFailure
-      ) {
-        emit(sender, {
-          aiSessionId: req.aiSessionId,
-          kind: "status",
-          text: "running",
-          segment: {
-            type: "status",
-            label: "正在启动新会话",
-            icon: "think",
-          },
-        });
-        return await runClaudeOnce(req, sender, null);
-      }
-      throw err;
+      return await runClaudeOnce(req, sender, null);
+    } catch (error) {
+      if (isUserStopError(error)) return "";
+      throw error;
     }
   }
 
   try {
+    return await runClaudeOnce(req, sender, sessionId);
+  } catch (error) {
+    if (isUserStopError(error)) return sessionId;
+    if (!isResumeFailure(error)) throw error;
     return await runClaudeOnce(req, sender, null);
-  } catch (err) {
-    if (isUserStopError(err)) return "";
-    throw err;
   }
 }
 
 export function stopAiChat(aiSessionId: string): boolean {
   const run = activeClaudeRuns.get(aiSessionId);
   if (!run) return false;
-  emit(run.sender, {
-    aiSessionId,
-    kind: "done",
-    text: "",
-    segment: {
-      type: "status",
-      stepId: "interrupted",
-      label: "用户主动停止",
-      icon: "warn",
-      status: "canceled",
-    },
-  });
-  run.stop();
+  markCanceled(aiSessionId, run);
+  run.abortController.abort();
   return true;
 }
 
@@ -503,20 +258,12 @@ export function hasLiveAiChat(): boolean {
   return activeClaudeRuns.size > 0;
 }
 
-/**
- * Pre-warm a Claude session. Claude's session_id is only generated after the
- * first real conversation, so warmup simply verifies the CLI is available
- * and returns an empty providerSessionId.
- *
- * Best-effort: always resolves, never rejects.
- */
 export async function warmupAiSession(
-  aiSessionId: string,
-  _sender: Sender
+  _aiSessionId: string,
+  _sender: Sender,
 ): Promise<{ providerSessionId: string }> {
   return new Promise((resolve) => {
     const child = spawnClaude(["--version"]);
-
     const timeout = setTimeout(() => {
       try {
         child.kill();

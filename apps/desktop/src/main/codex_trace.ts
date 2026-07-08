@@ -480,12 +480,13 @@ function itemDurationMs(item: CodexTraceItem, fallbackEndAt: string | null | und
 
 export function codexTraceSnapshotToSegments(snapshot: CodexTraceSnapshot): ChatSegment[] {
   const segments: ChatSegment[] = [];
+  const providerName = snapshot.provider === "claude" ? "Claude" : "Codex";
   if (snapshot.status === "running") {
     const durationMs = snapshot.startedAt ? Math.max(0, Date.now() - Date.parse(snapshot.startedAt)) : undefined;
     segments.push({
       type: "status",
       stepId: "runtime-status",
-      label: "Codex 正在执行",
+      label: `${providerName} 正在执行`,
       icon: "think",
       status: "running",
       startedAt: snapshot.startedAt,
@@ -503,7 +504,7 @@ export function codexTraceSnapshotToSegments(snapshot: CodexTraceSnapshot): Chat
     segments.push({
       type: "status",
       stepId: "runtime-status",
-      label: "Codex 已完成",
+      label: `${providerName} 已完成`,
       icon: "check",
       status: snapshot.status === "failed" ? "failed" : "completed",
       startedAt: snapshot.startedAt,

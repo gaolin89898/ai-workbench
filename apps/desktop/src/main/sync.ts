@@ -84,8 +84,16 @@ function listSyncableAiSessions() {
   return listLocalAiSessions();
 }
 
-function isCodexSession(aiSessionId: string) {
-  return getLocalAiSession(aiSessionId)?.providerId === "codex";
+function isTraceProvider(providerId?: string | null) {
+  return providerId === "codex" || providerId === "claude";
+}
+
+function traceKindForProvider(providerId?: string | null) {
+  return providerId === "claude" ? "claude" : "codex";
+}
+
+function isTraceProviderSession(aiSessionId: string) {
+  return isTraceProvider(getLocalAiSession(aiSessionId)?.providerId);
 }
 
 function traceStatus(trace: unknown): string {
@@ -726,8 +734,10 @@ class DesktopCloudSync {
   }
 
   private buildHistoryTrace(aiSessionId: string): Record<string, unknown> | null {
-    const trace = getLocalAiTrace(aiSessionId, "codex");
-    if (!trace || trace.providerId !== "codex") return null;
+    const providerId = getLocalAiSession(aiSessionId)?.providerId;
+    if (!isTraceProvider(providerId)) return null;
+    const trace = getLocalAiTrace(aiSessionId, traceKindForProvider(providerId));
+    if (!trace || trace.providerId !== providerId) return null;
     const snapshot = trace.snapshot as Record<string, unknown>;
     return {
       ...trace,
@@ -762,12 +772,12 @@ class DesktopCloudSync {
         if (!deviceId || channel !== "ai-chat-output") return;
         const event = args[0] as AiChatOutputEvent | undefined;
         if (!event?.aiSessionId) return;
-        const codexSession = isCodexSession(event.aiSessionId);
+        const traceProviderSession = isTraceProviderSession(event.aiSessionId);
         if (event.kind === "status" && event.text === "mobile sent message") return;
         const draft = this.mobileAssistantDrafts.get(event.aiSessionId) ?? { text: "", segments: [], savedText: "" };
         if (event.kind === "delta" && event.text) {
           if (event.stepId) draft.currentStepId = event.stepId;
-          if (codexSession && event.phase === "process") {
+          if (traceProviderSession && event.phase === "process") {
             draft.text += event.text;
             this.mobileAssistantDrafts.set(event.aiSessionId, draft);
             this.scheduleMobileDeltaFlush(deviceId, event.aiSessionId, event.text, draft.segments);
@@ -847,12 +857,12 @@ class DesktopCloudSync {
         if (channel !== "ai-chat-output") return;
         const event = args[0] as AiChatOutputEvent | undefined;
         if (!event?.aiSessionId) return;
-        const codexSession = isCodexSession(event.aiSessionId);
+        const traceProviderSession = isTraceProviderSession(event.aiSessionId);
         if (event.kind === "status" && event.text === "mobile sent message") return;
         const draft = this.mobileAssistantDrafts.get(event.aiSessionId) ?? { text: "", segments: [], savedText: "" };
         if (event.kind === "delta" && event.text) {
           if (event.stepId) draft.currentStepId = event.stepId;
-          if (codexSession && event.phase === "process") {
+          if (traceProviderSession && event.phase === "process") {
             draft.text += event.text;
             this.mobileAssistantDrafts.set(event.aiSessionId, draft);
             this.scheduleMobileDeltaFlush(deviceId, event.aiSessionId, event.text, draft.segments);
@@ -955,7 +965,7 @@ class DesktopCloudSync {
 
       const projectPath = this.sessionProjectPaths.get(aiSessionId) ?? session.summary ?? os.homedir();
       const aiChatSender = this.createAiChatSender(deviceId);
-      if (session.providerId !== "codex") {
+      if (!isTraceProvider(session.providerId)) {
         aiChatSender.send("ai-chat-output", {
           aiSessionId,
           kind: "status",
