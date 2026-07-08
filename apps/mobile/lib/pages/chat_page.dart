@@ -788,7 +788,7 @@ class _SheetTileShell extends StatelessWidget {
           onTap: enabled ? onTap : null,
           borderRadius: BorderRadius.circular(AppRadius.lg),
           child: Container(
-            minHeight: 64,
+            constraints: const BoxConstraints(minHeight: 64),
             padding: const EdgeInsets.symmetric(
               horizontal: AppSpacing.md,
               vertical: AppSpacing.sm,
