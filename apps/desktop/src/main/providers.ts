@@ -15,6 +15,7 @@ const BUILTIN_PROVIDERS: AiProvider[] = [
 ];
 
 let detectionInFlight: Promise<ProviderStatus[]> | null = null;
+let providerActionInFlight: Promise<ProviderActionResult> | null = null;
 let selectedNpmRegistry: string | null = null;
 let providerAutoDetectTimer: NodeJS.Timeout | null = null;
 let providerAutoDetectInFlight = false;
@@ -484,7 +485,7 @@ export async function detectAiProviders(): Promise<ProviderStatus[]> {
   return detectionInFlight;
 }
 
-export async function runProviderAction(providerId: string, action: ProviderActionKind): Promise<ProviderActionResult> {
+async function runProviderActionUncached(providerId: string, action: ProviderActionKind): Promise<ProviderActionResult> {
   const provider = BUILTIN_PROVIDERS.find((item) => item.id === providerId);
   if (!provider) throw new Error("未知的 AI 工具");
   const metadata = PROVIDER_METADATA[providerId];
@@ -507,6 +508,16 @@ export async function runProviderAction(providerId: string, action: ProviderActi
     status: result.status,
     output,
   };
+}
+
+export async function runProviderAction(providerId: string, action: ProviderActionKind): Promise<ProviderActionResult> {
+  if (providerActionInFlight) {
+    throw new Error("已有 CLI 正在安装或更新，请等待当前操作完成。");
+  }
+  providerActionInFlight = runProviderActionUncached(providerId, action).finally(() => {
+    providerActionInFlight = null;
+  });
+  return providerActionInFlight;
 }
 
 async function runProviderAutoDetect() {

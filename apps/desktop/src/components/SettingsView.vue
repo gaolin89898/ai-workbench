@@ -153,6 +153,8 @@ const selectedNpmRegistryOption = computed(() => {
   return npmRegistryOptions.value.find((option) => option.registry === npmRegistry.value) ?? null;
 });
 
+const providerActionBusy = computed(() => Object.values(providerActionLoading.value).some(Boolean));
+
 const updateSummaryText = computed(() => {
   if (ws.updateInstalling.value) return "正在下载并安装";
   if (ws.updateChecking.value) return "正在检查更新";
@@ -163,6 +165,7 @@ const updateSummaryText = computed(() => {
 });
 
 const updateDetailText = computed(() => {
+  if (ws.updateInstalling.value) return "";
   const text = ws.updateResult.value.trim();
   if (!text || text === "尚未检查更新。") return "";
   if (ws.updateChecking.value && text === "正在检查 GitHub Releases...") return "";
@@ -269,17 +272,18 @@ async function installAppUpdateSafely() {
 async function runProviderAction(row: ProviderRow) {
   const kind = providerActionKind(row);
   const label = providerActionLabel(row);
-  if (!kind || !label || !row.status || providerActionLoading.value[row.provider.id]) return;
-  if (await ws.hasBlockingAiRun()) {
-    providerActionMessages.value = {
-      ...providerActionMessages.value,
-      [row.provider.id]: runningSessionUpdateMessage(),
-    };
-    return;
-  }
+  if (!kind || !label || !row.status || providerActionBusy.value) return;
+  npmRegistryDropdownOpen.value = false;
   providerActionLoading.value = { ...providerActionLoading.value, [row.provider.id]: true };
-  providerActionMessages.value = { ...providerActionMessages.value, [row.provider.id]: `正在${label}...` };
   try {
+    if (await ws.hasBlockingAiRun()) {
+      providerActionMessages.value = {
+        ...providerActionMessages.value,
+        [row.provider.id]: runningSessionUpdateMessage(),
+      };
+      return;
+    }
+    providerActionMessages.value = { ...providerActionMessages.value, [row.provider.id]: `正在${label}...` };
     const hasCommand = kind === "install"
       ? Boolean(row.status.installCommand)
       : Boolean(row.status.updateCommand || row.status.installCommand);
@@ -322,7 +326,7 @@ function checkedAt(status?: ProviderStatus) {
 }
 
 async function refreshProviderDiagnostics() {
-  if (providerRefreshLoading.value) return;
+  if (providerRefreshLoading.value || providerActionBusy.value) return;
   providerRefreshLoading.value = true;
   providerRefreshError.value = false;
   providerRefreshMessage.value = "正在重新检测本机命令...";
@@ -380,7 +384,7 @@ async function loadNpmRegistry() {
 }
 
 async function changeNpmRegistry(registry: string) {
-  if (!registry || npmRegistryLoading.value) return;
+  if (!registry || npmRegistryLoading.value || providerActionBusy.value) return;
   npmRegistryDropdownOpen.value = false;
   npmRegistryLoading.value = true;
   npmRegistryError.value = false;
@@ -400,7 +404,7 @@ async function changeNpmRegistry(registry: string) {
 }
 
 function toggleNpmRegistryDropdown() {
-  if (npmRegistryLoading.value) return;
+  if (npmRegistryLoading.value || providerActionBusy.value) return;
   npmRegistryDropdownOpen.value = !npmRegistryDropdownOpen.value;
 }
 
@@ -420,7 +424,7 @@ function selectNpmRegistry(registry: string) {
 }
 
 async function probeNpmRegistries() {
-  if (npmRegistryLoading.value) return;
+  if (npmRegistryLoading.value || providerActionBusy.value) return;
   npmRegistryLoading.value = true;
   npmRegistryError.value = false;
   npmRegistryMessage.value = "正在测速 npm 源...";
@@ -763,7 +767,7 @@ async function restoreSession(sessionId: string) {
                       class="settings-npm-registry-trigger"
                       :class="{ open: npmRegistryDropdownOpen }"
                       type="button"
-                      :disabled="npmRegistryLoading"
+                      :disabled="npmRegistryLoading || providerActionBusy"
                       aria-haspopup="listbox"
                       :aria-expanded="npmRegistryDropdownOpen"
                       @click="toggleNpmRegistryDropdown"
@@ -782,6 +786,7 @@ async function restoreSession(sessionId: string) {
                         :class="{ active: option.registry === npmRegistry }"
                         type="button"
                         role="option"
+                        :disabled="providerActionBusy"
                         :aria-selected="option.registry === npmRegistry"
                         @mousedown.prevent
                         @click="selectNpmRegistry(option.registry)"
@@ -792,10 +797,10 @@ async function restoreSession(sessionId: string) {
                       </button>
                     </div>
                   </div>
-                  <button class="button secondary mini" type="button" :disabled="npmRegistryLoading" @click="probeNpmRegistries">
+                  <button class="button secondary mini" type="button" :disabled="npmRegistryLoading || providerActionBusy" @click="probeNpmRegistries">
                     {{ npmRegistryLoading ? "检测中" : "测速选源" }}
                   </button>
-                  <button class="button secondary mini" type="button" :disabled="providerRefreshLoading" @click="refreshProviderDiagnostics">
+                  <button class="button secondary mini" type="button" :disabled="providerRefreshLoading || providerActionBusy" @click="refreshProviderDiagnostics">
                     {{ providerRefreshLoading ? "刷新中" : "刷新" }}
                   </button>
                 </div>
@@ -836,7 +841,7 @@ async function restoreSession(sessionId: string) {
                       v-if="providerActionKind(row)"
                       :class="['button', providerActionKind(row) === 'install' ? 'primary' : 'secondary', 'mini', 'narrow']"
                       type="button"
-                      :disabled="providerActionLoading[row.provider.id]"
+                      :disabled="providerActionBusy"
                       @click="runProviderAction(row)"
                     >
                       {{ providerActionLoading[row.provider.id] ? `${providerActionLabel(row)}中` : providerActionLabel(row) }}

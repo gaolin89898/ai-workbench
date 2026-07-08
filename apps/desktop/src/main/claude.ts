@@ -51,6 +51,13 @@ function imagePromptNote(imageCount: number | undefined): string {
   return `\n\n[用户还粘贴了 ${imageCount} 张图片；当前 Claude Agent SDK 集成暂未直接传递图片二进制，请根据用户文字继续，并在需要时提示用户改用 Codex 或描述图片内容。]`;
 }
 
+function buildClaudePrompt(req: RunAiChatRequest): string {
+  const goal = req.claudeGoal?.trim();
+  const imageNote = imagePromptNote(req.images?.length);
+  if (!goal) return `${req.prompt}${imageNote}`;
+  return `本轮目标：${goal}\n\n用户请求：\n${req.prompt}${imageNote}`;
+}
+
 function isUserStopError(error: unknown): boolean {
   return error instanceof Error && error.message === "AI chat stopped by user";
 }
@@ -183,21 +190,26 @@ async function runClaudeOnce(
 
   let latestSessionId = existingSessionId ?? "";
   try {
-    for await (const message of query({
-      prompt: `${req.prompt}${imagePromptNote(req.images?.length)}`,
-      options: {
-        cwd: req.projectPath,
-        resume: existingSessionId || undefined,
-        permissionMode: "plan",
-        includePartialMessages: true,
-        includeHookEvents: true,
-        abortController,
-        systemPrompt: { type: "preset", preset: "claude_code", append: claudeDesktopPrompt() },
-        env: {
-          ...process.env,
-          CLAUDE_AGENT_SDK_CLIENT_APP: "ai-workbench-desktop/0.1.0",
-        },
+    const queryOptions = {
+      cwd: req.projectPath,
+      resume: existingSessionId || undefined,
+      permissionMode: req.claudeMode === "plan" ? "plan" : "auto",
+      includePartialMessages: true,
+      includeHookEvents: true,
+      abortController,
+      systemPrompt: { type: "preset", preset: "claude_code", append: claudeDesktopPrompt() },
+      env: {
+        ...process.env,
+        CLAUDE_AGENT_SDK_CLIENT_APP: "ai-workbench-desktop/0.1.0",
       },
+    };
+    const queryOptionsWithRunControls = queryOptions as typeof queryOptions & Record<string, unknown>;
+    if (req.claudeModel) queryOptionsWithRunControls.model = req.claudeModel;
+    if (req.claudeReasoningEffort) queryOptionsWithRunControls.effort = req.claudeReasoningEffort;
+
+    for await (const message of query({
+      prompt: buildClaudePrompt(req),
+      options: queryOptions,
     })) {
       latestSessionId = message.session_id || latestSessionId;
       reportClaudeTokenUsage(req.aiSessionId, message);

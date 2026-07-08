@@ -338,6 +338,7 @@ export type CodexModelOption = {
 };
 
 export type CodexReasoningEffort = "low" | "medium" | "high" | "ultra";
+export type ClaudeReasoningEffort = "low" | "medium" | "high" | "xhigh" | "max";
 
 export type CodexChatOptions = {
   approvalMode?: CodexApprovalMode;
@@ -346,6 +347,13 @@ export type CodexChatOptions = {
   codexReasoningEffort?: CodexReasoningEffort | null;
   codexGoal?: string | null;
   codexGoalTokenBudget?: number | null;
+};
+
+export type AiChatOptions = CodexChatOptions & {
+  claudeModel?: string | null;
+  claudeReasoningEffort?: ClaudeReasoningEffort | null;
+  claudeMode?: CodexRunMode;
+  claudeGoal?: string | null;
 };
 
 export type RunCodexChatRequest = {
@@ -360,7 +368,7 @@ export type RunAiChatRequest = {
   projectPath: string;
   prompt: string;
   images?: ChatImageAttachment[];
-};
+} & AiChatOptions;
 
 export type ChatImageAttachment = {
   id: string;

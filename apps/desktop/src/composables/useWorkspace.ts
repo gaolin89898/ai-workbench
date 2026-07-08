@@ -1,6 +1,6 @@
 import { computed, ref, watch } from "vue";
 import router from "../router";
-import { desktopApi, type AiChatOutputEvent, type AiProvider, type AiProviderTrace, type AiSession, type AiTraceUpdateEvent, type AppUpdateDownloadProgress, type AppUpdateInfo, type ChatImageAttachment, type CodexChatOptions, type ChatMessage, type ChatSegment, type ProviderStatus, type TerminalSession, type ViewName, type WorkspaceProject } from "../services/desktop";
+import { desktopApi, type AiChatOptions, type AiChatOutputEvent, type AiProvider, type AiProviderTrace, type AiSession, type AiTraceUpdateEvent, type AppUpdateDownloadProgress, type AppUpdateInfo, type ChatImageAttachment, type ChatMessage, type ChatSegment, type ProviderStatus, type TerminalSession, type ViewName, type WorkspaceProject } from "../services/desktop";
 import { decodeAssistantMessageFromStorage, encodeAssistantMessageForStorage, extractAssistantText } from "../utils/chat";
 
 const providers = ref<AiProvider[]>([]);
@@ -997,7 +997,7 @@ function isCodexExternalMirrorSession(session: AiSession | null) {
   return !session.providerSessionId.startsWith("app-server:");
 }
 
-async function sendPrompt(prompt: string, images: ChatImageAttachment[] = [], codexOptions: CodexChatOptions = {}) {
+async function sendPrompt(prompt: string, images: ChatImageAttachment[] = [], chatOptions: AiChatOptions = {}) {
   pushChatDebugEvent("收到发送请求");
   await initAiEventListeners();
   const trimmed = prompt.trim();
@@ -1099,7 +1099,7 @@ async function sendPrompt(prompt: string, images: ChatImageAttachment[] = [], co
       projectPath,
       prompt: promptForSession,
       images: plainImages,
-      ...(providerId === "codex" ? codexOptions : {}),
+      ...chatOptions,
     };
     void runChat(runRequest).then((providerSessionId) => {
       const pending = pendingAssistants.get(sessionId);
@@ -1804,10 +1804,6 @@ async function initUpdateEventListeners() {
     desktopApi.onAppUpdateDownloadProgress((progress) => {
       updateDownloadProgress.value = progress;
       updateResultError.value = false;
-      const percent = updateProgressPercentFrom(progress);
-      updateResult.value = percent === null
-        ? "正在下载更新..."
-        : `正在下载更新：${percent.toFixed(0)}%`;
     }),
     desktopApi.onAppUpdateDownloaded(() => {
       updateDownloadProgress.value = null;

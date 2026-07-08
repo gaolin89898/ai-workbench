@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'pages/login_page.dart';
 import 'pages/mobile_shell_page.dart';
 import 'services/api_client.dart';
+import 'services/permission_service.dart';
 import 'state/workspace_controller.dart';
 import 'state/workspace_scope.dart';
 import 'widgets/app_theme.dart';
@@ -38,6 +39,9 @@ class _BootstrapPageState extends State<BootstrapPage> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      PermissionService.requestNotificationPermission();
+    });
     WidgetsBinding.instance.addPostFrameCallback((_) => _bootstrap());
   }
 
