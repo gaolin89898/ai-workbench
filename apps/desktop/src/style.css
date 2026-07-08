@@ -2159,6 +2159,10 @@ h2 {
   flex: 0 0 auto;
 }
 
+.codex-start-toolbar .codex-send-button img {
+  filter: brightness(0) invert(1);
+}
+
 .codex-start-toolbar .codex-start-menu {
   left: 0;
   bottom: calc(100% + 6px);
