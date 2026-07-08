@@ -1,6 +1,11 @@
 package com.aiworkbench.remote_term_mobile
 
 import android.Manifest
+import android.app.Notification
+import android.app.NotificationChannel
+import android.app.NotificationManager
+import android.app.PendingIntent
+import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
@@ -79,28 +84,88 @@ class MainActivity : FlutterActivity() {
             flutterEngine.dartExecutor.binaryMessenger,
             "ai_workbench_mobile/permissions"
         ).setMethodCallHandler { call, result ->
-            if (call.method != "requestNotificationPermission") {
-                result.notImplemented()
-                return@setMethodCallHandler
+            when (call.method) {
+                "requestNotificationPermission" -> requestNotificationPermission(result)
+                "showNotification" -> showNotification(
+                    call.argument<String>("title"),
+                    call.argument<String>("body"),
+                    result
+                )
+                else -> result.notImplemented()
             }
+        }
+    }
 
-            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU ||
-                checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED
+    private fun requestNotificationPermission(result: MethodChannel.Result) {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU ||
+            checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED
+        ) {
+            result.success(true)
+            return
+        }
+
+        if (notificationPermissionResult != null) {
+            result.success(false)
+            return
+        }
+
+        notificationPermissionResult = result
+        requestPermissions(
+            arrayOf(Manifest.permission.POST_NOTIFICATIONS),
+            NOTIFICATION_PERMISSION_REQUEST_CODE
+        )
+    }
+
+    private fun showNotification(title: String?, body: String?, result: MethodChannel.Result) {
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+                checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
             ) {
-                result.success(true)
-                return@setMethodCallHandler
-            }
-
-            if (notificationPermissionResult != null) {
                 result.success(false)
-                return@setMethodCallHandler
+                return
             }
 
-            notificationPermissionResult = result
-            requestPermissions(
-                arrayOf(Manifest.permission.POST_NOTIFICATIONS),
-                NOTIFICATION_PERMISSION_REQUEST_CODE
+            val notificationManager =
+                getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                val channel = NotificationChannel(
+                    NOTIFICATION_CHANNEL_ID,
+                    "AI Workbench",
+                    NotificationManager.IMPORTANCE_HIGH
+                ).apply {
+                    description = "AI session approval, error, and final answer alerts"
+                }
+                notificationManager.createNotificationChannel(channel)
+            }
+
+            val launchIntent = packageManager.getLaunchIntentForPackage(packageName)
+                ?: Intent(this, MainActivity::class.java)
+            val pendingIntent = PendingIntent.getActivity(
+                this,
+                0,
+                launchIntent,
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
             )
+
+            val builder = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                Notification.Builder(this, NOTIFICATION_CHANNEL_ID)
+            } else {
+                @Suppress("DEPRECATION")
+                Notification.Builder(this)
+            }
+            val notification = builder
+                .setSmallIcon(applicationInfo.icon)
+                .setContentTitle(title ?: "AI Workbench")
+                .setContentText(body ?: "")
+                .setStyle(Notification.BigTextStyle().bigText(body ?: ""))
+                .setContentIntent(pendingIntent)
+                .setAutoCancel(true)
+                .build()
+
+            notificationManager.notify((System.currentTimeMillis() % Int.MAX_VALUE).toInt(), notification)
+            result.success(true)
+        } catch (error: Exception) {
+            result.error("NOTIFICATION_FAILED", error.message, null)
         }
     }
 
@@ -120,5 +185,6 @@ class MainActivity : FlutterActivity() {
 
     companion object {
         private const val NOTIFICATION_PERMISSION_REQUEST_CODE = 4101
+        private const val NOTIFICATION_CHANNEL_ID = "ai_workbench_events"
     }
 }

@@ -188,10 +188,12 @@ type AiSessionCreate struct {
 // AiMessageSend: "ai.message.send".
 type AiMessageSend struct {
 	BaseMessage
-	DeviceId      string `json:"deviceId"`
-	AiSessionId   string `json:"aiSessionId"`
-	Content       string `json:"content"`
-	ConfirmedRisk bool   `json:"confirmedRisk"`
+	DeviceId        string `json:"deviceId"`
+	AiSessionId     string `json:"aiSessionId"`
+	Content         string `json:"content"`
+	ConfirmedRisk   bool   `json:"confirmedRisk"`
+	Model           string `json:"model,omitempty"`
+	ReasoningEffort string `json:"reasoningEffort,omitempty"`
 }
 
 // AiApprovalRespond: "ai.approval.respond".

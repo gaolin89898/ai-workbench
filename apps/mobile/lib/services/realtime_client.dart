@@ -60,13 +60,23 @@ class RealtimeClient {
     });
   }
 
-  void sendPrompt(String deviceId, String aiSessionId, String content, {bool confirmedRisk = false}) {
+  void sendPrompt(
+    String deviceId,
+    String aiSessionId,
+    String content, {
+    bool confirmedRisk = false,
+    String? model,
+    String? reasoningEffort,
+  }) {
     send({
       'type': 'ai.message.send',
       'deviceId': deviceId,
       'aiSessionId': aiSessionId,
       'content': content,
       'confirmedRisk': confirmedRisk,
+      if (model != null && model.isNotEmpty) 'model': model,
+      if (reasoningEffort != null && reasoningEffort.isNotEmpty)
+        'reasoningEffort': reasoningEffort,
     });
   }
 

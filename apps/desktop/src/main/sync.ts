@@ -10,6 +10,8 @@ import type {
   SavedCloudConfig,
   AiChatOutputEvent,
   AppUpdateInfo,
+  ClaudeReasoningEffort,
+  CodexReasoningEffort,
 } from "../services/desktop";
 import {
   listWorkspaceProjects,
@@ -36,6 +38,14 @@ import { codexTraceSnapshotToSegments } from "./codex_trace";
 const STRUCTURED_MESSAGE_PREFIX = "__AI_WORKBENCH_MESSAGE_V1__";
 const configPath = path.join(app.getPath("userData"), "cloud-config.json");
 const machineIdPath = path.join(app.getPath("userData"), "machine-id");
+
+function codexReasoningEffort(value: string): CodexReasoningEffort | null {
+  return value === "low" || value === "medium" || value === "high" || value === "ultra" ? value : null;
+}
+
+function claudeReasoningEffort(value: string): ClaudeReasoningEffort | null {
+  return value === "low" || value === "medium" || value === "high" || value === "xhigh" || value === "max" ? value : null;
+}
 
 interface StoredCloudConfig {
   serverUrl: string;
@@ -928,6 +938,8 @@ class DesktopCloudSync {
       const aiSessionId: string = msg.aiSessionId;
       const content: string = msg.content;
       const confirmedRisk: boolean = !!msg.confirmedRisk;
+      const selectedModel = typeof msg.model === "string" ? msg.model.trim() : "";
+      const reasoningEffort = typeof msg.reasoningEffort === "string" ? msg.reasoningEffort.trim() : "";
 
       const risk = assessCommandRisk(content);
       if (risk.risky && !confirmedRisk) {
@@ -983,12 +995,24 @@ class DesktopCloudSync {
         let providerSessionId: string | null = null;
         if (session.providerId === "codex") {
           providerSessionId = await runCodexChat(
-            { aiSessionId, projectPath, prompt: content },
+            {
+              aiSessionId,
+              projectPath,
+              prompt: content,
+              codexModel: selectedModel || null,
+              codexReasoningEffort: codexReasoningEffort(reasoningEffort),
+            },
             aiChatSender
           );
         } else {
           providerSessionId = await runAiChat(
-            { aiSessionId, projectPath, prompt: content },
+            {
+              aiSessionId,
+              projectPath,
+              prompt: content,
+              claudeModel: selectedModel || null,
+              claudeReasoningEffort: claudeReasoningEffort(reasoningEffort),
+            },
             aiChatSender,
             session.providerSessionId ?? null
           );

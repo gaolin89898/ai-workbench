@@ -210,6 +210,7 @@ class _ChatPageState extends State<ChatPage> {
               _ChatComposer(
                 controller: _prompt,
                 archived: session.archived,
+                providerId: session.providerId,
                 pendingApproval: pendingApproval,
                 onSend: _send,
                 onApproval: (segment, decision) {
@@ -249,9 +250,14 @@ class _ChatPageState extends State<ChatPage> {
         status.contains('恢复');
   }
 
-  void _send() {
+  void _send({String? model, String? reasoningEffort}) {
     final text = _prompt.text;
-    WorkspaceScope.of(context).sendPrompt(widget.session, text);
+    WorkspaceScope.of(context).sendPrompt(
+      widget.session,
+      text,
+      model: model,
+      reasoningEffort: reasoningEffort,
+    );
     _prompt.clear();
   }
 
@@ -298,6 +304,7 @@ class _ChatComposer extends StatelessWidget {
   const _ChatComposer({
     required this.controller,
     required this.archived,
+    required this.providerId,
     required this.pendingApproval,
     required this.onSend,
     required this.onApproval,
@@ -305,8 +312,9 @@ class _ChatComposer extends StatelessWidget {
 
   final TextEditingController controller;
   final bool archived;
+  final String providerId;
   final ChatSegment? pendingApproval;
-  final VoidCallback onSend;
+  final void Function({String? model, String? reasoningEffort}) onSend;
   final void Function(ChatSegment segment, String decision) onApproval;
 
   @override
@@ -329,6 +337,7 @@ class _ChatComposer extends StatelessWidget {
             ? _ComposerInput(
                 controller: controller,
                 archived: archived,
+                providerId: providerId,
                 onSend: onSend,
               )
             : Column(
@@ -347,16 +356,90 @@ class _ChatComposer extends StatelessWidget {
   }
 }
 
-class _ComposerInput extends StatelessWidget {
+class _ComposerInput extends StatefulWidget {
   const _ComposerInput({
     required this.controller,
     required this.archived,
+    required this.providerId,
     required this.onSend,
   });
 
   final TextEditingController controller;
   final bool archived;
-  final VoidCallback onSend;
+  final String providerId;
+  final void Function({String? model, String? reasoningEffort}) onSend;
+
+  @override
+  State<_ComposerInput> createState() => _ComposerInputState();
+}
+
+class _ComposerInputState extends State<_ComposerInput> {
+  String _selectedModel = 'claude-sonnet-4';
+  String _selectedReasoning = 'high';
+
+  @override
+  void initState() {
+    super.initState();
+    _selectedModel = _defaultModelForProvider(widget.providerId);
+  }
+
+  @override
+  void didUpdateWidget(covariant _ComposerInput oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.providerId != widget.providerId) {
+      _selectedModel = _defaultModelForProvider(widget.providerId);
+      _selectedReasoning = 'high';
+    }
+  }
+
+  String _defaultModelForProvider(String providerId) {
+    if (providerId == 'codex') return 'gpt-5-codex';
+    if (providerId == 'claude') return 'claude-sonnet-4';
+    return 'default';
+  }
+
+  List<_SheetOption> get _modelOptions {
+    if (widget.providerId == 'codex') {
+      return const [
+        _SheetOption('gpt-5-codex', 'GPT-5 Codex', '适合代码修改和多步骤任务'),
+        _SheetOption('gpt-5', 'GPT-5', '通用推理和复杂问答'),
+        _SheetOption('gpt-5-mini', 'GPT-5 Mini', '更快的日常任务'),
+      ];
+    }
+    if (widget.providerId == 'claude') {
+      return const [
+        _SheetOption('claude-sonnet-4', 'Claude Sonnet 4', '默认均衡模型'),
+        _SheetOption('claude-opus-4', 'Claude Opus 4', '更强的复杂任务能力'),
+      ];
+    }
+    return const [
+      _SheetOption('default', '默认模型', '使用桌面端当前工具配置'),
+    ];
+  }
+
+  List<_SheetOption> get _reasoningOptions {
+    if (widget.providerId == 'claude') {
+      return const [
+        _SheetOption('low', '低', '更快响应'),
+        _SheetOption('medium', '中', '平衡速度和质量'),
+        _SheetOption('high', '高', '更充分的推理'),
+      ];
+    }
+    return const [
+      _SheetOption('low', '低', '更快响应'),
+      _SheetOption('medium', '中', '平衡速度和质量'),
+      _SheetOption('high', '高', '更充分的推理'),
+      _SheetOption('ultra', 'Ultra', '最强推理，耗时更长'),
+    ];
+  }
+
+  String get _selectedModelLabel =>
+      _modelOptions.where((option) => option.value == _selectedModel).firstOrNull?.label ??
+      _modelOptions.first.label;
+
+  String get _selectedReasoningLabel =>
+      _reasoningOptions.where((option) => option.value == _selectedReasoning).firstOrNull?.label ??
+      _reasoningOptions.first.label;
 
   @override
   Widget build(BuildContext context) {
@@ -367,15 +450,15 @@ class _ComposerInput extends StatelessWidget {
           decoration: BoxDecoration(
             color: AppColors.surfaceMuted,
             border: Border.all(
-              color: archived ? AppColors.border : AppColors.borderActive,
-              width: archived ? 1 : 2,
+              color: widget.archived ? AppColors.border : AppColors.borderActive,
+              width: widget.archived ? 1 : 2,
             ),
             borderRadius: BorderRadius.circular(AppRadius.lg),
           ),
           clipBehavior: Clip.antiAlias,
           child: TextField(
-            controller: controller,
-            enabled: !archived,
+            controller: widget.controller,
+            enabled: !widget.archived,
             minLines: 1,
             maxLines: 5,
             textInputAction: TextInputAction.newline,
@@ -410,31 +493,348 @@ class _ComposerInput extends StatelessWidget {
                   _ComposerIconButton(
                     icon: Icons.add,
                     tooltip: '添加附件',
-                    onPressed: archived ? null : () {},
+                    onPressed: widget.archived ? null : _showAddSheet,
                   ),
                 ],
               ),
             ),
             const SizedBox(width: AppSpacing.sm),
             _ComposerPillButton(
-              label: 'claude-sonnet-4',
-              maxWidth: 140,
-              onPressed: archived ? null : () {},
+              label: _selectedModelLabel,
+              maxWidth: 122,
+              onPressed: widget.archived ? null : _showModelSheet,
+            ),
+            const SizedBox(width: AppSpacing.sm),
+            _ComposerPillButton(
+              label: '推理 $_selectedReasoningLabel',
+              maxWidth: 94,
+              onPressed: widget.archived ? null : _showReasoningSheet,
             ),
             const SizedBox(width: AppSpacing.sm),
             ValueListenableBuilder<TextEditingValue>(
-              valueListenable: controller,
+              valueListenable: widget.controller,
               builder: (context, value, _) {
-                final canSend = !archived && value.text.trim().isNotEmpty;
+                final canSend = !widget.archived && value.text.trim().isNotEmpty;
                 return _ComposerSendButton(
                   enabled: canSend,
-                  onPressed: onSend,
+                  onPressed: () => widget.onSend(
+                    model: _selectedModel,
+                    reasoningEffort: _selectedReasoning,
+                  ),
                 );
               },
             ),
           ],
         ),
       ],
+    );
+  }
+
+  void _showAddSheet() {
+    _showComposerSheet(
+      context: context,
+      title: '添加',
+      subtitle: '选择要加入本次消息的内容',
+      children: const [
+        _SheetActionTile(
+          icon: Icons.photo_outlined,
+          title: '从相册选择图片',
+          subtitle: '图片附件功能接入后可用',
+          enabled: false,
+        ),
+        _SheetActionTile(
+          icon: Icons.camera_alt_outlined,
+          title: '拍照',
+          subtitle: '相机附件功能接入后可用',
+          enabled: false,
+        ),
+        _SheetActionTile(
+          icon: Icons.description_outlined,
+          title: '选择文件',
+          subtitle: '文件附件功能接入后可用',
+          enabled: false,
+        ),
+      ],
+    );
+  }
+
+  void _showModelSheet() {
+    _showComposerSheet(
+      context: context,
+      title: '模型选择',
+      subtitle: '选择本次输入区使用的模型',
+      children: [
+        for (final option in _modelOptions)
+          _SheetOptionTile(
+            option: option,
+            selected: option.value == _selectedModel,
+            onTap: () {
+              setState(() => _selectedModel = option.value);
+              Navigator.of(context).pop();
+            },
+          ),
+      ],
+    );
+  }
+
+  void _showReasoningSheet() {
+    _showComposerSheet(
+      context: context,
+      title: '推理强度',
+      subtitle: '更高强度通常更慢，但适合复杂任务',
+      children: [
+        for (final option in _reasoningOptions)
+          _SheetOptionTile(
+            option: option,
+            selected: option.value == _selectedReasoning,
+            onTap: () {
+              setState(() => _selectedReasoning = option.value);
+              Navigator.of(context).pop();
+            },
+          ),
+      ],
+    );
+  }
+}
+
+class _SheetOption {
+  const _SheetOption(this.value, this.label, this.description);
+
+  final String value;
+  final String label;
+  final String description;
+}
+
+Future<void> _showComposerSheet({
+  required BuildContext context,
+  required String title,
+  required String subtitle,
+  required List<Widget> children,
+}) {
+  return showModalBottomSheet<void>(
+    context: context,
+    isScrollControlled: true,
+    useSafeArea: true,
+    backgroundColor: Colors.transparent,
+    builder: (context) {
+      final height = MediaQuery.sizeOf(context).height * 0.52;
+      return Align(
+        alignment: Alignment.bottomCenter,
+        child: Container(
+          height: height,
+          decoration: const BoxDecoration(
+            color: AppColors.surface,
+            borderRadius: BorderRadius.vertical(
+              top: Radius.circular(AppRadius.xl),
+            ),
+          ),
+          child: Column(
+            children: [
+              const SizedBox(height: AppSpacing.sm),
+              Container(
+                width: 36,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: AppColors.border,
+                  borderRadius: BorderRadius.circular(AppRadius.full),
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(
+                  AppSpacing.lg,
+                  AppSpacing.md,
+                  AppSpacing.lg,
+                  AppSpacing.sm,
+                ),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            title,
+                            style: const TextStyle(
+                              color: AppColors.ink,
+                              fontSize: 17,
+                              fontWeight: FontWeight.w800,
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            subtitle,
+                            style: const TextStyle(
+                              color: AppColors.muted,
+                              fontSize: 12,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    IconButton(
+                      tooltip: '关闭',
+                      onPressed: () => Navigator.of(context).pop(),
+                      icon: const Icon(Icons.close, size: 20),
+                    ),
+                  ],
+                ),
+              ),
+              const Divider(height: 1, color: AppColors.border),
+              Expanded(
+                child: ListView(
+                  padding: const EdgeInsets.fromLTRB(
+                    AppSpacing.md,
+                    AppSpacing.md,
+                    AppSpacing.md,
+                    AppSpacing.lg,
+                  ),
+                  children: children,
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    },
+  );
+}
+
+class _SheetOptionTile extends StatelessWidget {
+  const _SheetOptionTile({
+    required this.option,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final _SheetOption option;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return _SheetTileShell(
+      enabled: true,
+      onTap: onTap,
+      leading: Icon(
+        selected ? Icons.radio_button_checked : Icons.radio_button_unchecked,
+        size: 20,
+        color: selected ? AppColors.primary : AppColors.muted,
+      ),
+      title: option.label,
+      subtitle: option.description,
+      trailing: selected
+          ? const Icon(Icons.check, size: 18, color: AppColors.primary)
+          : null,
+    );
+  }
+}
+
+class _SheetActionTile extends StatelessWidget {
+  const _SheetActionTile({
+    required this.icon,
+    required this.title,
+    required this.subtitle,
+    this.enabled = true,
+    this.onTap,
+  });
+
+  final IconData icon;
+  final String title;
+  final String subtitle;
+  final bool enabled;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return _SheetTileShell(
+      enabled: enabled,
+      onTap: onTap,
+      leading: Icon(
+        icon,
+        size: 20,
+        color: enabled ? AppColors.primary : AppColors.muted,
+      ),
+      title: title,
+      subtitle: subtitle,
+    );
+  }
+}
+
+class _SheetTileShell extends StatelessWidget {
+  const _SheetTileShell({
+    required this.enabled,
+    required this.leading,
+    required this.title,
+    required this.subtitle,
+    this.trailing,
+    this.onTap,
+  });
+
+  final bool enabled;
+  final Widget leading;
+  final String title;
+  final String subtitle;
+  final Widget? trailing;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: AppSpacing.sm),
+      child: Material(
+        color: enabled ? AppColors.surfaceMuted : AppColors.surfaceMuted.withValues(alpha: 0.55),
+        borderRadius: BorderRadius.circular(AppRadius.lg),
+        child: InkWell(
+          onTap: enabled ? onTap : null,
+          borderRadius: BorderRadius.circular(AppRadius.lg),
+          child: Container(
+            minHeight: 64,
+            padding: const EdgeInsets.symmetric(
+              horizontal: AppSpacing.md,
+              vertical: AppSpacing.sm,
+            ),
+            child: Row(
+              children: [
+                SizedBox(width: 28, child: Center(child: leading)),
+                const SizedBox(width: AppSpacing.sm),
+                Expanded(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        title,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          color: enabled ? AppColors.ink : AppColors.muted,
+                          fontSize: 14,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                      const SizedBox(height: 3),
+                      Text(
+                        subtitle,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          color: AppColors.muted,
+                          fontSize: 12,
+                          height: 1.35,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                if (trailing != null) ...[
+                  const SizedBox(width: AppSpacing.sm),
+                  trailing!,
+                ],
+              ],
+            ),
+          ),
+        ),
+      ),
     );
   }
 }

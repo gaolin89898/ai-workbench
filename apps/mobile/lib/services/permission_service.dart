@@ -12,4 +12,21 @@ class PermissionService {
       return false;
     }
   }
+
+  static Future<bool> showNotification({
+    required String title,
+    required String body,
+  }) async {
+    try {
+      return await _channel.invokeMethod<bool>('showNotification', {
+            'title': title,
+            'body': body,
+          }) ??
+          false;
+    } on MissingPluginException {
+      return false;
+    } catch (_) {
+      return false;
+    }
+  }
 }

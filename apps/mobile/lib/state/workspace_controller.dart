@@ -6,6 +6,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../models/workbench_models.dart';
 import '../services/api_client.dart';
+import '../services/permission_service.dart';
 import '../services/realtime_client.dart';
 import '../services/update_service.dart';
 
@@ -53,6 +54,10 @@ class WorkspaceController extends ChangeNotifier {
   final Map<String, String> runStatusBySession = {};
   final Map<String, String?> _currentAgentMessageStepIds = {};
   final Map<String, String> _lastCommittedAssistantTexts = {};
+  final Set<String> _notifiedApprovalIds = {};
+  final Set<String> _notifiedErrorKeys = {};
+  final Set<String> _notifiedFinalKeys = {};
+  final Set<String> _notifiedUpdateKeys = {};
   bool _notifyQueued = false;
   String? _lastSelectedDeviceId;
   String accountDisplayName = 'AI 工作台用户';
@@ -160,6 +165,7 @@ class WorkspaceController extends ChangeNotifier {
         .then((update) {
           if (update.available || update.isRequired) {
             appUpdateNotice = update;
+            _notifyAppUpdate(update);
             _notifySafely();
           }
         })
@@ -365,7 +371,12 @@ class WorkspaceController extends ChangeNotifier {
         messages.single.text == _historyLoadingText;
   }
 
-  void sendPrompt(AiSessionMeta session, String prompt) {
+  void sendPrompt(
+    AiSessionMeta session,
+    String prompt, {
+    String? model,
+    String? reasoningEffort,
+  }) {
     final device = selectedDevice;
     final trimmed = prompt.trim();
     if (device == null || trimmed.isEmpty) return;
@@ -377,7 +388,13 @@ class WorkspaceController extends ChangeNotifier {
     runStatusBySession[session.id] = '正在发送给 ${session.providerId}';
     _beginLocalPromptTurn(session.id, trimmed);
     _notifySafely();
-    realtime.sendPrompt(device.id, session.id, trimmed);
+    realtime.sendPrompt(
+      device.id,
+      session.id,
+      trimmed,
+      model: model,
+      reasoningEffort: reasoningEffort,
+    );
     // Best-effort: rename untitled sessions based on the first prompt.
     _maybeRenameUntitledSession(session, trimmed);
   }
@@ -661,12 +678,14 @@ class WorkspaceController extends ChangeNotifier {
               _applyProviderTraceToMessages(sessionId, current, trace),
             );
             runStatusBySession[sessionId] = _providerTraceStatusLabel(trace);
+            _notifyFromTrace(sessionId, trace);
           }
         }
         break;
       case 'app.update.available':
         if (json['platform'] == 'mobile') {
           appUpdateNotice = MobileUpdateInfo.fromServer(json);
+          _notifyAppUpdate(appUpdateNotice!);
           notifyListeners();
         }
         break;
@@ -691,15 +710,131 @@ class WorkspaceController extends ChangeNotifier {
       case 'terminal.error':
         final sessionId = json['aiSessionId'] as String?;
         if (sessionId != null) {
+          final message = json['message'] as String? ?? '远程错误';
           _appendMessage(
               sessionId,
               ChatMessage(
                   role: ChatRole.error,
-                  text: json['message'] as String? ?? '远程错误'));
+                  text: message));
+          _notifyError(sessionId, message);
         }
         break;
     }
     _notifySafely();
+  }
+
+  void _notifyFromTrace(String sessionId, AiProviderTrace trace) {
+    _notifyFromSegments(sessionId, trace.segments);
+    if (_isFailureStatus(trace.status)) {
+      final message = _firstTraceErrorMessage(trace) ?? 'AI 执行失败';
+      _notifyError(sessionId, message);
+    }
+    if (!trace.pending && _isCompletedStatus(trace.status)) {
+      _notifyFinal(sessionId, trace.displayText);
+    }
+  }
+
+  void _notifyFromSegments(String sessionId, List<ChatSegment> segments) {
+    for (final segment in segments) {
+      if (segment.type == 'approval' && segment.status == 'pending') {
+        _notifyApproval(sessionId, segment);
+      } else if (segment.type == 'error') {
+        _notifyError(
+          sessionId,
+          segment.message ??
+              segment.text ??
+              segment.detail ??
+              segment.title ??
+              'AI 执行失败',
+        );
+      }
+    }
+  }
+
+  void _notifyApproval(String sessionId, ChatSegment segment) {
+    final key = segment.approvalId ?? '${sessionId}:${segment.stepId ?? segment.title ?? segment.command ?? 'approval'}';
+    if (!_notifiedApprovalIds.add(key)) return;
+    final action = segment.title ??
+        segment.command ??
+        segment.reason ??
+        segment.detail ??
+        '有新的审批请求';
+    _showSystemNotification(
+      title: '需要审批：${_sessionNotificationTitle(sessionId)}',
+      body: _notificationPreview(action),
+    );
+  }
+
+  void _notifyError(String sessionId, String message) {
+    final preview = _notificationPreview(message);
+    final key = '$sessionId:error:$preview';
+    if (!_notifiedErrorKeys.add(key)) return;
+    _showSystemNotification(
+      title: '执行出错：${_sessionNotificationTitle(sessionId)}',
+      body: preview,
+    );
+  }
+
+  void _notifyFinal(String sessionId, String text) {
+    final preview = _notificationPreview(text);
+    if (preview.isEmpty) return;
+    final key = '$sessionId:final:$preview';
+    if (!_notifiedFinalKeys.add(key)) return;
+    _showSystemNotification(
+      title: 'AI 已回答：${_sessionNotificationTitle(sessionId)}',
+      body: preview,
+    );
+  }
+
+  void _notifyAppUpdate(MobileUpdateInfo update) {
+    final version = update.version ?? update.currentVersion;
+    final key = 'mobile-update:$version:${update.isRequired}:${update.force}';
+    if (!_notifiedUpdateKeys.add(key)) return;
+    final title = update.isRequired || update.force ? '移动端需要更新' : '发现移动端更新';
+    final detail = update.body?.trim();
+    final body = detail == null || detail.isEmpty
+        ? '发现 v$version，可前往设置里的应用更新下载安装。'
+        : '发现 v$version：$detail';
+    _showSystemNotification(
+      title: title,
+      body: _notificationPreview(body),
+    );
+  }
+
+  void _showSystemNotification({
+    required String title,
+    required String body,
+  }) {
+    if (body.trim().isEmpty) return;
+    unawaited(PermissionService.showNotification(title: title, body: body));
+  }
+
+  String _sessionNotificationTitle(String sessionId) {
+    for (final session in sessions) {
+      if (session.id == sessionId) return getEffectiveTitle(session);
+    }
+    return 'AI 会话';
+  }
+
+  String _notificationPreview(String value) {
+    final normalized = value.replaceAll(RegExp(r'\s+'), ' ').trim();
+    if (normalized.length <= 120) return normalized;
+    return '${normalized.substring(0, 120)}...';
+  }
+
+  String? _firstTraceErrorMessage(AiProviderTrace trace) {
+    final errors = trace.snapshot['errors'];
+    if (errors is List) {
+      for (final item in errors) {
+        if (item is Map) {
+          final message = item['message'];
+          if (message is String && message.trim().isNotEmpty) {
+            return message.trim();
+          }
+        }
+      }
+    }
+    return null;
   }
 
   List<ChatMessage> _mergeHistoryWithPending(
@@ -1098,6 +1233,10 @@ class WorkspaceController extends ChangeNotifier {
         .map(ChatSegment.fromJson)
         .map(_normalizeIncomingSegment)
         .toList();
+    _notifyFromSegments(sessionId, [
+      ...segments,
+      if (segment != null) segment,
+    ]);
     final current = [
       ...(messagesBySession[sessionId] ?? const <ChatMessage>[])
     ];
@@ -1144,6 +1283,7 @@ class WorkspaceController extends ChangeNotifier {
       runStatusBySession[sessionId] = '已完成';
       _currentAgentMessageStepIds.remove(sessionId);
       _lastCommittedAssistantTexts.remove(sessionId);
+      _notifyFinal(sessionId, doneText);
     } else if (kind == 'error') {
       final errorMessage = ChatMessage(
         role: ChatRole.error,
@@ -1158,6 +1298,7 @@ class WorkspaceController extends ChangeNotifier {
       runStatusBySession[sessionId] = '执行失败';
       _currentAgentMessageStepIds.remove(sessionId);
       _lastCommittedAssistantTexts.remove(sessionId);
+      _notifyError(sessionId, errorMessage.text ?? 'AI 执行失败');
     } else if (kind == 'delta') {
       final deltaText =
           (text != null && text.isNotEmpty) ? text : segment?.text;
@@ -1351,6 +1492,7 @@ class WorkspaceController extends ChangeNotifier {
 
     final pending = current[pendingIndex];
     if (_isFailureStatus(status)) {
+      final message = summary == null || summary.isEmpty ? 'AI 执行失败' : summary;
       current[pendingIndex] = ChatMessage(
         role: ChatRole.error,
         text: summary == null || summary.isEmpty ? 'AI 执行失败' : summary,
@@ -1358,6 +1500,7 @@ class WorkspaceController extends ChangeNotifier {
       );
       _currentAgentMessageStepIds.remove(sessionId);
       _lastCommittedAssistantTexts.remove(sessionId);
+      _notifyError(sessionId, message);
     } else if (_isCompletedStatus(status)) {
       // The completion event means the desktop run ended, but the final
       // assistant text may still arrive through ai.chat.output or history.
