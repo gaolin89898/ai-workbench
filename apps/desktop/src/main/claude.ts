@@ -499,6 +499,10 @@ export function stopAiChat(aiSessionId: string): boolean {
   return true;
 }
 
+export function hasLiveAiChat(): boolean {
+  return activeClaudeRuns.size > 0;
+}
+
 /**
  * Pre-warm a Claude session. Claude's session_id is only generated after the
  * first real conversation, so warmup simply verifies the CLI is available

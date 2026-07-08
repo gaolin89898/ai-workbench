@@ -103,11 +103,15 @@ const activeChatIsRunning = computed(() => {
   return Boolean(activeChatRunState.value?.active || (sessionId && pendingAssistants.has(sessionId)));
 });
 const hasRunningAiSession = computed(() => {
-  if (activeSessions.value.some((session) => session.status === "running")) return true;
   if (Object.values(thinkingSessionIds.value).some(Boolean)) return true;
   if ([...pendingAssistants.keys()].length > 0) return true;
   return Object.values(chatRunStates.value).some((state) => state.active || state.phase === "running" || state.phase === "starting");
 });
+
+async function hasBlockingAiRun() {
+  if (hasRunningAiSession.value) return true;
+  return desktopApi.hasLiveAiChat();
+}
 
 type PendingAssistant = {
   clientId: string;
@@ -2163,6 +2167,7 @@ export function useWorkspace() {
     activeChatRunState,
     activeChatIsRunning,
     hasRunningAiSession,
+    hasBlockingAiRun,
     pinnedSessionIds,
     unreadSessionIds,
     shellBuffers,

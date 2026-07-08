@@ -1227,6 +1227,10 @@ export function stopCodexChat(aiSessionId: string): boolean {
   return true;
 }
 
+export function hasLiveCodexChat(): boolean {
+  return activeCodexSessions.size > 0;
+}
+
 export function respondCodexApproval(
   aiSessionId: string,
   approvalId: string,

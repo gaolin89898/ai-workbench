@@ -258,7 +258,7 @@ function runningSessionUpdateMessage() {
 }
 
 async function installAppUpdateSafely() {
-  if (ws.hasRunningAiSession.value) {
+  if (await ws.hasBlockingAiRun()) {
     ws.updateResultError.value = true;
     ws.updateResult.value = runningSessionUpdateMessage();
     return;
@@ -270,7 +270,7 @@ async function runProviderAction(row: ProviderRow) {
   const kind = providerActionKind(row);
   const label = providerActionLabel(row);
   if (!kind || !label || !row.status || providerActionLoading.value[row.provider.id]) return;
-  if (ws.hasRunningAiSession.value) {
+  if (await ws.hasBlockingAiRun()) {
     providerActionMessages.value = {
       ...providerActionMessages.value,
       [row.provider.id]: runningSessionUpdateMessage(),

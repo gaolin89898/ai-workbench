@@ -542,6 +542,8 @@ export const desktopApi = {
     ipc<CodexModelOption[]>("list_codex_models"),
   stopAiChat: (aiSessionId: string): Promise<boolean> =>
     ipc<boolean>("stop_ai_chat", aiSessionId),
+  hasLiveAiChat: (): Promise<boolean> =>
+    ipc<boolean>("has_live_ai_chat"),
   respondCodexApproval: (req: CodexApprovalResponseRequest): Promise<boolean> =>
     ipc<boolean>("respond_codex_approval", req),
   warmupAiSession: (aiSessionId: string): Promise<AiSession> =>

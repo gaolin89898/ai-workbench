@@ -26,9 +26,9 @@ import {
   fetchDesktopAppRelease,
 } from "./sync";
 import { saveCredentials, loadCredentials, clearCredentials } from "./credentials";
-import { listCodexModels, respondCodexApproval, runCodexChat, stopCodexChat } from "./codex";
+import { hasLiveCodexChat, listCodexModels, respondCodexApproval, runCodexChat, stopCodexChat } from "./codex";
 import { syncCodexHistoryMirror } from "./codex_sessions";
-import { runAiChat, stopAiChat } from "./claude";
+import { hasLiveAiChat, runAiChat, stopAiChat } from "./claude";
 import { checkAppUpdate, getUpdateDownloadSize, installAppUpdate, initUpdater } from "./updater";
 import type {
   CreateAiSessionRequest,
@@ -351,6 +351,8 @@ export function registerIpcHandlers(win?: BrowserWindow): void {
     const aiSessionId = args[0];
     return stopCodexChat(aiSessionId) || stopAiChat(aiSessionId);
   });
+
+  handle("has_live_ai_chat", async () => hasLiveCodexChat() || hasLiveAiChat());
 
   handle("respond_codex_approval", async (_event, args: [CodexApprovalResponseRequest]) => {
     const req = args[0];
