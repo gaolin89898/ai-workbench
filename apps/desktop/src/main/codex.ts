@@ -69,6 +69,8 @@ interface CodexSession {
   approvalMode: CodexApprovalMode;
   reportedTokenUsageKeys: Set<string>;
   currentTurnStartedAtMs: number | null;
+  launchCommand: string;
+  launchDiagnostics: string[];
 }
 
 // ---------- Constants ----------
@@ -89,67 +91,140 @@ const CODEX_SESSIONS_DIR = path.join(os.homedir(), ".codex", "sessions");
 const activeCodexSessions = new Map<string, CodexSession>();
 const codexSessionFileCache = new Map<string, string | null>();
 
-function windowsPathKey(): string {
-  return Object.keys(process.env).find((key) => key.toLowerCase() === "path") ?? "Path";
+interface CodexSpawnResult {
+  child: ChildProcessWithoutNullStreams;
+  launchCommand: string;
+  launchDiagnostics: string[];
 }
 
-function windowsCodexPathDirs(): string[] {
-  const home = os.homedir();
-  const localAppData = process.env["LOCALAPPDATA"] || path.join(home, "AppData", "Local");
-  const appData = process.env["APPDATA"] || path.join(home, "AppData", "Roaming");
-  return [
-    path.join(localAppData, "Programs", "OpenAI", "Codex", "bin"),
-    path.join(appData, "npm"),
-  ];
+interface WindowsCodexCandidate {
+  kind: "exe" | "cmd";
+  path: string;
+  source: string;
+}
+
+function windowsPathKey(env: NodeJS.ProcessEnv = process.env): string {
+  return Object.keys(env).find((key) => key.toLowerCase() === "path") ?? "Path";
+}
+
+function uniquePaths(paths: Array<string | null | undefined>): string[] {
+  const result: string[] = [];
+  const seen = new Set<string>();
+  for (const raw of paths) {
+    const value = raw?.trim();
+    if (!value) continue;
+    const key = value.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    result.push(value);
+  }
+  return result;
+}
+
+function windowsUserHomes(): string[] {
+  return uniquePaths([process.env["USERPROFILE"], os.homedir()]);
+}
+
+function windowsCodexPathDirs(env: NodeJS.ProcessEnv = process.env): string[] {
+  const homes = windowsUserHomes();
+  const localAppDataDirs = uniquePaths([
+    env["LOCALAPPDATA"],
+    ...homes.map((home) => path.join(home, "AppData", "Local")),
+  ]);
+  const appDataDirs = uniquePaths([
+    env["APPDATA"],
+    ...homes.map((home) => path.join(home, "AppData", "Roaming")),
+  ]);
+  return uniquePaths([
+    ...localAppDataDirs.map((dir) => path.join(dir, "Programs", "OpenAI", "Codex", "bin")),
+    ...appDataDirs.map((dir) => path.join(dir, "npm")),
+    env["ProgramFiles"] ? path.join(env["ProgramFiles"], "OpenAI", "Codex", "bin") : null,
+    env["ProgramFiles(x86)"] ? path.join(env["ProgramFiles(x86)"], "OpenAI", "Codex", "bin") : null,
+  ]);
 }
 
 function windowsCodexEnv(): NodeJS.ProcessEnv {
-  const pathKey = windowsPathKey();
-  const existingPath = process.env[pathKey] ?? "";
+  const env = { ...process.env };
+  const pathKey = windowsPathKey(env);
+  const existingPath = env[pathKey] ?? "";
   const parts = existingPath.split(path.delimiter).filter(Boolean);
   const seen = new Set(parts.map((part) => part.toLowerCase()));
-  for (const dir of windowsCodexPathDirs()) {
+  for (const dir of windowsCodexPathDirs(env)) {
     const key = dir.toLowerCase();
     if (!seen.has(key)) {
       parts.push(dir);
       seen.add(key);
     }
   }
-  return { ...process.env, [pathKey]: parts.join(path.delimiter) };
+  env[pathKey] = parts.join(path.delimiter);
+  return env;
 }
 
-function resolveWindowsCodexExe(): string | null {
-  const configuredPath = process.env["CODEX_CLI_PATH"];
-  const candidates = [
-    configuredPath && configuredPath.toLowerCase().endsWith(".exe") ? configuredPath : null,
-    path.join(windowsCodexPathDirs()[0], "codex.exe"),
+function windowsCodexCandidates(env: NodeJS.ProcessEnv): WindowsCodexCandidate[] {
+  const pathKey = windowsPathKey(env);
+  const pathDirs = (env[pathKey] ?? "").split(path.delimiter).filter(Boolean);
+  const configuredPath = env["CODEX_CLI_PATH"];
+  const configuredKind = configuredPath?.toLowerCase().endsWith(".cmd") ? "cmd" : "exe";
+  const configured = configuredPath
+    ? [{ kind: configuredKind as "exe" | "cmd", path: configuredPath, source: "CODEX_CLI_PATH" }]
+    : [];
+  return [
+    ...configured,
+    ...windowsCodexPathDirs(env).flatMap((dir) => [
+      { kind: "exe" as const, path: path.join(dir, "codex.exe"), source: "known Codex directory" },
+      { kind: "cmd" as const, path: path.join(dir, "codex.cmd"), source: "known Codex directory" },
+    ]),
+    ...pathDirs.flatMap((dir) => [
+      { kind: "exe" as const, path: path.join(dir, "codex.exe"), source: "PATH" },
+      { kind: "cmd" as const, path: path.join(dir, "codex.cmd"), source: "PATH" },
+    ]),
   ];
-  return candidates.find((candidate): candidate is string => Boolean(candidate && fsSync.existsSync(candidate))) ?? null;
 }
 
-function spawnCodex(args: string[], cwd: string): ChildProcessWithoutNullStreams {
-  if (process.platform === "win32") {
-    const env = windowsCodexEnv();
-    const codexExe = resolveWindowsCodexExe();
-    if (codexExe) {
-      return spawn(codexExe, args, {
-        cwd,
-        stdio: ["pipe", "pipe", "pipe"],
-        windowsHide: true,
-        env,
-      });
-    }
-    return spawn(process.env["ComSpec"] || "cmd.exe", ["/d", "/s", "/c", "codex", ...args], {
+
+function createWindowsCodexSpawn(args: string[], cwd: string): CodexSpawnResult {
+  const env = windowsCodexEnv();
+  const candidates = windowsCodexCandidates(env);
+  const diagnostics = candidates.map((candidate) => {
+    const exists = fsSync.existsSync(candidate.path) ? "found" : "missing";
+    return `${exists}: ${candidate.path} (${candidate.source})`;
+  });
+  const candidate = candidates.find((item) => fsSync.existsSync(item.path));
+  if (candidate?.kind === "exe") {
+    return {
+      child: spawn(candidate.path, args, { cwd, stdio: ["pipe", "pipe", "pipe"], windowsHide: true, env }),
+      launchCommand: `${candidate.path} ${args.join(" ")}`,
+      launchDiagnostics: diagnostics,
+    };
+  }
+  if (candidate?.kind === "cmd") {
+    const command = process.env["ComSpec"] || "cmd.exe";
+    const commandArgs = ["/d", "/s", "/c", candidate.path, ...args];
+    return {
+      child: spawn(command, commandArgs, { cwd, stdio: ["pipe", "pipe", "pipe"], windowsHide: true, env }),
+      launchCommand: `${command} ${commandArgs.join(" ")}`,
+      launchDiagnostics: diagnostics,
+    };
+  }
+  const command = process.env["ComSpec"] || "cmd.exe";
+  const commandArgs = ["/d", "/s", "/c", "codex", ...args];
+  return {
+    child: spawn(command, commandArgs, { cwd, stdio: ["pipe", "pipe", "pipe"], windowsHide: true, env }),
+    launchCommand: `${command} ${commandArgs.join(" ")}`,
+    launchDiagnostics: diagnostics,
+  };
+}
+
+function spawnCodex(args: string[], cwd: string): CodexSpawnResult {
+  if (process.platform === "win32") return createWindowsCodexSpawn(args, cwd);
+  return {
+    child: spawn("codex", args, {
       cwd,
       stdio: ["pipe", "pipe", "pipe"],
-      windowsHide: true,
-      env,
-    });
-  }
-  return spawn("codex", args, {
-    cwd,
-    stdio: ["pipe", "pipe", "pipe"],
-  });
+    }),
+    launchCommand: `codex ${args.join(" ")}`,
+    launchDiagnostics: [],
+  };
 }
 
 // ---------- Helpers ----------
@@ -819,7 +894,8 @@ function createSession(
   traceEnabled = false,
   approvalMode: CodexApprovalMode = "suggest",
 ): CodexSession {
-  const child = spawnCodex(["app-server", "--stdio"], cwd);
+  const launchedCodex = spawnCodex(["app-server", "--stdio"], cwd);
+  const child = launchedCodex.child;
 
   const session: CodexSession = {
     aiSessionId,
@@ -842,6 +918,8 @@ function createSession(
     approvalMode,
     reportedTokenUsageKeys: new Set(),
     currentTurnStartedAtMs: null,
+    launchCommand: launchedCodex.launchCommand,
+    launchDiagnostics: launchedCodex.launchDiagnostics,
   };
 
   // stdout: parse JSON-RPC lines
@@ -896,10 +974,16 @@ function handleExit(
 
 function handleSpawnError(session: CodexSession, err: Error): void {
   const errno = err as NodeJS.ErrnoException;
-  const message =
-    errno.code === "ENOENT"
-      ? "未找到 codex 命令，请先安装 Codex CLI"
-      : `Codex 进程错误：${err.message}`;
+  const baseMessage = errno.code === "ENOENT"
+    ? "未找到 codex 命令，请先安装 Codex CLI，或在 CODEX_CLI_PATH 中配置 codex.exe / codex.cmd 的完整路径"
+    : `Codex 进程错误：${err.message}`;
+  const diagnosticLines = [
+    baseMessage,
+    `启动方式：${session.launchCommand}`,
+    `错误代码：${errno.code ?? "unknown"}`,
+    ...session.launchDiagnostics.slice(0, 16).map((line) => `候选路径：${line}`),
+  ];
+  const message = diagnosticLines.join("\n");
   emitSessionError(session, message);
   for (const [, pending] of session.pendingRequests) {
     pending.reject(err);
