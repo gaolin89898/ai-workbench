@@ -168,19 +168,15 @@ function windowsCodexCandidates(env: NodeJS.ProcessEnv): WindowsCodexCandidate[]
   const configured = configuredPath
     ? [{ kind: configuredKind as "exe" | "cmd", path: configuredPath, source: "CODEX_CLI_PATH" }]
     : [];
+  const knownDirs = windowsCodexPathDirs(env);
   return [
     ...configured,
-    ...windowsCodexPathDirs(env).flatMap((dir) => [
-      { kind: "exe" as const, path: path.join(dir, "codex.exe"), source: "known Codex directory" },
-      { kind: "cmd" as const, path: path.join(dir, "codex.cmd"), source: "known Codex directory" },
-    ]),
-    ...pathDirs.flatMap((dir) => [
-      { kind: "exe" as const, path: path.join(dir, "codex.exe"), source: "PATH" },
-      { kind: "cmd" as const, path: path.join(dir, "codex.cmd"), source: "PATH" },
-    ]),
+    ...knownDirs.map((dir) => ({ kind: "cmd" as const, path: path.join(dir, "codex.cmd"), source: "known Codex directory" })),
+    ...pathDirs.map((dir) => ({ kind: "cmd" as const, path: path.join(dir, "codex.cmd"), source: "PATH" })),
+    ...knownDirs.map((dir) => ({ kind: "exe" as const, path: path.join(dir, "codex.exe"), source: "known Codex directory" })),
+    ...pathDirs.map((dir) => ({ kind: "exe" as const, path: path.join(dir, "codex.exe"), source: "PATH" })),
   ];
 }
-
 
 function createWindowsCodexSpawn(args: string[], cwd: string): CodexSpawnResult {
   const env = windowsCodexEnv();
