@@ -1478,8 +1478,10 @@ function syncPendingAssistantSegments(sessionId: string, done = false) {
 }
 
 function finalizeSegmentForDone(segment: ChatSegment, done: boolean): ChatSegment {
-  if (!done || segment.type !== "tool" || segment.status !== "running") return segment;
-  return { ...segment, status: "success" };
+  if (!done) return segment;
+  if (segment.type === "tool" && segment.status === "running") return { ...segment, status: "success" };
+  if (segment.type === "approval" && segment.status === "pending") return { ...segment, status: "expired" };
+  return segment;
 }
 
 function upsertCompletionSummary(sessionId: string) {

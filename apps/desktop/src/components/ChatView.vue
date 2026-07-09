@@ -116,6 +116,7 @@ const chatHeaderMeta = computed(() => {
 const conversationTitle = computed(() => ws.activeAiSession.value?.title ?? currentProject.value?.name ?? "新对话");
 const showCreateHint = computed(() => !ws.activeAiSession.value && ws.createAiResult.value);
 const pendingApprovalSegment = computed<Extract<ChatSegment, { type: "approval" }> | null>(() => {
+  if (!ws.activeChatIsRunning.value) return null;
   for (let messageIndex = ws.chatMessages.value.length - 1; messageIndex >= 0; messageIndex -= 1) {
     const segments = ws.chatMessages.value[messageIndex].segments ?? [];
     for (let segmentIndex = segments.length - 1; segmentIndex >= 0; segmentIndex -= 1) {

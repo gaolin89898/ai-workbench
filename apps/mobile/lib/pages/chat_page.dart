@@ -85,7 +85,8 @@ class _ChatPageState extends State<ChatPage> {
             (messages.isNotEmpty &&
                 messages.last.role == ChatRole.assistant &&
                 messages.last.pending);
-        final pendingApproval = _findPendingApproval(messages);
+        final pendingApproval =
+            isRunning ? _findPendingApproval(messages) : null;
         final shouldStickToBottom = _isNearBottom;
         WidgetsBinding.instance.addPostFrameCallback((_) {
           if (shouldStickToBottom) _scrollToBottom();

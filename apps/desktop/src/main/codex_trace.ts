@@ -212,6 +212,18 @@ function upsertItem(snapshot: CodexTraceSnapshot, item: CodexTraceItem): CodexTr
   return { ...snapshot, items };
 }
 
+function expirePendingApprovals(snapshot: CodexTraceSnapshot, now: string): CodexTraceSnapshot {
+  const approvals = snapshot.approvals.map((approval) =>
+    approval.status === "pending" ? { ...approval, status: "expired" as const } : approval
+  );
+  const items = snapshot.items.map((item) => (
+    item.type === "approval" && item.status === "running"
+      ? { ...item, status: "failed" as const, completedAt: item.completedAt ?? now }
+      : item
+  ));
+  return { ...snapshot, approvals, items };
+}
+
 function itemFromParams(params: unknown, receivedAt: string): CodexTraceItem {
   const p = record(params);
   const item = record(p.item ?? p);
@@ -430,6 +442,7 @@ export function reduceCodexTraceSnapshot(
         completedAt: now,
         items: snapshot.items.map((item) => item.status === "running" ? { ...item, status: "completed", completedAt: item.completedAt ?? now } : item),
       };
+      snapshot = expirePendingApprovals(snapshot, now);
       break;
     }
     case "error": {
@@ -457,6 +470,7 @@ export function reduceCodexTraceSnapshot(
           },
         ],
       };
+      snapshot = expirePendingApprovals(snapshot, now);
       break;
     }
   }
