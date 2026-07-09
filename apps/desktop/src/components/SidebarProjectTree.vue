@@ -98,6 +98,10 @@ const providerUpdateNames = computed(() => {
 });
 const hasAppUpdate = computed(() => Boolean(props.appUpdateAvailableVersion));
 const hasUpdatePrompt = computed(() => hasAppUpdate.value || providerUpdateCount.value > 0);
+const activeFileListProject = computed(() => {
+  const path = fileListProjectPath.value;
+  return path ? props.projects.find((project) => project.path === path) ?? null : null;
+});
 const appUpdatePromptText = computed(() => props.appUpdateAvailableVersion ? `新版本 ${props.appUpdateAvailableVersion}` : "");
 const providerUpdatePromptText = computed(() => {
   const count = providerUpdateCount.value;
@@ -192,6 +196,10 @@ async function toggleProjectFileList(project: WorkspaceProject) {
   expandedDirectories.value = { ...expandedDirectories.value, [directoryKey(project.path)]: true };
   if (directoryFiles.value[directoryKey(project.path)] || directoryLoading.value[directoryKey(project.path)]) return;
   await loadDirectoryFiles(project);
+}
+
+function closeProjectFileList() {
+  fileListProjectPath.value = null;
 }
 
 async function toggleDirectoryNode(project: WorkspaceProject, directoryPath: string) {
@@ -680,12 +688,17 @@ onBeforeUnmount(() => {
         <span>项目</span>
         <button class="icon-button" title="选择本地项目" type="button" @click.stop="chooseProjectFromSidebar">＋</button>
       </div>
-      <div class="project-tree">
-        <button v-if="!projects.length" class="tree-empty" type="button" @click.stop="chooseProjectFromSidebar">
+      <div class="project-tree" :class="{ 'project-tree-file-mode': activeFileListProject }">
+        <button v-if="!activeFileListProject && !projects.length" class="tree-empty" type="button" @click.stop="chooseProjectFromSidebar">
           <img class="tree-empty-icon" :src="projectFolderIcon" alt="" aria-hidden="true" />
           <span>选择项目</span>
         </button>
-        <section v-for="project in projects" :key="project.path" class="tree-project">
+        <section
+          v-for="project in projects"
+          :key="project.path"
+          class="tree-project"
+          :class="{ 'tree-project-file-active': isProjectFileListOpen(project.path) }"
+        >
           <div v-if="!isProjectFileListOpen(project.path)" class="tree-project-row" :class="{ active: selectedProjectPath === project.path, collapsed: isProjectCollapsedLocal(project.path) }">
             <button
               class="tree-project-title"
@@ -750,7 +763,7 @@ onBeforeUnmount(() => {
           <div v-if="!isProjectCollapsedLocal(project.path)" class="tree-chat-list" :class="{ 'tree-chat-list-files': isProjectFileListOpen(project.path) }">
             <template v-if="isProjectFileListOpen(project.path)">
               <div class="tree-file-header">
-                <button class="tree-file-back" type="button" title="返回项目列表" @click.stop="toggleProjectFileList(project)">
+                <button class="tree-file-back" type="button" title="返回项目列表" @click.stop="closeProjectFileList">
                   <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M12.5 5 7.5 10 12.5 15"/></svg>
                   <span>返回项目列表</span>
                 </button>

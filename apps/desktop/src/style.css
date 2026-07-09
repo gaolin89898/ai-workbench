@@ -769,6 +769,24 @@ button {
   gap: 2px;
 }
 
+.project-tree-file-mode {
+  gap: 0;
+}
+
+.project-tree-file-mode .tree-project:not(.tree-project-file-active) {
+  display: none;
+}
+
+.project-tree-file-mode .tree-project-file-active {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+.project-tree-file-mode .tree-chat-list-files {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
 .tree-role {
   display: flex;
   flex-direction: column;
