@@ -119,7 +119,7 @@ jobs:
       - name: Publish GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          name: "AI Workbench ${{ github.ref_name }}"
-          body: "Desktop release for AI Workbench."
+          name: "CodeHub AI ${{ github.ref_name }}"
+          body: "Desktop release for CodeHub AI."
           make_latest: true
           files: release-assets/**/*

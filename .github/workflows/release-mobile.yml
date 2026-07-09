@@ -58,12 +58,12 @@ jobs:
           flutter pub get
           flutter build apk --release --dart-define="MOBILE_VERSION=$VERSION"
           mkdir -p release-assets
-          cp build/app/outputs/flutter-apk/app-release.apk "release-assets/ai-workbench-mobile-$VERSION.apk"
+          cp build/app/outputs/flutter-apk/app-release.apk "release-assets/codehub-ai-mobile-$VERSION.apk"
 
       - name: Publish GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          name: "AI Workbench Mobile ${{ github.ref_name }}"
-          body: "Mobile Android release for AI Workbench."
+          name: "CodeHub AI Mobile ${{ github.ref_name }}"
+          body: "Mobile Android release for CodeHub AI."
           make_latest: false
           files: apps/mobile/release-assets/*

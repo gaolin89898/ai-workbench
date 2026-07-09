@@ -12,7 +12,7 @@ const _githubReleasesApiUrl =
 const _githubReleasesUrl =
     'https://github.com/gaolin89898/ai-workbench/releases';
 const _currentMobileVersion =
-    String.fromEnvironment('MOBILE_VERSION', defaultValue: '0.1.84');
+    String.fromEnvironment('MOBILE_VERSION', defaultValue: '0.1.85');
 const _downloadHeaders = {
   'Accept':
       'application/octet-stream, application/vnd.android.package-archive, */*',
@@ -60,7 +60,7 @@ class MobileUpdateInfo {
       apkUrl: downloadUrl,
       apkFileName: latestVersion == null
           ? null
-          : 'ai-workbench-mobile-$latestVersion.apk',
+          : 'codehub-ai-mobile-$latestVersion.apk',
       body: json['releaseNotes'] as String?,
       isRequired: json['required'] == true,
       force: json['force'] == true,
@@ -115,7 +115,7 @@ class MobileUpdateService {
     final latestVersion =
         _mobileVersionFromTag(tagName) ?? _currentMobileVersion;
     final apkFileName =
-        apkAsset['name'] as String? ?? 'ai-workbench-mobile-$latestVersion.apk';
+        apkAsset['name'] as String? ?? 'codehub-ai-mobile-$latestVersion.apk';
     final apkUrl = apkAsset['browser_download_url'] as String?;
     if (apkUrl == null || apkUrl.isEmpty) {
       throw Exception('GitHub Release APK 缺少下载地址。');
@@ -144,7 +144,7 @@ class MobileUpdateService {
     }
 
     final apkFileName = update.apkFileName ??
-        'ai-workbench-mobile-${update.version ?? update.currentVersion}.apk';
+        'codehub-ai-mobile-${update.version ?? update.currentVersion}.apk';
     final safeApkFileName =
         apkFileName.replaceAll(RegExp(r'[\\/:*?"<>|]'), '_');
     final tempDir = Directory.systemTemp;

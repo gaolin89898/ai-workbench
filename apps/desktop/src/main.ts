@@ -3,7 +3,7 @@ import "./style.css";
 const appRoot = document.querySelector("#app");
 
 if (appRoot) {
-  appRoot.innerHTML = `<div class="boot-loading">正在启动 AI 工作台...</div>`;
+  appRoot.innerHTML = `<div class="boot-loading">正在启动 CodeHub AI...</div>`;
 }
 
 async function bootstrap() {

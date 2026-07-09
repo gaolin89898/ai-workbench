@@ -83,7 +83,7 @@ const CODEX_WARMUP_TIMEOUT_MS = 60_000;
 const CODEX_RECONNECT_RETRY_MS = 1200;
 const CODEX_RECONNECT_MAX_RETRIES = 5;
 const CLI_INTERRUPT_FALLBACK_MS = 1500;
-const CODEX_CLIENT_INFO = { name: "AI Workbench", version: "0.1.0" };
+const CODEX_CLIENT_INFO = { name: "CodeHub AI", version: "0.1.0" };
 const CODEX_INITIALIZE_PARAMS = {
   clientInfo: CODEX_CLIENT_INFO,
   capabilities: { experimentalApi: true },

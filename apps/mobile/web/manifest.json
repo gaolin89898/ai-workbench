@@ -1,11 +1,11 @@
 {
-    "name": "remote_term_mobile",
-    "short_name": "remote_term_mobile",
+    "name": "CodeHub AI",
+    "short_name": "CodeHub AI",
     "start_url": ".",
     "display": "standalone",
     "background_color": "#0175C2",
     "theme_color": "#0175C2",
-    "description": "A new Flutter project.",
+    "description": "CodeHub AI 移动端",
     "orientation": "portrait-primary",
     "prefer_related_applications": false,
     "icons": [

@@ -1,7 +1,7 @@
 {
   "name": "ai-workbench-desktop",
-  "version": "0.1.84",
-  "description": "AI Workbench Desktop",
+  "version": "0.1.85",
+  "description": "CodeHub AI desktop client",
   "author": "gaolin89898",
   "homepage": "https://github.com/gaolin89898/ai-workbench",
   "main": "out/main/index.js",

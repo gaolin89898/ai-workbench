@@ -1,6 +1,6 @@
 <svg width="720" height="192" viewBox="0 0 720 192" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="title desc">
-  <title id="title">AI Workbench lockup</title>
-  <desc id="desc">Horizontal logo lockup with the AI Workbench mark and product name.</desc>
+  <title id="title">CodeHub AI lockup</title>
+  <desc id="desc">Horizontal logo lockup with the CodeHub AI mark and product name.</desc>
   <defs>
     <linearGradient id="bg" x1="60" y1="56" x2="132" y2="136" gradientUnits="userSpaceOnUse">
       <stop stop-color="#0B1026"/>
@@ -16,6 +16,6 @@
   <rect x="106" y="89" width="30" height="39" rx="9" fill="#FFFFFF"/>
   <rect x="115" y="100" width="12" height="4" rx="2" fill="#0F5EA8"/>
   <rect x="115" y="111" width="8" height="4" rx="2" fill="#0F5EA8"/>
-  <text x="184" y="87" fill="#0F172A" font-family="Inter, Segoe UI, Arial, sans-serif" font-size="50" font-weight="760">AI Workbench</text>
+  <text x="184" y="87" fill="#0F172A" font-family="Inter, Segoe UI, Arial, sans-serif" font-size="50" font-weight="760">CodeHub AI</text>
   <text x="187" y="124" fill="#64748B" font-family="Inter, Segoe UI, Arial, sans-serif" font-size="18" font-weight="520">Local AI agents, observable execution, cross-device control</text>
 </svg>

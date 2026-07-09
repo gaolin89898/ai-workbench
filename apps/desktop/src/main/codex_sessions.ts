@@ -199,7 +199,13 @@ function isVisibleUserText(text: string): boolean {
   if (trimmed.includes("<environment_context>")) return false;
   if (trimmed.includes("# AGENTS.md instructions")) return false;
   if (trimmed.includes("<turn_aborted>")) return false;
-  if (trimmed.startsWith("你是 AI Workbench 桌面端的编程助手。")) return false;
+  if (
+    trimmed.startsWith("你是 CodeHub AI 桌面端的编程助手。") ||
+    trimmed.startsWith("你是灵枢 AI 桌面端的编程助手。") ||
+    trimmed.startsWith("你是 AI Workbench 桌面端的编程助手。")
+  ) {
+    return false;
+  }
   return true;
 }
 

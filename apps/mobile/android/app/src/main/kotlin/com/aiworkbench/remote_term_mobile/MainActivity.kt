@@ -50,7 +50,7 @@ class MainActivity : FlutterActivity() {
                     startActivity(settingsIntent)
                     result.error(
                         "INSTALL_PERMISSION_REQUIRED",
-                        "请先允许 AI Workbench 安装未知来源应用，然后重新安装。",
+                        "请先允许 CodeHub AI 安装未知来源应用，然后重新安装。",
                         null
                     )
                     return@setMethodCallHandler
@@ -130,7 +130,7 @@ class MainActivity : FlutterActivity() {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                 val channel = NotificationChannel(
                     NOTIFICATION_CHANNEL_ID,
-                    "AI Workbench",
+                    "CodeHub AI",
                     NotificationManager.IMPORTANCE_HIGH
                 ).apply {
                     description = "AI session approval, error, and final answer alerts"
@@ -155,7 +155,7 @@ class MainActivity : FlutterActivity() {
             }
             val notification = builder
                 .setSmallIcon(applicationInfo.icon)
-                .setContentTitle(title ?: "AI Workbench")
+                .setContentTitle(title ?: "CodeHub AI")
                 .setContentText(body ?: "")
                 .setStyle(Notification.BigTextStyle().bigText(body ?: ""))
                 .setContentIntent(pendingIntent)

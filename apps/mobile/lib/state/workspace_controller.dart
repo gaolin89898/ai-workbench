@@ -60,7 +60,7 @@ class WorkspaceController extends ChangeNotifier {
   final Set<String> _notifiedUpdateKeys = {};
   bool _notifyQueued = false;
   String? _lastSelectedDeviceId;
-  String accountDisplayName = 'AI 工作台用户';
+  String accountDisplayName = 'CodeHub AI 用户';
   int accountAvatarIndex = 0;
   MobileUpdateInfo? appUpdateNotice;
 
@@ -501,7 +501,7 @@ class WorkspaceController extends ChangeNotifier {
     required int avatarIndex,
   }) {
     final trimmed = displayName.trim();
-    accountDisplayName = trimmed.isEmpty ? 'AI 工作台用户' : trimmed;
+    accountDisplayName = trimmed.isEmpty ? 'CodeHub AI 用户' : trimmed;
     accountAvatarIndex = avatarIndex < 0 ? 0 : avatarIndex;
     _saveAccountProfile();
     _notifySafely();

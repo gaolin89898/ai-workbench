@@ -112,12 +112,12 @@ function handleLogout() {
 </script>
 
 <template>
-  <div v-if="checkingAuth" class="boot-loading">正在启动 AI 工作台...</div>
+  <div v-if="checkingAuth" class="boot-loading">正在启动 CodeHub AI...</div>
   <main v-else-if="!authenticated" class="desktop-login-page">
     <section class="desktop-login-card">
       <div class="desktop-login-brand">
         <img class="desktop-login-icon" :src="aiWorkbenchMark" alt="" aria-hidden="true" />
-        <h1>AI 工作台</h1>
+        <h1>CodeHub AI</h1>
         <p>桌面端 AI 编程助手</p>
       </div>
       <form class="desktop-login-form" @submit.prevent="login">

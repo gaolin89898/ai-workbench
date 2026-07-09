@@ -1,5 +1,5 @@
 appId: com.gaolin89898.aiworkbench
-productName: AI Workbench
+productName: CodeHub AI
 directories:
   output: dist-electron
   buildResources: build
@@ -12,6 +12,9 @@ files:
   - "!**/.{idea,git,cache,vscode,DS_Store}"
 asarUnpack:
   - "**/*.{node,dll}"
+extraResources:
+  - from: build
+    to: build
 win:
   icon: build/icon.ico
   target:
@@ -24,7 +27,7 @@ linux:
     - deb
   category: Development
   maintainer: gaolin89898
-  artifactName: AI-Workbench-${version}-${arch}.${ext}
+  artifactName: CodeHub-AI-${version}-${arch}.${ext}
 deb:
   depends:
     - libgtk-3-0
@@ -38,7 +41,7 @@ deb:
     - libgbm1
     - libasound2
 appImage:
-  artifactName: AI-Workbench-${version}-${arch}.AppImage
+  artifactName: CodeHub-AI-${version}-${arch}.AppImage
 publish:
   provider: github
   owner: gaolin89898

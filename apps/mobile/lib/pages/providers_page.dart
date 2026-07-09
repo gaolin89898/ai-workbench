@@ -142,7 +142,7 @@ class _AppInfoCard extends StatelessWidget {
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     Text(
-                      'AI 工作台',
+                      'CodeHub AI',
                       style: textTheme.titleLarge?.copyWith(
                         fontSize: 20,
                         fontWeight: FontWeight.w700,

@@ -178,7 +178,7 @@ class _DashboardHeader extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  'AI Workbench · 今日 $activeSessions 个活动会话',
+                  'CodeHub AI · 今日 $activeSessions 个活动会话',
                   style: theme.bodySmall?.copyWith(fontSize: 12),
                 ),
                 const SizedBox(height: 2),

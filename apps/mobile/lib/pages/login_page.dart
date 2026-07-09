@@ -111,7 +111,7 @@ class _LoginPageState extends State<LoginPage> {
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
                                 Text(
-                                  'AI 工作台',
+                                  'CodeHub AI',
                                   style: theme.displaySmall
                                       ?.copyWith(fontWeight: FontWeight.w800),
                                 ),

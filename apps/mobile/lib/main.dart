@@ -18,7 +18,7 @@ class AiWorkbenchApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'AI 工作台',
+      title: 'CodeHub AI',
       debugShowCheckedModeBanner: false,
       theme: buildAppTheme(),
       home: const BootstrapPage(),

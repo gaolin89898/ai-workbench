@@ -1,6 +1,6 @@
-# AI Workbench Brand Assets
+# CodeHub AI Brand Assets
 
-This folder contains the source logo assets for AI Workbench.
+This folder contains the source logo assets for CodeHub AI.
 
 - `ai-workbench-mark.svg`: flat rounded-square logo mark for product UI, docs, and light/dark surfaces.
 - `ai-workbench-app-icon.svg`: flat app icon source for launcher and installer exports.

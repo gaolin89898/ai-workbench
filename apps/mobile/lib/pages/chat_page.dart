@@ -1258,7 +1258,7 @@ class _AiBubble extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 const Text(
-                  'AI 工作台',
+                  'CodeHub AI',
                   style: TextStyle(
                     color: AppColors.secondary,
                     fontSize: 12,

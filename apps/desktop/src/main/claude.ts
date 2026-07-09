@@ -76,7 +76,7 @@ function spawnClaude(args: string[], options?: { cwd?: string }): ChildProcessWi
 
 function claudeDesktopPrompt(): string {
   return [
-    "你是 AI Workbench 桌面端的编程助手。",
+    "你是 CodeHub AI 桌面端的编程助手。",
     "请严格遵守以下规则：",
     "1. 必须使用中文回复用户。",
     "2. 必须实际执行读取命令（如 ls / cat / grep / find）来了解项目结构和文件内容，不能仅凭推测回答。",

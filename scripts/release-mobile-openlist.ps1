@@ -34,7 +34,7 @@ if (-not $Version) {
 }
 
 $versionName = ($Version -split '\+')[0]
-$apkName = "ai-workbench-mobile-$versionName.apk"
+$apkName = "codehub-ai-mobile-$versionName.apk"
 $builtApk = Join-Path $mobileDir 'build/app/outputs/flutter-apk/app-release.apk'
 $distApk = Join-Path $releaseDir $apkName
 $manifestPath = Join-Path $releaseDir 'latest.json'
@@ -74,7 +74,7 @@ $manifest = [ordered]@{
   tagName = "mobile-v$versionName"
   apkFileName = $apkName
   apkUrl = "$WebDavUrl/$([System.Uri]::EscapeDataString($RemotePath).Replace('%2F', '/'))/$apkUrlPath"
-  notes = "AI Workbench mobile $versionName"
+  notes = "CodeHub AI mobile $versionName"
   updatedAt = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ")
 }
 $manifestJson = $manifest | ConvertTo-Json
