@@ -350,7 +350,7 @@ function userAnchorText(text?: string) {
 
 function estimateMessageHeight(message?: ChatMessage) {
   if (!message) return VIRTUAL_MESSAGE_ESTIMATE;
-  if (message.role === "user") return message.images?.length ? 150 : 76;
+  if (message.role === "user") return message.images?.length ? 170 : 96;
   const textLength = message.text?.length ?? 0;
   const segmentCount = message.segments?.length ?? 0;
   const imageHeight = message.images?.length ? 118 : 0;

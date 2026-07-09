@@ -96,18 +96,13 @@ class _LoginPageState extends State<LoginPage> {
                       Row(
                         crossAxisAlignment: CrossAxisAlignment.center,
                         children: [
-                          // 56×56 圆角 16 + primaryGradient + terminal 图标
-                          Container(
-                            width: 56,
-                            height: 56,
-                            decoration: BoxDecoration(
-                              gradient: AppColors.primaryGradient,
-                              borderRadius: BorderRadius.circular(AppRadius.xl),
-                            ),
-                            child: const Icon(
-                              Icons.terminal,
-                              color: AppColors.inverse,
-                              size: 28,
+                          ClipRRect(
+                            borderRadius: BorderRadius.circular(AppRadius.xl),
+                            child: Image.asset(
+                              'assets/brand/ai-workbench-app-icon.png',
+                              width: 56,
+                              height: 56,
+                              fit: BoxFit.cover,
                             ),
                           ),
                           const SizedBox(width: 14),

@@ -4,6 +4,8 @@ import ChatSegment from "./ChatSegment.vue";
 import type { ChatMessage, ChatSegment as ChatSegmentType } from "../services/desktop";
 import { assistantOutputToSegments, extractAssistantText, formatChatMessageText } from "../utils/chat";
 
+const clipboardIcon = new URL("../assets/icons/clipboard.svg", import.meta.url).href;
+
 const props = defineProps<{
   message: ChatMessage;
   aiSessionId?: string;
@@ -15,7 +17,9 @@ const userToggledProcessGroups = new Set<string>();
 // 缓存 runtime-status 的 startedAt，避免 trace flush 短暂丢失 segment 时计时闪动
 const cachedRuntimeStartedAt = ref<number | null>(null);
 const cachedRuntimeDurationMs = ref<number | null>(null);
+const copiedUserMessage = ref(false);
 let nowTimer: ReturnType<typeof window.setInterval> | null = null;
+let copyResetTimer: ReturnType<typeof window.setTimeout> | null = null;
 
 onMounted(() => {
   nowTimer = window.setInterval(() => {
@@ -28,8 +32,47 @@ onUnmounted(() => {
     window.clearInterval(nowTimer);
     nowTimer = null;
   }
+  if (copyResetTimer !== null) {
+    window.clearTimeout(copyResetTimer);
+    copyResetTimer = null;
+  }
 });
 
+
+const userMessageTime = computed(() => {
+  if (props.message.role !== "user") return "";
+  const source = props.message.createdAt;
+  const date = source ? new Date(source) : new Date();
+  if (Number.isNaN(date.getTime())) return "";
+  return new Intl.DateTimeFormat("zh-CN", {
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  }).format(date);
+});
+
+const userMessageCopyText = computed(() => {
+  if (props.message.role !== "user") return "";
+  const text = (props.message.text ?? "").trim();
+  const imageNames = (props.message.images ?? [])
+    .map((image) => image.name.trim())
+    .filter(Boolean);
+  return [text, imageNames.length ? `Images: ${imageNames.join(", ")}` : ""]
+    .filter(Boolean)
+    .join("\n");
+});
+
+async function copyUserMessage() {
+  const text = userMessageCopyText.value;
+  if (!text) return;
+  await navigator.clipboard.writeText(text);
+  copiedUserMessage.value = true;
+  if (copyResetTimer !== null) window.clearTimeout(copyResetTimer);
+  copyResetTimer = window.setTimeout(() => {
+    copiedUserMessage.value = false;
+    copyResetTimer = null;
+  }, 1200);
+}
 const rawSegments = computed<ChatSegmentType[]>(() => {
   const sourceSegments = props.message.segments ?? [];
   const cleanedText = stripProcessTextFromFinalText(
@@ -928,6 +971,19 @@ function countCommandOutputSignals(text: string) {
           :title="image.name"
         >
           <img :src="image.dataUrl" :alt="image.name" />
+        </button>
+      </div>
+      <div v-if="message.role === 'user'" class="chat-message-meta">
+        <time v-if="userMessageTime" :datetime="message.createdAt || undefined">{{ userMessageTime }}</time>
+        <button
+          v-if="userMessageCopyText"
+          class="chat-message-copy"
+          type="button"
+          :title="copiedUserMessage ? 'Copied' : 'Copy'"
+          :aria-label="copiedUserMessage ? 'Copied user message' : 'Copy user message'"
+          @click="copyUserMessage"
+        >
+          <img :src="clipboardIcon" alt="" />
         </button>
       </div>
     </div>

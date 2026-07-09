@@ -13,10 +13,12 @@ files:
 asarUnpack:
   - "**/*.{node,dll}"
 win:
+  icon: build/icon.ico
   target:
     - nsis
   signAndEditExecutable: false
 linux:
+  icon: build/icon.png
   target:
     - AppImage
     - deb

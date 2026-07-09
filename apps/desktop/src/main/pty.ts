@@ -2,6 +2,9 @@
 // Mirrors the original Tauri Rust ShellPtySessionHandle: one node-pty per
 // aiSessionId, with output streamed to the renderer via WebContents.send.
 
+import * as fs from "node:fs";
+import * as os from "node:os";
+import * as path from "node:path";
 import * as pty from "node-pty";
 import type { WebContents } from "electron";
 import type {
@@ -28,6 +31,32 @@ function resolveShell(): string {
   return process.env.SHELL || (process.platform === "win32" ? "powershell.exe" : "bash");
 }
 
+function isDirectoryPath(value: string): boolean {
+  try {
+    return fs.statSync(value).isDirectory();
+  } catch {
+    return false;
+  }
+}
+
+function normalizeCwd(value: string): string {
+  return path.isAbsolute(value) ? value : path.resolve(value);
+}
+
+function resolveShellCwd(cwd: string): { requestedCwd: string; resolvedCwd: string; fallbackUsed: boolean } {
+  const requestedCwd = (cwd || "").trim();
+  const normalized = requestedCwd ? normalizeCwd(requestedCwd) : "";
+  if (normalized && isDirectoryPath(normalized)) {
+    return { requestedCwd, resolvedCwd: normalized, fallbackUsed: false };
+  }
+  const fallbacks = [os.homedir(), process.cwd()].filter(isDirectoryPath);
+  return {
+    requestedCwd,
+    resolvedCwd: fallbacks[0] ?? os.homedir(),
+    fallbackUsed: true,
+  };
+}
+
 function destroySession(aiSessionId: string, session: ShellPtySession): void {
   try {
     session.pty.kill();
@@ -49,11 +78,20 @@ export function startShellPty(req: StartShellPtyRequest, sender: WebContents): v
   }
 
   const shell = resolveShell();
-  const proc = pty.spawn(shell, [], { cwd, cols: 100, rows: 30 });
+  const cwdInfo = resolveShellCwd(cwd);
+  const proc = pty.spawn(shell, [], { cwd: cwdInfo.resolvedCwd, cols: 100, rows: 30 });
+
+  const initialMessage = cwdInfo.fallbackUsed
+    ? [
+        `Requested shell cwd is unavailable: ${cwdInfo.requestedCwd || "<empty>"}`,
+        `Using: ${cwdInfo.resolvedCwd}`,
+        "",
+      ].join("\r\n")
+    : "";
 
   const session: ShellPtySession = {
     pty: proc,
-    buffer: "",
+    buffer: initialMessage,
     status: "running",
   };
 
@@ -73,6 +111,7 @@ export function startShellPty(req: StartShellPtyRequest, sender: WebContents): v
   });
 
   sessions.set(aiSessionId, session);
+  if (initialMessage) sender.send("shell-terminal-output", { aiSessionId, chunk: initialMessage });
 
   sender.send("shell-session-status", { aiSessionId, status: "running" });
 }

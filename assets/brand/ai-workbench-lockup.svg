@@ -1,0 +1,21 @@
+<svg width="720" height="192" viewBox="0 0 720 192" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="title desc">
+  <title id="title">AI Workbench lockup</title>
+  <desc id="desc">Horizontal logo lockup with the AI Workbench mark and product name.</desc>
+  <defs>
+    <linearGradient id="bg" x1="60" y1="56" x2="132" y2="136" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#0B1026"/>
+      <stop offset="1" stop-color="#38BDF8"/>
+    </linearGradient>
+  </defs>
+  <rect x="48" y="48" width="96" height="96" rx="22" fill="url(#bg)"/>
+  <rect x="68" y="76" width="50" height="34" rx="8" fill="#FFFFFF"/>
+  <rect x="74" y="86" width="22" height="4.5" rx="2.25" fill="#0F5EA8"/>
+  <rect x="74" y="97" width="34" height="4.5" rx="2.25" fill="#0F5EA8"/>
+  <path d="M84 122H102" stroke="#FFFFFF" stroke-width="7" stroke-linecap="round"/>
+  <path d="M93 110V122" stroke="#FFFFFF" stroke-width="7" stroke-linecap="round"/>
+  <rect x="106" y="89" width="30" height="39" rx="9" fill="#FFFFFF"/>
+  <rect x="115" y="100" width="12" height="4" rx="2" fill="#0F5EA8"/>
+  <rect x="115" y="111" width="8" height="4" rx="2" fill="#0F5EA8"/>
+  <text x="184" y="87" fill="#0F172A" font-family="Inter, Segoe UI, Arial, sans-serif" font-size="50" font-weight="760">AI Workbench</text>
+  <text x="187" y="124" fill="#64748B" font-family="Inter, Segoe UI, Arial, sans-serif" font-size="18" font-weight="520">Local AI agents, observable execution, cross-device control</text>
+</svg>

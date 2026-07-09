@@ -3,6 +3,7 @@ import { onMounted, onUnmounted, ref, watch } from "vue";
 import { useWorkspace } from "./composables/useWorkspace";
 import { desktopApi } from "./services/desktop";
 import router from "./router";
+import aiWorkbenchMark from "./assets/brand/ai-workbench-mark.svg";
 
 const ws = useWorkspace();
 const checkingAuth = ref(true);
@@ -115,7 +116,7 @@ function handleLogout() {
   <main v-else-if="!authenticated" class="desktop-login-page">
     <section class="desktop-login-card">
       <div class="desktop-login-brand">
-        <div class="desktop-login-icon" aria-hidden="true">⌘</div>
+        <img class="desktop-login-icon" :src="aiWorkbenchMark" alt="" aria-hidden="true" />
         <h1>AI 工作台</h1>
         <p>桌面端 AI 编程助手</p>
       </div>

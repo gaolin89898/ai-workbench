@@ -210,6 +210,7 @@ export type ChatMessage = {
   clientId?: string;
   role: "user" | "assistant" | "system" | "error";
   text?: string;
+  createdAt?: string;
   pending?: boolean;
   segments?: ChatSegment[];
   images?: ChatImageAttachment[];

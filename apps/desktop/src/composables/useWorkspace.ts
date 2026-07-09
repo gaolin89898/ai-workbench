@@ -335,13 +335,22 @@ function chatClientId(prefix: string) {
   return `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
+function withMessageCreatedAt(message: ChatMessage): ChatMessage {
+  return message.createdAt ? message : { ...message, createdAt: new Date().toISOString() };
+}
+
+function withMessagesCreatedAt(messages: ChatMessage[]): ChatMessage[] {
+  return messages.map(withMessageCreatedAt);
+}
+
 function setChatMessagesForSession(sessionId: string, messages: ChatMessage[]) {
+  const normalizedMessages = withMessagesCreatedAt(messages);
   chatMessagesBySessionId.value = {
     ...chatMessagesBySessionId.value,
-    [sessionId]: messages,
+    [sessionId]: normalizedMessages,
   };
   if (activeAiSession.value?.id === sessionId) {
-    chatMessages.value = messages;
+    chatMessages.value = normalizedMessages;
   }
 }
 
@@ -357,7 +366,7 @@ function replaceCurrentChatMessages(messages: ChatMessage[]) {
     setChatMessagesForSession(sessionId, messages);
     return;
   }
-  chatMessages.value = messages;
+  chatMessages.value = withMessagesCreatedAt(messages);
 }
 
 function appendCurrentChatMessage(message: ChatMessage) {
@@ -745,13 +754,14 @@ async function loadAiSessionHistorySnapshot(sessionId: string) {
   const messages = dedupeAdjacentChatMessages(history.map((message) => {
     if (message.role !== "assistant") {
       const decoded = decodeAssistantMessageFromStorage(message.content);
-      return { role: message.role, text: decoded.text, images: decoded.images };
+      return { role: message.role, text: decoded.text, images: decoded.images, createdAt: message.createdAt };
     }
     const decoded = decodeAssistantMessageFromStorage(message.content);
     return {
       role: message.role,
       text: decoded.text,
       segments: decoded.segments,
+      createdAt: message.createdAt,
     };
   }));
   const session = aiSessions.value.find((item) => item.id === sessionId) ?? activeAiSession.value;
@@ -819,6 +829,7 @@ function providerTraceToChatMessage(trace: AiProviderTrace): ChatMessage | null 
     pending: providerTracePending(trace),
     text,
     segments,
+    createdAt: trace.createdAt ?? trace.updatedAt,
   };
 }
 

@@ -13,6 +13,10 @@ node_modules/
 apps/desktop/out/
 apps/desktop/release/
 apps/desktop/dist-electron/
+!apps/desktop/build/
+!apps/desktop/build/icon.png
+!apps/desktop/build/icon-256.png
+!apps/desktop/build/icon.ico
 releases/
 backend/.gocache/
 .gocache/

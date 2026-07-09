@@ -2,6 +2,7 @@
 // Singletons: the DB is opened once at module load and reused by all helpers.
 // Schema mirrors the original Rust local-store implementation.
 
+import { app } from "electron";
 import Database from "better-sqlite3";
 import * as fs from "node:fs";
 import * as path from "node:path";
@@ -489,6 +490,71 @@ export function getLocalAiTrace(
   return row ? rowToTrace(row, includeRawEvents) : null;
 }
 
+function markdownEscape(value: string): string {
+  return value.replace(/\\/g, "\\\\").replace(/`/g, "\\`");
+}
+
+function decodeStoredMessageContent(content: string): { text: string; imageNames: string[] } {
+  if (!content.startsWith(STRUCTURED_MESSAGE_PREFIX)) return { text: content, imageNames: [] };
+  try {
+    const parsed = JSON.parse(content.slice(STRUCTURED_MESSAGE_PREFIX.length));
+    if (!parsed || typeof parsed !== "object") return { text: content, imageNames: [] };
+    const record = parsed as Record<string, unknown>;
+    const text = typeof record.text === "string" ? record.text : "";
+    const images = Array.isArray(record.images) ? record.images : [];
+    const imageNames = images
+      .map((image) => image && typeof image === "object" ? (image as Record<string, unknown>).name : null)
+      .filter((name): name is string => typeof name === "string" && name.trim().length > 0);
+    if (text || imageNames.length) return { text, imageNames };
+  } catch {
+    return { text: content, imageNames: [] };
+  }
+  return { text: content, imageNames: [] };
+}
+
+function roleLabel(role: string): string {
+  switch (role) {
+    case "user": return "User";
+    case "assistant": return "Assistant";
+    case "system": return "System";
+    case "error": return "Error";
+    default: return role || "Message";
+  }
+}
+
+function writeLocalAiSessionLog(aiSessionId: string): void {
+  try {
+    const session = getLocalAiSession(aiSessionId);
+    const rows = db
+      .prepare("SELECT * FROM local_ai_messages WHERE ai_session_id = ? ORDER BY datetime(created_at) ASC, id ASC")
+      .all(aiSessionId) as MessageRow[];
+    const logsDir = path.join(app.getPath("logs"), "ai-sessions");
+    fs.mkdirSync(logsDir, { recursive: true });
+    const filePath = path.join(logsDir, `${aiSessionId}.md`);
+    const lines: string[] = [
+      `# ${markdownEscape(session?.title || "AI Session")}`,
+      "",
+      `- Session ID: ${aiSessionId}`,
+      `- Provider: ${session?.providerId ?? "unknown"}`,
+      `- Project: ${session?.summary ?? ""}`,
+      `- Updated: ${new Date().toISOString()}`,
+      "",
+    ];
+    for (const row of rows) {
+      const decoded = decodeStoredMessageContent(row.content);
+      lines.push(`## ${roleLabel(row.role)} - ${row.created_at}`, "");
+      if (decoded.text.trim()) {
+        lines.push(decoded.text.trim(), "");
+      }
+      if (decoded.imageNames.length) {
+        lines.push(`Images: ${decoded.imageNames.join(", ")}`, "");
+      }
+    }
+    fs.writeFileSync(filePath, `${lines.join("\n").trimEnd()}\n`, "utf-8");
+  } catch (error) {
+    console.error("Failed to write AI session log:", error);
+  }
+}
 // ---------- AI messages ----------
 
 export function appendLocalAiMessage(
@@ -508,6 +574,7 @@ export function appendLocalAiMessage(
         if (historyContentScore(content) > historyContentScore(previous.content)) {
           db.prepare("UPDATE local_ai_messages SET content = ?, created_at = ? WHERE rowid = ?")
             .run(content, new Date().toISOString(), previous.id);
+          writeLocalAiSessionLog(aiSessionId);
         }
         return;
       }
@@ -518,6 +585,7 @@ export function appendLocalAiMessage(
     `INSERT INTO local_ai_messages (ai_session_id, role, content, created_at)
      VALUES (?, ?, ?, ?)`
   ).run(aiSessionId, role, content, now);
+  writeLocalAiSessionLog(aiSessionId);
 }
 
 export function replaceLocalAiHistory(
@@ -535,6 +603,7 @@ export function replaceLocalAiHistory(
     }
   });
   replace();
+  writeLocalAiSessionLog(aiSessionId);
 }
 
 export function mergeLocalAiHistory(
@@ -589,6 +658,7 @@ export function mergeLocalAiHistory(
     }
   });
   merge();
+  if (changed > 0) writeLocalAiSessionLog(aiSessionId);
   return changed > 0;
 }
 
@@ -718,6 +788,7 @@ function historyContentScore(content: string): number {
 
 export function listLocalAiHistory(aiSessionId: string): AiHistoryMessage[] {
   compactLocalAiHistory(aiSessionId);
+  writeLocalAiSessionLog(aiSessionId);
   const rows = db
     .prepare(
       "SELECT * FROM local_ai_messages WHERE ai_session_id = ? ORDER BY datetime(created_at) ASC, id ASC"

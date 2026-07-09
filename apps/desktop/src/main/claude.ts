@@ -3,7 +3,10 @@
 // share the same renderer/mobile path as Codex traces.
 
 import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
-import { query, type SDKMessage } from "@anthropic-ai/claude-agent-sdk";
+import * as fs from "node:fs";
+import * as os from "node:os";
+import * as path from "node:path";
+import { query, type Options, type PermissionMode, type SDKMessage } from "@anthropic-ai/claude-agent-sdk";
 import type { RunAiChatRequest, CodexTraceSnapshot } from "../services/desktop";
 import { reportTokenUsage } from "./sync";
 import { upsertLocalAiTrace } from "./db";
@@ -20,6 +23,42 @@ type ActiveClaudeRun = {
 
 const CLAUDE_TURN_TIMEOUT_MS = 30 * 60_000;
 const activeClaudeRuns = new Map<string, ActiveClaudeRun>();
+
+function isDirectoryPath(value: string): boolean {
+  try {
+    return fs.statSync(value).isDirectory();
+  } catch {
+    return false;
+  }
+}
+
+function normalizeCwd(value: string): string {
+  return path.isAbsolute(value) ? value : path.resolve(value);
+}
+
+function resolveClaudeCwd(cwd: string): string {
+  const requestedCwd = (cwd || "").trim();
+  const candidates = [
+    requestedCwd ? normalizeCwd(requestedCwd) : "",
+    os.homedir(),
+    process.cwd(),
+  ].filter(Boolean);
+  return candidates.find(isDirectoryPath) ?? os.homedir();
+}
+
+function resolveClaudeExecutable(): string | undefined {
+  if (process.platform !== "win32") return undefined;
+  const appData = process.env["APPDATA"] || path.join(os.homedir(), "AppData", "Roaming");
+  const candidates = [
+    path.join(appData, "npm", "node_modules", "@anthropic-ai", "claude-code", "bin", "claude.exe"),
+    path.join(appData, "npm", "claude.cmd"),
+  ];
+  return candidates.find((candidate) => fs.existsSync(candidate));
+}
+
+function claudePermissionMode(req: RunAiChatRequest): PermissionMode {
+  return req.claudeMode === "plan" ? "plan" : "auto";
+}
 
 function spawnClaude(args: string[], options?: { cwd?: string }): ChildProcessWithoutNullStreams {
   if (process.platform === "win32") {
@@ -191,9 +230,10 @@ async function runClaudeOnce(
   let latestSessionId = existingSessionId ?? "";
   try {
     const queryOptions = {
-      cwd: req.projectPath,
+      cwd: resolveClaudeCwd(req.projectPath),
       resume: existingSessionId || undefined,
-      permissionMode: req.claudeMode === "plan" ? "plan" : "auto",
+      pathToClaudeCodeExecutable: resolveClaudeExecutable(),
+      permissionMode: claudePermissionMode(req),
       includePartialMessages: true,
       includeHookEvents: true,
       abortController,
@@ -202,8 +242,8 @@ async function runClaudeOnce(
         ...process.env,
         CLAUDE_AGENT_SDK_CLIENT_APP: "ai-workbench-desktop/0.1.0",
       },
-    };
-    const queryOptionsWithRunControls = queryOptions as typeof queryOptions & Record<string, unknown>;
+    } satisfies Options;
+    const queryOptionsWithRunControls = queryOptions as Options & Record<string, unknown>;
     if (req.claudeModel) queryOptionsWithRunControls.model = req.claudeModel;
     if (req.claudeReasoningEffort) queryOptionsWithRunControls.effort = req.claudeReasoningEffort;
 

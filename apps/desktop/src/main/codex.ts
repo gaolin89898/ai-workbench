@@ -71,6 +71,8 @@ interface CodexSession {
   currentTurnStartedAtMs: number | null;
   launchCommand: string;
   launchDiagnostics: string[];
+  requestedCwd: string;
+  resolvedCwd: string;
 }
 
 // ---------- Constants ----------
@@ -95,12 +97,51 @@ interface CodexSpawnResult {
   child: ChildProcessWithoutNullStreams;
   launchCommand: string;
   launchDiagnostics: string[];
+  requestedCwd: string;
+  resolvedCwd: string;
 }
 
 interface WindowsCodexCandidate {
   kind: "exe" | "cmd";
   path: string;
   source: string;
+}
+
+interface CodexCwdResolution {
+  requestedCwd: string;
+  resolvedCwd: string;
+  diagnostics: string[];
+}
+
+function isDirectoryPath(value: string): boolean {
+  try {
+    return fsSync.statSync(value).isDirectory();
+  } catch {
+    return false;
+  }
+}
+
+function normalizeCandidateCwd(value: string): string {
+  return path.isAbsolute(value) ? value : path.resolve(value);
+}
+
+function resolveCodexCwd(cwd: string): CodexCwdResolution {
+  const requestedCwd = (cwd || "").trim();
+  const candidates = uniquePaths([
+    requestedCwd ? normalizeCandidateCwd(requestedCwd) : null,
+    os.homedir(),
+    process.cwd(),
+  ]);
+  const resolvedCwd = candidates.find(isDirectoryPath) ?? os.homedir();
+  return {
+    requestedCwd,
+    resolvedCwd,
+    diagnostics: [
+      `requested cwd: ${requestedCwd || "<empty>"}`,
+      `resolved cwd: ${resolvedCwd}`,
+      ...candidates.map((candidate) => `${isDirectoryPath(candidate) ? "found" : "missing"}: ${candidate} (cwd)`),
+    ],
+  };
 }
 
 function windowsPathKey(env: NodeJS.ProcessEnv = process.env): string {
@@ -180,46 +221,60 @@ function windowsCodexCandidates(env: NodeJS.ProcessEnv): WindowsCodexCandidate[]
 
 function createWindowsCodexSpawn(args: string[], cwd: string): CodexSpawnResult {
   const env = windowsCodexEnv();
+  const cwdInfo = resolveCodexCwd(cwd);
   const candidates = windowsCodexCandidates(env);
-  const diagnostics = candidates.map((candidate) => {
-    const exists = fsSync.existsSync(candidate.path) ? "found" : "missing";
-    return `${exists}: ${candidate.path} (${candidate.source})`;
-  });
+  const diagnostics = [
+    ...cwdInfo.diagnostics,
+    ...candidates.map((candidate) => {
+      const exists = fsSync.existsSync(candidate.path) ? "found" : "missing";
+      return `${exists}: ${candidate.path} (${candidate.source})`;
+    }),
+  ];
   const candidate = candidates.find((item) => fsSync.existsSync(item.path));
+  const spawnOptions = { cwd: cwdInfo.resolvedCwd, stdio: ["pipe", "pipe", "pipe"] as ["pipe", "pipe", "pipe"], windowsHide: true, env };
   if (candidate?.kind === "exe") {
     return {
-      child: spawn(candidate.path, args, { cwd, stdio: ["pipe", "pipe", "pipe"], windowsHide: true, env }),
+      child: spawn(candidate.path, args, spawnOptions),
       launchCommand: `${candidate.path} ${args.join(" ")}`,
       launchDiagnostics: diagnostics,
+      requestedCwd: cwdInfo.requestedCwd,
+      resolvedCwd: cwdInfo.resolvedCwd,
     };
   }
   if (candidate?.kind === "cmd") {
     const command = process.env["ComSpec"] || "cmd.exe";
     const commandArgs = ["/d", "/s", "/c", candidate.path, ...args];
     return {
-      child: spawn(command, commandArgs, { cwd, stdio: ["pipe", "pipe", "pipe"], windowsHide: true, env }),
+      child: spawn(command, commandArgs, spawnOptions),
       launchCommand: `${command} ${commandArgs.join(" ")}`,
       launchDiagnostics: diagnostics,
+      requestedCwd: cwdInfo.requestedCwd,
+      resolvedCwd: cwdInfo.resolvedCwd,
     };
   }
   const command = process.env["ComSpec"] || "cmd.exe";
   const commandArgs = ["/d", "/s", "/c", "codex", ...args];
   return {
-    child: spawn(command, commandArgs, { cwd, stdio: ["pipe", "pipe", "pipe"], windowsHide: true, env }),
+    child: spawn(command, commandArgs, spawnOptions),
     launchCommand: `${command} ${commandArgs.join(" ")}`,
     launchDiagnostics: diagnostics,
+    requestedCwd: cwdInfo.requestedCwd,
+    resolvedCwd: cwdInfo.resolvedCwd,
   };
 }
 
 function spawnCodex(args: string[], cwd: string): CodexSpawnResult {
   if (process.platform === "win32") return createWindowsCodexSpawn(args, cwd);
+  const cwdInfo = resolveCodexCwd(cwd);
   return {
     child: spawn("codex", args, {
-      cwd,
+      cwd: cwdInfo.resolvedCwd,
       stdio: ["pipe", "pipe", "pipe"],
     }),
     launchCommand: `codex ${args.join(" ")}`,
-    launchDiagnostics: [],
+    launchDiagnostics: cwdInfo.diagnostics,
+    requestedCwd: cwdInfo.requestedCwd,
+    resolvedCwd: cwdInfo.resolvedCwd,
   };
 }
 
@@ -916,6 +971,8 @@ function createSession(
     currentTurnStartedAtMs: null,
     launchCommand: launchedCodex.launchCommand,
     launchDiagnostics: launchedCodex.launchDiagnostics,
+    requestedCwd: launchedCodex.requestedCwd,
+    resolvedCwd: launchedCodex.resolvedCwd,
   };
 
   // stdout: parse JSON-RPC lines
@@ -969,16 +1026,21 @@ function handleExit(
 }
 
 function handleSpawnError(session: CodexSession, err: Error): void {
-  const errno = err as NodeJS.ErrnoException;
+  const errno = err as NodeJS.ErrnoException & { spawnargs?: string[] };
+  const spawnArgs = Array.isArray(errno.spawnargs) ? errno.spawnargs.join(" ") : "";
   const baseMessage = errno.code === "ENOENT"
-    ? "未找到 codex 命令，请先安装 Codex CLI，或在 CODEX_CLI_PATH 中配置 codex.exe / codex.cmd 的完整路径"
-    : `Codex 进程错误：${err.message}`;
+    ? "Codex process failed to start. The command or working directory was not found."
+    : `Codex process error: ${err.message}`;
   const diagnosticLines = [
     baseMessage,
-    `启动方式：${session.launchCommand}`,
-    `错误代码：${errno.code ?? "unknown"}`,
-    ...session.launchDiagnostics.slice(0, 16).map((line) => `候选路径：${line}`),
-  ];
+    `launch command: ${session.launchCommand}`,
+    `requested cwd: ${session.requestedCwd || "<empty>"}`,
+    `resolved cwd: ${session.resolvedCwd}`,
+    `error code: ${errno.code ?? "unknown"}`,
+    `error path: ${errno.path ?? "unknown"}`,
+    spawnArgs ? `error spawnargs: ${spawnArgs}` : null,
+    ...session.launchDiagnostics.slice(0, 20).map((line) => `diagnostic: ${line}`),
+  ].filter((line): line is string => Boolean(line));
   const message = diagnosticLines.join("\n");
   emitSessionError(session, message);
   for (const [, pending] of session.pendingRequests) {
