@@ -5,6 +5,7 @@
 
 import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
 import { createInterface, type Interface } from "node:readline";
+import * as fsSync from "node:fs";
 import * as fs from "node:fs/promises";
 import * as os from "node:os";
 import * as path from "node:path";
@@ -88,12 +89,61 @@ const CODEX_SESSIONS_DIR = path.join(os.homedir(), ".codex", "sessions");
 const activeCodexSessions = new Map<string, CodexSession>();
 const codexSessionFileCache = new Map<string, string | null>();
 
+function windowsPathKey(): string {
+  return Object.keys(process.env).find((key) => key.toLowerCase() === "path") ?? "Path";
+}
+
+function windowsCodexPathDirs(): string[] {
+  const home = os.homedir();
+  const localAppData = process.env["LOCALAPPDATA"] || path.join(home, "AppData", "Local");
+  const appData = process.env["APPDATA"] || path.join(home, "AppData", "Roaming");
+  return [
+    path.join(localAppData, "Programs", "OpenAI", "Codex", "bin"),
+    path.join(appData, "npm"),
+  ];
+}
+
+function windowsCodexEnv(): NodeJS.ProcessEnv {
+  const pathKey = windowsPathKey();
+  const existingPath = process.env[pathKey] ?? "";
+  const parts = existingPath.split(path.delimiter).filter(Boolean);
+  const seen = new Set(parts.map((part) => part.toLowerCase()));
+  for (const dir of windowsCodexPathDirs()) {
+    const key = dir.toLowerCase();
+    if (!seen.has(key)) {
+      parts.push(dir);
+      seen.add(key);
+    }
+  }
+  return { ...process.env, [pathKey]: parts.join(path.delimiter) };
+}
+
+function resolveWindowsCodexExe(): string | null {
+  const configuredPath = process.env["CODEX_CLI_PATH"];
+  const candidates = [
+    configuredPath && configuredPath.toLowerCase().endsWith(".exe") ? configuredPath : null,
+    path.join(windowsCodexPathDirs()[0], "codex.exe"),
+  ];
+  return candidates.find((candidate): candidate is string => Boolean(candidate && fsSync.existsSync(candidate))) ?? null;
+}
+
 function spawnCodex(args: string[], cwd: string): ChildProcessWithoutNullStreams {
   if (process.platform === "win32") {
-    return spawn("cmd.exe", ["/d", "/s", "/c", "codex.cmd", ...args], {
+    const env = windowsCodexEnv();
+    const codexExe = resolveWindowsCodexExe();
+    if (codexExe) {
+      return spawn(codexExe, args, {
+        cwd,
+        stdio: ["pipe", "pipe", "pipe"],
+        windowsHide: true,
+        env,
+      });
+    }
+    return spawn(process.env["ComSpec"] || "cmd.exe", ["/d", "/s", "/c", "codex", ...args], {
       cwd,
       stdio: ["pipe", "pipe", "pipe"],
       windowsHide: true,
+      env,
     });
   }
   return spawn("codex", args, {
