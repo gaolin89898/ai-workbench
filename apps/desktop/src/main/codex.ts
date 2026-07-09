@@ -340,6 +340,34 @@ function emitSessionError(session: CodexSession, message: string, detail?: strin
   flushTrace(session);
 }
 
+function finishCodexSessionTrace(
+  session: CodexSession,
+  status: "completed" | "failed" | "canceled",
+  detail?: string
+): void {
+  if (!session.traceEnabled || !session.traceSnapshot) return;
+  const now = new Date().toISOString();
+  session.traceSnapshot = {
+    ...session.traceSnapshot,
+    status,
+    updatedAt: now,
+    completedAt: now,
+    errors: status === "failed" && detail
+      ? [...session.traceSnapshot.errors, { message: detail, at: now }]
+      : session.traceSnapshot.errors,
+    approvals: session.traceSnapshot.approvals.map((approval) => (
+      approval.status === "pending" ? { ...approval, status: "expired" as const } : approval
+    )),
+    items: session.traceSnapshot.items.map((item) => (
+      item.status === "running"
+        ? { ...item, status: status === "completed" ? "completed" as const : "failed" as const, completedAt: item.completedAt ?? now }
+        : item
+    )),
+  };
+  session.traceDirty = true;
+  flushTrace(session);
+}
+
 function errorMessage(err: unknown): string {
   if (err instanceof Error) return err.message;
   return String(err);
@@ -1263,7 +1291,8 @@ export async function runCodexChat(
   activeCodexSessions.set(aiSessionId, session);
 
   const timeout = setTimeout(() => {
-    emitSessionError(session, "Codex 会话超时（30 分钟）");
+    const timeoutMessage = "Codex session timed out after 30 minutes.";
+    emitSessionError(session, timeoutMessage);
     if (session.turnResolver) {
       session.turnResolver.reject(new Error("timeout"));
       session.turnResolver = null;
@@ -1272,7 +1301,8 @@ export async function runCodexChat(
       pending.reject(new Error("timeout"));
     }
     session.pendingRequests.clear();
-    resolvePendingApprovals(session, "expired", "Codex session ended; approval requests expired.");
+    resolvePendingApprovals(session, "expired", "Codex session timed out; approval requests expired.");
+    finishCodexSessionTrace(session, "failed", timeoutMessage);
     killSession(session);
   }, CODEX_TURN_TIMEOUT_MS);
 

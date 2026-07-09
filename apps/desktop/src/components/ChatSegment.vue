@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed } from "vue";
+import { useWorkspace } from "../composables/useWorkspace";
 import { desktopApi } from "../services/desktop";
 import type { ChatSegment as ChatSegmentType } from "../services/desktop";
 import { extractAssistantText } from "../utils/chat";
@@ -8,6 +9,7 @@ const props = defineProps<{
   segment: ChatSegmentType;
   aiSessionId?: string;
 }>();
+const ws = useWorkspace();
 
 type MarkdownBlock =
   | { type: "paragraph"; text: string }
@@ -490,11 +492,18 @@ function approvalKindLabel(segment: Extract<ChatSegmentType, { type: "approval" 
 
 async function respondApproval(decision: "approved" | "denied") {
   if (props.segment.type !== "approval" || !props.aiSessionId || props.segment.status !== "pending") return;
-  await desktopApi.respondCodexApproval({
-    aiSessionId: props.aiSessionId,
-    approvalId: props.segment.approvalId,
-    decision,
-  });
+  try {
+    const handled = await desktopApi.respondCodexApproval({
+      aiSessionId: props.aiSessionId,
+      approvalId: props.segment.approvalId,
+      decision,
+    });
+    if (!handled) {
+      ws.expirePendingApproval(props.aiSessionId, props.segment.approvalId);
+    }
+  } catch {
+    ws.expirePendingApproval(props.aiSessionId, props.segment.approvalId);
+  }
 }
 </script>
 

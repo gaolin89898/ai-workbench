@@ -1408,6 +1408,42 @@ function interruptPendingAssistant(sessionId: string) {
   stopRunningElapsedTimerIfIdle();
 }
 
+function expirePendingApproval(sessionId: string, approvalId: string, detail = "Approval request expired.") {
+  const expireSegment = (segment: ChatSegment): ChatSegment => {
+    if (segment.type !== "approval" || segment.approvalId !== approvalId || segment.status !== "pending") return segment;
+    return { ...segment, status: "expired", detail };
+  };
+
+  const pending = pendingAssistants.get(sessionId);
+  if (pending) {
+    pending.steps = new Map([...pending.steps.entries()].map(([key, segment]) => [key, expireSegment(segment)]));
+    syncPendingAssistantSegments(sessionId, true);
+    persistPendingAssistantSnapshot(sessionId, pending);
+    pendingAssistants.delete(sessionId);
+    assistantDrafts.delete(sessionId);
+  } else {
+    const nextMessages = chatMessagesForSession(sessionId).map((message) => (
+      message.segments?.some((segment) => segment.type === "approval" && segment.approvalId === approvalId && segment.status === "pending")
+        ? {
+          ...message,
+          pending: false,
+          segments: message.segments.map(expireSegment),
+        }
+        : message
+    ));
+    setChatMessagesForSession(sessionId, nextMessages);
+  }
+
+  thinkingSessionIds.value = { ...thinkingSessionIds.value, [sessionId]: false };
+  setChatRunState(sessionId, {
+    active: false,
+    phase: "done",
+    title: "Approval expired",
+    detail,
+  });
+  stopRunningElapsedTimerIfIdle();
+}
+
 async function stopActiveAiChat() {
   const sessionId = activeAiSession.value?.id;
   if (!sessionId) return;
@@ -2219,6 +2255,7 @@ export function useWorkspace() {
     selectAiSessionFromDropdown,
     loadAiSessionHistory,
     sendPrompt,
+    expirePendingApproval,
     stopActiveAiChat,
     sendShellInput,
     sendProjectShellInput,

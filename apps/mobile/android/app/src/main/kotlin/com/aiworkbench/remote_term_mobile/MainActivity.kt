@@ -19,6 +19,8 @@ import java.io.File
 
 class MainActivity : FlutterActivity() {
     private var notificationPermissionResult: MethodChannel.Result? = null
+    private var pendingInstallPath: String? = null
+    private var pendingInstallResult: MethodChannel.Result? = null
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
@@ -37,47 +39,7 @@ class MainActivity : FlutterActivity() {
                 return@setMethodCallHandler
             }
 
-            try {
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O &&
-                    !packageManager.canRequestPackageInstalls()
-                ) {
-                    val settingsIntent = Intent(
-                        Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES,
-                        Uri.parse("package:$packageName")
-                    ).apply {
-                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                    }
-                    startActivity(settingsIntent)
-                    result.error(
-                        "INSTALL_PERMISSION_REQUIRED",
-                        "请先允许 CodeHub AI 安装未知来源应用，然后重新安装。",
-                        null
-                    )
-                    return@setMethodCallHandler
-                }
-
-                val apkFile = File(path)
-                if (!apkFile.exists() || apkFile.length() <= 0) {
-                    result.error("INVALID_APK", "APK file is missing or empty.", null)
-                    return@setMethodCallHandler
-                }
-
-                val apkUri = FileProvider.getUriForFile(
-                    this,
-                    "${applicationContext.packageName}.fileprovider",
-                    apkFile
-                )
-                val intent = Intent(Intent.ACTION_INSTALL_PACKAGE).apply {
-                    setDataAndType(apkUri, "application/vnd.android.package-archive")
-                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                    addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                    putExtra(Intent.EXTRA_NOT_UNKNOWN_SOURCE, true)
-                }
-                startActivity(intent)
-                result.success(null)
-            } catch (error: Exception) {
-                result.error("INSTALL_FAILED", error.message, null)
-            }
+            installApkOrRequestPermission(path, result)
         }
 
         MethodChannel(
@@ -94,6 +56,93 @@ class MainActivity : FlutterActivity() {
                 else -> result.notImplemented()
             }
         }
+    }
+
+    override fun onResume() {
+        super.onResume()
+
+        val path = pendingInstallPath ?: return
+        val result = pendingInstallResult ?: return
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O &&
+            !packageManager.canRequestPackageInstalls()
+        ) {
+            clearPendingInstall()
+            result.error(
+                "INSTALL_PERMISSION_REQUIRED",
+                "Please allow CodeHub AI to install unknown apps, then try again.",
+                null
+            )
+            return
+        }
+
+        clearPendingInstall()
+        installApkOrRequestPermission(path, result, allowPermissionRequest = false)
+    }
+
+    private fun installApkOrRequestPermission(
+        path: String,
+        result: MethodChannel.Result,
+        allowPermissionRequest: Boolean = true
+    ) {
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O &&
+                !packageManager.canRequestPackageInstalls()
+            ) {
+                if (!allowPermissionRequest) {
+                    result.error(
+                        "INSTALL_PERMISSION_REQUIRED",
+                        "Please allow CodeHub AI to install unknown apps, then try again.",
+                        null
+                    )
+                    return
+                }
+
+                if (pendingInstallResult != null) {
+                    result.error("INSTALL_ALREADY_PENDING", "APK install permission is already pending.", null)
+                    return
+                }
+
+                pendingInstallPath = path
+                pendingInstallResult = result
+                val settingsIntent = Intent(
+                    Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES,
+                    Uri.parse("package:$packageName")
+                ).apply {
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                }
+                startActivity(settingsIntent)
+                return
+            }
+
+            val apkFile = File(path)
+            if (!apkFile.exists() || apkFile.length() <= 0) {
+                result.error("INVALID_APK", "APK file is missing or empty.", null)
+                return
+            }
+
+            val apkUri = FileProvider.getUriForFile(
+                this,
+                "${applicationContext.packageName}.fileprovider",
+                apkFile
+            )
+            val intent = Intent(Intent.ACTION_INSTALL_PACKAGE).apply {
+                setDataAndType(apkUri, "application/vnd.android.package-archive")
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                putExtra(Intent.EXTRA_NOT_UNKNOWN_SOURCE, true)
+            }
+            startActivity(intent)
+            result.success(null)
+        } catch (error: Exception) {
+            clearPendingInstall()
+            result.error("INSTALL_FAILED", error.message, null)
+        }
+    }
+
+    private fun clearPendingInstall() {
+        pendingInstallPath = null
+        pendingInstallResult = null
     }
 
     private fun requestNotificationPermission(result: MethodChannel.Result) {
