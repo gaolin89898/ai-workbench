@@ -48,7 +48,7 @@ func (h *Handler) handleDesktopMessage(msg protocol.Message, userID, deviceID uu
 	case protocol.AiSessionsSnapshot:
 		h.handleAiSessionsSnapshot(userID, m)
 		return true
-	case protocol.AiMessageDelta, protocol.AiMessageDone, protocol.AiHistoryResponse, protocol.AiChatOutput, protocol.AiTraceUpdate, protocol.GitStatusSnapshotMessage, protocol.AiRunSettingsSnapshot:
+	case protocol.AiMessageDelta, protocol.AiMessageDone, protocol.AiHistoryResponse, protocol.AiChatOutput, protocol.AiTraceUpdate, protocol.GitStatusSnapshotMessage, protocol.AiRunSettingsSnapshot, protocol.ProjectFilesResponse, protocol.ProjectFilePreviewResponse:
 		// Pure forward to mobiles; no DB side effects.
 		h.notifyMobiles(userID, msg)
 		return true

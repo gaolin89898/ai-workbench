@@ -128,9 +128,15 @@
   "deviceId": "00000000-0000-0000-0000-000000000000",
   "aiSessionId": "22222222-2222-2222-2222-222222222222",
   "content": "帮我检查这个项目的登录流程",
-  "confirmedRisk": false
+  "confirmedRisk": false,
+  "model": "gpt-5.6",
+  "reasoningEffort": "high",
+  "mode": "plan",
+  "goal": "给出可执行的登录流程改造方案"
 }
 ```
+
+`model`、`reasoningEffort`、`mode` 和 `goal` 均为可选字段。`mode` 使用 `default` 或 `plan`，桌面端会映射到各 Provider 的构建/规划模式。
 
 桌面端收到后负责：
 
@@ -468,6 +474,29 @@ WebSocket 消息示例：
 ```
 
 `trace` 是可选字段。只有桌面端本地存在 provider trace 时返回；没有 trace 的旧会话或非 Codex 会话继续只返回 `messages`。
+
+### 运行设置同步
+
+桌面端通过 `ai.run.settings.snapshot` 同步 Codex、Claude、OpenCode 和 MiMo 的模型与推理选项。移动端修改后使用 `ai.run.settings.update` 返回对应 Provider，桌面端再广播最新快照。
+
+### 项目文件浏览
+
+移动端请求目录内容：
+
+```json
+{
+  "type": "project.files.request",
+  "deviceId": "00000000-0000-0000-0000-000000000000",
+  "projectId": "11111111-1111-1111-1111-111111111111",
+  "projectPath": "C:\\repo",
+  "directoryPath": null,
+  "requestId": "44444444-4444-4444-4444-444444444444"
+}
+```
+
+桌面端返回 `project.files.response`，其中 `entries` 按目录优先排序。服务端校验设备和项目归属，桌面端再次校验目标路径必须位于已注册项目根目录内，并排除 `.git`。
+
+移动端请求文件预览使用 `project.file.preview.request`，桌面端通过 `project.file.preview.response` 返回 `text`、`image`、`binary` 或 `tooLarge` 类型。该能力只读，不提供移动端文件修改接口。
 
 ### Git 状态快照
 

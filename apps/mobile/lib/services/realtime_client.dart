@@ -3,6 +3,7 @@ import 'dart:convert';
 
 import 'package:web_socket_channel/web_socket_channel.dart';
 
+import '../models/workbench_models.dart';
 import 'api_client.dart';
 
 class RealtimeClient {
@@ -67,6 +68,8 @@ class RealtimeClient {
     bool confirmedRisk = false,
     String? model,
     String? reasoningEffort,
+    String? mode,
+    String? goal,
   }) {
     send({
       'type': 'ai.message.send',
@@ -77,6 +80,8 @@ class RealtimeClient {
       if (model != null && model.isNotEmpty) 'model': model,
       if (reasoningEffort != null && reasoningEffort.isNotEmpty)
         'reasoningEffort': reasoningEffort,
+      if (mode != null && mode.isNotEmpty) 'mode': mode,
+      if (goal != null && goal.isNotEmpty) 'goal': goal,
     });
   }
 
@@ -111,6 +116,38 @@ class RealtimeClient {
       if (model != null) 'model': model,
       if (reasoningEffort != null && reasoningEffort.isNotEmpty)
         'reasoningEffort': reasoningEffort,
+    });
+  }
+
+  void requestProjectFiles(
+    String deviceId,
+    WorkspaceProject project,
+    String requestId, {
+    String? directoryPath,
+  }) {
+    send({
+      'type': 'project.files.request',
+      'deviceId': deviceId,
+      'projectId': project.id,
+      'projectPath': project.path,
+      'directoryPath': directoryPath,
+      'requestId': requestId,
+    });
+  }
+
+  void requestProjectFilePreview(
+    String deviceId,
+    WorkspaceProject project,
+    String filePath,
+    String requestId,
+  ) {
+    send({
+      'type': 'project.file.preview.request',
+      'deviceId': deviceId,
+      'projectId': project.id,
+      'projectPath': project.path,
+      'filePath': filePath,
+      'requestId': requestId,
     });
   }
 

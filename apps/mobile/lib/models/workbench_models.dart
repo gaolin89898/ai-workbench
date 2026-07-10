@@ -157,6 +157,21 @@ class AiRunProviderSettings {
                 .whereType<String>()
                 .toList(),
       );
+
+  AiRunProviderSettings copyWith({
+    String? providerId,
+    String? model,
+    String? reasoningEffort,
+    List<AiRunModelOption>? models,
+    List<String>? reasoningOptions,
+  }) =>
+      AiRunProviderSettings(
+        providerId: providerId ?? this.providerId,
+        model: model ?? this.model,
+        reasoningEffort: reasoningEffort ?? this.reasoningEffort,
+        models: models ?? this.models,
+        reasoningOptions: reasoningOptions ?? this.reasoningOptions,
+      );
 }
 
 class AiRunSettingsSnapshot {
@@ -164,11 +179,15 @@ class AiRunSettingsSnapshot {
     required this.deviceId,
     required this.codex,
     required this.claude,
+    required this.opencode,
+    required this.mimo,
   });
 
   final String deviceId;
   final AiRunProviderSettings codex;
   final AiRunProviderSettings claude;
+  final AiRunProviderSettings opencode;
+  final AiRunProviderSettings mimo;
 
   factory AiRunSettingsSnapshot.fromJson(Map<String, dynamic> json) =>
       AiRunSettingsSnapshot(
@@ -179,13 +198,63 @@ class AiRunSettingsSnapshot {
         claude: AiRunProviderSettings.fromJson(
           (json['claude'] as Map<String, dynamic>?) ?? const {},
         ),
+        opencode: AiRunProviderSettings.fromJson(
+          _providerSettingsJson(
+            json['opencode'],
+            const {'providerId': 'opencode'},
+          ),
+        ),
+        mimo: AiRunProviderSettings.fromJson(
+          _providerSettingsJson(
+            json['mimo'],
+            const {
+              'providerId': 'mimo',
+              'model': 'xiaomi/mimo-v2.5-pro',
+              'reasoningEffort': 'high',
+              'models': [
+                {
+                  'id': 'xiaomi/mimo-v2.5-pro',
+                  'model': 'xiaomi/mimo-v2.5-pro',
+                  'displayName': 'MiMo-V2.5-Pro',
+                  'isDefault': true,
+                },
+              ],
+              'reasoningOptions': ['low', 'medium', 'high'],
+            },
+          ),
+        ),
       );
 
   AiRunProviderSettings? forProvider(String providerId) => switch (providerId) {
         'codex' => codex,
         'claude' => claude,
+        'opencode' => opencode,
+        'mimo' => mimo,
         _ => null,
       };
+
+  AiRunSettingsSnapshot withProvider(
+    String providerId,
+    AiRunProviderSettings settings,
+  ) =>
+      AiRunSettingsSnapshot(
+        deviceId: deviceId,
+        codex: providerId == 'codex' ? settings : codex,
+        claude: providerId == 'claude' ? settings : claude,
+        opencode: providerId == 'opencode' ? settings : opencode,
+        mimo: providerId == 'mimo' ? settings : mimo,
+      );
+}
+
+Map<String, dynamic> _providerSettingsJson(
+  dynamic value,
+  Map<String, dynamic> fallback,
+) {
+  if (value is Map<String, dynamic> &&
+      (value['providerId'] as String? ?? '').isNotEmpty) {
+    return value;
+  }
+  return fallback;
 }
 
 class WorkspaceProject {
@@ -216,6 +285,70 @@ class WorkspaceProject {
         gitDirty: json['gitDirty'] as bool,
         updatedAt: json['updatedAt'] as String,
         gitBranch: json['gitBranch'] as String?,
+      );
+}
+
+class WorkspaceFileEntry {
+  const WorkspaceFileEntry({
+    required this.name,
+    required this.path,
+    required this.kind,
+    required this.size,
+    required this.modifiedAt,
+  });
+
+  final String name;
+  final String path;
+  final String kind;
+  final int size;
+  final String modifiedAt;
+
+  bool get isDirectory => kind == 'directory';
+
+  factory WorkspaceFileEntry.fromJson(Map<String, dynamic> json) =>
+      WorkspaceFileEntry(
+        name: json['name'] as String? ?? '',
+        path: json['path'] as String? ?? '',
+        kind: json['kind'] as String? ?? 'file',
+        size: (json['size'] as num?)?.toInt() ?? 0,
+        modifiedAt: json['modifiedAt'] as String? ?? '',
+      );
+}
+
+class ProjectFilePreview {
+  const ProjectFilePreview({
+    required this.name,
+    required this.path,
+    required this.size,
+    required this.modifiedAt,
+    required this.previewKind,
+    this.mimeType,
+    this.content,
+    this.dataUrl,
+    this.language,
+  });
+
+  final String name;
+  final String path;
+  final int size;
+  final String modifiedAt;
+  final String previewKind;
+  final String? mimeType;
+  final String? content;
+  final String? dataUrl;
+  final String? language;
+
+  factory ProjectFilePreview.fromJson(Map<String, dynamic> json) =>
+      ProjectFilePreview(
+        name: json['name'] as String? ?? '',
+        path: json['path'] as String? ?? '',
+        size: (json['size'] as num?)?.toInt() ?? 0,
+        modifiedAt: json['modifiedAt'] as String? ?? '',
+        previewKind: json['previewKind'] as String? ?? 'binary',
+        mimeType: json['mimeType'] as String?,
+        content: json['content'] as String?,
+        dataUrl: json['dataUrl'] as String?,
+        language: json['language'] as String?,
       );
 }
 

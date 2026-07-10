@@ -35,6 +35,7 @@ import { runAiChat, stopAiChat } from "./claude";
 import { runOpenCodeChat, stopOpenCodeChat } from "./acp";
 import { respondMimoApproval, runMimoChat, stopMimoChat } from "./mimo";
 import { codexTraceSnapshotToSegments } from "./codex_trace";
+import { listProjectFiles, readProjectFilePreview } from "./project_files";
 
 // ---------- Cloud config persistence ----------
 
@@ -53,6 +54,20 @@ export type AiRunSettingsState = {
   };
   claude: {
     providerId: "claude";
+    model: string;
+    reasoningEffort: string;
+    models: CodexModelOption[];
+    reasoningOptions: string[];
+  };
+  opencode: {
+    providerId: "opencode";
+    model: string;
+    reasoningEffort: string;
+    models: CodexModelOption[];
+    reasoningOptions: string[];
+  };
+  mimo: {
+    providerId: "mimo";
     model: string;
     reasoningEffort: string;
     models: CodexModelOption[];
@@ -80,6 +95,22 @@ const defaultRunSettings: AiRunSettingsState = {
       { id: "default", model: "", displayName: "默认" },
     ],
     reasoningOptions: ["low", "medium", "high", "xhigh", "max"],
+  },
+  opencode: {
+    providerId: "opencode",
+    model: "",
+    reasoningEffort: "high",
+    models: [],
+    reasoningOptions: ["low", "medium", "high", "max"],
+  },
+  mimo: {
+    providerId: "mimo",
+    model: "xiaomi/mimo-v2.5-pro",
+    reasoningEffort: "high",
+    models: [
+      { id: "xiaomi/mimo-v2.5-pro", model: "xiaomi/mimo-v2.5-pro", displayName: "MiMo-V2.5-Pro", isDefault: true },
+    ],
+    reasoningOptions: ["low", "medium", "high"],
   },
 };
 
@@ -462,6 +493,7 @@ class DesktopCloudSync {
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   private providerSnapshotCache: { providers: Awaited<ReturnType<typeof detectAiProviders>>; checkedAt: number } | null = null;
   private runSettings: AiRunSettingsState = cloneRunSettings(defaultRunSettings);
+  private runSettingsRevision = 0;
   private stopped = false;
   // Tracks projectPath per session for mobile-originated sessions, since the
   // local DB schema does not store project_path on local_ai_sessions.
@@ -550,13 +582,17 @@ class DesktopCloudSync {
     this.runSettings = {
       codex: { ...this.runSettings.codex, ...settings.codex },
       claude: { ...this.runSettings.claude, ...settings.claude },
+      opencode: { ...this.runSettings.opencode, ...settings.opencode },
+      mimo: { ...this.runSettings.mimo, ...settings.mimo },
     };
+    this.runSettingsRevision += 1;
     const config = loadStoredConfig();
     if (!config) return;
     void this.pushRunSettingsSnapshot(config.deviceId);
   }
 
   private async pushRunSettingsSnapshot(deviceId: string): Promise<void> {
+    const revision = this.runSettingsRevision;
     const settings = cloneRunSettings(this.runSettings);
     if (settings.codex.models.length === 0) {
       try {
@@ -565,6 +601,10 @@ class DesktopCloudSync {
       } catch {
         // Keep the last known/default settings.
       }
+    }
+    if (revision !== this.runSettingsRevision) {
+      // The settings change that advanced the revision already queued a newer snapshot.
+      return;
     }
     if (settings.codex.models.length > 0) {
       settings.codex = normalizeCodexRunSettings(settings.codex);
@@ -695,6 +735,12 @@ class DesktopCloudSync {
       case "ai.run.settings.update":
         this.handleAiRunSettingsUpdate(msg, deviceId);
         break;
+      case "project.files.request":
+        void this.handleProjectFilesRequest(msg, deviceId);
+        break;
+      case "project.file.preview.request":
+        void this.handleProjectFilePreviewRequest(msg, deviceId);
+        break;
       case "app.update.available":
         this.notify("app-update-available", {
           available: msg.available === true,
@@ -719,7 +765,7 @@ class DesktopCloudSync {
 
   private handleAiRunSettingsUpdate(msg: any, deviceId: string): void {
     const providerId = typeof msg.providerId === "string" ? msg.providerId : "";
-    if (providerId !== "codex" && providerId !== "claude") return;
+    if (providerId !== "codex" && providerId !== "claude" && providerId !== "opencode" && providerId !== "mimo") return;
     const model = typeof msg.model === "string" ? msg.model : "";
     const reasoningEffort = typeof msg.reasoningEffort === "string" ? msg.reasoningEffort : "";
     let appliedModel = model;
@@ -727,15 +773,11 @@ class DesktopCloudSync {
     let appliedServiceTier: string | null | undefined;
 
     if (providerId === "codex") {
-      const hasServiceTier = Object.prototype.hasOwnProperty.call(msg, "serviceTier");
-      const serviceTier = typeof msg.serviceTier === "string" && msg.serviceTier.trim()
-        ? msg.serviceTier.trim()
-        : null;
       const nextSettings: AiRunSettingsState["codex"] = {
         ...this.runSettings.codex,
         ...(model ? { model } : {}),
         ...(codexReasoningEffort(reasoningEffort) ? { reasoningEffort } : {}),
-        ...(hasServiceTier ? { serviceTier } : {}),
+        serviceTier: null,
       };
       this.runSettings.codex = nextSettings.models.length > 0
         ? normalizeCodexRunSettings(nextSettings)
@@ -743,13 +785,33 @@ class DesktopCloudSync {
       appliedModel = this.runSettings.codex.model;
       appliedReasoningEffort = this.runSettings.codex.reasoningEffort;
       appliedServiceTier = this.runSettings.codex.serviceTier;
-    } else {
+    } else if (providerId === "claude") {
       this.runSettings.claude = {
         ...this.runSettings.claude,
         ...(typeof msg.model === "string" ? { model } : {}),
         ...(claudeReasoningEffort(reasoningEffort) ? { reasoningEffort } : {}),
       };
+      appliedModel = this.runSettings.claude.model;
+      appliedReasoningEffort = this.runSettings.claude.reasoningEffort;
+    } else {
+      const providerSettings = providerId === "opencode"
+        ? this.runSettings.opencode
+        : this.runSettings.mimo;
+      const updatedSettings = {
+        ...providerSettings,
+        ...(typeof msg.model === "string" ? { model } : {}),
+        ...(reasoningEffort ? { reasoningEffort } : {}),
+      };
+      if (providerId === "opencode") {
+        this.runSettings.opencode = { ...updatedSettings, providerId: "opencode" };
+      } else {
+        this.runSettings.mimo = { ...updatedSettings, providerId: "mimo" };
+      }
+      appliedModel = updatedSettings.model;
+      appliedReasoningEffort = updatedSettings.reasoningEffort;
     }
+
+    this.runSettingsRevision += 1;
 
     this.notify("ai-run-settings-update", {
       providerId,
@@ -758,6 +820,64 @@ class DesktopCloudSync {
       ...(providerId === "codex" ? { serviceTier: appliedServiceTier ?? null } : {}),
     });
     void this.pushRunSettingsSnapshot(deviceId);
+  }
+
+  private async handleProjectFilesRequest(msg: any, deviceId: string): Promise<void> {
+    const requestId = typeof msg.requestId === "string" ? msg.requestId : "";
+    const projectId = typeof msg.projectId === "string" ? msg.projectId : "";
+    const projectPath = typeof msg.projectPath === "string" ? msg.projectPath : "";
+    if (!requestId || !projectId || !projectPath) return;
+    try {
+      const entries = await listProjectFiles(
+        projectPath,
+        typeof msg.directoryPath === "string" && msg.directoryPath ? msg.directoryPath : null,
+      );
+      this.send({
+        type: "project.files.response",
+        deviceId,
+        projectId,
+        requestId,
+        entries,
+        error: null,
+      });
+    } catch (error) {
+      this.send({
+        type: "project.files.response",
+        deviceId,
+        projectId,
+        requestId,
+        entries: [],
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
+
+  private async handleProjectFilePreviewRequest(msg: any, deviceId: string): Promise<void> {
+    const requestId = typeof msg.requestId === "string" ? msg.requestId : "";
+    const projectId = typeof msg.projectId === "string" ? msg.projectId : "";
+    const projectPath = typeof msg.projectPath === "string" ? msg.projectPath : "";
+    const filePath = typeof msg.filePath === "string" ? msg.filePath : "";
+    if (!requestId || !projectId || !projectPath || !filePath) return;
+    try {
+      const preview = await readProjectFilePreview(projectPath, filePath);
+      this.send({
+        type: "project.file.preview.response",
+        deviceId,
+        projectId,
+        requestId,
+        preview,
+        error: null,
+      });
+    } catch (error) {
+      this.send({
+        type: "project.file.preview.response",
+        deviceId,
+        projectId,
+        requestId,
+        preview: null,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
   }
 
   private handleAiMessageStop(msg: any, deviceId: string): void {
@@ -1126,10 +1246,8 @@ class DesktopCloudSync {
       const confirmedRisk: boolean = !!msg.confirmedRisk;
       const selectedModel = typeof msg.model === "string" ? msg.model.trim() : "";
       const reasoningEffort = typeof msg.reasoningEffort === "string" ? msg.reasoningEffort.trim() : "";
-      const hasServiceTier = Object.prototype.hasOwnProperty.call(msg, "serviceTier");
-      const serviceTier = typeof msg.serviceTier === "string" && msg.serviceTier.trim()
-        ? msg.serviceTier.trim()
-        : null;
+      const runMode = msg.mode === "plan" ? "plan" : "default";
+      const goal = typeof msg.goal === "string" && msg.goal.trim() ? msg.goal.trim() : null;
 
       const risk = assessCommandRisk(content);
       if (risk.risky && !confirmedRisk) {
@@ -1191,7 +1309,9 @@ class DesktopCloudSync {
               prompt: content,
               codexModel: selectedModel || null,
               codexReasoningEffort: codexReasoningEffort(reasoningEffort),
-              ...(hasServiceTier ? { codexServiceTier: serviceTier } : {}),
+              codexMode: runMode,
+              codexGoal: goal,
+              codexServiceTier: null,
             },
             aiChatSender
           );
@@ -1203,7 +1323,8 @@ class DesktopCloudSync {
               prompt: content,
               opencodeModel: selectedModel || null,
               opencodeEffort: reasoningEffort || null,
-              opencodeMode: "build",
+              opencodeMode: runMode === "plan" ? "plan" : "build",
+              codexGoal: goal,
             },
             aiChatSender,
             session.providerSessionId ?? null,
@@ -1216,7 +1337,8 @@ class DesktopCloudSync {
               prompt: content,
               mimoModel: selectedModel || null,
               mimoVariant: reasoningEffort || null,
-              mimoAgent: "build",
+              mimoAgent: runMode === "plan" ? "plan" : "build",
+              codexGoal: goal,
             },
             aiChatSender,
             session.providerSessionId ?? null,
@@ -1229,6 +1351,8 @@ class DesktopCloudSync {
               prompt: content,
               claudeModel: selectedModel || null,
               claudeReasoningEffort: claudeReasoningEffort(reasoningEffort),
+              claudeMode: runMode,
+              claudeGoal: goal,
             },
             aiChatSender,
             session.providerSessionId ?? null

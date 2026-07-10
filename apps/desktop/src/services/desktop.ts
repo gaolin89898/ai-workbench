@@ -383,7 +383,7 @@ export type CodexModelOption = {
 export type ClaudeReasoningEffort = "low" | "medium" | "high" | "xhigh" | "max";
 
 export type AiRunProviderSettings = {
-  providerId: "codex" | "claude";
+  providerId: "codex" | "claude" | "opencode" | "mimo";
   model: string;
   reasoningEffort: string;
   models: CodexModelOption[];
@@ -394,10 +394,12 @@ export type AiRunProviderSettings = {
 export type AiRunSettingsState = {
   codex: AiRunProviderSettings & { providerId: "codex" };
   claude: AiRunProviderSettings & { providerId: "claude" };
+  opencode: AiRunProviderSettings & { providerId: "opencode" };
+  mimo: AiRunProviderSettings & { providerId: "mimo" };
 };
 
 export type AiRunSettingsUpdateEvent = {
-  providerId: "codex" | "claude";
+  providerId: "codex" | "claude" | "opencode" | "mimo";
   model: string;
   reasoningEffort: string;
   serviceTier?: string | null;

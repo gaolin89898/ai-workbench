@@ -36,6 +36,10 @@ class WorkspaceController extends ChangeNotifier {
   late final Future<void> _persistenceLoaded;
   DateTime? _lastDevicesLoadedAt;
   final Map<String, Future<AiSessionMeta?>> _createSessionInFlight = {};
+  final Map<String, Completer<List<WorkspaceFileEntry>>> _fileListRequests = {};
+  final Map<String, Completer<ProjectFilePreview>> _filePreviewRequests = {};
+  final Map<String, _PendingRunSettingsSelection>
+      _pendingRunSettingsSelections = {};
   static const _selectedDeviceIdKey = 'selectedDeviceId';
   static const _accountDisplayNameKey = 'accountDisplayName';
   static const _accountAvatarIndexKey = 'accountAvatarIndex';
@@ -232,6 +236,7 @@ class WorkspaceController extends ChangeNotifier {
         providers = [];
         providerStatuses = [];
         runSettingsByDevice.clear();
+        _pendingRunSettingsSelections.clear();
         projects = [];
         sessions = [];
         logs = [];
@@ -384,6 +389,8 @@ class WorkspaceController extends ChangeNotifier {
     String prompt, {
     String? model,
     String? reasoningEffort,
+    String? mode,
+    String? goal,
   }) {
     final device = selectedDevice;
     final trimmed = prompt.trim();
@@ -402,6 +409,8 @@ class WorkspaceController extends ChangeNotifier {
       trimmed,
       model: model,
       reasoningEffort: reasoningEffort,
+      mode: mode,
+      goal: goal,
     );
     // Best-effort: rename untitled sessions based on the first prompt.
     _maybeRenameUntitledSession(session, trimmed);
@@ -422,12 +431,85 @@ class WorkspaceController extends ChangeNotifier {
   }) {
     final device = selectedDevice;
     if (device == null) return;
+    final snapshot = runSettingsByDevice[device.id];
+    final current = snapshot?.forProvider(providerId);
+    if (snapshot != null && current != null) {
+      final selectedModel = model ?? current.model;
+      final selectedReasoning = reasoningEffort?.isNotEmpty == true
+          ? reasoningEffort!
+          : current.reasoningEffort;
+      runSettingsByDevice[device.id] = snapshot.withProvider(
+        providerId,
+        current.copyWith(
+          model: selectedModel,
+          reasoningEffort: selectedReasoning,
+        ),
+      );
+      _pendingRunSettingsSelections[_runSettingsSelectionKey(
+        device.id,
+        providerId,
+      )] = _PendingRunSettingsSelection(
+        model: model,
+        reasoningEffort:
+            reasoningEffort?.isNotEmpty == true ? reasoningEffort : null,
+        createdAt: DateTime.now(),
+      );
+      _notifySafely();
+    }
     realtime.updateRunSettings(
       device.id,
       providerId,
       model: model,
       reasoningEffort: reasoningEffort,
     );
+  }
+
+  Future<List<WorkspaceFileEntry>> listProjectFiles(
+    WorkspaceProject project, {
+    String? directoryPath,
+  }) {
+    final device = selectedDevice;
+    if (device == null || device.id != project.deviceId) {
+      return Future.error(StateError('桌面设备不可用'));
+    }
+    final requestId =
+        'files-${DateTime.now().microsecondsSinceEpoch}-${project.id}';
+    final completer = Completer<List<WorkspaceFileEntry>>();
+    _fileListRequests[requestId] = completer;
+    realtime.requestProjectFiles(
+      device.id,
+      project,
+      requestId,
+      directoryPath: directoryPath,
+    );
+    return completer.future.timeout(
+      const Duration(seconds: 15),
+      onTimeout: () => throw TimeoutException('桌面端未及时返回文件列表'),
+    ).whenComplete(() => _fileListRequests.remove(requestId));
+  }
+
+  Future<ProjectFilePreview> readProjectFilePreview(
+    WorkspaceProject project,
+    String filePath,
+  ) {
+    final device = selectedDevice;
+    if (device == null || device.id != project.deviceId) {
+      return Future.error(StateError('桌面设备不可用'));
+    }
+    final requestId =
+        'preview-${DateTime.now().microsecondsSinceEpoch}-${project.id}';
+    final completer = Completer<ProjectFilePreview>();
+    _filePreviewRequests[requestId] = completer;
+    realtime.requestProjectFilePreview(
+      device.id,
+      project,
+      filePath,
+      requestId,
+    );
+    return completer.future.timeout(
+      const Duration(seconds: 20),
+      onTimeout: () => throw TimeoutException('桌面端未及时返回文件预览'),
+    ).whenComplete(() => _filePreviewRequests.remove(requestId));
   }
 
   void _beginLocalPromptTurn(String sessionId, String prompt) {
@@ -652,7 +734,9 @@ class WorkspaceController extends ChangeNotifier {
             .toList();
         break;
       case 'ai.run.settings.snapshot':
-        final snapshot = AiRunSettingsSnapshot.fromJson(json);
+        final snapshot = _reconcileRunSettingsSnapshot(
+          AiRunSettingsSnapshot.fromJson(json),
+        );
         if (snapshot.deviceId.isNotEmpty) {
           runSettingsByDevice[snapshot.deviceId] = snapshot;
         }
@@ -662,6 +746,38 @@ class WorkspaceController extends ChangeNotifier {
             .map((item) =>
                 WorkspaceProject.fromJson(item as Map<String, dynamic>))
             .toList();
+        break;
+      case 'project.files.response':
+        final requestId = json['requestId'] as String? ?? '';
+        final request = _fileListRequests[requestId];
+        if (request != null && !request.isCompleted) {
+          final responseError = json['error'] as String?;
+          if (responseError != null && responseError.isNotEmpty) {
+            request.completeError(StateError(responseError));
+          } else {
+            request.complete(
+              ((json['entries'] as List<dynamic>?) ?? const [])
+                  .whereType<Map<String, dynamic>>()
+                  .map(WorkspaceFileEntry.fromJson)
+                  .toList(),
+            );
+          }
+        }
+        break;
+      case 'project.file.preview.response':
+        final requestId = json['requestId'] as String? ?? '';
+        final request = _filePreviewRequests[requestId];
+        if (request != null && !request.isCompleted) {
+          final responseError = json['error'] as String?;
+          final preview = json['preview'];
+          if (responseError != null && responseError.isNotEmpty) {
+            request.completeError(StateError(responseError));
+          } else if (preview is Map<String, dynamic>) {
+            request.complete(ProjectFilePreview.fromJson(preview));
+          } else {
+            request.completeError(StateError('桌面端未返回文件预览'));
+          }
+        }
         break;
       case 'ai.sessions.snapshot':
         sessions = ((json['sessions'] as List<dynamic>?) ?? const [])
@@ -1805,7 +1921,67 @@ class WorkspaceController extends ChangeNotifier {
     _historyRefreshTimer?.cancel();
     _historyTimeoutTimer?.cancel();
     _events?.cancel();
+    for (final request in _fileListRequests.values) {
+      if (!request.isCompleted) request.completeError(StateError('控制器已关闭'));
+    }
+    for (final request in _filePreviewRequests.values) {
+      if (!request.isCompleted) request.completeError(StateError('控制器已关闭'));
+    }
+    _fileListRequests.clear();
+    _filePreviewRequests.clear();
+    _pendingRunSettingsSelections.clear();
     realtime.close();
     super.dispose();
   }
+
+  AiRunSettingsSnapshot _reconcileRunSettingsSnapshot(
+    AiRunSettingsSnapshot snapshot,
+  ) {
+    var reconciled = snapshot;
+    for (final providerId in const ['codex', 'claude', 'opencode', 'mimo']) {
+      final key = _runSettingsSelectionKey(snapshot.deviceId, providerId);
+      final pending = _pendingRunSettingsSelections[key];
+      final remote = snapshot.forProvider(providerId);
+      if (pending == null || remote == null) continue;
+
+      final modelConfirmed = pending.model == null || remote.model == pending.model;
+      final reasoningConfirmed = pending.reasoningEffort == null ||
+          remote.reasoningEffort == pending.reasoningEffort;
+      if (modelConfirmed && reasoningConfirmed) {
+        _pendingRunSettingsSelections.remove(key);
+        continue;
+      }
+
+      if (DateTime.now().difference(pending.createdAt) >
+          const Duration(seconds: 15)) {
+        _pendingRunSettingsSelections.remove(key);
+        continue;
+      }
+
+      reconciled = reconciled.withProvider(
+        providerId,
+        remote.copyWith(
+          model: pending.model ?? remote.model,
+          reasoningEffort:
+              pending.reasoningEffort ?? remote.reasoningEffort,
+        ),
+      );
+    }
+    return reconciled;
+  }
+
+  String _runSettingsSelectionKey(String deviceId, String providerId) =>
+      '$deviceId\x00$providerId';
+}
+
+class _PendingRunSettingsSelection {
+  const _PendingRunSettingsSelection({
+    required this.model,
+    required this.reasoningEffort,
+    required this.createdAt,
+  });
+
+  final String? model;
+  final String? reasoningEffort;
+  final DateTime createdAt;
 }

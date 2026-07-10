@@ -52,6 +52,18 @@ func TestParseAiMessageSend(t *testing.T) {
 	roundTrip(t, `{"type":"ai.message.send","deviceId":"11111111-1111-1111-1111-111111111111","aiSessionId":"22222222-2222-2222-2222-222222222222","content":"hello","confirmedRisk":false}`, "ai.message.send")
 }
 
+func TestParseAiMessageSendWithRunControls(t *testing.T) {
+	roundTrip(t, `{"type":"ai.message.send","deviceId":"11111111-1111-1111-1111-111111111111","aiSessionId":"22222222-2222-2222-2222-222222222222","content":"inspect","confirmedRisk":false,"model":"gpt-5.6","reasoningEffort":"high","mode":"plan","goal":"produce a migration plan"}`, "ai.message.send")
+}
+
+func TestParseProjectFilesRequest(t *testing.T) {
+	roundTrip(t, `{"type":"project.files.request","deviceId":"11111111-1111-1111-1111-111111111111","projectId":"33333333-3333-3333-3333-333333333333","projectPath":"C:\\\\repo","directoryPath":null,"requestId":"44444444-4444-4444-4444-444444444444"}`, "project.files.request")
+}
+
+func TestParseProjectFilePreviewResponse(t *testing.T) {
+	roundTrip(t, `{"type":"project.file.preview.response","deviceId":"11111111-1111-1111-1111-111111111111","projectId":"33333333-3333-3333-3333-333333333333","requestId":"44444444-4444-4444-4444-444444444444","preview":{"name":"main.go","path":"C:\\\\repo\\\\main.go","size":12,"modifiedAt":"2024-01-02T03:04:05Z","previewKind":"text","content":"package main","language":"go"},"error":null}`, "project.file.preview.response")
+}
+
 func TestParseAiApprovalRespond(t *testing.T) {
 	roundTrip(t, `{"type":"ai.approval.respond","deviceId":"11111111-1111-1111-1111-111111111111","aiSessionId":"22222222-2222-2222-2222-222222222222","approvalId":"approval-1","decision":"approved"}`, "ai.approval.respond")
 }

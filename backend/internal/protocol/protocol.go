@@ -76,6 +76,26 @@ type WorkspaceProject struct {
 	UpdatedAt time.Time `json:"updatedAt"`
 }
 
+type WorkspaceFileEntry struct {
+	Name       string    `json:"name"`
+	Path       string    `json:"path"`
+	Kind       string    `json:"kind"`
+	Size       int64     `json:"size"`
+	ModifiedAt time.Time `json:"modifiedAt"`
+}
+
+type ProjectFilePreview struct {
+	Name        string    `json:"name"`
+	Path        string    `json:"path"`
+	Size        int64     `json:"size"`
+	ModifiedAt  time.Time `json:"modifiedAt"`
+	PreviewKind string    `json:"previewKind"`
+	MimeType    string    `json:"mimeType,omitempty"`
+	Content     string    `json:"content,omitempty"`
+	DataUrl     string    `json:"dataUrl,omitempty"`
+	Language    string    `json:"language,omitempty"`
+}
+
 // AiSession mirrors the shared AiSession struct.
 type AiSession struct {
 	Id                string          `json:"id"`
@@ -194,6 +214,44 @@ type AiMessageSend struct {
 	ConfirmedRisk   bool   `json:"confirmedRisk"`
 	Model           string `json:"model,omitempty"`
 	ReasoningEffort string `json:"reasoningEffort,omitempty"`
+	Mode            string `json:"mode,omitempty"`
+	Goal            string `json:"goal,omitempty"`
+}
+
+type ProjectFilesRequest struct {
+	BaseMessage
+	DeviceId      string  `json:"deviceId"`
+	ProjectId     string  `json:"projectId"`
+	ProjectPath   string  `json:"projectPath"`
+	DirectoryPath *string `json:"directoryPath"`
+	RequestId     string  `json:"requestId"`
+}
+
+type ProjectFilesResponse struct {
+	BaseMessage
+	DeviceId  string               `json:"deviceId"`
+	ProjectId string               `json:"projectId"`
+	RequestId string               `json:"requestId"`
+	Entries   []WorkspaceFileEntry `json:"entries"`
+	Error     *string              `json:"error"`
+}
+
+type ProjectFilePreviewRequest struct {
+	BaseMessage
+	DeviceId    string `json:"deviceId"`
+	ProjectId   string `json:"projectId"`
+	ProjectPath string `json:"projectPath"`
+	FilePath    string `json:"filePath"`
+	RequestId   string `json:"requestId"`
+}
+
+type ProjectFilePreviewResponse struct {
+	BaseMessage
+	DeviceId  string              `json:"deviceId"`
+	ProjectId string              `json:"projectId"`
+	RequestId string              `json:"requestId"`
+	Preview   *ProjectFilePreview `json:"preview"`
+	Error     *string             `json:"error"`
 }
 
 // AiMessageStop: "ai.message.stop".
@@ -225,6 +283,8 @@ type AiRunSettingsSnapshot struct {
 	DeviceId string                `json:"deviceId"`
 	Codex    AiRunProviderSettings `json:"codex"`
 	Claude   AiRunProviderSettings `json:"claude"`
+	OpenCode AiRunProviderSettings `json:"opencode"`
+	MiMo     AiRunProviderSettings `json:"mimo"`
 }
 
 // AiRunSettingsUpdate: "ai.run.settings.update".
@@ -368,6 +428,22 @@ func ParseMessage(data []byte) (Message, error) {
 		return m, err
 	case "projects.snapshot":
 		var m ProjectsSnapshot
+		err := json.Unmarshal(data, &m)
+		return m, err
+	case "project.files.request":
+		var m ProjectFilesRequest
+		err := json.Unmarshal(data, &m)
+		return m, err
+	case "project.files.response":
+		var m ProjectFilesResponse
+		err := json.Unmarshal(data, &m)
+		return m, err
+	case "project.file.preview.request":
+		var m ProjectFilePreviewRequest
+		err := json.Unmarshal(data, &m)
+		return m, err
+	case "project.file.preview.response":
+		var m ProjectFilePreviewResponse
 		err := json.Unmarshal(data, &m)
 		return m, err
 	case "ai.sessions.snapshot":

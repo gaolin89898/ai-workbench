@@ -6,6 +6,7 @@ import '../state/workspace_controller.dart';
 import '../state/workspace_scope.dart';
 import '../widgets/app_theme.dart';
 import '../widgets/chat_segment_view.dart';
+import 'project_files_page.dart';
 
 class ChatPage extends StatefulWidget {
   const ChatPage({super.key, required this.session});
@@ -77,6 +78,9 @@ class _ChatPageState extends State<ChatPage> {
           );
         }
         final session = matchedSession ?? widget.session;
+        final project = ws.projects.where((item) {
+          return item.id == session.projectId || item.path == session.summary;
+        }).firstOrNull;
         final messages =
             ws.messagesBySession[session.id] ?? const <ChatMessage>[];
         final title = ws.getEffectiveTitle(session);
@@ -126,6 +130,12 @@ class _ChatPageState extends State<ChatPage> {
               ],
             ),
             actions: [
+              if (project != null)
+                IconButton(
+                  tooltip: '项目文件',
+                  icon: const Icon(Icons.folder_open_outlined, size: 20),
+                  onPressed: () => _openProjectFiles(context, ws, project),
+                ),
               PopupMenuButton<String>(
                 tooltip: '更多',
                 icon: const Icon(Icons.more_vert, size: 20),
@@ -262,19 +272,41 @@ class _ChatPageState extends State<ChatPage> {
         status.contains('恢复');
   }
 
-  void _send({String? model, String? reasoningEffort}) {
+  void _send({
+    String? model,
+    String? reasoningEffort,
+    String? mode,
+    String? goal,
+  }) {
     final text = _prompt.text;
     WorkspaceScope.of(context).sendPrompt(
       widget.session,
       text,
       model: model,
       reasoningEffort: reasoningEffort,
+      mode: mode,
+      goal: goal,
     );
     _prompt.clear();
   }
 
   void _stop(AiSessionMeta session) {
     WorkspaceScope.of(context).stopPrompt(session);
+  }
+
+  void _openProjectFiles(
+    BuildContext context,
+    WorkspaceController workspace,
+    WorkspaceProject project,
+  ) {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => WorkspaceScope(
+          controller: workspace,
+          child: ProjectFilesPage(project: project),
+        ),
+      ),
+    );
   }
 
   void _showRename(
@@ -336,7 +368,12 @@ class _ChatComposer extends StatelessWidget {
   final AiRunProviderSettings? runSettings;
   final bool isRunning;
   final ChatSegment? pendingApproval;
-  final void Function({String? model, String? reasoningEffort}) onSend;
+  final void Function({
+    String? model,
+    String? reasoningEffort,
+    String? mode,
+    String? goal,
+  }) onSend;
   final VoidCallback onStop;
   final void Function(String? model, String? reasoningEffort)
       onRunSettingsChanged;
@@ -402,7 +439,12 @@ class _ComposerInput extends StatefulWidget {
   final String providerId;
   final AiRunProviderSettings? runSettings;
   final bool isRunning;
-  final void Function({String? model, String? reasoningEffort}) onSend;
+  final void Function({
+    String? model,
+    String? reasoningEffort,
+    String? mode,
+    String? goal,
+  }) onSend;
   final VoidCallback onStop;
   final void Function(String? model, String? reasoningEffort)
       onRunSettingsChanged;
@@ -414,6 +456,8 @@ class _ComposerInput extends StatefulWidget {
 class _ComposerInputState extends State<_ComposerInput> {
   String _selectedModel = '';
   String _selectedReasoning = 'high';
+  String _selectedMode = 'default';
+  String _goal = '';
 
   @override
   void initState() {
@@ -530,30 +574,39 @@ class _ComposerInputState extends State<_ComposerInput> {
         const SizedBox(height: AppSpacing.sm),
         Row(
           children: [
-            Flexible(
-              child: Wrap(
-                spacing: 6,
-                runSpacing: 6,
-                children: [
-                  _ComposerIconButton(
-                    icon: Icons.add,
-                    tooltip: '添加附件',
-                    onPressed: widget.archived ? null : _showAddSheet,
-                  ),
-                ],
+            Expanded(
+              child: SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: Row(
+                  children: [
+                    _ComposerIconButton(
+                      icon: _goal.isEmpty
+                          ? Icons.tune_outlined
+                          : Icons.flag_outlined,
+                      tooltip: '任务设置',
+                      onPressed: widget.archived ? null : _showAddSheet,
+                    ),
+                    const SizedBox(width: 6),
+                    _ComposerPillButton(
+                      label: _selectedMode == 'plan' ? '规划' : '构建',
+                      maxWidth: 72,
+                      onPressed: widget.archived ? null : _showModeSheet,
+                    ),
+                    const SizedBox(width: 6),
+                    _ComposerPillButton(
+                      label: _selectedModelLabel,
+                      maxWidth: 122,
+                      onPressed: widget.archived ? null : _showModelSheet,
+                    ),
+                    const SizedBox(width: 6),
+                    _ComposerPillButton(
+                      label: '推理 $_selectedReasoningLabel',
+                      maxWidth: 94,
+                      onPressed: widget.archived ? null : _showReasoningSheet,
+                    ),
+                  ],
+                ),
               ),
-            ),
-            const SizedBox(width: AppSpacing.sm),
-            _ComposerPillButton(
-              label: _selectedModelLabel,
-              maxWidth: 122,
-              onPressed: widget.archived ? null : _showModelSheet,
-            ),
-            const SizedBox(width: AppSpacing.sm),
-            _ComposerPillButton(
-              label: '推理 $_selectedReasoningLabel',
-              maxWidth: 94,
-              onPressed: widget.archived ? null : _showReasoningSheet,
             ),
             const SizedBox(width: AppSpacing.sm),
             ValueListenableBuilder<TextEditingValue>(
@@ -569,6 +622,8 @@ class _ComposerInputState extends State<_ComposerInput> {
                       : () => widget.onSend(
                             model: _selectedModel,
                             reasoningEffort: _selectedReasoning,
+                            mode: _selectedMode,
+                            goal: _goal.trim().isEmpty ? null : _goal.trim(),
                           ),
                 );
               },
@@ -582,29 +637,101 @@ class _ComposerInputState extends State<_ComposerInput> {
   void _showAddSheet() {
     _showComposerSheet(
       context: context,
-      title: '添加',
-      subtitle: '选择要加入本次消息的内容',
-      children: const [
+      title: '任务设置',
+      subtitle: _goal.isEmpty ? '设置运行方式和本轮目标' : '当前目标：$_goal',
+      children: [
         _SheetActionTile(
-          icon: Icons.photo_outlined,
-          title: '从相册选择图片',
-          subtitle: '图片附件功能接入后可用',
-          enabled: false,
+          icon: Icons.account_tree_outlined,
+          title: _selectedMode == 'plan' ? '当前：规划模式' : '当前：构建模式',
+          subtitle: _selectedMode == 'plan' ? '点击切换到构建模式' : '点击切换到规划模式',
+          onTap: () {
+            setState(() {
+              _selectedMode = _selectedMode == 'plan' ? 'default' : 'plan';
+            });
+            Navigator.of(context).pop();
+          },
         ),
         _SheetActionTile(
-          icon: Icons.camera_alt_outlined,
-          title: '拍照',
-          subtitle: '相机附件功能接入后可用',
-          enabled: false,
+          icon: Icons.flag_outlined,
+          title: _goal.isEmpty ? '设置本轮目标' : '编辑本轮目标',
+          subtitle: _goal.isEmpty ? '为后续消息附加持续目标' : _goal,
+          onTap: () {
+            Navigator.of(context).pop();
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              if (mounted) _showGoalDialog();
+            });
+          },
         ),
-        _SheetActionTile(
-          icon: Icons.description_outlined,
-          title: '选择文件',
-          subtitle: '文件附件功能接入后可用',
-          enabled: false,
+        if (_goal.isNotEmpty)
+          _SheetActionTile(
+            icon: Icons.flag_circle_outlined,
+            title: '清除本轮目标',
+            subtitle: '后续消息不再附加目标',
+            onTap: () {
+              setState(() => _goal = '');
+              Navigator.of(context).pop();
+            },
+          ),
+      ],
+    );
+  }
+
+  void _showModeSheet() {
+    _showComposerSheet(
+      context: context,
+      title: '运行模式',
+      subtitle: '构建模式可执行修改，规划模式优先分析和制定方案',
+      children: [
+        _SheetOptionTile(
+          option: const _SheetOption('default', '构建', '执行代码修改和命令'),
+          selected: _selectedMode == 'default',
+          onTap: () {
+            setState(() => _selectedMode = 'default');
+            Navigator.of(context).pop();
+          },
+        ),
+        _SheetOptionTile(
+          option: const _SheetOption('plan', '规划', '只分析任务并制定实施方案'),
+          selected: _selectedMode == 'plan',
+          onTap: () {
+            setState(() => _selectedMode = 'plan');
+            Navigator.of(context).pop();
+          },
         ),
       ],
     );
+  }
+
+  Future<void> _showGoalDialog() async {
+    final controller = TextEditingController(text: _goal);
+    final result = await showDialog<String>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('本轮目标'),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          minLines: 2,
+          maxLines: 4,
+          decoration: const InputDecoration(
+            hintText: '例如：完成移动端功能对齐并通过测试',
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(),
+            child: const Text('取消'),
+          ),
+          FilledButton(
+            onPressed: () =>
+                Navigator.of(dialogContext).pop(controller.text.trim()),
+            child: const Text('确定'),
+          ),
+        ],
+      ),
+    );
+    controller.dispose();
+    if (result != null && mounted) setState(() => _goal = result);
   }
 
   void _showModelSheet() {

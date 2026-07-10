@@ -63,6 +63,7 @@ interface CodexSession {
   traceSnapshot: CodexTraceSnapshot | null;
   traceDirty: boolean;
   traceFlushTimer: ReturnType<typeof setTimeout> | null;
+  turnTimeoutTimer: ReturnType<typeof setTimeout> | null;
   turnResolver: { resolve: () => void; reject: (error: Error) => void } | null;
   errorEmitted: boolean;
   cancelled: boolean;
@@ -648,6 +649,7 @@ function handleApprovalRequest(
     return;
   }
   session.pendingApprovals.set(segment.approvalId, approval);
+  refreshCodexTurnTimeout(session);
 }
 
 function resolvePendingApprovals(session: CodexSession, status: "expired" | "failed", detail?: string): void {
@@ -657,6 +659,39 @@ function resolvePendingApprovals(session: CodexSession, status: "expired" | "fai
     updateApprovalSegment(session, approval, status, detail);
   }
   session.pendingApprovals.clear();
+}
+
+function clearCodexTurnTimeout(session: CodexSession): void {
+  if (!session.turnTimeoutTimer) return;
+  clearTimeout(session.turnTimeoutTimer);
+  session.turnTimeoutTimer = null;
+}
+
+function expireCodexTurnForInactivity(session: CodexSession): void {
+  session.turnTimeoutTimer = null;
+  if (session.closed || session.cancelled || session.pendingApprovals.size > 0) return;
+
+  const timeoutMessage = "Codex 连续 30 分钟没有新活动，本轮已自动结束。";
+  emitSessionError(session, timeoutMessage);
+  if (session.turnResolver) {
+    session.turnResolver.reject(new Error("timeout"));
+    session.turnResolver = null;
+  }
+  for (const [, pending] of session.pendingRequests) {
+    pending.reject(new Error("timeout"));
+  }
+  session.pendingRequests.clear();
+  resolvePendingApprovals(session, "expired", "Codex 会话空闲超时，审批请求已失效。");
+  finishCodexSessionTrace(session, "failed", timeoutMessage);
+  killSession(session);
+}
+
+function refreshCodexTurnTimeout(session: CodexSession): void {
+  clearCodexTurnTimeout(session);
+  if (!session.traceEnabled || session.closed || session.cancelled || session.pendingApprovals.size > 0) return;
+  session.turnTimeoutTimer = setTimeout(() => {
+    expireCodexTurnForInactivity(session);
+  }, CODEX_TURN_TIMEOUT_MS);
 }
 
 // ---------- Line / notification handling ----------
@@ -676,6 +711,7 @@ function handleLine(session: CodexSession, line: string): void {
 
   if (!message || typeof message !== "object") return;
   const msg = message as Record<string, unknown>;
+  refreshCodexTurnTimeout(session);
 
   // Server request from Codex app-server. The app must answer this id, or the
   // Codex turn waits indefinitely for approval.
@@ -957,6 +993,7 @@ function handleNotification(
       break;
     }
     case "turn/completed": {
+      clearCodexTurnTimeout(session);
       reportCodexTokenUsage(session, params);
       if (session.turnResolver) {
         session.turnResolver.resolve();
@@ -1002,6 +1039,7 @@ function createSession(
     traceSnapshot: null,
     traceDirty: false,
     traceFlushTimer: null,
+    turnTimeoutTimer: null,
     turnResolver: null,
     errorEmitted: false,
     cancelled: false,
@@ -1045,6 +1083,7 @@ function handleExit(
   code: number | null,
   signal: NodeJS.Signals | null
 ): void {
+  clearCodexTurnTimeout(session);
   const detail =
     session.stderrBuffer.trim() || `code=${code} signal=${signal}`;
   if (!session.closed && !session.cancelled) {
@@ -1065,6 +1104,7 @@ function handleExit(
 }
 
 function handleSpawnError(session: CodexSession, err: Error): void {
+  clearCodexTurnTimeout(session);
   const errno = err as NodeJS.ErrnoException & { spawnargs?: string[] };
   const spawnArgs = Array.isArray(errno.spawnargs) ? errno.spawnargs.join(" ") : "";
   const baseMessage = errno.code === "ENOENT"
@@ -1096,6 +1136,7 @@ function handleSpawnError(session: CodexSession, err: Error): void {
 }
 
 function killSession(session: CodexSession): void {
+  clearCodexTurnTimeout(session);
   if (session.closed) return;
   flushTrace(session);
   resolvePendingApprovals(session, "expired", "Codex session ended; approval requests expired.");
@@ -1118,6 +1159,7 @@ function killSession(session: CodexSession): void {
 }
 
 function interruptSession(session: CodexSession): void {
+  clearCodexTurnTimeout(session);
   if (session.closed) return;
   flushTrace(session);
   resolvePendingApprovals(session, "expired", "用户主动停止当前 AI 会话。");
@@ -1330,21 +1372,7 @@ export async function runCodexChat(
   });
   activeCodexSessions.set(aiSessionId, session);
 
-  const timeout = setTimeout(() => {
-    const timeoutMessage = "Codex session timed out after 30 minutes.";
-    emitSessionError(session, timeoutMessage);
-    if (session.turnResolver) {
-      session.turnResolver.reject(new Error("timeout"));
-      session.turnResolver = null;
-    }
-    for (const [, pending] of session.pendingRequests) {
-      pending.reject(new Error("timeout"));
-    }
-    session.pendingRequests.clear();
-    resolvePendingApprovals(session, "expired", "Codex session timed out; approval requests expired.");
-    finishCodexSessionTrace(session, "failed", timeoutMessage);
-    killSession(session);
-  }, CODEX_TURN_TIMEOUT_MS);
+  refreshCodexTurnTimeout(session);
 
   try {
     // 1. initialize
@@ -1368,11 +1396,9 @@ export async function runCodexChat(
     await turnDone;
     await reportCodexSessionFileTokenUsage(session, threadInfo.threadId);
 
-    clearTimeout(timeout);
     killSession(session);
     return encodeAppServerProviderSessionId(threadInfo.threadId);
   } catch (err) {
-    clearTimeout(timeout);
     if (session.cancelled) {
       killSession(session);
       return session.threadId ? encodeAppServerProviderSessionId(session.threadId) : "";
@@ -1591,10 +1617,12 @@ export function respondCodexApproval(
       decision === "approved" ? "用户已同意本次操作。" : "用户已拒绝本次操作。"
     );
     session.pendingApprovals.delete(approvalId);
+    refreshCodexTurnTimeout(session);
     return true;
   } catch (error) {
     updateApprovalSegment(session, approval, "failed", errorMessage(error));
     session.pendingApprovals.delete(approvalId);
+    refreshCodexTurnTimeout(session);
     return false;
   }
 }

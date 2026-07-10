@@ -47,9 +47,35 @@ func (h *Handler) handleMobileMessage(msg protocol.Message, userID, deviceID uui
 		h.handleAiHistoryRequest(userID, m)
 	case protocol.AiSessionArchive:
 		h.handleAiSessionArchive(userID, m)
+	case protocol.ProjectFilesRequest:
+		h.handleProjectFilesRequest(userID, m)
+	case protocol.ProjectFilePreviewRequest:
+		h.handleProjectFilePreviewRequest(userID, m)
 	default:
 		// Unknown/unhandled mobile message: ignore (matches Rust `_ => {}`).
 	}
+}
+
+func (h *Handler) handleProjectFilesRequest(userID uuid.UUID, m protocol.ProjectFilesRequest) {
+	ctx := context.Background()
+	if err := h.DB.EnsureDeviceOwner(ctx, userID.String(), m.DeviceId); err != nil {
+		return
+	}
+	if err := h.DB.EnsureProjectOwner(ctx, m.DeviceId, m.ProjectId); err != nil {
+		return
+	}
+	h.forwardToDesktop(userID, m.DeviceId, m)
+}
+
+func (h *Handler) handleProjectFilePreviewRequest(userID uuid.UUID, m protocol.ProjectFilePreviewRequest) {
+	ctx := context.Background()
+	if err := h.DB.EnsureDeviceOwner(ctx, userID.String(), m.DeviceId); err != nil {
+		return
+	}
+	if err := h.DB.EnsureProjectOwner(ctx, m.DeviceId, m.ProjectId); err != nil {
+		return
+	}
+	h.forwardToDesktop(userID, m.DeviceId, m)
 }
 
 // handleAiMessageSend mirrors handle_ai_message_send in mobile.rs: verify
@@ -110,7 +136,7 @@ func (h *Handler) handleAiRunSettingsUpdate(userID uuid.UUID, m protocol.AiRunSe
 	if m.DeviceId == "" {
 		return
 	}
-	if m.ProviderId != "codex" && m.ProviderId != "claude" {
+	if m.ProviderId != "codex" && m.ProviderId != "claude" && m.ProviderId != "opencode" && m.ProviderId != "mimo" {
 		return
 	}
 	ctx := context.Background()

@@ -6,6 +6,7 @@ import '../state/workspace_scope.dart';
 import '../widgets/app_theme.dart';
 import 'chat_page.dart';
 import 'providers_page.dart';
+import 'project_files_page.dart';
 import 'settings_page.dart';
 
 class MobileShellPage extends StatefulWidget {
@@ -950,6 +951,15 @@ class _ProjectCard extends StatelessWidget {
                     ),
                   ),
                   IconButton(
+                    onPressed: () => _openProjectFiles(context, ws, project),
+                    icon: const Icon(
+                      Icons.folder_open_outlined,
+                      color: AppColors.primary,
+                    ),
+                    visualDensity: VisualDensity.compact,
+                    tooltip: '项目文件',
+                  ),
+                  IconButton(
                     onPressed: () => Navigator.of(context).push(
                       MaterialPageRoute(
                         builder: (_) => WorkspaceScope(
@@ -1011,6 +1021,21 @@ class _ProjectCard extends StatelessWidget {
       ),
     );
   }
+}
+
+void _openProjectFiles(
+  BuildContext context,
+  WorkspaceController workspace,
+  WorkspaceProject project,
+) {
+  Navigator.of(context).push(
+    MaterialPageRoute(
+      builder: (_) => WorkspaceScope(
+        controller: workspace,
+        child: ProjectFilesPage(project: project),
+      ),
+    ),
+  );
 }
 
 class _ProjectSessionRow extends StatelessWidget {

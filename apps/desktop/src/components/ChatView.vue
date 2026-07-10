@@ -4,7 +4,47 @@ import ChatMessageRow from "./ChatMessageRow.vue";
 import ApprovalSegment from "./ChatSegment.vue";
 import TerminalView from "./TerminalView.vue";
 import { useWorkspace } from "../composables/useWorkspace";
-import { desktopApi, type AiChatOptions, type AiProvider, type ChatImageAttachment, type ChatMessage, type ChatSegment, type ClaudeReasoningEffort, type AcpConfigOption, type CodexApprovalMode, type CodexModelOption, type CodexReasoningEffort, type CodexRunMode, type ProjectEnvironmentInfo, type ProjectFilePreview } from "../services/desktop";
+import { desktopApi, type AiChatOptions, type AiProvider, type AiRunSettingsState, type ChatImageAttachment, type ChatMessage, type ChatSegment, type ClaudeReasoningEffort, type AcpConfigOption, type CodexApprovalMode, type CodexModelOption, type CodexReasoningEffort, type CodexRunMode, type ProjectEnvironmentInfo, type ProjectFilePreview } from "../services/desktop";
+
+type RunPreferenceProviderId = "codex" | "claude" | "opencode" | "mimo";
+type RunPreference = { model: string; reasoningEffort: string };
+type RunPreferences = Partial<Record<RunPreferenceProviderId, RunPreference>>;
+
+const runPreferencesStorageKey = "ai-workbench.aiRunPreferences.v1";
+
+function readRunPreferences(): RunPreferences {
+  try {
+    const parsed = JSON.parse(window.localStorage.getItem(runPreferencesStorageKey) ?? "{}") as unknown;
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return {};
+    const preferences: RunPreferences = {};
+    for (const providerId of ["codex", "claude", "opencode", "mimo"] as const) {
+      const value = (parsed as Record<string, unknown>)[providerId];
+      if (!value || typeof value !== "object" || Array.isArray(value)) continue;
+      const record = value as Record<string, unknown>;
+      preferences[providerId] = {
+        model: typeof record.model === "string" ? record.model : "",
+        reasoningEffort: typeof record.reasoningEffort === "string" ? record.reasoningEffort : "",
+      };
+    }
+    return preferences;
+  } catch {
+    return {};
+  }
+}
+
+function codexEffortPreference(value: string | undefined): CodexReasoningEffort | null {
+  return value === "low" || value === "medium" || value === "high" || value === "xhigh" || value === "max" || value === "ultra"
+    ? value
+    : null;
+}
+
+function claudeEffortPreference(value: string | undefined): ClaudeReasoningEffort {
+  return value === "low" || value === "medium" || value === "high" || value === "xhigh" || value === "max"
+    ? value
+    : "high";
+}
+
+const runPreferences = readRunPreferences();
 
 const providerClaudeIcon = new URL("../assets/icons/provider-claude.svg", import.meta.url).href;
 const providerCodexIcon = new URL("../assets/icons/provider-codex.svg", import.meta.url).href;
@@ -36,15 +76,14 @@ const splitPanelOpen = ref(false);
 const splitPanelWidth = ref(420);
 const modelMenuOpen = ref(false);
 const modelSubmenuOpen = ref(false);
-type ModelSubmenuKind = "model" | "reasoning" | "service";
+type ModelSubmenuKind = "model" | "reasoning";
 const modelSubmenuKind = ref<ModelSubmenuKind>("model");
 const codexApprovalMode = ref<CodexApprovalMode>("custom");
 const codexMode = ref<CodexRunMode>("default");
-const codexSelectedModel = ref("");
-const codexReasoningLevel = ref<CodexReasoningEffort | null>(null);
-const codexServiceTier = ref<string | null | undefined>(undefined);
-const claudeSelectedModel = ref("sonnet");
-const claudeReasoningLevel = ref<ClaudeReasoningEffort>("high");
+const codexSelectedModel = ref(runPreferences.codex?.model ?? "");
+const codexReasoningLevel = ref<CodexReasoningEffort | null>(codexEffortPreference(runPreferences.codex?.reasoningEffort));
+const claudeSelectedModel = ref(runPreferences.claude?.model || "sonnet");
+const claudeReasoningLevel = ref<ClaudeReasoningEffort>(claudeEffortPreference(runPreferences.claude?.reasoningEffort));
 const codexGoalEnabled = ref(false);
 const codexGoal = ref("");
 const codexModels = ref<CodexModelOption[]>([]);
@@ -246,7 +285,6 @@ const codexReasoningOptions = computed<CodexReasoningOption[]>(() => {
     description: option.description,
   }));
 });
-const activeCodexServiceTiers = computed(() => selectedCodexModelOption.value?.serviceTiers ?? []);
 const selectedReasoningLabel = computed(() => codexReasoningOptions.value.find((option) => option.id === codexReasoningLevel.value)?.label ?? "默认");
 const selectedClaudeReasoningLabel = computed(() => claudeReasoningOptions.find((option) => option.id === claudeReasoningLevel.value)?.label ?? "高");
 const selectedCodexModelLabel = computed(() => {
@@ -267,12 +305,7 @@ const selectedCodexModelShortLabel = computed(() => {
     .replace(/^codex[-_\s]*/i, "")
     .replace(/^openai[-_\s]*/i, "");
 });
-const selectedCodexServiceTierLabel = computed(() => activeCodexServiceTiers.value.find((tier) => tier.id === codexServiceTier.value)?.name ?? "");
-const selectedCodexServiceTierMenuLabel = computed(() => selectedCodexServiceTierLabel.value || "标准");
-const selectedCodexModelButtonLabel = computed(() => {
-  const serviceTier = selectedCodexServiceTierLabel.value ? ` ${selectedCodexServiceTierLabel.value}` : "";
-  return `${selectedCodexModelShortLabel.value} ${selectedReasoningLabel.value}${serviceTier}`;
-});
+const selectedCodexModelButtonLabel = computed(() => `${selectedCodexModelShortLabel.value} ${selectedReasoningLabel.value}`);
 const acpModelOptions = computed(() => acpModels.value.map((m) => ({ id: m.value, model: m.value, displayName: m.name })));
 const acpEffortOptions = computed(() => {
   if (acpEfforts.value.length) return acpEfforts.value.map((e) => ({ id: e.value, label: e.name }));
@@ -776,10 +809,6 @@ function reconcileCodexModelSettings() {
         ? "high"
         : supportedEfforts[0] ?? null;
   }
-
-  if (codexServiceTier.value && !activeCodexServiceTiers.value.some((tier) => tier.id === codexServiceTier.value)) {
-    codexServiceTier.value = null;
-  }
 }
 
 function selectModel(model: string) {
@@ -791,6 +820,7 @@ function selectModel(model: string) {
     codexSelectedModel.value = model;
     reconcileCodexModelSettings();
   }
+  persistRunPreferences();
   modelSubmenuOpen.value = false;
   modelMenuOpen.value = false;
 }
@@ -805,13 +835,7 @@ function selectReasoningLevel(level: string) {
     const option = codexReasoningOptions.value.find((candidate) => candidate.id === level);
     if (option) codexReasoningLevel.value = option.id;
   }
-  modelSubmenuOpen.value = false;
-  modelMenuOpen.value = false;
-}
-
-function selectCodexServiceTier(serviceTier: string | null) {
-  if (serviceTier && !activeCodexServiceTiers.value.some((tier) => tier.id === serviceTier)) return;
-  codexServiceTier.value = serviceTier;
+  persistRunPreferences();
   modelSubmenuOpen.value = false;
   modelMenuOpen.value = false;
 }
@@ -855,6 +879,7 @@ async function loadCodexApprovalMode() {
 async function loadAcpModels() {
   const providerId = acpProviderId.value;
   if (providerId !== "opencode" && providerId !== "mimo") return;
+  const savedPreference = runPreferences[providerId];
   const projectPath = currentProject.value?.path ?? "";
   const configKey = `${providerId}\u0000${projectPath}`;
   if (acpModelsLoadedKey === configKey || acpModelsRequestedKey === configKey) return;
@@ -863,8 +888,8 @@ async function loadAcpModels() {
   if (acpModelsLoadedKey !== configKey) {
     acpModels.value = [];
     acpEfforts.value = [];
-    acpSelectedModel.value = "";
-    acpReasoningLevel.value = "";
+    acpSelectedModel.value = savedPreference?.model ?? "";
+    acpReasoningLevel.value = savedPreference?.reasoningEffort ?? "";
   }
   acpModelsLoading.value = true;
   try {
@@ -876,11 +901,17 @@ async function loadAcpModels() {
     acpEfforts.value = options.efforts;
     acpModelsLoadedKey = configKey;
     const defaultModel = options.models.find((m) => m.isDefault) ?? options.models[0];
-    if (!options.models.some((model) => model.value === acpSelectedModel.value) && defaultModel) {
+    const preferredModel = savedPreference?.model || acpSelectedModel.value;
+    if (options.models.some((model) => model.value === preferredModel)) {
+      acpSelectedModel.value = preferredModel;
+    } else if (defaultModel) {
       acpSelectedModel.value = defaultModel.value;
     }
     const defaultEffort = options.efforts.find((effort) => effort.isDefault);
-    if (!options.efforts.some((effort) => effort.value === acpReasoningLevel.value)) {
+    const preferredEffort = savedPreference?.reasoningEffort || acpReasoningLevel.value;
+    if (options.efforts.some((effort) => effort.value === preferredEffort)) {
+      acpReasoningLevel.value = preferredEffort;
+    } else {
       acpReasoningLevel.value = defaultEffort?.value ?? "";
     }
   } catch (error) {
@@ -893,15 +924,38 @@ async function loadAcpModels() {
   }
 }
 
+function persistRunPreferences() {
+  runPreferences.codex = {
+    model: codexSelectedModel.value,
+    reasoningEffort: codexReasoningLevel.value ?? "",
+  };
+  runPreferences.claude = {
+    model: claudeSelectedModel.value,
+    reasoningEffort: claudeReasoningLevel.value,
+  };
+  const providerId = acpProviderId.value;
+  if (providerId === "opencode" || providerId === "mimo") {
+    runPreferences[providerId] = {
+      model: acpSelectedModel.value,
+      reasoningEffort: acpReasoningLevel.value,
+    };
+  }
+  try {
+    window.localStorage.setItem(runPreferencesStorageKey, JSON.stringify(runPreferences));
+  } catch {
+    // Preferences are best-effort; the current window still keeps the selection.
+  }
+}
+
 function publishRunSettings() {
-  void desktopApi.publishAiRunSettings({
+  const settings: Partial<AiRunSettingsState> = {
     codex: {
       providerId: "codex",
       model: codexSelectedModel.value,
       reasoningEffort: codexReasoningLevel.value ?? "",
       models: codexModels.value,
       reasoningOptions: codexReasoningOptions.value.map((option) => option.id),
-      ...(codexServiceTier.value !== undefined ? { serviceTier: codexServiceTier.value } : {}),
+      serviceTier: null,
     },
     claude: {
       providerId: "claude",
@@ -914,7 +968,24 @@ function publishRunSettings() {
       })),
       reasoningOptions: claudeReasoningOptions.map((option) => option.id),
     },
-  });
+  };
+  const providerId = acpProviderId.value;
+  const providerSettings = {
+    providerId,
+    model: acpSelectedModel.value,
+    reasoningEffort: acpReasoningLevel.value,
+    models: acpModels.value.map((option) => ({
+      id: option.value,
+      model: option.value,
+      displayName: option.name,
+      description: option.description,
+      isDefault: option.isDefault,
+    })),
+    reasoningOptions: acpEfforts.value.map((option) => option.value),
+  };
+  if (providerId === "mimo") settings.mimo = { ...providerSettings, providerId: "mimo" };
+  else if (providerId === "opencode") settings.opencode = { ...providerSettings, providerId: "opencode" };
+  void desktopApi.publishAiRunSettings(settings);
 }
 
 function applyRunSettingsUpdate(event: { providerId?: string; model?: string; reasoningEffort?: string; serviceTier?: string | null }) {
@@ -922,9 +993,6 @@ function applyRunSettingsUpdate(event: { providerId?: string; model?: string; re
     if (typeof event.model === "string" && event.model) codexSelectedModel.value = event.model;
     if (event.reasoningEffort === "low" || event.reasoningEffort === "medium" || event.reasoningEffort === "high" || event.reasoningEffort === "xhigh" || event.reasoningEffort === "max" || event.reasoningEffort === "ultra") {
       codexReasoningLevel.value = event.reasoningEffort;
-    }
-    if (Object.prototype.hasOwnProperty.call(event, "serviceTier")) {
-      codexServiceTier.value = typeof event.serviceTier === "string" ? event.serviceTier : null;
     }
     if (codexModelsLoaded.value) reconcileCodexModelSettings();
     return;
@@ -934,6 +1002,11 @@ function applyRunSettingsUpdate(event: { providerId?: string; model?: string; re
     if (event.reasoningEffort === "low" || event.reasoningEffort === "medium" || event.reasoningEffort === "high" || event.reasoningEffort === "xhigh" || event.reasoningEffort === "max") {
       claudeReasoningLevel.value = event.reasoningEffort;
     }
+    return;
+  }
+  if (event.providerId === acpProviderId.value) {
+    if (typeof event.model === "string") acpSelectedModel.value = event.model;
+    if (typeof event.reasoningEffort === "string") acpReasoningLevel.value = event.reasoningEffort;
   }
 }
 
@@ -973,7 +1046,7 @@ function buildRunOptions(): AiChatOptions {
     codexMode: codexMode.value,
     codexModel: codexSelectedModel.value || null,
     codexReasoningEffort: codexReasoningLevel.value,
-    ...(codexServiceTier.value !== undefined ? { codexServiceTier: codexServiceTier.value } : {}),
+    codexServiceTier: null,
     codexGoal: goal || null,
   };
 }
@@ -1209,8 +1282,11 @@ watch(
 );
 
 watch(
-  [codexSelectedModel, codexReasoningLevel, codexServiceTier, claudeSelectedModel, claudeReasoningLevel],
-  publishRunSettings,
+  [codexSelectedModel, codexReasoningLevel, claudeSelectedModel, claudeReasoningLevel, acpProviderId, acpSelectedModel, acpReasoningLevel, acpModels, acpEfforts],
+  () => {
+    persistRunPreferences();
+    publishRunSettings();
+  },
   { immediate: true },
 );
 
@@ -1520,39 +1596,6 @@ function onPromptKeydown(event: KeyboardEvent) {
                     >
                       <span>{{ option.label }}</span>
                       <span class="codex-model-menu-check" aria-hidden="true">{{ option.id === selectedReasoningValue ? "✓" : "" }}</span>
-                    </button>
-                  </div>
-                </div>
-                <div v-if="showCodexRunControls && activeCodexServiceTiers.length" class="codex-model-menu-section">
-                  <button
-                    type="button"
-                    class="codex-model-menu-row"
-                    :class="{ active: modelSubmenuOpen && modelSubmenuKind === 'service' }"
-                    :aria-expanded="modelSubmenuOpen && modelSubmenuKind === 'service'"
-                    @click.stop="toggleModelSubmenu('service')"
-                  >
-                    <span class="codex-model-menu-row-label">服务</span>
-                    <span class="codex-model-menu-row-value">{{ selectedCodexServiceTierMenuLabel }}</span>
-                    <svg class="codex-model-submenu-chevron" viewBox="0 0 16 16" fill="none" aria-hidden="true">
-                      <path d="M6 4.5 9.5 8 6 11.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" />
-                    </svg>
-                  </button>
-                  <div v-if="modelSubmenuOpen && modelSubmenuKind === 'service'" class="codex-model-submenu">
-                    <div class="codex-model-menu-heading">服务</div>
-                    <button type="button" :class="{ active: !codexServiceTier }" @click="selectCodexServiceTier(null)">
-                      <span>标准</span>
-                      <span class="codex-model-menu-check" aria-hidden="true">{{ !codexServiceTier ? "✓" : "" }}</span>
-                    </button>
-                    <button
-                      v-for="tier in activeCodexServiceTiers"
-                      :key="tier.id"
-                      type="button"
-                      :class="{ active: tier.id === codexServiceTier }"
-                      :title="tier.description"
-                      @click="selectCodexServiceTier(tier.id)"
-                    >
-                      <span>{{ tier.name }}</span>
-                      <span class="codex-model-menu-check" aria-hidden="true">{{ tier.id === codexServiceTier ? "✓" : "" }}</span>
                     </button>
                   </div>
                 </div>
@@ -1983,39 +2026,6 @@ function onPromptKeydown(event: KeyboardEvent) {
                       >
                         <span>{{ option.label }}</span>
                         <span class="codex-model-menu-check" aria-hidden="true">{{ option.id === selectedReasoningValue ? "✓" : "" }}</span>
-                      </button>
-                    </div>
-                  </div>
-                  <div v-if="showCodexRunControls && activeCodexServiceTiers.length" class="codex-model-menu-section">
-                    <button
-                      type="button"
-                      class="codex-model-menu-row"
-                      :class="{ active: modelSubmenuOpen && modelSubmenuKind === 'service' }"
-                      :aria-expanded="modelSubmenuOpen && modelSubmenuKind === 'service'"
-                      @click.stop="toggleModelSubmenu('service')"
-                    >
-                      <span class="codex-model-menu-row-label">服务</span>
-                      <span class="codex-model-menu-row-value">{{ selectedCodexServiceTierMenuLabel }}</span>
-                      <svg class="codex-model-submenu-chevron" viewBox="0 0 16 16" fill="none" aria-hidden="true">
-                        <path d="M6 4.5 9.5 8 6 11.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" />
-                      </svg>
-                    </button>
-                    <div v-if="modelSubmenuOpen && modelSubmenuKind === 'service'" class="codex-model-submenu">
-                      <div class="codex-model-menu-heading">服务</div>
-                      <button type="button" :class="{ active: !codexServiceTier }" @click="selectCodexServiceTier(null)">
-                        <span>标准</span>
-                        <span class="codex-model-menu-check" aria-hidden="true">{{ !codexServiceTier ? "✓" : "" }}</span>
-                      </button>
-                      <button
-                        v-for="tier in activeCodexServiceTiers"
-                        :key="tier.id"
-                        type="button"
-                        :class="{ active: tier.id === codexServiceTier }"
-                        :title="tier.description"
-                        @click="selectCodexServiceTier(tier.id)"
-                      >
-                        <span>{{ tier.name }}</span>
-                        <span class="codex-model-menu-check" aria-hidden="true">{{ tier.id === codexServiceTier ? "✓" : "" }}</span>
                       </button>
                     </div>
                   </div>

@@ -11,6 +11,116 @@ void main() {
     SharedPreferences.setMockInitialValues({});
   });
 
+  test('run settings snapshot supports OpenCode and MiMo', () {
+    final snapshot = AiRunSettingsSnapshot.fromJson({
+      'deviceId': 'device-1',
+      'codex': {'providerId': 'codex'},
+      'claude': {'providerId': 'claude'},
+      'opencode': {
+        'providerId': 'opencode',
+        'model': 'openai/gpt-5.6',
+        'reasoningEffort': 'high',
+        'models': [
+          {
+            'id': 'openai/gpt-5.6',
+            'model': 'openai/gpt-5.6',
+            'displayName': 'GPT-5.6',
+          },
+        ],
+        'reasoningOptions': ['medium', 'high'],
+      },
+      'mimo': {
+        'providerId': 'mimo',
+        'model': 'xiaomi/mimo-v2.5-pro',
+        'reasoningEffort': 'high',
+        'models': [
+          {
+            'id': 'xiaomi/mimo-v2.5-pro',
+            'model': 'xiaomi/mimo-v2.5-pro',
+            'displayName': 'MiMo-V2.5-Pro',
+          },
+        ],
+        'reasoningOptions': ['low', 'high'],
+      },
+    });
+
+    expect(snapshot.forProvider('opencode')?.model, 'openai/gpt-5.6');
+    expect(snapshot.forProvider('opencode')?.reasoningOptions, ['medium', 'high']);
+    expect(snapshot.forProvider('mimo')?.model, 'xiaomi/mimo-v2.5-pro');
+  });
+
+  test('selected model survives a stale run settings snapshot', () async {
+    final controller =
+        WorkspaceController(api: ApiClient(baseUrl: 'http://127.0.0.1:3000'));
+    controller.selectedDevice = const DesktopDevice(
+      id: 'device-1',
+      name: 'desktop',
+      os: 'windows',
+      online: true,
+    );
+
+    Map<String, dynamic> snapshot(String model) => {
+          'type': 'ai.run.settings.snapshot',
+          'deviceId': 'device-1',
+          'codex': {
+            'providerId': 'codex',
+            'model': model,
+            'reasoningEffort': 'high',
+            'models': [
+              {
+                'id': 'gpt-5.6',
+                'model': 'gpt-5.6',
+                'displayName': 'GPT-5.6',
+              },
+              {
+                'id': 'gpt-5.6-codex',
+                'model': 'gpt-5.6-codex',
+                'displayName': 'GPT-5.6 Codex',
+              },
+            ],
+            'reasoningOptions': ['medium', 'high'],
+          },
+          'claude': {'providerId': 'claude'},
+        };
+
+    controller.handleRealtimeForTesting(snapshot('gpt-5.6'));
+    controller.updateRunSettings('codex', model: 'gpt-5.6-codex');
+    expect(controller.selectedRunSettings?.codex.model, 'gpt-5.6-codex');
+
+    controller.handleRealtimeForTesting(snapshot('gpt-5.6'));
+    expect(controller.selectedRunSettings?.codex.model, 'gpt-5.6-codex');
+
+    controller.handleRealtimeForTesting(snapshot('gpt-5.6-codex'));
+    controller.handleRealtimeForTesting(snapshot('gpt-5.6'));
+    expect(controller.selectedRunSettings?.codex.model, 'gpt-5.6');
+
+    await Future<void>.delayed(Duration.zero);
+    controller.dispose();
+  });
+
+  test('project file response models parse preview payloads', () {
+    final entry = WorkspaceFileEntry.fromJson({
+      'name': 'main.dart',
+      'path': r'C:\repo\lib\main.dart',
+      'kind': 'file',
+      'size': 128,
+      'modifiedAt': '2026-07-10T00:00:00Z',
+    });
+    final preview = ProjectFilePreview.fromJson({
+      'name': 'main.dart',
+      'path': entry.path,
+      'size': entry.size,
+      'modifiedAt': entry.modifiedAt,
+      'previewKind': 'text',
+      'content': 'void main() {}',
+      'language': 'dart',
+    });
+
+    expect(entry.isDirectory, isFalse);
+    expect(preview.previewKind, 'text');
+    expect(preview.content, contains('main'));
+  });
+
   test(
       'history response replaces realtime pending when assistant history exists',
       () async {
