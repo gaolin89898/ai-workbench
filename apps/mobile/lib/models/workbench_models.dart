@@ -345,6 +345,7 @@ class ChatSegment {
     this.message,
     this.approvalId,
     this.approvalKind,
+    this.providerId,
     this.reason,
     this.cwd,
     this.grantRoot,
@@ -374,6 +375,7 @@ class ChatSegment {
   final String? message;
   final String? approvalId;
   final String? approvalKind;
+  final String? providerId;
   final String? reason;
   final String? cwd;
   final String? grantRoot;
@@ -403,6 +405,7 @@ class ChatSegment {
         message: json['message'] as String?,
         approvalId: json['approvalId'] as String?,
         approvalKind: json['approvalKind'] as String?,
+        providerId: json['providerId'] as String?,
         reason: json['reason'] as String?,
         cwd: json['cwd'] as String?,
         grantRoot: json['grantRoot'] as String?,

@@ -1214,9 +1214,10 @@ class _ApprovalCoverCard extends StatelessWidget {
   }
 
   String _approvalKindLabel(ChatSegment segment) {
-    if (segment.approvalKind == 'fileChange') return '文件修改 · 本次会话';
-    if (segment.approvalKind == 'command') return '命令执行 · 本次会话';
-    return '工具操作 · 本次会话';
+    final provider = segment.providerId == 'mimo' ? 'MiMo Code' : 'Codex';
+    if (segment.approvalKind == 'fileChange') return '$provider · 文件修改 · 本次会话';
+    if (segment.approvalKind == 'command') return '$provider · 命令执行 · 本次会话';
+    return '$provider · 工具操作 · 本次会话';
   }
 }
 

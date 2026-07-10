@@ -4,6 +4,8 @@
 
 本文档描述将 MiMo Code（`mimo` CLI）集成到 AI Workbench 桌面端的技术方案。MiMo Code 是小米 MiMo 团队开发的 AI 编程助手，支持多种运行模式。
 
+> 当前实现（2026-07-10）：OpenCode 继续使用独立 ACP 传输；MiMo Code 已切换为本地 `mimo serve` HTTP/SSE 传输。桌面端监听 `permission.asked`，通过 `/permission/{requestID}/reply` 完成允许或拒绝，不再使用无法交互审批的 `mimo run --format json` 作为聊天主链路。
+
 ## 2. MiMo Code 运行模式分析
 
 ### 2.1 ACP 协议模式（`mimo acp`）
@@ -73,6 +75,15 @@ mimo run --format json --session ses_xxx "继续对话"
 mimo serve --port 4096
 ```
 
+当前桌面端为每轮 MiMo 会话启动仅监听 `127.0.0.1` 的随机端口，使用：
+
+- `GET /event`：订阅 SSE 工具、文本、状态和审批事件
+- `POST /session/{id}/message`：发送消息并等待本轮结果
+- `POST /permission/{requestID}/reply`：回复 `once` 或 `reject`
+- `POST /session/{id}/abort`：停止当前执行并清理待审批
+
+这种模式保留 MiMo 自己的权限规则，同时支持桌面端和移动端共用审批卡片。
+
 ## 3. 与 Codex app-server 协议对比
 
 | 特性 | Codex app-server | MiMo Code (ACP) | MiMo Code (run) |
@@ -88,7 +99,11 @@ mimo serve --port 4096
 
 ## 4. 推荐集成方案
 
-### 方案 A：CLI 流式模式（推荐）
+### 方案 A：本地 HTTP/SSE 模式（当前实现）
+
+使用 `mimo serve` 的会话、事件与 permission API。该方案支持会话续接、实时工具状态和交互审批，也是当前桌面端采用的实现。
+
+### 方案 B：CLI 流式模式（历史方案）
 
 参照 `claude.ts` 的实现，使用 `mimo run --format json` 作为集成方式。
 
@@ -175,7 +190,7 @@ function handleLine(line: string, aiSessionId: string, sender: Sender): { sessio
 
 在 `useWorkspace.ts` 中将 `mimo` 添加到 `supportedChatProviders`。
 
-### 方案 B：ACP 协议模式（后续优化）
+### 方案 C：ACP 协议模式（后续评估）
 
 使用 `mimo acp` 实现类似 Codex 的持久 JSON-RPC 会话。
 
@@ -207,13 +222,14 @@ function handleLine(line: string, aiSessionId: string, sender: Sender): { sessio
 | `apps/mobile/lib/pages/providers_page.dart` | 添加 `_ProviderInfo` |
 | `apps/mobile/lib/pages/mobile_shell_page.dart` | 添加到 `_builtInProviders` |
 
-### 待实现（聊天集成）
+### 已完成（聊天与审批集成）
 
 | 文件 | 变更 |
 |---|---|
-| `apps/desktop/src/main/mimo.ts` | 新建，MiMo Code CLI 集成 |
-| `apps/desktop/src/main/ipc.ts` | 添加 `run_mimo_chat` / `stop_mimo_chat` |
-| `apps/desktop/src/composables/useWorkspace.ts` | 路由 `mimo` 到 `runMimoChat` |
+| `apps/desktop/src/main/mimo.ts` | 独立 HTTP/SSE 会话、工具事件、审批与停止处理 |
+| `apps/desktop/src/main/ipc.ts` | MiMo 聊天、停止、配置和统一审批 IPC 路由 |
+| `apps/desktop/src/main/sync.ts` | 移动端聊天、停止和审批响应路由 |
+| `apps/desktop/src/components/ChatSegment.vue` | 共用审批卡片并显示真实 Provider |
 
 ## 6. 测试验证
 
@@ -223,31 +239,33 @@ function handleLine(line: string, aiSessionId: string, sender: Sender): { sessio
 # 检查 mimo 安装
 which mimo && mimo --version
 
-# 测试流式输出
-echo "hello" | mimo run --format json
+# 启动本地服务
+mimo serve --hostname 127.0.0.1 --port 4096
 
-# 测试会话续接
-mimo run --format json --session ses_xxx "继续"
+# 检查服务和待审批列表
+curl "http://127.0.0.1:4096/path?directory=/path/to/project"
+curl "http://127.0.0.1:4096/permission?directory=/path/to/project"
 ```
 
 ### 6.2 集成验证
 
 1. 启动桌面端，检查 Settings → AI 工具 中 MiMo Code 状态
 2. 创建新会话，选择 MiMo Code 作为 Provider
-3. 发送消息，验证流式输出
-4. 验证会话续接功能
+3. 发送消息，验证 SSE 文本和工具状态
+4. 触发权限请求，分别验证允许、拒绝和停止
+5. 验证会话续接功能
 
 ## 7. 风险与限制
 
 | 风险 | 影响 | 缓解措施 |
 |---|---|---|
-| ACP 协议不完整 | 无法使用持久会话 | 先用 CLI 流式模式 |
-| 无审批机制 | 用户无法控制命令执行 | 使用 `--dangerously-skip-permissions` 或提示用户 |
-| 超时未知 | 长任务可能超时 | 设置 30 分钟超时 |
+| 本地服务异常退出 | 当前轮次中断 | 监听子进程并中止 HTTP/SSE 请求 |
+| MiMo 0.1.5 拒绝后 runner 不结束 | 会话持续等待 | 拒绝后保留 8 秒收尾窗口，随后中止本轮 |
+| 审批长期未处理 | 输入框持续锁定 | 停止或 30 分钟超时后将审批标记为失效 |
 | 版本兼容性 | CLI 参数可能变化 | 检测版本并适配 |
 
 ## 8. 后续计划
 
-1. **Phase 1**：实现 CLI 流式模式集成（方案 A）
-2. **Phase 2**：探索 ACP 协议，实现持久会话（方案 B）
-3. **Phase 3**：支持 MCP 工具调用（如果 MiMo Code 支持）
+1. **已完成**：本地 HTTP/SSE 聊天、会话续接和模型配置
+2. **已完成**：桌面端与移动端交互审批
+3. **后续**：评估复用常驻 MiMo 服务以降低每轮启动开销

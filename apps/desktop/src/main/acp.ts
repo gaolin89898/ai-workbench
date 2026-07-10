@@ -1,6 +1,5 @@
-// ACP (Agent Client Protocol) integration for the Electron main process.
-// Shared by OpenCode (`opencode acp`) and MiMo Code (`mimo acp`).
-// Spawns `<provider> acp`, communicates via JSON-RPC 2.0 over stdio, and
+// OpenCode ACP (Agent Client Protocol) integration for the Electron main process.
+// Spawns `opencode acp`, communicates via JSON-RPC 2.0 over stdio, and
 // emits provider trace updates sharing the same CodexTraceSnapshot model as
 // Codex/Claude so the renderer and mobile client render one unified view.
 
@@ -48,11 +47,7 @@ interface AcpSession {
 
 const ACP_TURN_TIMEOUT_MS = 30 * 60_000;
 const activeAcpSessions = new Map<string, AcpSession>();
-
-const PROVIDER_COMMANDS: Record<string, string> = {
-  opencode: "opencode",
-  mimo: "mimo",
-};
+const OPENCODE_COMMAND = "opencode";
 
 function isDirectoryPath(value: string): boolean {
   try {
@@ -287,11 +282,10 @@ function reportAcpUsage(session: AcpSession, response: unknown): void {
 
 function spawnAcpSession(
   aiSessionId: string,
-  providerId: string,
   cwd: string,
   sender: Sender,
 ): AcpSession {
-  const command = PROVIDER_COMMANDS[providerId] ?? providerId;
+  const command = OPENCODE_COMMAND;
   const resolvedCwd = resolveAcpCwd(cwd);
   const child = spawn(command, ["acp"], {
     cwd: resolvedCwd,
@@ -302,7 +296,7 @@ function spawnAcpSession(
 
   const session: AcpSession = {
     aiSessionId,
-    providerId,
+    providerId: "opencode",
     command,
     child,
     rl: createInterface({ input: child.stdout, terminal: false }),
@@ -419,15 +413,11 @@ function extractAcpConfigOptions(configOptions: unknown[]): AcpConfigOptions {
 }
 
 /**
- * Probe an ACP provider (opencode / mimo) for its available config options
- * (models, reasoning effort levels, session modes). Spawns a short-lived
- * `<provider> acp` process, runs initialize + session/new, then tears it down.
+ * Probe OpenCode ACP for its available config options (models, reasoning
+ * effort levels, and session modes).
  */
-export async function listAcpConfigOptions(
-  providerId: string,
-  cwd: string,
-): Promise<AcpConfigOptions> {
-  const command = PROVIDER_COMMANDS[providerId] ?? providerId;
+export async function listOpenCodeConfigOptions(cwd: string): Promise<AcpConfigOptions> {
+  const command = OPENCODE_COMMAND;
   const resolvedCwd = resolveAcpCwd(cwd);
   const child = spawn(command, ["acp"], {
     cwd: resolvedCwd,
@@ -530,27 +520,27 @@ function buildAcpPrompt(req: RunAiChatRequest): string {
 }
 
 /**
- * Run an ACP chat turn (OpenCode / MiMo Code). Spawns `<command> acp`,
+ * Run an OpenCode ACP chat turn. Spawns `opencode acp`,
  * initializes the JSON-RPC connection, creates (or loads) a session, sends
  * session/prompt, and streams trace updates to the sender until the turn
  * completes.
  *
  * Returns the ACP sessionId (providerSessionId) for later reuse via session/load.
  */
-export async function runAcpChat(
+export async function runOpenCodeChat(
   req: RunAiChatRequest,
   sender: Sender,
-  providerId: string,
   existingSessionId?: string | null,
 ): Promise<string> {
   const { aiSessionId, projectPath } = req;
+  const providerId = "opencode";
   const cwd = resolveAcpCwd(projectPath);
 
   // Tear down any previous session for this aiSessionId
   const prev = activeAcpSessions.get(aiSessionId);
   if (prev) teardown(prev);
 
-  const session = spawnAcpSession(aiSessionId, providerId, projectPath, sender);
+  const session = spawnAcpSession(aiSessionId, projectPath, sender);
   activeAcpSessions.set(aiSessionId, session);
 
   const now = new Date().toISOString();
@@ -588,12 +578,10 @@ export async function runAcpChat(
     };
     emitTrace(session, session.snapshot);
 
-    // 应用用户选择的模型 / 推理强度 / 会话模式（build/plan）。
-    // opencode 的 effort 选项在切换模型后才出现，故先设 model 再设 effort；
-    // mimo 无独立 effort（编码在模型 value 后缀里），set 失败会被静默忽略。
-    if (req.acpModel) await setConfigOption(session, "model", req.acpModel);
-    if (req.acpEffort) await setConfigOption(session, "effort", req.acpEffort);
-    if (req.acpMode) await setConfigOption(session, "mode", req.acpMode);
+    // OpenCode only exposes effort options after the model is selected.
+    if (req.opencodeModel) await setConfigOption(session, "model", req.opencodeModel);
+    if (req.opencodeEffort) await setConfigOption(session, "effort", req.opencodeEffort);
+    if (req.opencodeMode) await setConfigOption(session, "mode", req.opencodeMode);
 
     const promptResponse = await runPrompt(session, buildAcpPrompt(req));
     reportAcpUsage(session, promptResponse);
@@ -628,7 +616,7 @@ export async function runAcpChat(
   }
 }
 
-export function stopAcpChat(aiSessionId: string): boolean {
+export function stopOpenCodeChat(aiSessionId: string): boolean {
   const session = activeAcpSessions.get(aiSessionId);
   if (!session) return false;
   session.cancelled = true;
@@ -652,13 +640,6 @@ export function stopAcpChat(aiSessionId: string): boolean {
   return true;
 }
 
-export function hasLiveAcpChat(): boolean {
+export function hasLiveOpenCodeChat(): boolean {
   return activeAcpSessions.size > 0;
-}
-
-export async function warmupAcpSession(
-  _aiSessionId: string,
-  _sender: Sender,
-): Promise<{ providerSessionId: string }> {
-  return { providerSessionId: "" };
 }

@@ -241,7 +241,7 @@ function providerRuntimeName(providerId?: string | null) {
   if (providerId === "codex") return "Codex app-server";
   if (providerId === "claude") return "Claude Agent SDK";
   if (providerId === "opencode") return "OpenCode ACP";
-  if (providerId === "mimo") return "MiMo ACP";
+  if (providerId === "mimo") return "MiMo local API";
   return providerDisplayName(providerId);
 }
 

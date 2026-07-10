@@ -2355,19 +2355,19 @@ h2 {
 }
 
 .codex-start-toolbar .codex-start-add {
-  order: 1;
+  order: 2;
   flex: 0 0 auto;
 }
 
 .codex-start-toolbar .start-run-controls {
-  order: 2;
+  order: 3;
   flex: 1 1 auto;
   min-width: 0;
   justify-content: flex-end;
 }
 
 .codex-start-toolbar .start-approval-trigger {
-  order: 3;
+  order: 1;
   flex: 0 1 auto;
 }
 
@@ -2386,7 +2386,7 @@ h2 {
 }
 
 .codex-start-toolbar .codex-approval-menu {
-  left: 0;
+  left: 40px;
   right: auto;
   bottom: calc(100% + 6px);
 }
@@ -2398,8 +2398,7 @@ h2 {
 
 .codex-start-toolbar .codex-run-mode,
 .codex-start-toolbar .codex-goal-toggle,
-.codex-start-toolbar .codex-goal-input,
-.codex-start-toolbar .start-approval-trigger {
+.codex-start-toolbar .codex-goal-input {
   display: none;
 }
 
@@ -3026,110 +3025,99 @@ h2 {
   color: var(--color-text-body);
 }
 
-.codex-model-menu-dual {
-  width: 208px;
+.codex-model-menu-compact {
+  width: 224px;
   max-height: none;
   flex-direction: column;
-  gap: 0;
+  gap: 2px;
   overflow: visible;
   border: 1px solid var(--color-border);
-  border-radius: 10px;
+  border-radius: 8px;
   background: var(--color-bg-elevated);
-  padding: 8px 0;
+  padding: 4px;
   box-shadow: 0 10px 24px rgba(15, 23, 42, 0.12);
 }
 
-.codex-model-menu-column {
-  display: flex;
-  flex-direction: column;
-  border: 0;
-  background: transparent;
-  padding: 0;
-  box-shadow: none;
-}
-
-.codex-model-menu-column.models {
-  order: 3;
+.codex-model-menu-section {
   position: relative;
   width: 100%;
-  margin-top: 8px;
-  padding-top: 8px;
-  border-top: 1px solid var(--color-border-subtle);
-  border-radius: 0;
 }
 
-.codex-model-menu-column.reasoning {
-  order: 1;
+.codex-model-menu .codex-model-menu-row {
+  display: grid;
   width: 100%;
-  border-radius: 0;
-}
-
-.codex-model-menu-column.service-tier {
-  order: 2;
-  width: 100%;
-  margin-top: 8px;
-  padding-top: 8px;
-  border-top: 1px solid var(--color-border-subtle);
-  border-radius: 0;
-}
-
-.codex-model-menu-heading {
-  color: var(--color-text-muted);
-  padding: 6px 12px 4px;
-  font-size: 11px;
-  font-weight: 800;
-}
-
-.codex-model-menu-column.models .codex-model-menu-heading {
-  display: block;
-}
-
-.codex-model-menu-column button {
-  display: flex;
-  width: 100%;
+  min-height: 40px;
+  grid-template-columns: minmax(74px, auto) minmax(0, 1fr) 14px;
   align-items: center;
   gap: 8px;
-  justify-content: flex-start;
-  border-radius: 0;
-  padding: 8px 12px;
+  border-radius: 6px;
+  padding: 0 8px;
 }
 
-.codex-model-submenu-trigger {
-  display: flex;
-  width: 100%;
-  align-items: center;
-  gap: 8px;
-  justify-content: space-between;
-  border-radius: 7px;
-  padding: 8px 12px;
-}
-
-.codex-model-submenu-trigger.open {
-  background: var(--color-bg-hover);
+.codex-model-menu-row-label {
   color: var(--color-text-body);
+  font-size: 13px;
+  font-weight: 650;
+}
+
+.codex-model-menu-row-value {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--color-text-muted);
+  font-size: 13px;
+  font-weight: 500;
+  text-align: right;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.codex-model-menu-row.active .codex-model-menu-row-value,
+.codex-model-menu-row:hover .codex-model-menu-row-value {
+  color: var(--color-text-secondary);
 }
 
 .codex-model-submenu-chevron {
   width: 14px;
   height: 14px;
-  margin-left: auto;
   flex: 0 0 14px;
   color: var(--color-text-muted);
 }
 
 .codex-model-submenu {
   position: absolute;
-  right: calc(100% + 2px);
-  bottom: 0;
-  z-index: 1;
+  top: 50%;
+  right: calc(100% + 8px);
+  z-index: 2;
   display: flex;
-  width: 200px;
+  width: 280px;
+  max-height: min(360px, calc(100vh - 32px));
   flex-direction: column;
+  overflow-y: auto;
   border: 1px solid var(--color-border);
-  border-radius: 10px;
+  border-radius: 8px;
   background: var(--color-bg-elevated);
-  padding: 8px 0;
+  padding: 6px;
   box-shadow: 0 10px 24px rgba(15, 23, 42, 0.12);
+  transform: translateY(-50%);
+}
+
+.codex-model-menu-heading {
+  flex: 0 0 auto;
+  color: var(--color-text-muted);
+  padding: 6px 8px 4px;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.codex-model-submenu > button {
+  display: flex;
+  width: 100%;
+  min-height: 38px;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 8px;
+  border-radius: 6px;
+  padding: 0 10px;
 }
 
 .codex-model-menu-check {
@@ -6541,45 +6529,41 @@ dd {
   color: var(--color-text-body);
 }
 
-.chat-composer .codex-model-menu-dual {
-  width: 208px;
+.chat-composer .codex-model-menu-compact {
+  width: 224px;
   max-height: none;
   flex-direction: column;
-  gap: 0;
+  gap: 2px;
   overflow: visible;
   border: 1px solid var(--color-border);
   background: var(--color-bg-elevated);
-  padding: 8px 0;
+  padding: 4px;
   box-shadow: 0 10px 24px rgba(15, 23, 42, 0.12);
 }
 
-.chat-composer .codex-model-menu-column {
-  background: var(--color-bg-elevated);
-  box-shadow: none;
-}
-
-.chat-composer .codex-model-menu-column.models {
-  width: 100%;
-}
-
-.chat-composer .codex-model-menu-column.reasoning {
-  width: 100%;
-}
-
-.chat-composer .codex-model-menu-column.service-tier {
-  width: 100%;
-}
-
 .chat-composer .codex-model-menu-heading {
-  padding: 6px 12px 4px;
+  padding: 6px 8px 4px;
   font-size: 11px;
-  font-weight: 800;
+  font-weight: 700;
 }
 
-.chat-composer .codex-model-menu-column button {
-  min-height: 32px;
-  border-radius: 0;
-  padding: 8px 12px;
+.chat-composer .codex-model-menu .codex-model-menu-row {
+  min-height: 40px;
+  border-radius: 6px;
+  padding: 0 8px;
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.chat-composer .codex-model-submenu {
+  width: 280px;
+  background: var(--color-bg-elevated);
+}
+
+.chat-composer .codex-model-submenu > button {
+  min-height: 38px;
+  border-radius: 6px;
+  padding: 0 10px;
   font-size: 13px;
   font-weight: 500;
 }
@@ -6665,7 +6649,7 @@ dd {
 }
 
 .chat-approval-menu {
-  left: 12px;
+  left: 52px;
   bottom: 52px;
 }
 
@@ -8619,6 +8603,15 @@ textarea:focus {
 
   .codex-model-picker {
     max-width: none;
+  }
+
+  .codex-model-submenu,
+  .chat-composer .codex-model-submenu {
+    top: auto;
+    right: 0;
+    bottom: calc(100% + 8px);
+    width: min(280px, calc(100vw - 24px));
+    transform: none;
   }
 
   .chat-user-anchor-rail {

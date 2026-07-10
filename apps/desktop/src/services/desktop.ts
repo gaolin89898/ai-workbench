@@ -212,6 +212,7 @@ export type ChatSegment =
       stepId: string;
       approvalId: string;
       approvalKind: "command" | "fileChange";
+      providerId?: string;
       status: "pending" | "approved" | "denied" | "expired" | "failed";
       title: string;
       reason?: string;
@@ -344,7 +345,7 @@ export type ShellInputRequest = {
 };
 
 export type CodexApprovalDecision = "approved" | "denied";
-export type CodexApprovalMode = "suggest" | "autoEdit" | "fullAccess";
+export type CodexApprovalMode = "suggest" | "autoEdit" | "fullAccess" | "custom";
 export type CodexRunMode = "default" | "plan";
 export type CodexReasoningEffort = "low" | "medium" | "high" | "xhigh" | "max" | "ultra";
 
@@ -369,8 +370,10 @@ export type CodexModelOption = {
   id: string;
   model: string;
   displayName: string;
+  resolvedModel?: string | null;
   description?: string | null;
   isDefault?: boolean;
+  supportsEffort?: boolean;
   defaultReasoningEffort?: CodexReasoningEffort | null;
   supportedReasoningEfforts?: CodexReasoningEffortOption[];
   defaultServiceTier?: string | null;
@@ -415,9 +418,12 @@ export type AiChatOptions = CodexChatOptions & {
   claudeReasoningEffort?: ClaudeReasoningEffort | null;
   claudeMode?: CodexRunMode;
   claudeGoal?: string | null;
-  acpModel?: string | null;
-  acpEffort?: string | null;
-  acpMode?: string | null;
+  opencodeModel?: string | null;
+  opencodeEffort?: string | null;
+  opencodeMode?: string | null;
+  mimoModel?: string | null;
+  mimoVariant?: string | null;
+  mimoAgent?: string | null;
 };
 
 export type RunCodexChatRequest = {
@@ -628,8 +634,14 @@ export const desktopApi = {
     ipc<string>("run_codex_chat", req),
   listCodexModels: (): Promise<CodexModelOption[]> =>
     ipc<CodexModelOption[]>("list_codex_models"),
-  listAcpConfigOptions: (providerId: string, cwd: string): Promise<AcpConfigOptions> =>
-    ipc<AcpConfigOptions>("list_acp_config_options", providerId, cwd),
+  listClaudeModels: (): Promise<CodexModelOption[]> =>
+    ipc<CodexModelOption[]>("list_claude_models"),
+  getCodexApprovalMode: (cwd: string): Promise<CodexApprovalMode> =>
+    ipc<CodexApprovalMode>("get_codex_approval_mode", cwd),
+  listOpenCodeConfigOptions: (cwd: string): Promise<AcpConfigOptions> =>
+    ipc<AcpConfigOptions>("list_opencode_config_options", cwd),
+  listMimoConfigOptions: (cwd: string): Promise<AcpConfigOptions> =>
+    ipc<AcpConfigOptions>("list_mimo_config_options", cwd),
   publishAiRunSettings: (settings: Partial<AiRunSettingsState>): Promise<void> =>
     ipc<void>("publish_ai_run_settings", settings),
   stopAiChat: (aiSessionId: string): Promise<boolean> =>
@@ -638,6 +650,8 @@ export const desktopApi = {
     ipc<boolean>("has_live_ai_chat"),
   respondCodexApproval: (req: CodexApprovalResponseRequest): Promise<boolean> =>
     ipc<boolean>("respond_codex_approval", req),
+  respondAiApproval: (req: CodexApprovalResponseRequest): Promise<boolean> =>
+    ipc<boolean>("respond_ai_approval", req),
   warmupAiSession: (aiSessionId: string): Promise<AiSession> =>
     ipc<AiSession>("warmup_ai_session", aiSessionId),
   warmupCodexSession: (aiSessionId: string): Promise<AiSession> =>

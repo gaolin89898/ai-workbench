@@ -26,10 +26,11 @@ import {
   fetchDesktopAppRelease,
 } from "./sync";
 import { saveCredentials, loadCredentials, clearCredentials } from "./credentials";
-import { hasLiveCodexChat, listCodexModels, respondCodexApproval, runCodexChat, stopCodexChat } from "./codex";
+import { getCodexApprovalMode, hasLiveCodexChat, listCodexModels, respondCodexApproval, runCodexChat, stopCodexChat } from "./codex";
 import { syncCodexHistoryMirror } from "./codex_sessions";
 import { hasLiveAiChat, runAiChat, stopAiChat } from "./claude";
-import { hasLiveAcpChat, listAcpConfigOptions, runAcpChat, stopAcpChat } from "./acp";
+import { hasLiveOpenCodeChat, listOpenCodeConfigOptions, runOpenCodeChat, stopOpenCodeChat } from "./acp";
+import { hasLiveMimoChat, listMimoConfigOptions, respondMimoApproval, runMimoChat, stopMimoChat } from "./mimo";
 import { checkAppUpdate, getUpdateDownloadSize, installAppUpdate, initUpdater } from "./updater";
 import type {
   CreateAiSessionRequest,
@@ -403,11 +404,11 @@ export function registerIpcHandlers(win?: BrowserWindow): void {
     const session = db.getLocalAiSession(req.aiSessionId);
     const existingSessionId = session?.providerSessionId ?? null;
     const providerId = session?.providerId ?? "claude";
-    // OpenCode / MiMo Code share the ACP (Agent Client Protocol) integration;
-    // Claude Code keeps its dedicated Agent SDK path.
-    const providerSessionId = (providerId === "opencode" || providerId === "mimo")
-      ? await runAcpChat(req, sender, providerId, existingSessionId)
-      : await runAiChat(req, sender, existingSessionId);
+    const providerSessionId = providerId === "opencode"
+      ? await runOpenCodeChat(req, sender, existingSessionId)
+      : providerId === "mimo"
+        ? await runMimoChat(req, sender, existingSessionId)
+        : await runAiChat(req, sender, existingSessionId);
     db.updateLocalAiSession(req.aiSessionId, {
       providerSessionId: providerSessionId || existingSessionId,
       status: "completed",
@@ -436,8 +437,16 @@ export function registerIpcHandlers(win?: BrowserWindow): void {
 
   handle("list_codex_models", async () => listCodexModels());
 
-  handle("list_acp_config_options", async (_event, args: [string, string]) =>
-    listAcpConfigOptions(args[0], args[1])
+  handle("get_codex_approval_mode", async (_event, args: [string]) =>
+    getCodexApprovalMode(args[0] ?? "")
+  );
+
+  handle("list_opencode_config_options", async (_event, args: [string]) =>
+    listOpenCodeConfigOptions(args[0] ?? "")
+  );
+
+  handle("list_mimo_config_options", async (_event, args: [string]) =>
+    listMimoConfigOptions(args[0] ?? "")
   );
 
   handle("publish_ai_run_settings", async (_event, args: [unknown]) => {
@@ -446,14 +455,30 @@ export function registerIpcHandlers(win?: BrowserWindow): void {
 
   handle("stop_ai_chat", async (_event, args: [string]) => {
     const aiSessionId = args[0];
-    return stopCodexChat(aiSessionId) || stopAcpChat(aiSessionId) || stopAiChat(aiSessionId);
+    return stopCodexChat(aiSessionId)
+      || stopOpenCodeChat(aiSessionId)
+      || stopMimoChat(aiSessionId)
+      || stopAiChat(aiSessionId);
   });
 
-  handle("has_live_ai_chat", async () => hasLiveCodexChat() || hasLiveAcpChat() || hasLiveAiChat());
+  handle("has_live_ai_chat", async () =>
+    hasLiveCodexChat() || hasLiveOpenCodeChat() || hasLiveMimoChat() || hasLiveAiChat()
+  );
 
+  const respondAiApproval = async (req: CodexApprovalResponseRequest) => {
+    const codexHandled = respondCodexApproval(req.aiSessionId, req.approvalId, req.decision);
+    return codexHandled || await respondMimoApproval(req.aiSessionId, req.approvalId, req.decision);
+  };
+
+  handle("respond_ai_approval", async (_event, args: [CodexApprovalResponseRequest]) => {
+    const req = args[0];
+    return respondAiApproval(req);
+  });
+
+  // Compatibility for renderers that still use the previous Codex-only IPC name.
   handle("respond_codex_approval", async (_event, args: [CodexApprovalResponseRequest]) => {
     const req = args[0];
-    return respondCodexApproval(req.aiSessionId, req.approvalId, req.decision);
+    return respondAiApproval(req);
   });
 
   // Simplified warmup: return the current session record. (Full pre-warm of
@@ -491,8 +516,8 @@ export function registerIpcHandlers(win?: BrowserWindow): void {
     db.updateLocalAiSession(args[0], { title: args[1] })
   );
 
-  // Rename a session everywhere: local SQLite + backend PATCH (which also
-  // forwards ai.session.rename to other clients over WS).
+  // Desktop sessions are authoritative locally; the sync layer immediately
+  // publishes the updated session snapshot to the backend and mobile clients.
   handle("rename_ai_session", async (_event, args: [string, string]) => {
     const [aiSessionId, title] = args;
     const sync = getDesktopCloudSync();

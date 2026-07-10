@@ -389,6 +389,10 @@ function trimmedOrNull(v: unknown): string | null {
   return typeof v === "string" && v.trim().length > 0 ? v.trim() : null;
 }
 
+function recordOrNull(v: unknown): Record<string, unknown> | null {
+  return v && typeof v === "object" && !Array.isArray(v) ? v as Record<string, unknown> : null;
+}
+
 function codexReasoningEffort(v: unknown): CodexReasoningEffort | null {
   const value = trimmedOrNull(v);
   return value === "low"
@@ -978,7 +982,7 @@ function createSession(
   cwd: string,
   sender: Sender,
   traceEnabled = false,
-  approvalMode: CodexApprovalMode = "suggest",
+  approvalMode: CodexApprovalMode = "custom",
 ): CodexSession {
   const launchedCodex = spawnCodex(["app-server", "--stdio"], cwd);
   const child = launchedCodex.child;
@@ -1145,6 +1149,30 @@ function interruptSession(session: CodexSession): void {
 
 // ---------- Thread management ----------
 
+function codexApprovalOverrides(mode: CodexApprovalMode): Record<string, unknown> {
+  if (mode === "suggest") {
+    return {
+      approvalPolicy: "on-request",
+      approvalsReviewer: "user",
+      sandbox: "workspace-write",
+    };
+  }
+  if (mode === "autoEdit") {
+    return {
+      approvalPolicy: "on-request",
+      approvalsReviewer: "auto_review",
+      sandbox: "workspace-write",
+    };
+  }
+  if (mode === "fullAccess") {
+    return {
+      approvalPolicy: "never",
+      sandbox: "danger-full-access",
+    };
+  }
+  return {};
+}
+
 function lookupExistingProviderSessionId(aiSessionId: string): string | null {
   try {
     const providerSessionId = getLocalAiSession(aiSessionId)?.providerSessionId ?? null;
@@ -1172,6 +1200,7 @@ async function ensureThread(
   aiSessionId: string
 ): Promise<CodexThreadInfo> {
   if (session.threadId) return { threadId: session.threadId, model: null };
+  const approvalOverrides = codexApprovalOverrides(session.approvalMode);
 
   // Try to resume from a DB-stored providerSessionId
   const existing = lookupExistingProviderSessionId(aiSessionId);
@@ -1179,6 +1208,7 @@ async function ensureThread(
     try {
       const resp = await sendRequestWithReconnectRetry(session, "thread/resume", {
         threadId: existing,
+        ...approvalOverrides,
       });
       const info = extractThreadInfo(resp.result, existing);
       if (!info) throw new Error("未能从 codex 恢复 threadId");
@@ -1189,7 +1219,7 @@ async function ensureThread(
     }
   }
 
-  const resp = await sendRequestWithReconnectRetry(session, "thread/start", {});
+  const resp = await sendRequestWithReconnectRetry(session, "thread/start", approvalOverrides);
   const info = extractThreadInfo(resp.result);
   if (!info) {
     throw new Error("未能从 codex 获取 threadId");
@@ -1269,7 +1299,7 @@ export async function runCodexChat(
   req: RunCodexChatRequest,
   sender: Sender
 ): Promise<string> {
-  const { aiSessionId, projectPath, images = [], approvalMode = "suggest" } = req;
+  const { aiSessionId, projectPath, images = [], approvalMode = "custom" } = req;
   const session = createSession(aiSessionId, projectPath, sender, true, approvalMode);
   const initialTrace = resetLocalAiTrace({
     aiSessionId,
@@ -1419,6 +1449,48 @@ function extractCodexModelOptions(result: unknown): CodexModelOption[] {
 function extractNextCursor(result: unknown): string | null {
   if (!result || typeof result !== "object") return null;
   return trimmedOrNull((result as Record<string, unknown>)["nextCursor"]);
+}
+
+function approvalModeFromConfigReadResult(result: unknown): CodexApprovalMode {
+  const config = recordOrNull(recordOrNull(result)?.["config"]);
+  if (!config) return "custom";
+  const approvalPolicy = trimmedOrNull(config["approval_policy"]);
+  const approvalsReviewer = trimmedOrNull(config["approvals_reviewer"]) ?? "user";
+  const sandboxMode = trimmedOrNull(config["sandbox_mode"]);
+
+  if (approvalPolicy === "never" && sandboxMode === "danger-full-access") return "fullAccess";
+  if (approvalPolicy === "on-request" && sandboxMode === "workspace-write") {
+    return approvalsReviewer === "auto_review" || approvalsReviewer === "guardian_subagent"
+      ? "autoEdit"
+      : approvalsReviewer === "user"
+        ? "suggest"
+        : "custom";
+  }
+  return "custom";
+}
+
+export async function getCodexApprovalMode(
+  cwd: string,
+  sender: Sender = { send: () => undefined },
+): Promise<CodexApprovalMode> {
+  const session = createSession(`codex-config-read-${Date.now()}`, cwd || os.homedir(), sender);
+  const timeout = setTimeout(() => {
+    for (const [, pending] of session.pendingRequests) pending.reject(new Error("timeout"));
+    session.pendingRequests.clear();
+    killSession(session);
+  }, CODEX_WARMUP_TIMEOUT_MS);
+
+  try {
+    await sendRequestWithReconnectRetry(session, "initialize", CODEX_INITIALIZE_PARAMS);
+    const response = await sendRequestWithReconnectRetry(session, "config/read", {
+      cwd: session.resolvedCwd,
+      includeLayers: false,
+    });
+    return approvalModeFromConfigReadResult(response.result);
+  } finally {
+    clearTimeout(timeout);
+    killSession(session);
+  }
 }
 
 export async function listCodexModels(sender: Sender = { send: () => undefined }): Promise<CodexModelOption[]> {

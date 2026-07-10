@@ -32,6 +32,8 @@ import { listCodexModels, respondCodexApproval, runCodexChat, stopCodexChat, war
 import { clearCredentials } from "./credentials";
 import { syncCodexHistoryMirror } from "./codex_sessions";
 import { runAiChat, stopAiChat } from "./claude";
+import { runOpenCodeChat, stopOpenCodeChat } from "./acp";
+import { respondMimoApproval, runMimoChat, stopMimoChat } from "./mimo";
 import { codexTraceSnapshotToSegments } from "./codex_trace";
 
 // ---------- Cloud config persistence ----------
@@ -178,11 +180,12 @@ function listSyncableAiSessions() {
 }
 
 function isTraceProvider(providerId?: string | null) {
-  return providerId === "codex" || providerId === "claude";
+  return providerId === "codex" || providerId === "claude" || providerId === "opencode" || providerId === "mimo";
 }
 
 function traceKindForProvider(providerId?: string | null) {
-  return providerId === "claude" ? "claude" : "codex";
+  if (providerId === "claude" || providerId === "opencode" || providerId === "mimo") return providerId;
+  return "codex";
 }
 
 function isTraceProviderSession(aiSessionId: string) {
@@ -645,11 +648,10 @@ class DesktopCloudSync {
   }
 
   /**
-   * Rename an AI session everywhere: update local SQLite, then call the
-   * backend PATCH /ai-sessions/{id} so PostgreSQL is updated and the server
-   * forwards ai.session.rename to other clients (e.g. mobile).
-   * Best-effort: backend failure is logged but does not revert the local
-   * change, since the local UI already shows the new title.
+   * Rename a desktop-owned session locally and publish the authoritative
+   * session snapshot. The backend PATCH route is for mobile-originated
+   * renames and can return 403 while a new desktop session is still being
+   * inserted from its first snapshot.
    */
   async renameAiSession(aiSessionId: string, title: string): Promise<void> {
     try {
@@ -659,22 +661,7 @@ class DesktopCloudSync {
     }
     this.notify("workspace-changed");
     this.notify("ai-history-changed", { aiSessionId });
-
-    const config = loadStoredConfig();
-    if (!config || !config.accessToken) return;
-    try {
-      const url = `${normalizeServerUrl(config.serverUrl)}/ai-sessions/${encodeURIComponent(aiSessionId)}`;
-      await fetchJson(url, {
-        method: "PATCH",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${config.accessToken}`,
-        },
-        body: JSON.stringify({ title }),
-      });
-    } catch (e) {
-      console.error("renameAiSession: backend PATCH failed:", e);
-    }
+    this.pushSessionSnapshot();
   }
 
   // ----- message dispatch -----
@@ -703,7 +690,7 @@ class DesktopCloudSync {
         this.handleAiSessionRename(msg, deviceId);
         break;
       case "ai.approval.respond":
-        this.handleAiApprovalRespond(msg, deviceId);
+        void this.handleAiApprovalRespond(msg, deviceId);
         break;
       case "ai.run.settings.update":
         this.handleAiRunSettingsUpdate(msg, deviceId);
@@ -776,7 +763,10 @@ class DesktopCloudSync {
   private handleAiMessageStop(msg: any, deviceId: string): void {
     const aiSessionId = typeof msg.aiSessionId === "string" ? msg.aiSessionId : "";
     if (!aiSessionId) return;
-    const stopped = stopCodexChat(aiSessionId) || stopAiChat(aiSessionId);
+    const stopped = stopCodexChat(aiSessionId)
+      || stopOpenCodeChat(aiSessionId)
+      || stopMimoChat(aiSessionId)
+      || stopAiChat(aiSessionId);
     if (stopped) {
       updateLocalAiSession(aiSessionId, { status: "completed" });
     }
@@ -1205,6 +1195,32 @@ class DesktopCloudSync {
             },
             aiChatSender
           );
+        } else if (session.providerId === "opencode") {
+          providerSessionId = await runOpenCodeChat(
+            {
+              aiSessionId,
+              projectPath,
+              prompt: content,
+              opencodeModel: selectedModel || null,
+              opencodeEffort: reasoningEffort || null,
+              opencodeMode: "build",
+            },
+            aiChatSender,
+            session.providerSessionId ?? null,
+          );
+        } else if (session.providerId === "mimo") {
+          providerSessionId = await runMimoChat(
+            {
+              aiSessionId,
+              projectPath,
+              prompt: content,
+              mimoModel: selectedModel || null,
+              mimoVariant: reasoningEffort || null,
+              mimoAgent: "build",
+            },
+            aiChatSender,
+            session.providerSessionId ?? null,
+          );
         } else {
           providerSessionId = await runAiChat(
             {
@@ -1256,12 +1272,13 @@ class DesktopCloudSync {
     }
   }
 
-  private handleAiApprovalRespond(msg: any, deviceId: string): void {
+  private async handleAiApprovalRespond(msg: any, deviceId: string): Promise<void> {
     const aiSessionId = typeof msg.aiSessionId === "string" ? msg.aiSessionId : "";
     const approvalId = typeof msg.approvalId === "string" ? msg.approvalId : "";
     const decision = msg.decision === "approved" || msg.decision === "denied" ? msg.decision : null;
     if (!aiSessionId || !approvalId || !decision) return;
-    const ok = respondCodexApproval(aiSessionId, approvalId, decision);
+    const ok = respondCodexApproval(aiSessionId, approvalId, decision)
+      || await respondMimoApproval(aiSessionId, approvalId, decision);
     if (!ok) {
       this.send({
         type: "ai.chat.output",

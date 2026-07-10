@@ -494,7 +494,12 @@ function itemDurationMs(item: CodexTraceItem, fallbackEndAt: string | null | und
 
 export function codexTraceSnapshotToSegments(snapshot: CodexTraceSnapshot): ChatSegment[] {
   const segments: ChatSegment[] = [];
-  const providerName = snapshot.provider === "claude" ? "Claude" : "Codex";
+  const providerName = ({
+    codex: "Codex",
+    claude: "Claude",
+    opencode: "OpenCode",
+    mimo: "MiMo Code",
+  } as Record<string, string>)[snapshot.provider] ?? snapshot.provider;
   if (snapshot.status === "running") {
     const durationMs = snapshot.startedAt ? Math.max(0, Date.now() - Date.parse(snapshot.startedAt)) : undefined;
     segments.push({
@@ -610,6 +615,7 @@ export function codexTraceSnapshotToSegments(snapshot: CodexTraceSnapshot): Chat
         stepId: item.id,
         approvalId: approval?.id ?? item.id,
         approvalKind: approval?.kind ?? "command",
+        providerId: snapshot.provider,
         status: approval?.status ?? (item.status === "running" ? "pending" : "expired"),
         title: approval?.title ?? item.title,
         command: item.command ?? approval?.command ?? undefined,

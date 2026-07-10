@@ -490,10 +490,17 @@ function approvalKindLabel(segment: Extract<ChatSegmentType, { type: "approval" 
   return "工具操作";
 }
 
+function approvalProviderLabel(segment: Extract<ChatSegmentType, { type: "approval" }>) {
+  if (segment.providerId === "mimo") return "MiMo Code";
+  if (segment.providerId === "opencode") return "OpenCode";
+  if (segment.providerId === "claude") return "Claude";
+  return "Codex";
+}
+
 async function respondApproval(decision: "approved" | "denied") {
   if (props.segment.type !== "approval" || !props.aiSessionId || props.segment.status !== "pending") return;
   try {
-    const handled = await desktopApi.respondCodexApproval({
+    const handled = await desktopApi.respondAiApproval({
       aiSessionId: props.aiSessionId,
       approvalId: props.segment.approvalId,
       decision,
@@ -735,7 +742,7 @@ async function respondApproval(decision: "approved" | "denied") {
             <small>审批期间输入框已锁定，处理后恢复发送。</small>
           </div>
           <strong>{{ segment.title || "需要确认 AI 工具操作" }}</strong>
-          <span class="chat-segment-approval-subtitle">Codex · {{ approvalKindLabel(segment) }} · 本次会话</span>
+          <span class="chat-segment-approval-subtitle">{{ approvalProviderLabel(segment) }} · {{ approvalKindLabel(segment) }} · 本次会话</span>
         </div>
       </div>
       <svg class="chat-segment-approval-corner" viewBox="0 0 16 16" fill="none" aria-hidden="true">
