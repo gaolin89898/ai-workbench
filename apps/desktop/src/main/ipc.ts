@@ -29,6 +29,7 @@ import { saveCredentials, loadCredentials, clearCredentials } from "./credential
 import { hasLiveCodexChat, listCodexModels, respondCodexApproval, runCodexChat, stopCodexChat } from "./codex";
 import { syncCodexHistoryMirror } from "./codex_sessions";
 import { hasLiveAiChat, runAiChat, stopAiChat } from "./claude";
+import { hasLiveAcpChat, listAcpConfigOptions, runAcpChat, stopAcpChat } from "./acp";
 import { checkAppUpdate, getUpdateDownloadSize, installAppUpdate, initUpdater } from "./updater";
 import type {
   CreateAiSessionRequest,
@@ -398,10 +399,15 @@ export function registerIpcHandlers(win?: BrowserWindow): void {
     const sync = getDesktopCloudSync();
     sync?.beginAiTurn(req.aiSessionId);
     const sender = sync?.createRendererAndMobileAiChatSender(getSender()) ?? getSender();
-    // Resume an existing Claude session if we have a providerSessionId stored.
+    // Resume an existing session if we have a providerSessionId stored.
     const session = db.getLocalAiSession(req.aiSessionId);
     const existingSessionId = session?.providerSessionId ?? null;
-    const providerSessionId = await runAiChat(req, sender, existingSessionId);
+    const providerId = session?.providerId ?? "claude";
+    // OpenCode / MiMo Code share the ACP (Agent Client Protocol) integration;
+    // Claude Code keeps its dedicated Agent SDK path.
+    const providerSessionId = (providerId === "opencode" || providerId === "mimo")
+      ? await runAcpChat(req, sender, providerId, existingSessionId)
+      : await runAiChat(req, sender, existingSessionId);
     db.updateLocalAiSession(req.aiSessionId, {
       providerSessionId: providerSessionId || existingSessionId,
       status: "completed",
@@ -430,16 +436,20 @@ export function registerIpcHandlers(win?: BrowserWindow): void {
 
   handle("list_codex_models", async () => listCodexModels());
 
+  handle("list_acp_config_options", async (_event, args: [string, string]) =>
+    listAcpConfigOptions(args[0], args[1])
+  );
+
   handle("publish_ai_run_settings", async (_event, args: [unknown]) => {
     getDesktopCloudSync()?.publishRunSettings(args[0] as any);
   });
 
   handle("stop_ai_chat", async (_event, args: [string]) => {
     const aiSessionId = args[0];
-    return stopCodexChat(aiSessionId) || stopAiChat(aiSessionId);
+    return stopCodexChat(aiSessionId) || stopAcpChat(aiSessionId) || stopAiChat(aiSessionId);
   });
 
-  handle("has_live_ai_chat", async () => hasLiveCodexChat() || hasLiveAiChat());
+  handle("has_live_ai_chat", async () => hasLiveCodexChat() || hasLiveAcpChat() || hasLiveAiChat());
 
   handle("respond_codex_approval", async (_event, args: [CodexApprovalResponseRequest]) => {
     const req = args[0];

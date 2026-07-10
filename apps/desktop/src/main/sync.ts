@@ -11,6 +11,7 @@ import type {
   AiChatOutputEvent,
   AppUpdateInfo,
   ClaudeReasoningEffort,
+  CodexModelOption,
   CodexReasoningEffort,
 } from "../services/desktop";
 import {
@@ -39,27 +40,20 @@ const STRUCTURED_MESSAGE_PREFIX = "__AI_WORKBENCH_MESSAGE_V1__";
 const configPath = path.join(app.getPath("userData"), "cloud-config.json");
 const machineIdPath = path.join(app.getPath("userData"), "machine-id");
 
-type AiRunModelOption = {
-  id: string;
-  model: string;
-  displayName: string;
-  description?: string | null;
-  isDefault?: boolean;
-};
-
 export type AiRunSettingsState = {
   codex: {
     providerId: "codex";
     model: string;
     reasoningEffort: string;
-    models: AiRunModelOption[];
+    models: CodexModelOption[];
     reasoningOptions: string[];
+    serviceTier: string | null;
   };
   claude: {
     providerId: "claude";
     model: string;
     reasoningEffort: string;
-    models: AiRunModelOption[];
+    models: CodexModelOption[];
     reasoningOptions: string[];
   };
 };
@@ -68,9 +62,10 @@ const defaultRunSettings: AiRunSettingsState = {
   codex: {
     providerId: "codex",
     model: "",
-    reasoningEffort: "high",
+    reasoningEffort: "",
     models: [],
     reasoningOptions: ["low", "medium", "high", "ultra"],
+    serviceTier: null,
   },
   claude: {
     providerId: "claude",
@@ -91,7 +86,44 @@ function cloneRunSettings(settings: AiRunSettingsState): AiRunSettingsState {
 }
 
 function codexReasoningEffort(value: string): CodexReasoningEffort | null {
-  return value === "low" || value === "medium" || value === "high" || value === "ultra" ? value : null;
+  return value === "low"
+    || value === "medium"
+    || value === "high"
+    || value === "xhigh"
+    || value === "max"
+    || value === "ultra"
+    ? value
+    : null;
+}
+
+const fallbackCodexReasoningOptions: CodexReasoningEffort[] = ["low", "medium", "high", "ultra"];
+
+function normalizeCodexRunSettings(settings: AiRunSettingsState["codex"]): AiRunSettingsState["codex"] {
+  const selectedModel = settings.models.find((model) => model.model === settings.model)
+    ?? (!settings.model ? settings.models.find((model) => model.isDefault) ?? settings.models[0] : undefined);
+  const model = settings.model || selectedModel?.model || "";
+  const advertisedEfforts = selectedModel?.supportedReasoningEfforts?.map((option) => option.reasoningEffort) ?? [];
+  const reasoningOptions = advertisedEfforts.length ? advertisedEfforts : fallbackCodexReasoningOptions;
+  const requestedEffort = codexReasoningEffort(settings.reasoningEffort);
+  const modelDefault = selectedModel?.defaultReasoningEffort;
+  const reasoningEffort = requestedEffort && reasoningOptions.includes(requestedEffort)
+    ? requestedEffort
+    : modelDefault && reasoningOptions.includes(modelDefault)
+      ? modelDefault
+      : reasoningOptions.includes("high")
+        ? "high"
+        : reasoningOptions[0] ?? "";
+  const serviceTier = settings.serviceTier
+    && selectedModel?.serviceTiers?.some((tier) => tier.id === settings.serviceTier)
+    ? settings.serviceTier
+    : null;
+  return {
+    ...settings,
+    model,
+    reasoningEffort,
+    reasoningOptions,
+    serviceTier,
+  };
 }
 
 function claudeReasoningEffort(value: string): ClaudeReasoningEffort | null {
@@ -527,13 +559,13 @@ class DesktopCloudSync {
       try {
         const models = await listCodexModels();
         settings.codex.models = models;
-        if (!settings.codex.model) {
-          settings.codex.model = models.find((model) => model.isDefault)?.model ?? models[0]?.model ?? "";
-        }
-        this.runSettings.codex = { ...this.runSettings.codex, model: settings.codex.model, models };
       } catch {
         // Keep the last known/default settings.
       }
+    }
+    if (settings.codex.models.length > 0) {
+      settings.codex = normalizeCodexRunSettings(settings.codex);
+      this.runSettings.codex = { ...settings.codex };
     }
     this.send({
       type: "ai.run.settings.snapshot",
@@ -703,13 +735,27 @@ class DesktopCloudSync {
     if (providerId !== "codex" && providerId !== "claude") return;
     const model = typeof msg.model === "string" ? msg.model : "";
     const reasoningEffort = typeof msg.reasoningEffort === "string" ? msg.reasoningEffort : "";
+    let appliedModel = model;
+    let appliedReasoningEffort = reasoningEffort;
+    let appliedServiceTier: string | null | undefined;
 
     if (providerId === "codex") {
-      this.runSettings.codex = {
+      const hasServiceTier = Object.prototype.hasOwnProperty.call(msg, "serviceTier");
+      const serviceTier = typeof msg.serviceTier === "string" && msg.serviceTier.trim()
+        ? msg.serviceTier.trim()
+        : null;
+      const nextSettings: AiRunSettingsState["codex"] = {
         ...this.runSettings.codex,
         ...(model ? { model } : {}),
         ...(codexReasoningEffort(reasoningEffort) ? { reasoningEffort } : {}),
+        ...(hasServiceTier ? { serviceTier } : {}),
       };
+      this.runSettings.codex = nextSettings.models.length > 0
+        ? normalizeCodexRunSettings(nextSettings)
+        : nextSettings;
+      appliedModel = this.runSettings.codex.model;
+      appliedReasoningEffort = this.runSettings.codex.reasoningEffort;
+      appliedServiceTier = this.runSettings.codex.serviceTier;
     } else {
       this.runSettings.claude = {
         ...this.runSettings.claude,
@@ -718,7 +764,12 @@ class DesktopCloudSync {
       };
     }
 
-    this.notify("ai-run-settings-update", { providerId, model, reasoningEffort });
+    this.notify("ai-run-settings-update", {
+      providerId,
+      model: appliedModel,
+      reasoningEffort: appliedReasoningEffort,
+      ...(providerId === "codex" ? { serviceTier: appliedServiceTier ?? null } : {}),
+    });
     void this.pushRunSettingsSnapshot(deviceId);
   }
 
@@ -1085,6 +1136,10 @@ class DesktopCloudSync {
       const confirmedRisk: boolean = !!msg.confirmedRisk;
       const selectedModel = typeof msg.model === "string" ? msg.model.trim() : "";
       const reasoningEffort = typeof msg.reasoningEffort === "string" ? msg.reasoningEffort.trim() : "";
+      const hasServiceTier = Object.prototype.hasOwnProperty.call(msg, "serviceTier");
+      const serviceTier = typeof msg.serviceTier === "string" && msg.serviceTier.trim()
+        ? msg.serviceTier.trim()
+        : null;
 
       const risk = assessCommandRisk(content);
       if (risk.risky && !confirmedRisk) {
@@ -1146,6 +1201,7 @@ class DesktopCloudSync {
               prompt: content,
               codexModel: selectedModel || null,
               codexReasoningEffort: codexReasoningEffort(reasoningEffort),
+              ...(hasServiceTier ? { codexServiceTier: serviceTier } : {}),
             },
             aiChatSender
           );

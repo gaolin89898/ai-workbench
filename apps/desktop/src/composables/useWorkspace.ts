@@ -145,7 +145,7 @@ let updateEventsInitialized = false;
 let updateEventsInitPromise: Promise<void> | null = null;
 let updatePackageSizeLookupSeq = 0;
 let runningElapsedTimer: number | null = null;
-const supportedChatProviders = new Set(["codex", "claude", "mimo"]);
+const supportedChatProviders = new Set(["codex", "claude", "opencode", "mimo"]);
 
 function updateProgressPercentFrom(progress: AppUpdateDownloadProgress | null) {
   if (!progress) return null;
@@ -240,15 +240,19 @@ function providerNameForSession(sessionId?: string | null) {
 function providerRuntimeName(providerId?: string | null) {
   if (providerId === "codex") return "Codex app-server";
   if (providerId === "claude") return "Claude Agent SDK";
+  if (providerId === "opencode") return "OpenCode ACP";
+  if (providerId === "mimo") return "MiMo ACP";
   return providerDisplayName(providerId);
 }
 
 function isTraceProvider(providerId?: string | null) {
-  return providerId === "codex" || providerId === "claude";
+  return providerId === "codex" || providerId === "claude" || providerId === "opencode" || providerId === "mimo";
 }
 
 function traceKindForProvider(providerId?: string | null) {
-  return providerId === "claude" ? "claude" : "codex";
+  if (providerId === "claude") return "claude";
+  if (providerId === "opencode" || providerId === "mimo") return providerId ?? "codex";
+  return "codex";
 }
 
 function setChatRunState(sessionId: string, patch: Partial<ChatRunState>) {

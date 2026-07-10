@@ -346,11 +346,23 @@ export type ShellInputRequest = {
 export type CodexApprovalDecision = "approved" | "denied";
 export type CodexApprovalMode = "suggest" | "autoEdit" | "fullAccess";
 export type CodexRunMode = "default" | "plan";
+export type CodexReasoningEffort = "low" | "medium" | "high" | "xhigh" | "max" | "ultra";
 
 export type CodexApprovalResponseRequest = {
   aiSessionId: string;
   approvalId: string;
   decision: CodexApprovalDecision;
+};
+
+export type CodexReasoningEffortOption = {
+  reasoningEffort: CodexReasoningEffort;
+  description: string;
+};
+
+export type CodexServiceTierOption = {
+  id: string;
+  name: string;
+  description: string;
 };
 
 export type CodexModelOption = {
@@ -359,9 +371,12 @@ export type CodexModelOption = {
   displayName: string;
   description?: string | null;
   isDefault?: boolean;
+  defaultReasoningEffort?: CodexReasoningEffort | null;
+  supportedReasoningEfforts?: CodexReasoningEffortOption[];
+  defaultServiceTier?: string | null;
+  serviceTiers?: CodexServiceTierOption[];
 };
 
-export type CodexReasoningEffort = "low" | "medium" | "high" | "ultra";
 export type ClaudeReasoningEffort = "low" | "medium" | "high" | "xhigh" | "max";
 
 export type AiRunProviderSettings = {
@@ -370,6 +385,7 @@ export type AiRunProviderSettings = {
   reasoningEffort: string;
   models: CodexModelOption[];
   reasoningOptions: string[];
+  serviceTier?: string | null;
 };
 
 export type AiRunSettingsState = {
@@ -381,6 +397,7 @@ export type AiRunSettingsUpdateEvent = {
   providerId: "codex" | "claude";
   model: string;
   reasoningEffort: string;
+  serviceTier?: string | null;
 };
 
 export type CodexChatOptions = {
@@ -388,6 +405,7 @@ export type CodexChatOptions = {
   codexMode?: CodexRunMode;
   codexModel?: string | null;
   codexReasoningEffort?: CodexReasoningEffort | null;
+  codexServiceTier?: string | null;
   codexGoal?: string | null;
   codexGoalTokenBudget?: number | null;
 };
@@ -397,6 +415,9 @@ export type AiChatOptions = CodexChatOptions & {
   claudeReasoningEffort?: ClaudeReasoningEffort | null;
   claudeMode?: CodexRunMode;
   claudeGoal?: string | null;
+  acpModel?: string | null;
+  acpEffort?: string | null;
+  acpMode?: string | null;
 };
 
 export type RunCodexChatRequest = {
@@ -412,6 +433,18 @@ export type RunAiChatRequest = {
   prompt: string;
   images?: ChatImageAttachment[];
 } & AiChatOptions;
+
+export type AcpConfigOption = {
+  value: string;
+  name: string;
+  isDefault?: boolean;
+};
+
+export type AcpConfigOptions = {
+  models: AcpConfigOption[];
+  efforts: AcpConfigOption[];
+  modes: AcpConfigOption[];
+};
 
 export type ChatImageAttachment = {
   id: string;
@@ -595,6 +628,8 @@ export const desktopApi = {
     ipc<string>("run_codex_chat", req),
   listCodexModels: (): Promise<CodexModelOption[]> =>
     ipc<CodexModelOption[]>("list_codex_models"),
+  listAcpConfigOptions: (providerId: string, cwd: string): Promise<AcpConfigOptions> =>
+    ipc<AcpConfigOptions>("list_acp_config_options", providerId, cwd),
   publishAiRunSettings: (settings: Partial<AiRunSettingsState>): Promise<void> =>
     ipc<void>("publish_ai_run_settings", settings),
   stopAiChat: (aiSessionId: string): Promise<boolean> =>

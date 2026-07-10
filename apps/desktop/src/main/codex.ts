@@ -9,7 +9,7 @@ import * as fsSync from "node:fs";
 import * as fs from "node:fs/promises";
 import * as os from "node:os";
 import * as path from "node:path";
-import type { RunCodexChatRequest, ChatImageAttachment, ChatSegment, CodexApprovalDecision, CodexApprovalMode, CodexTraceSnapshot, CodexModelOption } from "../services/desktop";
+import type { RunCodexChatRequest, ChatImageAttachment, ChatSegment, CodexApprovalDecision, CodexApprovalMode, CodexTraceSnapshot, CodexModelOption, CodexReasoningEffort, CodexReasoningEffortOption, CodexServiceTierOption } from "../services/desktop";
 import { reportTokenUsage } from "./sync";
 import { getLocalAiSession, resetLocalAiTrace, upsertLocalAiTrace } from "./db";
 import { codexTraceSnapshotToSegments, reduceCodexTraceSnapshot, type CodexRawTraceEvent } from "./codex_trace";
@@ -389,9 +389,16 @@ function trimmedOrNull(v: unknown): string | null {
   return typeof v === "string" && v.trim().length > 0 ? v.trim() : null;
 }
 
-function codexReasoningEffort(v: unknown): string | null {
+function codexReasoningEffort(v: unknown): CodexReasoningEffort | null {
   const value = trimmedOrNull(v);
-  return value === "low" || value === "medium" || value === "high" || value === "ultra" ? value : null;
+  return value === "low"
+    || value === "medium"
+    || value === "high"
+    || value === "xhigh"
+    || value === "max"
+    || value === "ultra"
+    ? value
+    : null;
 }
 
 function arrayOfStrings(v: unknown): string[] {
@@ -1223,6 +1230,9 @@ function buildCodexTurnParams(
   };
   if (model) turnParams["model"] = model;
   if (reasoningEffort) turnParams["effort"] = reasoningEffort;
+  if (req.codexServiceTier !== undefined) {
+    turnParams["serviceTier"] = trimmedOrNull(req.codexServiceTier);
+  }
   if (collaborationMode) turnParams["collaborationMode"] = collaborationMode;
   return turnParams;
 }
@@ -1359,12 +1369,49 @@ function extractCodexModelOptions(result: unknown): CodexModelOption[] {
     const model = trimmedOrNull(row["model"]) ?? trimmedOrNull(row["id"]);
     const id = trimmedOrNull(row["id"]) ?? model;
     if (!id || !model) return [];
+    const supportedReasoningEfforts = Array.isArray(row["supportedReasoningEfforts"])
+      ? row["supportedReasoningEfforts"].flatMap((item): CodexReasoningEffortOption[] => {
+        if (!item || typeof item !== "object") return [];
+        const option = item as Record<string, unknown>;
+        const reasoningEffort = codexReasoningEffort(option["reasoningEffort"]);
+        if (!reasoningEffort) return [];
+        return [{
+          reasoningEffort,
+          description: trimmedOrNull(option["description"]) ?? "",
+        }];
+      })
+      : [];
+    const serviceTiers = new Map<string, CodexServiceTierOption>();
+    if (Array.isArray(row["serviceTiers"])) {
+      for (const item of row["serviceTiers"]) {
+        if (!item || typeof item !== "object") continue;
+        const option = item as Record<string, unknown>;
+        const tierId = trimmedOrNull(option["id"]);
+        if (!tierId) continue;
+        serviceTiers.set(tierId, {
+          id: tierId,
+          name: trimmedOrNull(option["name"]) ?? tierId,
+          description: trimmedOrNull(option["description"]) ?? "",
+        });
+      }
+    }
+    if (Array.isArray(row["additionalSpeedTiers"])) {
+      for (const value of row["additionalSpeedTiers"]) {
+        const tierId = trimmedOrNull(value);
+        if (!tierId || serviceTiers.has(tierId)) continue;
+        serviceTiers.set(tierId, { id: tierId, name: tierId, description: "" });
+      }
+    }
     return [{
       id,
       model,
       displayName: trimmedOrNull(row["displayName"]) ?? model,
       description: trimmedOrNull(row["description"]),
       isDefault: row["isDefault"] === true,
+      defaultReasoningEffort: codexReasoningEffort(row["defaultReasoningEffort"]),
+      supportedReasoningEfforts,
+      defaultServiceTier: trimmedOrNull(row["defaultServiceTier"]),
+      serviceTiers: [...serviceTiers.values()],
     }];
   });
 }
