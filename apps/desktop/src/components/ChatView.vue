@@ -37,6 +37,7 @@ const codexGoal = ref("");
 const codexModels = ref<CodexModelOption[]>([]);
 const codexModelsLoading = ref(false);
 const codexModelsLoaded = ref(false);
+let removeAiRunSettingsUpdateListener: (() => void) | null = null;
 const floatingMenuTargetSelector = [
   ".codex-start-add",
   ".codex-start-menu",
@@ -517,10 +518,50 @@ async function loadCodexModels() {
     codexModelsLoaded.value = true;
     const defaultModel = models.find((model) => model.isDefault) ?? models[0];
     if (!codexSelectedModel.value && defaultModel) codexSelectedModel.value = defaultModel.model;
+    publishRunSettings();
   } catch (error) {
     console.warn("Codex model list failed", error);
   } finally {
     codexModelsLoading.value = false;
+  }
+}
+
+function publishRunSettings() {
+  void desktopApi.publishAiRunSettings({
+    codex: {
+      providerId: "codex",
+      model: codexSelectedModel.value,
+      reasoningEffort: codexReasoningLevel.value,
+      models: codexModels.value,
+      reasoningOptions: reasoningOptions.map((option) => option.id),
+    },
+    claude: {
+      providerId: "claude",
+      model: claudeSelectedModel.value,
+      reasoningEffort: claudeReasoningLevel.value,
+      models: claudeModelOptions.map((option) => ({
+        id: option.id,
+        model: option.model,
+        displayName: option.displayName,
+      })),
+      reasoningOptions: claudeReasoningOptions.map((option) => option.id),
+    },
+  });
+}
+
+function applyRunSettingsUpdate(event: { providerId?: string; model?: string; reasoningEffort?: string }) {
+  if (event.providerId === "codex") {
+    if (typeof event.model === "string" && event.model) codexSelectedModel.value = event.model;
+    if (event.reasoningEffort === "low" || event.reasoningEffort === "medium" || event.reasoningEffort === "high" || event.reasoningEffort === "ultra") {
+      codexReasoningLevel.value = event.reasoningEffort;
+    }
+    return;
+  }
+  if (event.providerId === "claude") {
+    if (typeof event.model === "string") claudeSelectedModel.value = event.model;
+    if (event.reasoningEffort === "low" || event.reasoningEffort === "medium" || event.reasoningEffort === "high" || event.reasoningEffort === "xhigh" || event.reasoningEffort === "max") {
+      claudeReasoningLevel.value = event.reasoningEffort;
+    }
   }
 }
 
@@ -755,6 +796,12 @@ watch(
 );
 
 watch(
+  [codexSelectedModel, codexReasoningLevel, claudeSelectedModel, claudeReasoningLevel],
+  publishRunSettings,
+  { immediate: true },
+);
+
+watch(
   () => activeTab.value,
   async () => {
     await nextTick();
@@ -768,6 +815,9 @@ onMounted(() => {
   window.addEventListener("resize", updateVirtualViewport);
   observeChatScroll();
   void nextTick(updateVirtualViewport);
+  void desktopApi.onAiRunSettingsUpdate(applyRunSettingsUpdate).then((remove) => {
+    removeAiRunSettingsUpdateListener = remove;
+  });
 });
 
 onBeforeUnmount(() => {
@@ -778,6 +828,8 @@ onBeforeUnmount(() => {
   for (const observer of virtualRowObservers.values()) observer.disconnect();
   virtualRowObservers.clear();
   virtualRowElements.clear();
+  removeAiRunSettingsUpdateListener?.();
+  removeAiRunSettingsUpdateListener = null;
 });
 
 async function send() {

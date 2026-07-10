@@ -27,10 +27,10 @@ import {
 } from "./db";
 import { detectAiProviders } from "./providers";
 import { assessCommandRisk } from "./risk";
-import { respondCodexApproval, runCodexChat, warmupCodexSession } from "./codex";
+import { listCodexModels, respondCodexApproval, runCodexChat, stopCodexChat, warmupCodexSession } from "./codex";
 import { clearCredentials } from "./credentials";
 import { syncCodexHistoryMirror } from "./codex_sessions";
-import { runAiChat } from "./claude";
+import { runAiChat, stopAiChat } from "./claude";
 import { codexTraceSnapshotToSegments } from "./codex_trace";
 
 // ---------- Cloud config persistence ----------
@@ -38,6 +38,57 @@ import { codexTraceSnapshotToSegments } from "./codex_trace";
 const STRUCTURED_MESSAGE_PREFIX = "__AI_WORKBENCH_MESSAGE_V1__";
 const configPath = path.join(app.getPath("userData"), "cloud-config.json");
 const machineIdPath = path.join(app.getPath("userData"), "machine-id");
+
+type AiRunModelOption = {
+  id: string;
+  model: string;
+  displayName: string;
+  description?: string | null;
+  isDefault?: boolean;
+};
+
+export type AiRunSettingsState = {
+  codex: {
+    providerId: "codex";
+    model: string;
+    reasoningEffort: string;
+    models: AiRunModelOption[];
+    reasoningOptions: string[];
+  };
+  claude: {
+    providerId: "claude";
+    model: string;
+    reasoningEffort: string;
+    models: AiRunModelOption[];
+    reasoningOptions: string[];
+  };
+};
+
+const defaultRunSettings: AiRunSettingsState = {
+  codex: {
+    providerId: "codex",
+    model: "",
+    reasoningEffort: "high",
+    models: [],
+    reasoningOptions: ["low", "medium", "high", "ultra"],
+  },
+  claude: {
+    providerId: "claude",
+    model: "sonnet",
+    reasoningEffort: "high",
+    models: [
+      { id: "sonnet", model: "sonnet", displayName: "Sonnet" },
+      { id: "opus", model: "opus", displayName: "Opus" },
+      { id: "fable", model: "fable", displayName: "Fable" },
+      { id: "default", model: "", displayName: "默认" },
+    ],
+    reasoningOptions: ["low", "medium", "high", "xhigh", "max"],
+  },
+};
+
+function cloneRunSettings(settings: AiRunSettingsState): AiRunSettingsState {
+  return JSON.parse(JSON.stringify(settings)) as AiRunSettingsState;
+}
 
 function codexReasoningEffort(value: string): CodexReasoningEffort | null {
   return value === "low" || value === "medium" || value === "high" || value === "ultra" ? value : null;
@@ -375,6 +426,7 @@ class DesktopCloudSync {
   private snapshotTimer: ReturnType<typeof setInterval> | null = null;
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   private providerSnapshotCache: { providers: Awaited<ReturnType<typeof detectAiProviders>>; checkedAt: number } | null = null;
+  private runSettings: AiRunSettingsState = cloneRunSettings(defaultRunSettings);
   private stopped = false;
   // Tracks projectPath per session for mobile-originated sessions, since the
   // local DB schema does not store project_path on local_ai_sessions.
@@ -456,6 +508,38 @@ class DesktopCloudSync {
     this.send({ type: "projects.snapshot", deviceId, projects });
     this.send({ type: "ai.sessions.snapshot", deviceId, sessions });
     this.pushProviderSnapshot(deviceId);
+    void this.pushRunSettingsSnapshot(deviceId);
+  }
+
+  publishRunSettings(settings: Partial<AiRunSettingsState>): void {
+    this.runSettings = {
+      codex: { ...this.runSettings.codex, ...settings.codex },
+      claude: { ...this.runSettings.claude, ...settings.claude },
+    };
+    const config = loadStoredConfig();
+    if (!config) return;
+    void this.pushRunSettingsSnapshot(config.deviceId);
+  }
+
+  private async pushRunSettingsSnapshot(deviceId: string): Promise<void> {
+    const settings = cloneRunSettings(this.runSettings);
+    if (settings.codex.models.length === 0) {
+      try {
+        const models = await listCodexModels();
+        settings.codex.models = models;
+        if (!settings.codex.model) {
+          settings.codex.model = models.find((model) => model.isDefault)?.model ?? models[0]?.model ?? "";
+        }
+        this.runSettings.codex = { ...this.runSettings.codex, model: settings.codex.model, models };
+      } catch {
+        // Keep the last known/default settings.
+      }
+    }
+    this.send({
+      type: "ai.run.settings.snapshot",
+      deviceId,
+      ...settings,
+    });
   }
 
   private pushProviderSnapshot(deviceId: string): void {
@@ -574,6 +658,9 @@ class DesktopCloudSync {
       case "ai.message.send":
         void this.handleAiMessageSend(msg, deviceId);
         break;
+      case "ai.message.stop":
+        this.handleAiMessageStop(msg, deviceId);
+        break;
       case "ai.history.request":
         void this.handleAiHistoryRequest(msg, deviceId);
         break;
@@ -585,6 +672,9 @@ class DesktopCloudSync {
         break;
       case "ai.approval.respond":
         this.handleAiApprovalRespond(msg, deviceId);
+        break;
+      case "ai.run.settings.update":
+        this.handleAiRunSettingsUpdate(msg, deviceId);
         break;
       case "app.update.available":
         this.notify("app-update-available", {
@@ -606,6 +696,61 @@ class DesktopCloudSync {
         // unknown message type — ignore
         break;
     }
+  }
+
+  private handleAiRunSettingsUpdate(msg: any, deviceId: string): void {
+    const providerId = typeof msg.providerId === "string" ? msg.providerId : "";
+    if (providerId !== "codex" && providerId !== "claude") return;
+    const model = typeof msg.model === "string" ? msg.model : "";
+    const reasoningEffort = typeof msg.reasoningEffort === "string" ? msg.reasoningEffort : "";
+
+    if (providerId === "codex") {
+      this.runSettings.codex = {
+        ...this.runSettings.codex,
+        ...(model ? { model } : {}),
+        ...(codexReasoningEffort(reasoningEffort) ? { reasoningEffort } : {}),
+      };
+    } else {
+      this.runSettings.claude = {
+        ...this.runSettings.claude,
+        ...(typeof msg.model === "string" ? { model } : {}),
+        ...(claudeReasoningEffort(reasoningEffort) ? { reasoningEffort } : {}),
+      };
+    }
+
+    this.notify("ai-run-settings-update", { providerId, model, reasoningEffort });
+    void this.pushRunSettingsSnapshot(deviceId);
+  }
+
+  private handleAiMessageStop(msg: any, deviceId: string): void {
+    const aiSessionId = typeof msg.aiSessionId === "string" ? msg.aiSessionId : "";
+    if (!aiSessionId) return;
+    const stopped = stopCodexChat(aiSessionId) || stopAiChat(aiSessionId);
+    if (stopped) {
+      updateLocalAiSession(aiSessionId, { status: "completed" });
+    }
+    this.send({
+      type: "ai.message.done",
+      deviceId,
+      aiSessionId,
+      status: "canceled",
+      summary: stopped ? "stopped by user" : "no running task",
+    });
+    this.notify("ai-chat-output", {
+      aiSessionId,
+      kind: "done",
+      text: stopped ? "已终止" : "当前没有正在运行的任务",
+      segment: {
+        type: "status",
+        stepId: "mobile-run-stopped",
+        label: stopped ? "已终止" : "未在运行",
+        icon: "stop",
+        status: "canceled",
+      },
+    });
+    this.notify("ai-history-changed", { aiSessionId });
+    void this.pushSessionSnapshot();
+    void this.pushAiHistory(aiSessionId);
   }
 
   /** project.created: register the project locally and notify the UI. */

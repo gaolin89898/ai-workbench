@@ -37,8 +37,12 @@ func (h *Handler) handleMobileMessage(msg protocol.Message, userID, deviceID uui
 	switch m := msg.(type) {
 	case protocol.AiMessageSend:
 		h.handleAiMessageSend(userID, m)
+	case protocol.AiMessageStop:
+		h.handleAiMessageStop(userID, m)
 	case protocol.AiApprovalRespond:
 		h.handleAiApprovalRespond(userID, m)
+	case protocol.AiRunSettingsUpdate:
+		h.handleAiRunSettingsUpdate(userID, m)
 	case protocol.AiHistoryRequest:
 		h.handleAiHistoryRequest(userID, m)
 	case protocol.AiSessionArchive:
@@ -83,12 +87,34 @@ func (h *Handler) handleAiMessageSend(userID uuid.UUID, m protocol.AiMessageSend
 	h.forwardToDesktop(userID, m.DeviceId, m)
 }
 
+func (h *Handler) handleAiMessageStop(userID uuid.UUID, m protocol.AiMessageStop) {
+	ctx := context.Background()
+	if err := h.DB.EnsureAiSessionOwner(ctx, userID.String(), m.AiSessionId, m.DeviceId); err != nil {
+		return
+	}
+	h.forwardToDesktop(userID, m.DeviceId, m)
+}
+
 func (h *Handler) handleAiApprovalRespond(userID uuid.UUID, m protocol.AiApprovalRespond) {
 	ctx := context.Background()
 	if err := h.DB.EnsureAiSessionOwner(ctx, userID.String(), m.AiSessionId, m.DeviceId); err != nil {
 		return
 	}
 	if m.Decision != "approved" && m.Decision != "denied" {
+		return
+	}
+	h.forwardToDesktop(userID, m.DeviceId, m)
+}
+
+func (h *Handler) handleAiRunSettingsUpdate(userID uuid.UUID, m protocol.AiRunSettingsUpdate) {
+	if m.DeviceId == "" {
+		return
+	}
+	if m.ProviderId != "codex" && m.ProviderId != "claude" {
+		return
+	}
+	ctx := context.Background()
+	if err := h.DB.EnsureDeviceOwner(ctx, userID.String(), m.DeviceId); err != nil {
 		return
 	}
 	h.forwardToDesktop(userID, m.DeviceId, m)

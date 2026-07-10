@@ -341,6 +341,25 @@ export type CodexModelOption = {
 export type CodexReasoningEffort = "low" | "medium" | "high" | "ultra";
 export type ClaudeReasoningEffort = "low" | "medium" | "high" | "xhigh" | "max";
 
+export type AiRunProviderSettings = {
+  providerId: "codex" | "claude";
+  model: string;
+  reasoningEffort: string;
+  models: CodexModelOption[];
+  reasoningOptions: string[];
+};
+
+export type AiRunSettingsState = {
+  codex: AiRunProviderSettings & { providerId: "codex" };
+  claude: AiRunProviderSettings & { providerId: "claude" };
+};
+
+export type AiRunSettingsUpdateEvent = {
+  providerId: "codex" | "claude";
+  model: string;
+  reasoningEffort: string;
+};
+
 export type CodexChatOptions = {
   approvalMode?: CodexApprovalMode;
   codexMode?: CodexRunMode;
@@ -549,6 +568,8 @@ export const desktopApi = {
     ipc<string>("run_codex_chat", req),
   listCodexModels: (): Promise<CodexModelOption[]> =>
     ipc<CodexModelOption[]>("list_codex_models"),
+  publishAiRunSettings: (settings: Partial<AiRunSettingsState>): Promise<void> =>
+    ipc<void>("publish_ai_run_settings", settings),
   stopAiChat: (aiSessionId: string): Promise<boolean> =>
     ipc<boolean>("stop_ai_chat", aiSessionId),
   hasLiveAiChat: (): Promise<boolean> =>
@@ -609,4 +630,6 @@ export const desktopApi = {
     Promise.resolve(on("workspace-changed", handler as (...args: unknown[]) => void)),
   onAiHistoryChanged: (handler: (event: AiHistoryChangedEvent) => void): Promise<() => void> =>
     Promise.resolve(on("ai-history-changed", handler as (event: unknown) => void)),
+  onAiRunSettingsUpdate: (handler: (event: AiRunSettingsUpdateEvent) => void): Promise<() => void> =>
+    Promise.resolve(on("ai-run-settings-update", handler as (event: unknown) => void)),
 };

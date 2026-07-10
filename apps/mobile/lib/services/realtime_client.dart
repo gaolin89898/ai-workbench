@@ -80,6 +80,14 @@ class RealtimeClient {
     });
   }
 
+  void stopPrompt(String deviceId, String aiSessionId) {
+    send({
+      'type': 'ai.message.stop',
+      'deviceId': deviceId,
+      'aiSessionId': aiSessionId,
+    });
+  }
+
   void respondApproval(String deviceId, String aiSessionId, String approvalId, String decision) {
     send({
       'type': 'ai.approval.respond',
@@ -87,6 +95,22 @@ class RealtimeClient {
       'aiSessionId': aiSessionId,
       'approvalId': approvalId,
       'decision': decision,
+    });
+  }
+
+  void updateRunSettings(
+    String deviceId,
+    String providerId, {
+    String? model,
+    String? reasoningEffort,
+  }) {
+    send({
+      'type': 'ai.run.settings.update',
+      'deviceId': deviceId,
+      'providerId': providerId,
+      if (model != null) 'model': model,
+      if (reasoningEffort != null && reasoningEffort.isNotEmpty)
+        'reasoningEffort': reasoningEffort,
     });
   }
 

@@ -196,6 +196,46 @@ type AiMessageSend struct {
 	ReasoningEffort string `json:"reasoningEffort,omitempty"`
 }
 
+// AiMessageStop: "ai.message.stop".
+type AiMessageStop struct {
+	BaseMessage
+	DeviceId    string `json:"deviceId"`
+	AiSessionId string `json:"aiSessionId"`
+}
+
+type AiRunModelOption struct {
+	Id          string `json:"id"`
+	Model       string `json:"model"`
+	DisplayName string `json:"displayName"`
+	Description string `json:"description,omitempty"`
+	IsDefault   bool   `json:"isDefault,omitempty"`
+}
+
+type AiRunProviderSettings struct {
+	ProviderId       string             `json:"providerId"`
+	Model            string             `json:"model,omitempty"`
+	ReasoningEffort  string             `json:"reasoningEffort,omitempty"`
+	Models           []AiRunModelOption `json:"models,omitempty"`
+	ReasoningOptions []string           `json:"reasoningOptions,omitempty"`
+}
+
+// AiRunSettingsSnapshot: "ai.run.settings.snapshot".
+type AiRunSettingsSnapshot struct {
+	BaseMessage
+	DeviceId string                `json:"deviceId"`
+	Codex    AiRunProviderSettings `json:"codex"`
+	Claude   AiRunProviderSettings `json:"claude"`
+}
+
+// AiRunSettingsUpdate: "ai.run.settings.update".
+type AiRunSettingsUpdate struct {
+	BaseMessage
+	DeviceId        string `json:"deviceId"`
+	ProviderId      string `json:"providerId"`
+	Model           string `json:"model,omitempty"`
+	ReasoningEffort string `json:"reasoningEffort,omitempty"`
+}
+
 // AiApprovalRespond: "ai.approval.respond".
 type AiApprovalRespond struct {
 	BaseMessage
@@ -346,6 +386,18 @@ func ParseMessage(data []byte) (Message, error) {
 		var m AiMessageSend
 		err := json.Unmarshal(data, &m)
 		return m, err
+	case "ai.message.stop":
+		var m AiMessageStop
+		err := json.Unmarshal(data, &m)
+		return m, err
+	case "ai.run.settings.snapshot":
+		var m AiRunSettingsSnapshot
+		err := json.Unmarshal(data, &m)
+		return m, err
+	case "ai.run.settings.update":
+		var m AiRunSettingsUpdate
+		err := json.Unmarshal(data, &m)
+		return m, err
 	case "ai.approval.respond":
 		var m AiApprovalRespond
 		err := json.Unmarshal(data, &m)
@@ -408,6 +460,9 @@ var (
 	_ Message = AiSessionsSnapshot{}
 	_ Message = AiSessionCreate{}
 	_ Message = AiMessageSend{}
+	_ Message = AiMessageStop{}
+	_ Message = AiRunSettingsSnapshot{}
+	_ Message = AiRunSettingsUpdate{}
 	_ Message = AiApprovalRespond{}
 	_ Message = AiMessageDelta{}
 	_ Message = AiMessageDone{}

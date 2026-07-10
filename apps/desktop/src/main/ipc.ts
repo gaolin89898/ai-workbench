@@ -347,6 +347,10 @@ export function registerIpcHandlers(win?: BrowserWindow): void {
 
   handle("list_codex_models", async () => listCodexModels());
 
+  handle("publish_ai_run_settings", async (_event, args: [unknown]) => {
+    getDesktopCloudSync()?.publishRunSettings(args[0] as any);
+  });
+
   handle("stop_ai_chat", async (_event, args: [string]) => {
     const aiSessionId = args[0];
     return stopCodexChat(aiSessionId) || stopAiChat(aiSessionId);

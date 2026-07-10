@@ -212,8 +212,19 @@ class _ChatPageState extends State<ChatPage> {
                 controller: _prompt,
                 archived: session.archived,
                 providerId: session.providerId,
+                runSettings:
+                    ws.selectedRunSettings?.forProvider(session.providerId),
+                isRunning: isRunning,
                 pendingApproval: pendingApproval,
                 onSend: _send,
+                onStop: () => _stop(session),
+                onRunSettingsChanged: (model, reasoningEffort) {
+                  ws.updateRunSettings(
+                    session.providerId,
+                    model: model,
+                    reasoningEffort: reasoningEffort,
+                  );
+                },
                 onApproval: (segment, decision) {
                   final approvalId = segment.approvalId;
                   if (approvalId == null || approvalId.isEmpty) return;
@@ -262,6 +273,10 @@ class _ChatPageState extends State<ChatPage> {
     _prompt.clear();
   }
 
+  void _stop(AiSessionMeta session) {
+    WorkspaceScope.of(context).stopPrompt(session);
+  }
+
   void _showRename(
     BuildContext context,
     WorkspaceController ws,
@@ -306,16 +321,25 @@ class _ChatComposer extends StatelessWidget {
     required this.controller,
     required this.archived,
     required this.providerId,
+    required this.runSettings,
+    required this.isRunning,
     required this.pendingApproval,
     required this.onSend,
+    required this.onStop,
+    required this.onRunSettingsChanged,
     required this.onApproval,
   });
 
   final TextEditingController controller;
   final bool archived;
   final String providerId;
+  final AiRunProviderSettings? runSettings;
+  final bool isRunning;
   final ChatSegment? pendingApproval;
   final void Function({String? model, String? reasoningEffort}) onSend;
+  final VoidCallback onStop;
+  final void Function(String? model, String? reasoningEffort)
+      onRunSettingsChanged;
   final void Function(ChatSegment segment, String decision) onApproval;
 
   @override
@@ -339,7 +363,11 @@ class _ChatComposer extends StatelessWidget {
                 controller: controller,
                 archived: archived,
                 providerId: providerId,
+                runSettings: runSettings,
+                isRunning: isRunning,
                 onSend: onSend,
+                onStop: onStop,
+                onRunSettingsChanged: onRunSettingsChanged,
               )
             : Column(
                 mainAxisSize: MainAxisSize.min,
@@ -362,77 +390,93 @@ class _ComposerInput extends StatefulWidget {
     required this.controller,
     required this.archived,
     required this.providerId,
+    required this.runSettings,
+    required this.isRunning,
     required this.onSend,
+    required this.onStop,
+    required this.onRunSettingsChanged,
   });
 
   final TextEditingController controller;
   final bool archived;
   final String providerId;
+  final AiRunProviderSettings? runSettings;
+  final bool isRunning;
   final void Function({String? model, String? reasoningEffort}) onSend;
+  final VoidCallback onStop;
+  final void Function(String? model, String? reasoningEffort)
+      onRunSettingsChanged;
 
   @override
   State<_ComposerInput> createState() => _ComposerInputState();
 }
 
 class _ComposerInputState extends State<_ComposerInput> {
-  String _selectedModel = 'claude-sonnet-4';
+  String _selectedModel = '';
   String _selectedReasoning = 'high';
 
   @override
   void initState() {
     super.initState();
-    _selectedModel = _defaultModelForProvider(widget.providerId);
+    _syncFromRunSettings();
   }
 
   @override
   void didUpdateWidget(covariant _ComposerInput oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.providerId != widget.providerId) {
-      _selectedModel = _defaultModelForProvider(widget.providerId);
-      _selectedReasoning = 'high';
+    if (oldWidget.providerId != widget.providerId ||
+        oldWidget.runSettings != widget.runSettings) {
+      _syncFromRunSettings();
     }
   }
 
-  String _defaultModelForProvider(String providerId) {
-    if (providerId == 'codex') return 'gpt-5-codex';
-    if (providerId == 'claude') return 'claude-sonnet-4';
-    return 'default';
+  void _syncFromRunSettings() {
+    final settings = widget.runSettings;
+    final models = settings?.models ?? const <AiRunModelOption>[];
+    _selectedModel = settings?.model.isNotEmpty == true
+        ? settings!.model
+        : models.firstOrNull?.model ?? '';
+    _selectedReasoning = settings?.reasoningEffort.isNotEmpty == true
+        ? settings!.reasoningEffort
+        : 'high';
   }
 
   List<_SheetOption> get _modelOptions {
-    if (widget.providerId == 'codex') {
+    final syncedModels = widget.runSettings?.models ?? const <AiRunModelOption>[];
+    if (syncedModels.isEmpty) {
       return const [
-        _SheetOption('gpt-5-codex', 'GPT-5 Codex', '适合代码修改和多步骤任务'),
-        _SheetOption('gpt-5', 'GPT-5', '通用推理和复杂问答'),
-        _SheetOption('gpt-5-mini', 'GPT-5 Mini', '更快的日常任务'),
+        _SheetOption('', '桌面端默认模型', '等待桌面端同步模型列表'),
       ];
     }
-    if (widget.providerId == 'claude') {
-      return const [
-        _SheetOption('claude-sonnet-4', 'Claude Sonnet 4', '默认均衡模型'),
-        _SheetOption('claude-opus-4', 'Claude Opus 4', '更强的复杂任务能力'),
-      ];
-    }
-    return const [
-      _SheetOption('default', '默认模型', '使用桌面端当前工具配置'),
+    return [
+      for (final model in syncedModels)
+        _SheetOption(
+          model.model,
+          model.displayName,
+          model.description ?? model.model,
+        ),
     ];
   }
 
   List<_SheetOption> get _reasoningOptions {
-    if (widget.providerId == 'claude') {
-      return const [
-        _SheetOption('low', '低', '更快响应'),
-        _SheetOption('medium', '中', '平衡速度和质量'),
-        _SheetOption('high', '高', '更充分的推理'),
-      ];
-    }
-    return const [
-      _SheetOption('low', '低', '更快响应'),
-      _SheetOption('medium', '中', '平衡速度和质量'),
-      _SheetOption('high', '高', '更充分的推理'),
-      _SheetOption('ultra', 'Ultra', '最强推理，耗时更长'),
+    final syncedOptions =
+        widget.runSettings?.reasoningOptions ?? const <String>[];
+    final source = syncedOptions.isEmpty ? const ['high'] : syncedOptions;
+    return [
+      for (final option in source)
+        _SheetOption(option, _reasoningLabel(option), ''),
     ];
   }
+
+  String _reasoningLabel(String value) => switch (value) {
+        'low' => '低',
+        'medium' => '中',
+        'high' => '高',
+        'ultra' => '超高',
+        'xhigh' => '超高',
+        'max' => '最大',
+        _ => value,
+      };
 
   String get _selectedModelLabel =>
       _modelOptions.where((option) => option.value == _selectedModel).firstOrNull?.label ??
@@ -515,13 +559,17 @@ class _ComposerInputState extends State<_ComposerInput> {
             ValueListenableBuilder<TextEditingValue>(
               valueListenable: widget.controller,
               builder: (context, value, _) {
-                final canSend = !widget.archived && value.text.trim().isNotEmpty;
+                final canSend = !widget.archived &&
+                    (widget.isRunning || value.text.trim().isNotEmpty);
                 return _ComposerSendButton(
                   enabled: canSend,
-                  onPressed: () => widget.onSend(
-                    model: _selectedModel,
-                    reasoningEffort: _selectedReasoning,
-                  ),
+                  isRunning: widget.isRunning,
+                  onPressed: widget.isRunning
+                      ? widget.onStop
+                      : () => widget.onSend(
+                            model: _selectedModel,
+                            reasoningEffort: _selectedReasoning,
+                          ),
                 );
               },
             ),
@@ -571,6 +619,7 @@ class _ComposerInputState extends State<_ComposerInput> {
             selected: option.value == _selectedModel,
             onTap: () {
               setState(() => _selectedModel = option.value);
+              widget.onRunSettingsChanged(_selectedModel, _selectedReasoning);
               Navigator.of(context).pop();
             },
           ),
@@ -590,6 +639,7 @@ class _ComposerInputState extends State<_ComposerInput> {
             selected: option.value == _selectedReasoning,
             onTap: () {
               setState(() => _selectedReasoning = option.value);
+              widget.onRunSettingsChanged(_selectedModel, _selectedReasoning);
               Navigator.of(context).pop();
             },
           ),
@@ -933,10 +983,12 @@ class _ComposerPillButton extends StatelessWidget {
 class _ComposerSendButton extends StatelessWidget {
   const _ComposerSendButton({
     required this.enabled,
+    required this.isRunning,
     required this.onPressed,
   });
 
   final bool enabled;
+  final bool isRunning;
   final VoidCallback onPressed;
 
   @override
@@ -969,7 +1021,7 @@ class _ComposerSendButton extends StatelessWidget {
           ),
         ),
         child: Icon(
-          Icons.arrow_upward,
+          isRunning ? Icons.stop_rounded : Icons.arrow_upward,
           size: 18,
           color: enabled ? AppColors.inverse : AppColors.muted,
         ),

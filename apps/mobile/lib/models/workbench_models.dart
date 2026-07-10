@@ -101,6 +101,93 @@ class ProviderStatus {
       );
 }
 
+class AiRunModelOption {
+  const AiRunModelOption({
+    required this.id,
+    required this.model,
+    required this.displayName,
+    this.description,
+    this.isDefault = false,
+  });
+
+  final String id;
+  final String model;
+  final String displayName;
+  final String? description;
+  final bool isDefault;
+
+  factory AiRunModelOption.fromJson(Map<String, dynamic> json) =>
+      AiRunModelOption(
+        id: json['id'] as String? ?? json['model'] as String? ?? '',
+        model: json['model'] as String? ?? '',
+        displayName:
+            json['displayName'] as String? ?? json['model'] as String? ?? '',
+        description: json['description'] as String?,
+        isDefault: json['isDefault'] as bool? ?? false,
+      );
+}
+
+class AiRunProviderSettings {
+  const AiRunProviderSettings({
+    required this.providerId,
+    required this.model,
+    required this.reasoningEffort,
+    required this.models,
+    required this.reasoningOptions,
+  });
+
+  final String providerId;
+  final String model;
+  final String reasoningEffort;
+  final List<AiRunModelOption> models;
+  final List<String> reasoningOptions;
+
+  factory AiRunProviderSettings.fromJson(Map<String, dynamic> json) =>
+      AiRunProviderSettings(
+        providerId: json['providerId'] as String? ?? '',
+        model: json['model'] as String? ?? '',
+        reasoningEffort: json['reasoningEffort'] as String? ?? 'high',
+        models: ((json['models'] as List<dynamic>?) ?? const [])
+            .whereType<Map<String, dynamic>>()
+            .map(AiRunModelOption.fromJson)
+            .where((option) => option.displayName.isNotEmpty)
+            .toList(),
+        reasoningOptions:
+            ((json['reasoningOptions'] as List<dynamic>?) ?? const [])
+                .whereType<String>()
+                .toList(),
+      );
+}
+
+class AiRunSettingsSnapshot {
+  const AiRunSettingsSnapshot({
+    required this.deviceId,
+    required this.codex,
+    required this.claude,
+  });
+
+  final String deviceId;
+  final AiRunProviderSettings codex;
+  final AiRunProviderSettings claude;
+
+  factory AiRunSettingsSnapshot.fromJson(Map<String, dynamic> json) =>
+      AiRunSettingsSnapshot(
+        deviceId: json['deviceId'] as String? ?? '',
+        codex: AiRunProviderSettings.fromJson(
+          (json['codex'] as Map<String, dynamic>?) ?? const {},
+        ),
+        claude: AiRunProviderSettings.fromJson(
+          (json['claude'] as Map<String, dynamic>?) ?? const {},
+        ),
+      );
+
+  AiRunProviderSettings? forProvider(String providerId) => switch (providerId) {
+        'codex' => codex,
+        'claude' => claude,
+        _ => null,
+      };
+}
+
 class WorkspaceProject {
   const WorkspaceProject({
     required this.id,

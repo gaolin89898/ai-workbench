@@ -46,6 +46,7 @@ class WorkspaceController extends ChangeNotifier {
   List<DesktopDevice> devices = [];
   List<AiProvider> providers = [];
   List<ProviderStatus> providerStatuses = [];
+  final Map<String, AiRunSettingsSnapshot> runSettingsByDevice = {};
   List<WorkspaceProject> projects = [];
   List<AiSessionMeta> sessions = [];
   List<ActivityLog> logs = [];
@@ -63,6 +64,12 @@ class WorkspaceController extends ChangeNotifier {
   String accountDisplayName = 'CodeHub AI 用户';
   int accountAvatarIndex = 0;
   MobileUpdateInfo? appUpdateNotice;
+
+  AiRunSettingsSnapshot? get selectedRunSettings {
+    final id = selectedDevice?.id;
+    if (id == null) return null;
+    return runSettingsByDevice[id];
+  }
 
   // Client-side session state (matching desktop's localStorage pattern)
   final Set<String> _pinnedSessionIds = {};
@@ -224,6 +231,7 @@ class WorkspaceController extends ChangeNotifier {
         _historyTimeoutSessionId = null;
         providers = [];
         providerStatuses = [];
+        runSettingsByDevice.clear();
         projects = [];
         sessions = [];
         logs = [];
@@ -397,6 +405,29 @@ class WorkspaceController extends ChangeNotifier {
     );
     // Best-effort: rename untitled sessions based on the first prompt.
     _maybeRenameUntitledSession(session, trimmed);
+  }
+
+  void stopPrompt(AiSessionMeta session) {
+    final device = selectedDevice;
+    if (device == null) return;
+    runStatusBySession[session.id] = '正在终止...';
+    _notifySafely();
+    realtime.stopPrompt(device.id, session.id);
+  }
+
+  void updateRunSettings(
+    String providerId, {
+    String? model,
+    String? reasoningEffort,
+  }) {
+    final device = selectedDevice;
+    if (device == null) return;
+    realtime.updateRunSettings(
+      device.id,
+      providerId,
+      model: model,
+      reasoningEffort: reasoningEffort,
+    );
   }
 
   void _beginLocalPromptTurn(String sessionId, String prompt) {
@@ -620,6 +651,12 @@ class WorkspaceController extends ChangeNotifier {
                 (item) => ProviderStatus.fromJson(item as Map<String, dynamic>))
             .toList();
         break;
+      case 'ai.run.settings.snapshot':
+        final snapshot = AiRunSettingsSnapshot.fromJson(json);
+        if (snapshot.deviceId.isNotEmpty) {
+          runSettingsByDevice[snapshot.deviceId] = snapshot;
+        }
+        break;
       case 'projects.snapshot':
         projects = ((json['projects'] as List<dynamic>?) ?? const [])
             .map((item) =>
@@ -664,6 +701,7 @@ class WorkspaceController extends ChangeNotifier {
         );
         if (trace != null && trace.isProviderTrace) {
           runStatusBySession[sessionId] = _providerTraceStatusLabel(trace);
+          _notifyFromTrace(sessionId, trace);
         }
         break;
       case 'ai.trace.update':
