@@ -1,0 +1,109 @@
+# Codex 功能接入路线图
+
+更新日期：2026-07-10
+
+## 目标
+
+本文档整理 Codex 当前可用于 AI Workbench 的能力，并根据项目现状标记缺口、工作量和建议优先级，供后续选择接入范围。
+
+## 已有能力
+
+以下能力已经接入，不再列为待开发项：
+
+- 通过 Codex app-server 建立会话并流式接收事件。
+- `thread/start` 和 `thread/resume`。
+- `turn/start`。
+- 动态调用 `model/list` 获取可用模型。
+- 根据模型返回值显示支持的推理强度。
+- 支持 `low`、`medium`、`high`、`xhigh`、`max` 和 `ultra` 推理强度。
+- 支持默认模式和计划模式。
+- 支持图片输入。
+- 支持解析 `mcpToolCall` 和 `dynamicToolCall`，展示真实工具名、参数、进度、成功/失败、错误与耗时。
+- 支持通过 `turn/steer` 在运行中追加当前轮指令。
+- 支持按会话维护下一轮消息队列，可编辑、排序、删除、手动发送并在正常完成后自动续发。
+- 支持通过 `turn/interrupt` 原生停止当前 Turn；只有协议请求失败时才使用进程信号兜底。
+- 支持 Goal Mode 的目标设置和展示。
+- 支持基础审批模式和自动审批审查。
+- 支持本地会话归档、移动端同步和独立终端。
+- 支持文档、代码、图片和 Markdown 侧栏预览。
+
+> GPT-5.6 Sol、Terra、Luna 等模型会由 `model/list` 动态返回。模型选择和推理强度选择已经具备，不需要重复开发。Power、Powerful 和 Efficient 主要属于官方客户端的快捷预设 UI。
+
+## 功能清单
+
+| 编号 | 功能 | 当前状态 | 工作量 | 优先级 |
+| --- | --- | --- | --- | --- |
+| 1 | 工具调用名称与状态 | 已接入：展示真实工具名、参数、进度、成功/失败、错误和耗时 | 已完成 | 已完成 |
+| 2 | 运行中追加指令 | 已接入：使用 `turn/steer` 追加到当前 Turn | 已完成 | 已完成 |
+| 3 | 后续消息排队 | 已接入：支持编辑、排序、删除、手动发送和正常完成后自动续发 | 已完成 | 已完成 |
+| 4 | 原生停止当前 Turn | 已接入：优先使用 `turn/interrupt`，协议失败时才降级到进程信号 | 已完成 | 已完成 |
+| 5 | Codex 原生会话中心 | 已接入：支持列表、项目范围、搜索、归档筛选、分页、详情、改名和实时状态 | 已完成 | 已完成 |
+| 6 | 全局 MCP 管理中心 | 已接入独立页面：展示服务器、工具、资源、资源模板、认证、OAuth、重载和启动错误 | 已完成 | 已完成 |
+| 7 | Codex 配置中心 | 已接入：支持有效配置、来源分层、单项/批量写入和功能开关 | 已完成 | 已完成 |
+| 8 | 会话分叉 | 未接入 `thread/fork`，不能从指定轮次创建新路线 | 中 | P1 |
+| 9 | Side Chat | 缺不影响主上下文的临时侧聊 | 中 | P1 |
+| 10 | 原生归档与删除 | 当前是本地数据库归档，未同步 Codex Thread 状态 | 中 | P1 |
+| 11 | Goal Mode 完整控制 | 已有设置和展示，缺读取、清除、暂停和恢复 | 小 | P1 |
+| 12 | 上下文压缩 | 未接入 `thread/compact/start` | 小 | P1 |
+| 13 | 权限配置与动态授权 | 已有基础审批，缺权限档位和文件/网络细粒度授权 | 中 | P1 |
+| 14 | Skills 管理 | 缺发现、查看、启停、额外目录和实时刷新 | 中 | P1 |
+| 15 | Hooks 管理 | 缺查看、信任审查、启停和执行状态 | 中 | P1 |
+| 16 | Claude Code 配置迁移 | 缺配置、Skills、MCP、Hooks、命令和历史会话导入 | 中 | P1 |
+| 17 | 原生代码审查 | 未接入 `review/start`、审查模式和行内评论 | 中 | P1 |
+| 18 | 文件附件发送 | 图片已支持，PDF、文档和代码目前只能侧栏预览 | 中 | P1 |
+| 19 | Codex 后台终端 | 当前是自建终端，未展示 Codex 后台进程和实时输出 | 中 | P1 |
+| 20 | Fast 服务档位 | 后端已解析 `serviceTiers`，UI 仍固定传 `null` | 小 | P2 |
+| 21 | Subagents 任务树 | 缺父子代理、并行状态、进度和结果展示 | 大 | P2 |
+| 22 | Ultra 并行模式 UI | 协议类型已有，但缺多代理执行视图 | 大 | P2 |
+| 23 | Plugins 与市场 | 未接入；app-server 的插件安装接口仍标注为开发中 | 大 | 暂缓 |
+| 24 | 定时任务 | 缺定时、事件触发、监控、运行历史和通知 | 大 | P2 |
+| 25 | Git Worktree 任务隔离 | 缺创建、切换、清理和任务迁移 | 大 | P2 |
+| 26 | Browser / Chrome / CDP | 缺页面预览、交互、截图、控制台和网络调试 | 很大 | P2 |
+| 27 | Computer Use | 缺 Windows/macOS 桌面应用控制 | 很大 | P2 |
+| 28 | Remote / SSH 主机 | 缺远程主机项目和远程 app-server 管理 | 很大 | P2 |
+| 29 | 手机远程接管与任务迁移 | 已有自建同步，缺主机配对、审批和 Git 状态迁移 | 很大 | P2 |
+| 30 | 多仓库项目 | 当前任务主要绑定单个项目路径 | 大 | P2 |
+
+## 推荐实施顺序
+
+### 第一阶段：完善核心交互
+
+1. 已完成：解析 `mcpToolCall`，显示真实工具名、运行中、成功、失败和耗时。
+2. 已完成：接入 `turn/steer` 和后续消息排队。
+3. 已完成：使用 `turn/interrupt` 只停止当前 Turn，不直接终止 app-server。
+4. 已完成：接入 Codex 原生会话列表、读取、搜索、命名和状态。
+5. 已完成：建立独立的全局 MCP 管理中心。
+
+### 第二阶段：完善会话与扩展管理
+
+1. 接入会话分叉、Side Chat、原生归档和删除。
+2. 补齐 Goal Mode 和上下文压缩。
+3. Codex 配置中心已完成；权限、Skills 和 Hooks 管理界面待接入。
+4. 接入 Claude Code 配置迁移。
+5. 接入原生代码审查和文件附件发送。
+
+### 第三阶段：高级代理能力
+
+1. 接入 Subagents 任务树和 Ultra 并行执行视图。
+2. 增加定时任务和 Git Worktree 隔离。
+3. 评估 Browser、Chrome、CDP 和 Computer Use。
+4. 评估 Remote、SSH、多仓库项目和跨设备任务迁移。
+
+## 接入注意事项
+
+- Codex app-server 本身仍在快速迭代，应使用当前安装版本生成的 TypeScript 或 JSON Schema，避免手写固定协议类型。
+- WebSocket transport 仍为实验能力；本地桌面进程优先继续使用 stdio。
+- `plugin/list`、`plugin/install`、`plugin/uninstall` 等 app-server 接口仍标注为开发中，不建议作为近期生产功能。
+- `permissionProfile/list`、部分后台终端和协作模式接口仍属于 Beta 或实验能力，应提供版本检测与降级逻辑。
+- MCP 状态应区分服务器启动、认证、工具调用、资源读取和 OAuth 流程，不能继续统一显示为 `mcpToolCall`。
+- 原生 Thread 与当前本地数据库会话需要建立稳定映射，避免出现重复会话或归档状态不一致。
+
+## 官方参考
+
+- [Codex App Server](https://learn.chatgpt.com/docs/app-server)
+- [Codex 最新功能](https://learn.chatgpt.com/docs/whats-new)
+- [Codex 模型](https://learn.chatgpt.com/docs/models)
+- [Codex 开发者命令](https://learn.chatgpt.com/docs/developer-commands)
+- [Scheduled Tasks](https://learn.chatgpt.com/docs/automations)
+- [Browser](https://learn.chatgpt.com/docs/browser)
+- [Remote Connections](https://learn.chatgpt.com/docs/remote-connections)

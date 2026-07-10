@@ -108,18 +108,22 @@ function toolLineTitle(segment: Extract<ChatSegmentType, { type: "tool" }>) {
     if (segment.status === "error") return displayCommand ? `运行失败 ${displayCommand}` : "运行命令失败";
     return displayCommand ? `${statusVerb}运行 ${displayCommand}` : `${statusVerb}运行命令`;
   }
-  if (segment.status === "error") return segment.summary || `处理失败 ${segment.toolName}`;
-  return segment.summary || `${statusVerb}处理 ${segment.toolName}`;
+  if (segment.status === "error") return `处理失败 ${segment.toolName}`;
+  return `${statusVerb}处理 ${segment.toolName}`;
 }
 
 function toolLineMeta(segment: Extract<ChatSegmentType, { type: "tool" }>) {
-  const parts: Array<{ kind: "add" | "delete" | "error"; text: string }> = [];
+  const parts: Array<{ kind: "add" | "delete" | "error" | "duration"; text: string }> = [];
   const stats = diffStats(toolDiffText(segment));
   const additions = segment.additions ?? stats.additions;
   const deletions = segment.deletions ?? stats.deletions;
   if (additions !== undefined) parts.push({ kind: "add", text: `+${additions}` });
   if (deletions !== undefined) parts.push({ kind: "delete", text: `-${deletions}` });
   if (segment.status === "error") parts.push({ kind: "error", text: "失败" });
+  if (segment.durationMs !== undefined) {
+    const duration = formatDuration(segment.durationMs);
+    if (duration) parts.push({ kind: "duration", text: duration });
+  }
   return parts;
 }
 

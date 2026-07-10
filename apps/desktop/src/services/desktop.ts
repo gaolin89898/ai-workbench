@@ -109,6 +109,15 @@ export type ProjectFilePreview = {
   truncated?: boolean;
 };
 
+export type ProjectFileViewerSource = {
+  name: string;
+  path: string;
+  size: number;
+  modifiedAt: string;
+  mimeType: string;
+  data: Uint8Array;
+};
+
 export type AiSession = {
   id: string;
   providerId: string;
@@ -250,9 +259,13 @@ export type CodexTraceItem = {
   completedAt?: string | null;
   rawItemType?: string | null;
   phase?: string | null;
+  toolName?: string | null;
   command?: string | null;
+  input?: string | null;
   output?: string | null;
+  error?: string | null;
   diff?: string | null;
+  durationMs?: number | null;
   additions?: number | null;
   deletions?: number | null;
 };
@@ -435,6 +448,211 @@ export type RunCodexChatRequest = {
   images?: ChatImageAttachment[];
 } & CodexChatOptions;
 
+export type SteerCodexChatRequest = {
+  aiSessionId: string;
+  prompt: string;
+  images?: ChatImageAttachment[];
+  clientUserMessageId?: string | null;
+};
+
+export type CodexNativeThreadStatus = {
+  type: "notLoaded" | "idle" | "systemError" | "active";
+  activeFlags: string[];
+};
+
+export type CodexNativeThreadItem = {
+  id: string;
+  type: string;
+  title: string;
+  status?: string | null;
+  text?: string | null;
+  detail?: string | null;
+  durationMs?: number | null;
+};
+
+export type CodexNativeTurn = {
+  id: string;
+  status: "completed" | "interrupted" | "failed" | "inProgress" | string;
+  startedAt?: number | null;
+  completedAt?: number | null;
+  durationMs?: number | null;
+  error?: string | null;
+  items: CodexNativeThreadItem[];
+};
+
+export type CodexNativeThread = {
+  id: string;
+  sessionId: string;
+  forkedFromId?: string | null;
+  parentThreadId?: string | null;
+  name?: string | null;
+  preview: string;
+  cwd: string;
+  modelProvider: string;
+  cliVersion: string;
+  source: string;
+  createdAt: number;
+  updatedAt: number;
+  recencyAt?: number | null;
+  archived: boolean;
+  status: CodexNativeThreadStatus;
+  turns: CodexNativeTurn[];
+};
+
+export type CodexThreadListRequest = {
+  cursor?: string | null;
+  limit?: number;
+  searchTerm?: string | null;
+  archived?: boolean;
+  cwd?: string | null;
+};
+
+export type CodexThreadListResponse = {
+  data: CodexNativeThread[];
+  nextCursor: string | null;
+};
+
+export type CodexThreadReadRequest = {
+  threadId: string;
+  archived?: boolean;
+};
+
+export type CodexThreadRenameRequest = {
+  threadId: string;
+  name: string;
+};
+
+export type CodexMcpTool = {
+  name: string;
+  title?: string | null;
+  description?: string | null;
+  inputSchema: unknown;
+  outputSchema?: unknown;
+  annotations?: unknown;
+};
+
+export type CodexMcpResource = {
+  uri: string;
+  name: string;
+  title?: string | null;
+  description?: string | null;
+  mimeType?: string | null;
+  size?: number | null;
+};
+
+export type CodexMcpResourceTemplate = {
+  uriTemplate: string;
+  name: string;
+  title?: string | null;
+  description?: string | null;
+  mimeType?: string | null;
+};
+
+export type CodexMcpServer = {
+  name: string;
+  displayName: string;
+  version?: string | null;
+  description?: string | null;
+  websiteUrl?: string | null;
+  authStatus: "unsupported" | "notLoggedIn" | "bearerToken" | "oAuth" | string;
+  startupStatus: "unknown" | "starting" | "ready" | "failed" | "cancelled";
+  error?: string | null;
+  failureReason?: string | null;
+  tools: CodexMcpTool[];
+  resources: CodexMcpResource[];
+  resourceTemplates: CodexMcpResourceTemplate[];
+};
+
+export type CodexMcpResourceReadRequest = {
+  server: string;
+  uri: string;
+  threadId?: string | null;
+};
+
+export type CodexMcpResourceContent = {
+  uri: string;
+  mimeType?: string | null;
+  text?: string | null;
+  blob?: string | null;
+};
+
+export type CodexMcpOauthRequest = {
+  name: string;
+  threadId?: string | null;
+  scopes?: string[] | null;
+};
+
+export type CodexMcpOauthResponse = {
+  authorizationUrl: string;
+};
+
+export type CodexConfigOrigin = {
+  type: string;
+  label: string;
+  version: string;
+  path?: string | null;
+};
+
+export type CodexConfigLayer = CodexConfigOrigin & {
+  disabledReason?: string | null;
+  config: unknown;
+};
+
+export type CodexConfigSnapshot = {
+  config: Record<string, unknown>;
+  origins: Record<string, CodexConfigOrigin>;
+  layers: CodexConfigLayer[];
+  userConfigPath?: string | null;
+  userConfigVersion?: string | null;
+};
+
+export type CodexConfigEdit = {
+  keyPath: string;
+  value: unknown;
+  mergeStrategy?: "replace" | "upsert";
+};
+
+export type CodexConfigWriteRequest = CodexConfigEdit & {
+  filePath?: string | null;
+  expectedVersion?: string | null;
+};
+
+export type CodexConfigBatchWriteRequest = {
+  edits: CodexConfigEdit[];
+  filePath?: string | null;
+  expectedVersion?: string | null;
+};
+
+export type CodexConfigWriteResult = {
+  status: "ok" | "okOverridden" | string;
+  version: string;
+  filePath: string;
+  overriddenMessage?: string | null;
+  effectiveValue?: unknown;
+};
+
+export type CodexFeature = {
+  name: string;
+  stage: "beta" | "underDevelopment" | "stable" | "deprecated" | "removed" | string;
+  displayName?: string | null;
+  description?: string | null;
+  announcement?: string | null;
+  enabled: boolean;
+  defaultEnabled: boolean;
+};
+
+export type CodexFeatureSetRequest = {
+  name: string;
+  enabled: boolean;
+  persist?: boolean;
+};
+
+export type CodexAdminEvent =
+  | { type: "thread-status"; threadId: string; status: CodexNativeThreadStatus }
+  | { type: "thread-name"; threadId: string; name: string | null }
+  | { type: "mcp-status"; name: string; startupStatus: CodexMcpServer["startupStatus"]; error?: string | null; failureReason?: string | null }
+  | { type: "mcp-oauth"; name: string; success: boolean; error?: string | null };
+
 export type RunAiChatRequest = {
   aiSessionId: string;
   projectPath: string;
@@ -616,6 +834,8 @@ export const desktopApi = {
     ipc<WorkspaceFileEntry[]>("list_project_files", path, directoryPath ?? null),
   readProjectFilePreview: (projectPath: string, filePath: string): Promise<ProjectFilePreview> =>
     ipc<ProjectFilePreview>("read_project_file_preview", projectPath, filePath),
+  readProjectFileForViewer: (projectPath: string, filePath: string): Promise<ProjectFileViewerSource> =>
+    ipc<ProjectFileViewerSource>("read_project_file_for_viewer", projectPath, filePath),
   createAiSession: (req: CreateAiSessionRequest): Promise<AiSession> =>
     ipc<AiSession>("create_ai_session", req),
   restartAiSession: (aiSessionId: string): Promise<AiSession> =>
@@ -634,6 +854,32 @@ export const desktopApi = {
     ipc<string>("run_ai_chat", req),
   runCodexChat: (req: RunCodexChatRequest): Promise<string> =>
     ipc<string>("run_codex_chat", req),
+  steerCodexChat: (req: SteerCodexChatRequest): Promise<boolean> =>
+    ipc<boolean>("steer_codex_chat", req),
+  listCodexThreads: (req: CodexThreadListRequest): Promise<CodexThreadListResponse> =>
+    ipc<CodexThreadListResponse>("list_codex_threads", req),
+  readCodexThread: (req: CodexThreadReadRequest): Promise<CodexNativeThread> =>
+    ipc<CodexNativeThread>("read_codex_thread", req),
+  renameCodexThread: (req: CodexThreadRenameRequest): Promise<boolean> =>
+    ipc<boolean>("rename_codex_thread", req),
+  listCodexMcpServers: (): Promise<CodexMcpServer[]> =>
+    ipc<CodexMcpServer[]>("list_codex_mcp_servers"),
+  readCodexMcpResource: (req: CodexMcpResourceReadRequest): Promise<CodexMcpResourceContent[]> =>
+    ipc<CodexMcpResourceContent[]>("read_codex_mcp_resource", req),
+  startCodexMcpOauth: (req: CodexMcpOauthRequest): Promise<CodexMcpOauthResponse> =>
+    ipc<CodexMcpOauthResponse>("start_codex_mcp_oauth", req),
+  reloadCodexMcpServers: (): Promise<CodexMcpServer[]> =>
+    ipc<CodexMcpServer[]>("reload_codex_mcp_servers"),
+  readCodexConfig: (cwd?: string | null): Promise<CodexConfigSnapshot> =>
+    ipc<CodexConfigSnapshot>("read_codex_config", cwd ?? null),
+  writeCodexConfigValue: (req: CodexConfigWriteRequest): Promise<CodexConfigWriteResult> =>
+    ipc<CodexConfigWriteResult>("write_codex_config_value", req),
+  batchWriteCodexConfig: (req: CodexConfigBatchWriteRequest): Promise<CodexConfigWriteResult> =>
+    ipc<CodexConfigWriteResult>("batch_write_codex_config", req),
+  listCodexFeatures: (): Promise<CodexFeature[]> =>
+    ipc<CodexFeature[]>("list_codex_features"),
+  setCodexFeature: (req: CodexFeatureSetRequest): Promise<boolean> =>
+    ipc<boolean>("set_codex_feature", req),
   listCodexModels: (): Promise<CodexModelOption[]> =>
     ipc<CodexModelOption[]>("list_codex_models"),
   listClaudeModels: (): Promise<CodexModelOption[]> =>
@@ -710,4 +956,6 @@ export const desktopApi = {
     Promise.resolve(on("ai-history-changed", handler as (event: unknown) => void)),
   onAiRunSettingsUpdate: (handler: (event: AiRunSettingsUpdateEvent) => void): Promise<() => void> =>
     Promise.resolve(on("ai-run-settings-update", handler as (event: unknown) => void)),
+  onCodexAdminEvent: (handler: (event: CodexAdminEvent) => void): Promise<() => void> =>
+    Promise.resolve(on("codex-admin-event", handler as (event: unknown) => void)),
 };

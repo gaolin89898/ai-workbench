@@ -3,6 +3,7 @@ import { computed, onMounted, ref, watch } from "vue";
 import { useRouter } from "vue-router";
 import { useWorkspace } from "../composables/useWorkspace";
 import { desktopApi, type AiProvider, type DesktopRuntimeInfo, type ProviderActionKind, type ProviderStatus, type TokenUsageSummary, type TokenUsageSummaryItem } from "../services/desktop";
+import CodexManagementPanel from "./CodexManagementPanel.vue";
 
 const settingsIcon = new URL("../assets/icons/settings.svg", import.meta.url).href;
 const riskGuardIcon = new URL("../assets/icons/risk-guard.svg", import.meta.url).href;
@@ -14,7 +15,7 @@ const providerClaudeIcon = new URL("../assets/icons/provider-claude.svg", import
 const providerOpencodeIcon = new URL("../assets/icons/provider-opencode.svg", import.meta.url).href;
 const providerMimoIcon = new URL("../assets/icons/provider-mimo.svg", import.meta.url).href;
 
-type SettingsPanel = "connection" | "security" | "about" | "archive" | "tokenUsage";
+type SettingsPanel = "connection" | "codex" | "mcp" | "security" | "about" | "archive" | "tokenUsage";
 type ProviderRow = {
   provider: AiProvider;
   status?: ProviderStatus;
@@ -80,6 +81,20 @@ const settingsPanels: SettingsPanelItem[] = [
     eyebrow: "基础",
     description: "账号状态、设备信息和本机历史位置",
     icon: settingsIcon,
+  },
+  {
+    id: "codex",
+    label: "Codex 管理",
+    eyebrow: "原生",
+    description: "管理 Codex 原生会话和本机配置",
+    icon: providerCodexIcon,
+  },
+  {
+    id: "mcp",
+    label: "MCP 管理",
+    eyebrow: "全局",
+    description: "管理全局 MCP Server、工具和认证状态",
+    icon: aiProvidersIcon,
   },
   {
     id: "security",
@@ -978,6 +993,14 @@ async function restoreSession(sessionId: string) {
                 </table>
               </div>
             </div>
+          </section>
+
+          <section v-else-if="settingsPanel === 'codex'" class="settings-section">
+            <CodexManagementPanel :cwd="ws.selectedProjectPath.value" />
+          </section>
+
+          <section v-else-if="settingsPanel === 'mcp'" class="settings-section">
+            <CodexManagementPanel mode="mcp" />
           </section>
         </div>
       </div>

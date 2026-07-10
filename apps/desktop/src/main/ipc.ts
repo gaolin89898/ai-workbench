@@ -24,13 +24,27 @@ import {
   fetchDesktopAppRelease,
 } from "./sync";
 import { saveCredentials, loadCredentials, clearCredentials } from "./credentials";
-import { getCodexApprovalMode, hasLiveCodexChat, listCodexModels, respondCodexApproval, runCodexChat, stopCodexChat } from "./codex";
+import { getCodexApprovalMode, hasLiveCodexChat, listCodexModels, respondCodexApproval, runCodexChat, steerCodexChat, stopCodexChat } from "./codex";
+import {
+  batchWriteCodexConfig,
+  listCodexFeatures,
+  listCodexMcpServers,
+  listCodexThreads,
+  readCodexConfig,
+  readCodexMcpResource,
+  readCodexThread,
+  reloadCodexMcpServers,
+  renameCodexThread,
+  setCodexFeature,
+  startCodexMcpOauth,
+  writeCodexConfigValue,
+} from "./codex_admin";
 import { syncCodexHistoryMirror } from "./codex_sessions";
 import { hasLiveAiChat, runAiChat, stopAiChat } from "./claude";
 import { hasLiveOpenCodeChat, listOpenCodeConfigOptions, runOpenCodeChat, stopOpenCodeChat } from "./acp";
 import { hasLiveMimoChat, listMimoConfigOptions, respondMimoApproval, runMimoChat, stopMimoChat } from "./mimo";
 import { checkAppUpdate, getUpdateDownloadSize, installAppUpdate, initUpdater } from "./updater";
-import { listProjectFiles, readProjectFilePreview } from "./project_files";
+import { listProjectFiles, readProjectFileForViewer, readProjectFilePreview } from "./project_files";
 import type {
   CreateAiSessionRequest,
   StartShellPtyRequest,
@@ -38,7 +52,16 @@ import type {
   ResizeShellRequest,
   RunAiChatRequest,
   RunCodexChatRequest,
+  SteerCodexChatRequest,
   CodexApprovalResponseRequest,
+  CodexConfigBatchWriteRequest,
+  CodexConfigWriteRequest,
+  CodexFeatureSetRequest,
+  CodexMcpOauthRequest,
+  CodexMcpResourceReadRequest,
+  CodexThreadListRequest,
+  CodexThreadReadRequest,
+  CodexThreadRenameRequest,
   ChatMessage,
 } from "../services/desktop";
 
@@ -210,6 +233,10 @@ export function registerIpcHandlers(win?: BrowserWindow): void {
     readProjectFilePreview(args[0], args[1])
   );
 
+  handle("read_project_file_for_viewer", async (_event, args: [string, string]) =>
+    readProjectFileForViewer(args[0], args[1])
+  );
+
   // ---------- AI sessions ----------
 
   handle("create_ai_session", async (_event, args: [CreateAiSessionRequest]) => {
@@ -331,6 +358,60 @@ export function registerIpcHandlers(win?: BrowserWindow): void {
 
   handle("list_codex_models", async () => listCodexModels());
 
+  handle("steer_codex_chat", async (_event, args: [SteerCodexChatRequest]) =>
+    steerCodexChat(args[0])
+  );
+
+  // ---------- Codex management ----------
+
+  handle("list_codex_threads", async (event, args: [CodexThreadListRequest]) =>
+    listCodexThreads(args[0], event.sender)
+  );
+
+  handle("read_codex_thread", async (event, args: [CodexThreadReadRequest]) =>
+    readCodexThread(args[0], event.sender)
+  );
+
+  handle("rename_codex_thread", async (event, args: [CodexThreadRenameRequest]) =>
+    renameCodexThread(args[0], event.sender)
+  );
+
+  handle("list_codex_mcp_servers", async (event) =>
+    listCodexMcpServers(event.sender)
+  );
+
+  handle("read_codex_mcp_resource", async (event, args: [CodexMcpResourceReadRequest]) =>
+    readCodexMcpResource(args[0], event.sender)
+  );
+
+  handle("start_codex_mcp_oauth", async (event, args: [CodexMcpOauthRequest]) =>
+    startCodexMcpOauth(args[0], event.sender)
+  );
+
+  handle("reload_codex_mcp_servers", async (event) =>
+    reloadCodexMcpServers(event.sender)
+  );
+
+  handle("read_codex_config", async (event, args: [string | null | undefined]) =>
+    readCodexConfig(args[0], event.sender)
+  );
+
+  handle("write_codex_config_value", async (event, args: [CodexConfigWriteRequest]) =>
+    writeCodexConfigValue(args[0], event.sender)
+  );
+
+  handle("batch_write_codex_config", async (event, args: [CodexConfigBatchWriteRequest]) =>
+    batchWriteCodexConfig(args[0], event.sender)
+  );
+
+  handle("list_codex_features", async (event) =>
+    listCodexFeatures(event.sender)
+  );
+
+  handle("set_codex_feature", async (event, args: [CodexFeatureSetRequest]) =>
+    setCodexFeature(args[0], event.sender)
+  );
+
   handle("get_codex_approval_mode", async (_event, args: [string]) =>
     getCodexApprovalMode(args[0] ?? "")
   );
@@ -349,8 +430,8 @@ export function registerIpcHandlers(win?: BrowserWindow): void {
 
   handle("stop_ai_chat", async (_event, args: [string]) => {
     const aiSessionId = args[0];
-    return stopCodexChat(aiSessionId)
-      || stopOpenCodeChat(aiSessionId)
+    if (await stopCodexChat(aiSessionId)) return true;
+    return stopOpenCodeChat(aiSessionId)
       || stopMimoChat(aiSessionId)
       || stopAiChat(aiSessionId);
   });

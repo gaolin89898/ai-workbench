@@ -3,6 +3,14 @@ import router from "../router";
 import { desktopApi, type AiChatOptions, type AiChatOutputEvent, type AiProvider, type AiProviderTrace, type AiSession, type AiTraceUpdateEvent, type AppUpdateDownloadProgress, type AppUpdateInfo, type ChatImageAttachment, type ChatMessage, type ChatSegment, type ProviderStatus, type TerminalSession, type ViewName, type WorkspaceProject } from "../services/desktop";
 import { decodeAssistantMessageFromStorage, encodeAssistantMessageForStorage, extractAssistantText } from "../utils/chat";
 
+export type QueuedAiMessage = {
+  id: string;
+  text: string;
+  images: ChatImageAttachment[];
+  options: AiChatOptions;
+  createdAt: string;
+};
+
 const providers = ref<AiProvider[]>([]);
 const providerStatuses = ref<ProviderStatus[]>([]);
 const projects = ref<WorkspaceProject[]>([]);
@@ -41,6 +49,7 @@ const liveShellSessions = ref<Record<string, boolean>>({});
 const thinkingSessionIds = ref<Record<string, boolean>>({});
 const chatDebugEvents = ref<string[]>([]);
 const chatRunStates = ref<Record<string, ChatRunState>>({});
+const queuedAiMessagesBySessionId = ref<Record<string, QueuedAiMessage[]>>({});
 
 const PIN_STORAGE_KEY = "ai-workbench.pinnedSessions";
 const UNREAD_STORAGE_KEY = "ai-workbench.unreadSessions";
@@ -102,6 +111,10 @@ const activeChatIsRunning = computed(() => {
   const sessionId = activeAiSession.value?.id;
   return Boolean(activeChatRunState.value?.active || (sessionId && pendingAssistants.has(sessionId)));
 });
+const activeQueuedAiMessages = computed(() => {
+  const sessionId = activeAiSession.value?.id;
+  return sessionId ? queuedAiMessagesBySessionId.value[sessionId] ?? [] : [];
+});
 const hasRunningAiSession = computed(() => {
   if (Object.values(thinkingSessionIds.value).some(Boolean)) return true;
   if ([...pendingAssistants.keys()].length > 0) return true;
@@ -137,6 +150,7 @@ type ChatRunState = {
 const pendingAssistants = new Map<string, PendingAssistant>();
 const assistantDrafts = new Map<string, { message: ChatMessage; savedText: string }>();
 const stoppedAiSessions = new Set<string>();
+const queueDispatchingSessions = new Set<string>();
 let aiEventsInitialized = false;
 let aiEventsInitPromise: Promise<void> | null = null;
 let workspaceEventsInitialized = false;
@@ -337,6 +351,115 @@ function describeChatEventForLog(event: { aiSessionId: string; kind: string; tex
 
 function chatClientId(prefix: string) {
   return `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+}
+
+function plainChatImages(images: ChatImageAttachment[]): ChatImageAttachment[] {
+  return images.map((image) => ({
+    id: image.id,
+    name: image.name,
+    mimeType: image.mimeType,
+    dataUrl: image.dataUrl,
+  }));
+}
+
+function queuedMessagesForSession(sessionId: string): QueuedAiMessage[] {
+  return queuedAiMessagesBySessionId.value[sessionId] ?? [];
+}
+
+function setQueuedMessagesForSession(sessionId: string, messages: QueuedAiMessage[]) {
+  queuedAiMessagesBySessionId.value = {
+    ...queuedAiMessagesBySessionId.value,
+    [sessionId]: messages,
+  };
+}
+
+function queuePrompt(
+  prompt: string,
+  images: ChatImageAttachment[] = [],
+  options: AiChatOptions = {},
+  sessionId = activeAiSession.value?.id,
+): string | null {
+  if (!sessionId) return null;
+  const text = prompt.trim();
+  const plainImages = plainChatImages(images);
+  if (!text && plainImages.length === 0) return null;
+  const item: QueuedAiMessage = {
+    id: chatClientId("queue"),
+    text,
+    images: plainImages,
+    options: { ...options },
+    createdAt: new Date().toISOString(),
+  };
+  setQueuedMessagesForSession(sessionId, [...queuedMessagesForSession(sessionId), item]);
+  return item.id;
+}
+
+function updateQueuedPrompt(itemId: string, text: string): boolean {
+  const sessionId = activeAiSession.value?.id;
+  if (!sessionId) return false;
+  const current = queuedMessagesForSession(sessionId);
+  const item = current.find((entry) => entry.id === itemId);
+  if (!item) return false;
+  const trimmed = text.trim();
+  if (!trimmed && item.images.length === 0) return false;
+  setQueuedMessagesForSession(sessionId, current.map((entry) => (
+    entry.id === itemId ? { ...entry, text: trimmed } : entry
+  )));
+  return true;
+}
+
+function moveQueuedPrompt(itemId: string, direction: -1 | 1): boolean {
+  const sessionId = activeAiSession.value?.id;
+  if (!sessionId) return false;
+  const current = [...queuedMessagesForSession(sessionId)];
+  const index = current.findIndex((entry) => entry.id === itemId);
+  const target = index + direction;
+  if (index < 0 || target < 0 || target >= current.length) return false;
+  [current[index], current[target]] = [current[target], current[index]];
+  setQueuedMessagesForSession(sessionId, current);
+  return true;
+}
+
+function removeQueuedPrompt(itemId: string): boolean {
+  const sessionId = activeAiSession.value?.id;
+  if (!sessionId) return false;
+  const current = queuedMessagesForSession(sessionId);
+  const next = current.filter((entry) => entry.id !== itemId);
+  if (next.length === current.length) return false;
+  setQueuedMessagesForSession(sessionId, next);
+  return true;
+}
+
+async function sendNextQueuedPrompt(sessionId = activeAiSession.value?.id): Promise<boolean> {
+  if (!sessionId || queueDispatchingSessions.has(sessionId) || pendingAssistants.has(sessionId)) return false;
+  if (stoppedAiSessions.has(sessionId)) return false;
+  const queued = queuedMessagesForSession(sessionId);
+  const next = queued[0];
+  if (!next) return false;
+  queueDispatchingSessions.add(sessionId);
+  setQueuedMessagesForSession(sessionId, queued.slice(1));
+  try {
+    const started = await sendPrompt(next.text, next.images, next.options, sessionId);
+    if (!started) {
+      setQueuedMessagesForSession(sessionId, [next, ...queuedMessagesForSession(sessionId)]);
+    }
+    return started;
+  } catch {
+    setQueuedMessagesForSession(sessionId, [next, ...queuedMessagesForSession(sessionId)]);
+    return false;
+  } finally {
+    queueDispatchingSessions.delete(sessionId);
+  }
+}
+
+function scheduleNextQueuedPrompt(sessionId: string) {
+  if (stoppedAiSessions.has(sessionId) || pendingAssistants.has(sessionId) || queueDispatchingSessions.has(sessionId)) return;
+  if (queuedMessagesForSession(sessionId).length === 0) return;
+  queueDispatchingSessions.add(sessionId);
+  window.setTimeout(() => {
+    queueDispatchingSessions.delete(sessionId);
+    void sendNextQueuedPrompt(sessionId);
+  }, 0);
 }
 
 function withMessageCreatedAt(message: ChatMessage): ChatMessage {
@@ -1012,32 +1135,95 @@ function isCodexExternalMirrorSession(session: AiSession | null) {
   return !session.providerSessionId.startsWith("app-server:");
 }
 
-async function sendPrompt(prompt: string, images: ChatImageAttachment[] = [], chatOptions: AiChatOptions = {}) {
+async function steerActiveCodexChat(
+  prompt: string,
+  images: ChatImageAttachment[] = [],
+): Promise<boolean> {
+  await initAiEventListeners();
+  const session = activeAiSession.value;
+  if (!session || session.providerId !== "codex" || session.archivedAt) return false;
+  const pending = pendingAssistants.get(session.id);
+  if (!pending || stoppedAiSessions.has(session.id)) return false;
+  const text = prompt.trim();
+  const plainImages = plainChatImages(images);
+  if (!text && plainImages.length === 0) return false;
+
+  const clientId = chatClientId("steer-user");
+  const userMessage: ChatMessage = {
+    clientId,
+    role: "user",
+    text,
+    images: plainImages,
+    createdAt: new Date().toISOString(),
+  };
+  const messages = [...chatMessagesForSession(session.id)];
+  const pendingIndex = messages.findIndex((message) => message.clientId === pending.clientId);
+  messages.splice(pendingIndex >= 0 ? pendingIndex : messages.length, 0, userMessage);
+  setChatMessagesForSession(session.id, messages);
+
+  try {
+    const handled = await desktopApi.steerCodexChat({
+      aiSessionId: session.id,
+      prompt: text,
+      images: plainImages,
+      clientUserMessageId: clientId,
+    });
+    if (!handled) throw new Error("当前 Codex Turn 尚未就绪");
+  } catch (error) {
+    setChatMessagesForSession(
+      session.id,
+      chatMessagesForSession(session.id).filter((message) => message.clientId !== clientId),
+    );
+    appendChatMessageForSession(session.id, { role: "error", text: `追加到当前轮失败：${String(error)}` });
+    return false;
+  }
+
+  const displayText = text;
+  void desktopApi.appendLocalAiMessage(session.id, "user", encodeAssistantMessageForStorage({
+    text: displayText,
+    images: plainImages,
+  })).catch((error) => {
+    pushChatDebugEvent(`保存追加消息失败：${String(error)}`);
+  });
+  setChatRunState(session.id, {
+    active: true,
+    phase: "running",
+    title: "已追加到当前轮",
+    detail: "Codex 会在当前 Turn 中处理这条补充指令。",
+  });
+  pushChatDebugEvent(`已 steer 当前 Codex Turn：${session.id.slice(0, 8)}`);
+  return true;
+}
+
+async function sendPrompt(
+  prompt: string,
+  images: ChatImageAttachment[] = [],
+  chatOptions: AiChatOptions = {},
+  targetSessionId?: string,
+): Promise<boolean> {
   pushChatDebugEvent("收到发送请求");
   await initAiEventListeners();
   const trimmed = prompt.trim();
-  const plainImages = images.map((image) => ({
-    id: image.id,
-    name: image.name,
-    mimeType: image.mimeType,
-    dataUrl: image.dataUrl,
-  }));
-  if (!trimmed && !plainImages.length) return;
-  if (!activeAiSession.value) {
+  const plainImages = plainChatImages(images);
+  if (!trimmed && !plainImages.length) return false;
+  const targetSession = targetSessionId
+    ? (activeAiSession.value?.id === targetSessionId ? activeAiSession.value : aiSessions.value.find((session) => session.id === targetSessionId))
+    : activeAiSession.value;
+  if (!targetSession) {
     chatMessages.value = [{ role: "error", text: "请先点击左侧项目下的新建按钮，创建一个 AI 会话。" }];
-    return;
+    return false;
   }
-  if (activeAiSession.value.archivedAt) {
-    appendCurrentChatMessage({ role: "error", text: "这个会话已归档。请先在“已归档”列表中恢复，再继续发送消息。" });
-    return;
+  if (targetSession.archivedAt) {
+    appendChatMessageForSession(targetSession.id, { role: "error", text: "这个会话已归档。请先在“已归档”列表中恢复，再继续发送消息。" });
+    return false;
   }
-  const sessionId = activeAiSession.value.id;
-  const providerId = activeAiSession.value.providerId;
+  const sessionId = targetSession.id;
+  const providerId = targetSession.providerId;
   const providerName = providerDisplayName(providerId);
   const runtimeName = providerRuntimeName(providerId);
-  const projectPath = activeAiSession.value.summary || selectedProjectPath.value;
+  const projectPath = targetSession.summary || (activeAiSession.value?.id === sessionId ? selectedProjectPath.value : "");
   if (!supportedChatProviders.has(providerId)) {
-    appendCurrentChatMessage({
+    appendChatMessageForSession(sessionId, {
       role: "error",
       segments: [{
         type: "error",
@@ -1046,15 +1232,16 @@ async function sendPrompt(prompt: string, images: ChatImageAttachment[] = [], ch
       }],
       text: `${providerName} 暂不支持结构化聊天。可以在终端页直接运行对应 CLI。`,
     });
-    return;
+    return false;
   }
   if (!projectPath) {
-    appendCurrentChatMessage({ role: "error", text: `当前 ${providerName} 会话没有项目路径，请先在左侧选择项目。` });
-    return;
+    appendChatMessageForSession(sessionId, { role: "error", text: `当前 ${providerName} 会话没有项目路径，请先在左侧选择项目。` });
+    return false;
   }
+  if (stoppedAiSessions.has(sessionId)) return false;
   if (pendingAssistants.has(sessionId)) {
-    appendCurrentChatMessage({ role: "error", text: "上一条消息还在处理，请等它完成后再发送。" });
-    return;
+    appendChatMessageForSession(sessionId, { role: "error", text: "上一条消息还在处理，请等它完成后再发送。" });
+    return false;
   }
   await saveAssistantDraft(sessionId);
   const promptForSession = trimmed || `查看这 ${plainImages.length} 张图片`;
@@ -1133,15 +1320,25 @@ async function sendPrompt(prompt: string, images: ChatImageAttachment[] = [], ch
             ? "本次执行已停止，已保留中断前的执行过程。"
             : `执行已结束，用时 ${formatElapsedMs(elapsedMs)}。正在等待下一条消息。`,
         });
+        if (!wasStopped) {
+          if (isTraceProvider(providerId)) {
+            void desktopApi.getLocalAiTrace(sessionId, traceKindForProvider(providerId)).then((trace) => {
+              if (trace?.status === "completed") scheduleNextQueuedPrompt(sessionId);
+            });
+          } else {
+            scheduleNextQueuedPrompt(sessionId);
+          }
+        }
         return;
       }
       pushChatDebugEvent(`${providerName} 进程已退出：用时 ${formatElapsedMs(elapsedMs)}`);
       if (isTraceProvider(providerId)) {
-        void desktopApi.getLocalAiTrace(sessionId, traceKindForProvider(providerId)).then((trace) => {
-          if (trace) void handleAiTraceUpdateEvent({ aiSessionId: sessionId, trace });
+        void desktopApi.getLocalAiTrace(sessionId, traceKindForProvider(providerId)).then(async (trace) => {
+          if (trace) await handleAiTraceUpdateEvent({ aiSessionId: sessionId, trace });
+          if (trace?.status === "completed") scheduleNextQueuedPrompt(sessionId);
         });
         window.setTimeout(() => {
-          void loadAiSessionHistory(sessionId, { force: true });
+          void loadAiSessionHistory(sessionId, { force: !pendingAssistants.has(sessionId) });
         }, 600);
         setChatRunState(sessionId, {
           active: false,
@@ -1154,7 +1351,7 @@ async function sendPrompt(prompt: string, images: ChatImageAttachment[] = [], ch
       replacePendingAssistantText(sessionId, pending.finalText, true);
       completePendingAssistantFromExec(sessionId);
       window.setTimeout(() => {
-        void loadAiSessionHistory(sessionId, { force: true });
+        void loadAiSessionHistory(sessionId, { force: !pendingAssistants.has(sessionId) });
       }, 600);
       setChatRunState(sessionId, {
         active: false,
@@ -1162,6 +1359,7 @@ async function sendPrompt(prompt: string, images: ChatImageAttachment[] = [], ch
         title: `${providerName} 已完成`,
         detail: `执行已结束，用时 ${formatElapsedMs(elapsedMs)}。正在等待下一条消息。`,
       });
+      scheduleNextQueuedPrompt(sessionId);
     }).catch((error) => {
       if (stoppedAiSessions.delete(sessionId)) {
         pushChatDebugEvent(`${providerName} 执行已由用户主动停止`);
@@ -1187,6 +1385,7 @@ async function sendPrompt(prompt: string, images: ChatImageAttachment[] = [], ch
         detail: String(error),
       });
     });
+    return true;
   } catch (error) {
     pushChatDebugEvent(`发送前失败：${String(error)}`);
     patchPendingAssistant(sessionId, {
@@ -1205,6 +1404,7 @@ async function sendPrompt(prompt: string, images: ChatImageAttachment[] = [], ch
       title: "发送失败",
       detail: String(error),
     });
+    return false;
   }
 }
 
@@ -1638,12 +1838,13 @@ function isTraceProviderSessionId(sessionId: string) {
 
 async function handleAiTraceUpdateEvent(event: AiTraceUpdateEvent) {
   if (!isTraceProvider(event.trace.providerId) || event.trace.traceKind !== traceKindForProvider(event.trace.providerId)) return;
+  const stopped = stoppedAiSessions.has(event.aiSessionId);
+  if (stopped && providerTracePending(event.trace)) return;
   let pending = pendingAssistants.get(event.aiSessionId);
   if (!pending && providerTracePending(event.trace)) {
     pending = await ensureIncomingPendingAssistantAfterRefresh(event.aiSessionId) ?? undefined;
   }
   const traceMessage = providerTraceToChatMessage(event.trace);
-  const stopped = stoppedAiSessions.has(event.aiSessionId);
   if (stopped && !providerTracePending(event.trace)) {
     if (pending) {
       if (traceMessage?.text) pending.finalText = traceMessage.text;
@@ -1712,7 +1913,7 @@ async function handleAiTraceUpdateEvent(event: AiTraceUpdateEvent) {
     assistantDrafts.delete(event.aiSessionId);
     stopRunningElapsedTimerIfIdle();
     window.setTimeout(() => {
-      void loadAiSessionHistory(event.aiSessionId, { force: true });
+      void loadAiSessionHistory(event.aiSessionId, { force: !pendingAssistants.has(event.aiSessionId) });
     }, 300);
   }
 }
@@ -1770,7 +1971,7 @@ async function handleAiChatOutputEvent(event: AiChatOutputEvent) {
         }
         completePendingAssistantFromExec(event.aiSessionId);
         window.setTimeout(() => {
-          void loadAiSessionHistory(event.aiSessionId, { force: true });
+          void loadAiSessionHistory(event.aiSessionId, { force: !pendingAssistants.has(event.aiSessionId) });
         }, 600);
         setChatRunState(event.aiSessionId, {
           active: false,
@@ -2225,6 +2426,7 @@ export function useWorkspace() {
     chatDebugEvents,
     activeChatRunState,
     activeChatIsRunning,
+    activeQueuedAiMessages,
     hasRunningAiSession,
     hasBlockingAiRun,
     pinnedSessionIds,
@@ -2259,6 +2461,12 @@ export function useWorkspace() {
     selectAiSessionFromDropdown,
     loadAiSessionHistory,
     sendPrompt,
+    steerActiveCodexChat,
+    queuePrompt,
+    updateQueuedPrompt,
+    moveQueuedPrompt,
+    removeQueuedPrompt,
+    sendNextQueuedPrompt,
     expirePendingApproval,
     stopActiveAiChat,
     sendShellInput,

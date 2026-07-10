@@ -2,6 +2,22 @@ allowBuilds:
   better-sqlite3: true
   esbuild: true
   node-pty: true
+minimumReleaseAgeExclude:
+  - '@file-viewer/core@2.1.25'
+  - '@file-viewer/doc@2.1.25'
+  - '@file-viewer/pptx@2.1.25'
+  - '@file-viewer/preset-office@2.1.25'
+  - '@file-viewer/renderer-ofd@2.1.25'
+  - '@file-viewer/renderer-pdf@2.1.25'
+  - '@file-viewer/renderer-presentation@2.1.25'
+  - '@file-viewer/renderer-spreadsheet@2.1.25'
+  - '@file-viewer/renderer-word@2.1.25'
+  - '@file-viewer/vue3@2.1.25'
+  - '@file-viewer/vite-plugin@2.1.25'
+  - '@file-viewer/preset-lite@2.1.25'
+  - '@file-viewer/renderer-image@2.1.25'
+  - '@file-viewer/renderer-media@2.1.25'
+  - '@file-viewer/renderer-text@2.1.25'
 onlyBuiltDependencies:
   - better-sqlite3
   - electron

@@ -6,6 +6,7 @@ import { join } from "node:path";
 import { registerIpcHandlers } from "./ipc";
 import { initDesktopCloudSync } from "./sync";
 import { startProviderAutoDetect } from "./providers";
+import { disposeCodexAdmin } from "./codex_admin";
 
 let tray: Tray | null = null;
 
@@ -152,4 +153,8 @@ app.on("window-all-closed", () => {
   if (process.platform !== "darwin") {
     app.quit();
   }
+});
+
+app.once("before-quit", () => {
+  disposeCodexAdmin();
 });

@@ -9,7 +9,7 @@ import * as fsSync from "node:fs";
 import * as fs from "node:fs/promises";
 import * as os from "node:os";
 import * as path from "node:path";
-import type { RunCodexChatRequest, ChatImageAttachment, ChatSegment, CodexApprovalDecision, CodexApprovalMode, CodexTraceSnapshot, CodexModelOption, CodexReasoningEffort, CodexReasoningEffortOption, CodexServiceTierOption } from "../services/desktop";
+import type { RunCodexChatRequest, SteerCodexChatRequest, ChatImageAttachment, ChatSegment, CodexApprovalDecision, CodexApprovalMode, CodexTraceSnapshot, CodexModelOption, CodexReasoningEffort, CodexReasoningEffortOption, CodexServiceTierOption } from "../services/desktop";
 import { reportTokenUsage } from "./sync";
 import { getLocalAiSession, resetLocalAiTrace, upsertLocalAiTrace } from "./db";
 import { codexTraceSnapshotToSegments, reduceCodexTraceSnapshot, type CodexRawTraceEvent } from "./codex_trace";
@@ -53,6 +53,7 @@ interface CodexSession {
   child: ChildProcessWithoutNullStreams;
   rl: Interface;
   threadId: string | null;
+  currentTurnId: string | null;
   nextRequestId: number;
   pendingRequests: Map<number, PendingRequest>;
   sender: Sender;
@@ -70,6 +71,8 @@ interface CodexSession {
   approvalMode: CodexApprovalMode;
   reportedTokenUsageKeys: Set<string>;
   currentTurnStartedAtMs: number | null;
+  interruptRequest: Promise<void> | null;
+  interruptedTurnId: string | null;
   launchCommand: string;
   launchDiagnostics: string[];
   requestedCwd: string;
@@ -83,6 +86,8 @@ const CODEX_TRACE_FLUSH_MS = 120;
 const CODEX_WARMUP_TIMEOUT_MS = 60_000;
 const CODEX_RECONNECT_RETRY_MS = 1200;
 const CODEX_RECONNECT_MAX_RETRIES = 5;
+const CODEX_INTERRUPT_REQUEST_TIMEOUT_MS = 5_000;
+const CODEX_INTERRUPT_SETTLE_TIMEOUT_MS = 10_000;
 const CLI_INTERRUPT_FALLBACK_MS = 1500;
 const CODEX_CLIENT_INFO = { name: "CodeHub AI", version: "0.1.0" };
 const CODEX_INITIALIZE_PARAMS = {
@@ -279,6 +284,10 @@ function spawnCodex(args: string[], cwd: string): CodexSpawnResult {
   };
 }
 
+export function spawnCodexAppServerProcess(cwd: string): ChildProcessWithoutNullStreams {
+  return spawnCodex(["app-server", "--stdio"], cwd).child;
+}
+
 // ---------- Helpers ----------
 
 function flushTrace(session: CodexSession, rawEvent?: CodexRawTraceEvent): void {
@@ -361,7 +370,11 @@ function finishCodexSessionTrace(
     )),
     items: session.traceSnapshot.items.map((item) => (
       item.status === "running"
-        ? { ...item, status: status === "completed" ? "completed" as const : "failed" as const, completedAt: item.completedAt ?? now }
+        ? {
+            ...item,
+            status: status === "completed" ? "completed" as const : status === "canceled" ? "canceled" as const : "failed" as const,
+            completedAt: item.completedAt ?? now,
+          }
         : item
     )),
   };
@@ -652,11 +665,36 @@ function handleApprovalRequest(
   refreshCodexTurnTimeout(session);
 }
 
+function extractTurnId(value: unknown): string | null {
+  if (typeof value === "string") return value;
+  if (value && typeof value === "object") {
+    const r = value as Record<string, unknown>;
+    const turn = r["turn"] as Record<string, unknown> | undefined;
+    const candidate = r["turnId"] ?? r["turn_id"] ?? turn?.["id"];
+    if (typeof candidate === "string" && candidate.trim()) return candidate;
+  }
+  return null;
+}
+
 function resolvePendingApprovals(session: CodexSession, status: "expired" | "failed", detail?: string): void {
   for (const approval of session.pendingApprovals.values()) {
     if (approval.resolved) continue;
     approval.resolved = true;
     updateApprovalSegment(session, approval, status, detail);
+  }
+  session.pendingApprovals.clear();
+}
+
+function declinePendingApprovalsForInterrupt(session: CodexSession): void {
+  for (const approval of session.pendingApprovals.values()) {
+    if (approval.resolved) continue;
+    approval.resolved = true;
+    try {
+      sendResponse(session, approval.requestId, approvalResponseFor(approval.method, "denied"));
+    } catch {
+      // turn/interrupt remains authoritative if the approval response races shutdown
+    }
+    updateApprovalSegment(session, approval, "expired", "用户主动停止当前 AI 会话。");
   }
   session.pendingApprovals.clear();
 }
@@ -992,9 +1030,18 @@ function handleNotification(
       if (tid) session.threadId = tid;
       break;
     }
+    case "turn/started": {
+      const turnId = extractTurnId(params);
+      if (turnId) session.currentTurnId = turnId;
+      if (session.cancelled && session.threadId && session.currentTurnId) {
+        void interruptCurrentCodexTurn(session).catch(() => interruptSession(session));
+      }
+      break;
+    }
     case "turn/completed": {
       clearCodexTurnTimeout(session);
       reportCodexTokenUsage(session, params);
+      session.currentTurnId = null;
       if (session.turnResolver) {
         session.turnResolver.resolve();
         session.turnResolver = null;
@@ -1029,6 +1076,7 @@ function createSession(
     child,
     rl: createInterface({ input: child.stdout, terminal: false }),
     threadId: null,
+    currentTurnId: null,
     nextRequestId: 1,
     pendingRequests: new Map(),
     sender,
@@ -1046,6 +1094,8 @@ function createSession(
     approvalMode,
     reportedTokenUsageKeys: new Set(),
     currentTurnStartedAtMs: null,
+    interruptRequest: null,
+    interruptedTurnId: null,
     launchCommand: launchedCodex.launchCommand,
     launchDiagnostics: launchedCodex.launchDiagnostics,
     requestedCwd: launchedCodex.requestedCwd,
@@ -1213,6 +1263,28 @@ function codexApprovalOverrides(mode: CodexApprovalMode): Record<string, unknown
     };
   }
   return {};
+}
+
+async function interruptCurrentCodexTurn(session: CodexSession): Promise<void> {
+  if (session.interruptRequest) return session.interruptRequest;
+  const threadId = session.threadId;
+  const turnId = session.currentTurnId;
+  if (!threadId || !turnId || session.closed) return;
+  if (session.interruptedTurnId === turnId) return;
+  session.interruptedTurnId = turnId;
+
+  const request = Promise.race([
+    sendRequestWithReconnectRetry(session, "turn/interrupt", { threadId, turnId }).then(() => undefined),
+    delay(CODEX_INTERRUPT_REQUEST_TIMEOUT_MS).then(() => {
+      throw new Error("turn/interrupt request timed out");
+    }),
+  ]);
+  session.interruptRequest = request;
+  try {
+    await request;
+  } finally {
+    if (session.interruptRequest === request) session.interruptRequest = null;
+  }
 }
 
 function lookupExistingProviderSessionId(aiSessionId: string): string | null {
@@ -1390,7 +1462,10 @@ export async function runCodexChat(
 
     // 4. send turn/start.
     session.currentTurnStartedAtMs = Date.now();
-    await sendRequestWithReconnectRetry(session, "turn/start", buildCodexTurnParams(threadInfo, req, images));
+    const turnStartResponse = await sendRequestWithReconnectRetry(session, "turn/start", buildCodexTurnParams(threadInfo, req, images));
+    const responseTurnId = extractTurnId(turnStartResponse.result);
+    if (session.turnResolver && responseTurnId) session.currentTurnId = responseTurnId;
+    if (session.cancelled) await interruptCurrentCodexTurn(session);
 
     // 5. wait for turn/completed or error
     await turnDone;
@@ -1552,45 +1627,47 @@ export async function listCodexModels(sender: Sender = { send: () => undefined }
   }
 }
 
-export function stopCodexChat(aiSessionId: string): boolean {
+export async function steerCodexChat(req: SteerCodexChatRequest): Promise<boolean> {
+  const session = activeCodexSessions.get(req.aiSessionId);
+  const prompt = req.prompt.trim();
+  const images = req.images ?? [];
+  if (!session || session.closed || session.cancelled || !session.threadId || !session.currentTurnId) return false;
+  if (!prompt && images.length === 0) return false;
+  const response = await sendRequestWithReconnectRetry(session, "turn/steer", {
+    threadId: session.threadId,
+    expectedTurnId: session.currentTurnId,
+    clientUserMessageId: req.clientUserMessageId ?? null,
+    input: buildUserInput(prompt || `查看这 ${images.length} 张图片`, images),
+  });
+  const responseTurnId = extractTurnId(response.result);
+  if (responseTurnId) session.currentTurnId = responseTurnId;
+  refreshCodexTurnTimeout(session);
+  return true;
+}
+
+export async function stopCodexChat(aiSessionId: string): Promise<boolean> {
   const session = activeCodexSessions.get(aiSessionId);
   if (!session) return false;
+  if (session.cancelled) return true;
   session.cancelled = true;
-  if (session.traceSnapshot) {
-    session.traceSnapshot = {
-      ...session.traceSnapshot,
-      status: "canceled",
-      updatedAt: new Date().toISOString(),
-      completedAt: new Date().toISOString(),
-    };
-    const trace = upsertLocalAiTrace({
-      aiSessionId,
-      providerId: "codex",
-      traceKind: "codex",
-      status: "canceled",
-      snapshot: session.traceSnapshot,
-      finalText: session.traceSnapshot.finalText,
-    });
-    session.sender.send("ai-trace-update", {
-      aiSessionId,
-      trace: {
-        ...trace,
-        segments: codexTraceSnapshotToSegments(session.traceSnapshot),
-      },
-    });
+  clearCodexTurnTimeout(session);
+  declinePendingApprovalsForInterrupt(session);
+  finishCodexSessionTrace(session, "canceled");
+  if (session.threadId && session.currentTurnId) {
+    try {
+      await interruptCurrentCodexTurn(session);
+    } catch {
+      // A process signal is only a fallback when the protocol request cannot complete.
+      interruptSession(session);
+    }
   }
-  const error = new Error("AI chat stopped by user");
-  for (const [, pending] of session.pendingRequests) {
-    pending.reject(error);
+  const deadline = Date.now() + CODEX_INTERRUPT_SETTLE_TIMEOUT_MS;
+  while (activeCodexSessions.get(aiSessionId) === session && Date.now() < deadline) {
+    await delay(25);
   }
-  session.pendingRequests.clear();
-  resolvePendingApprovals(session, "expired", "用户主动停止当前 AI 会话。");
-  if (session.turnResolver) {
-    session.turnResolver.reject(error);
-    session.turnResolver = null;
+  if (activeCodexSessions.get(aiSessionId) === session) {
+    interruptSession(session);
   }
-  interruptSession(session);
-  activeCodexSessions.delete(aiSessionId);
   return true;
 }
 

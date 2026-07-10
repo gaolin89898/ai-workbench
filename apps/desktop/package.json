@@ -18,6 +18,9 @@
   },
   "dependencies": {
     "@anthropic-ai/claude-agent-sdk": "0.3.203",
+    "@file-viewer/preset-lite": "2.1.25",
+    "@file-viewer/preset-office": "2.1.25",
+    "@file-viewer/vue3": "2.1.25",
     "@xterm/addon-fit": "^0.11.0",
     "@xterm/xterm": "^6.0.0",
     "better-sqlite3": "12.11.1",
@@ -30,6 +33,7 @@
     "ws": "^8.18.0"
   },
   "devDependencies": {
+    "@file-viewer/vite-plugin": "2.1.25",
     "@types/better-sqlite3": "^7.6.12",
     "@types/node": "^22.10.0",
     "@types/qrcode": "^1.5.6",

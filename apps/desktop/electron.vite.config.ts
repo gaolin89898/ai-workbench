@@ -1,6 +1,7 @@
 import { resolve } from "node:path";
 import { defineConfig, externalizeDepsPlugin } from "electron-vite";
 import vue from "@vitejs/plugin-vue";
+import { fileViewerRenderers } from "@file-viewer/vite-plugin";
 
 const ignoredWatchPaths = (path: string): boolean => {
   const normalizedPath = path.replaceAll("\\", "/");
@@ -43,7 +44,15 @@ export default defineConfig({
     resolve: {
       alias: { "@": resolve(__dirname, "src") },
     },
-    plugins: [vue()],
+    plugins: [
+      fileViewerRenderers({
+        preset: "office",
+        autoPresets: ["lite"],
+        inject: false,
+        copyAssets: true,
+      }),
+      vue(),
+    ],
     server: {
       host: "127.0.0.1",
       port: 1420,

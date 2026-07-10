@@ -718,7 +718,7 @@ class DesktopCloudSync {
         void this.handleAiMessageSend(msg, deviceId);
         break;
       case "ai.message.stop":
-        this.handleAiMessageStop(msg, deviceId);
+        void this.handleAiMessageStop(msg, deviceId);
         break;
       case "ai.history.request":
         void this.handleAiHistoryRequest(msg, deviceId);
@@ -880,10 +880,10 @@ class DesktopCloudSync {
     }
   }
 
-  private handleAiMessageStop(msg: any, deviceId: string): void {
+  private async handleAiMessageStop(msg: any, deviceId: string): Promise<void> {
     const aiSessionId = typeof msg.aiSessionId === "string" ? msg.aiSessionId : "";
     if (!aiSessionId) return;
-    const stopped = stopCodexChat(aiSessionId)
+    const stopped = await stopCodexChat(aiSessionId)
       || stopOpenCodeChat(aiSessionId)
       || stopMimoChat(aiSessionId)
       || stopAiChat(aiSessionId);

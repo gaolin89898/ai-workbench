@@ -20,6 +20,16 @@ function num(value: unknown): number | undefined {
   return typeof value === "number" && Number.isFinite(value) ? value : undefined;
 }
 
+function jsonText(value: unknown): string | undefined {
+  if (value === undefined || value === null) return undefined;
+  if (typeof value === "string") return value;
+  try {
+    return JSON.stringify(value, null, 2);
+  } catch {
+    return String(value);
+  }
+}
+
 function firstString(...values: unknown[]): string | undefined {
   for (const value of values) {
     const text = str(value);
@@ -155,10 +165,70 @@ function traceItemType(rawType: string): CodexTraceItem["type"] {
     case "file_edit":
     case "fileChange":
     case "file_change":
+    case "mcpToolCall":
+    case "mcp_tool_call":
+    case "dynamicToolCall":
+    case "dynamic_tool_call":
       return "tool";
     default:
       return "status";
   }
+}
+
+function isMcpToolCallRawType(rawType: string): boolean {
+  return /^(?:mcpToolCall|mcp_tool_call)$/i.test(rawType);
+}
+
+function isDynamicToolCallRawType(rawType: string): boolean {
+  return /^(?:dynamicToolCall|dynamic_tool_call)$/i.test(rawType);
+}
+
+function traceItemStatus(
+  item: Record<string, unknown>,
+  parent: Record<string, unknown>,
+): CodexTraceItem["status"] {
+  const status = firstString(item.status, parent.status);
+  if (status === "failed" || status === "error") return "failed";
+  if (status === "canceled" || status === "cancelled" || status === "interrupted") return "canceled";
+  if (status === "completed" || status === "success" || status === "succeeded") return "completed";
+  if ((item.success ?? parent.success) === false) return "failed";
+  if ((item.success ?? parent.success) === true) return "completed";
+  return "running";
+}
+
+function extractToolName(
+  rawType: string,
+  item: Record<string, unknown>,
+  parent: Record<string, unknown>,
+): string | null {
+  const tool = firstString(item.tool, item.toolName, parent.tool, parent.toolName);
+  if (!tool) return null;
+  if (isMcpToolCallRawType(rawType)) {
+    const server = firstString(item.server, parent.server);
+    return server ? `${server} / ${tool}` : tool;
+  }
+  if (isDynamicToolCallRawType(rawType)) {
+    const namespace = firstString(item.namespace, parent.namespace);
+    return namespace ? `${namespace} / ${tool}` : tool;
+  }
+  return tool;
+}
+
+function toolResultText(value: unknown): string | undefined {
+  if (value === undefined || value === null) return undefined;
+  const result = record(value);
+  const structured = result.structuredContent;
+  if (structured !== undefined && structured !== null) return jsonText(structured);
+  const content = result.content;
+  if (Array.isArray(content)) {
+    const textParts = content.flatMap((entry) => {
+      const part = record(entry);
+      const text = firstString(part.text, part.content, part.value);
+      return text ? [text] : [];
+    });
+    if (textParts.length === content.length && textParts.length > 0) return textParts.join("\n");
+  }
+  return jsonText(value);
 }
 
 function isInternalUserMessageRawType(rawType: string | null | undefined): boolean {
@@ -171,6 +241,9 @@ function isNoisyTraceRawType(rawType: string | null | undefined): boolean {
 
 function traceItemTitle(rawType: string, item: Record<string, unknown>, parent: Record<string, unknown>) {
   if (/^(?:contextCompaction|context_compaction)$/i.test(rawType)) return "正在压缩上下文";
+  const toolName = extractToolName(rawType, item, parent);
+  if (isMcpToolCallRawType(rawType)) return toolName ? `MCP ${toolName}` : "MCP 工具调用";
+  if (isDynamicToolCallRawType(rawType)) return toolName ?? "动态工具调用";
   switch (traceItemType(rawType)) {
     case "thinking":
       return "正在思考";
@@ -229,24 +302,32 @@ function itemFromParams(params: unknown, receivedAt: string): CodexTraceItem {
   const item = record(p.item ?? p);
   const rawType = firstString(item.type, p.type) ?? "unknown";
   const id = extractItemId(params);
+  const toolCall = isMcpToolCallRawType(rawType) || isDynamicToolCallRawType(rawType);
+  const error = firstString(record(item.error).message, record(p.error).message, item.error, p.error) ?? null;
   const command = firstString(item.command, item.commandText, p.command, p.commandText) ?? extractFilePath(item, p);
-  const text = firstString(item.text, item.summary, item.message, item.detail, p.text, p.summary, p.message, p.detail) ?? "";
-  const output = firstString(item.output, item.result, p.output, p.result) ?? null;
+  const text = error ?? firstString(item.text, item.summary, item.message, item.detail, p.text, p.summary, p.message, p.detail) ?? "";
+  const output = toolCall
+    ? toolResultText(item.result ?? item.contentItems ?? p.result ?? p.contentItems) ?? null
+    : firstString(item.output, item.result, p.output, p.result) ?? null;
   const phase = extractAgentMessagePhase(item, p);
   const diff = extractDiff(item, p);
   return {
     id,
     type: traceItemType(rawType),
     title: traceItemTitle(rawType, item, p),
-    status: "running",
+    status: traceItemStatus(item, p),
     text,
     startedAt: receivedAt,
     completedAt: null,
     rawItemType: rawType,
     phase,
+    toolName: extractToolName(rawType, item, p),
     command: command ?? null,
+    input: toolCall ? jsonText(item.arguments ?? p.arguments) ?? null : null,
     output,
+    error,
     diff,
+    durationMs: num(item.durationMs ?? p.durationMs) ?? null,
     additions: num(item.additions ?? p.additions) ?? null,
     deletions: num(item.deletions ?? p.deletions) ?? null,
   };
@@ -362,6 +443,28 @@ export function reduceCodexTraceSnapshot(
       snapshot = upsertItem(snapshot, item);
       break;
     }
+    case "item/mcpToolCall/progress": {
+      const id = extractItemId(event.params);
+      const p = record(event.params);
+      const current = snapshot.items.find((item) => item.id === id);
+      const item: CodexTraceItem = {
+        ...(current ?? {
+          id,
+          type: "tool" as const,
+          title: "MCP 工具调用",
+          status: "running" as const,
+          text: "",
+          startedAt: now,
+          completedAt: null,
+          rawItemType: "mcpToolCall",
+          toolName: "MCP 工具",
+        }),
+        status: "running",
+        text: firstString(p.message) ?? current?.text ?? "",
+      };
+      snapshot = upsertItem(snapshot, item);
+      break;
+    }
     case "item/completed": {
       const completed = itemFromParams(event.params, now);
       if (isInternalUserMessageRawType(completed.rawItemType)) break;
@@ -372,8 +475,12 @@ export function reduceCodexTraceSnapshot(
         ...completed,
         text: completed.text || current?.text || "",
         output: completed.output || current?.output || null,
+        input: completed.input ?? current?.input ?? null,
+        toolName: completed.toolName ?? current?.toolName ?? null,
+        error: completed.error ?? current?.error ?? null,
+        durationMs: completed.durationMs ?? current?.durationMs ?? null,
         phase: completed.phase ?? current?.phase ?? null,
-        status: "completed" as const,
+        status: completed.status === "running" ? "completed" as const : completed.status,
         completedAt: now,
       };
       snapshot = upsertItem(snapshot, completedItem);
@@ -436,11 +543,21 @@ export function reduceCodexTraceSnapshot(
       break;
     }
     case "turn/completed": {
+      const p = record(event.params);
+      const turn = record(p.turn);
+      const turnStatus = firstString(turn.status, p.status);
+      const status = turnStatus === "interrupted" ? "canceled"
+        : turnStatus === "failed" ? "failed"
+        : "completed";
       snapshot = {
         ...snapshot,
-        status: "completed",
+        status,
         completedAt: now,
-        items: snapshot.items.map((item) => item.status === "running" ? { ...item, status: "completed", completedAt: item.completedAt ?? now } : item),
+        items: snapshot.items.map((item) => item.status === "running" ? {
+          ...item,
+          status: status === "canceled" ? "canceled" : status === "failed" ? "failed" : "completed",
+          completedAt: item.completedAt ?? now,
+        } : item),
       };
       snapshot = expirePendingApprovals(snapshot, now);
       break;
@@ -485,6 +602,9 @@ function traceStatusToToolStatus(status: CodexTraceItem["status"]): Extract<Chat
 }
 
 function itemDurationMs(item: CodexTraceItem, fallbackEndAt: string | null | undefined): number | undefined {
+  if (typeof item.durationMs === "number" && Number.isFinite(item.durationMs)) {
+    return Math.max(0, item.durationMs);
+  }
   if (!item.startedAt) return undefined;
   const startedAt = Date.parse(item.startedAt);
   const endAt = Date.parse(item.completedAt ?? fallbackEndAt ?? new Date().toISOString());
@@ -596,10 +716,11 @@ export function codexTraceSnapshotToSegments(snapshot: CodexTraceSnapshot): Chat
       segments.push({
         type: "tool",
         stepId: item.id,
-        toolName: item.title.includes("文件") ? "修改文件" : item.title,
+        toolName: item.toolName ?? (item.title.includes("文件") ? "修改文件" : item.title),
         command: item.command ?? undefined,
         status: traceStatusToToolStatus(item.status),
-        summary: item.text || undefined,
+        summary: item.error || item.text || undefined,
+        input: item.input ?? undefined,
         output: item.output ?? undefined,
         diff: item.diff ?? undefined,
         durationMs: itemDurationMs(item, snapshot.completedAt),

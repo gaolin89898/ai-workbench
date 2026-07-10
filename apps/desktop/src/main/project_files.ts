@@ -1,6 +1,7 @@
 import { readFile, readdir, stat } from "node:fs/promises";
 import path from "node:path";
-import type { ProjectFilePreview, WorkspaceFileEntry } from "../services/desktop";
+import type { ProjectFilePreview, ProjectFileViewerSource, WorkspaceFileEntry } from "../services/desktop";
+import { projectFileViewerFormat } from "../shared/project_file_formats";
 import { getWorkspaceProjectByPath } from "./db";
 
 const MAX_TEXT_PREVIEW_BYTES = 1024 * 1024;
@@ -112,5 +113,29 @@ export async function readProjectFilePreview(
     previewKind: "text",
     content: buffer.toString("utf8"),
     language: previewLanguage(target),
+  };
+}
+
+export async function readProjectFileForViewer(
+  projectPath: string,
+  filePath: string,
+): Promise<ProjectFileViewerSource> {
+  const target = assertProjectChildPath(projectPath, filePath);
+  const info = await stat(target);
+  if (!info.isFile()) throw new Error("target is not a file");
+  const format = projectFileViewerFormat(target);
+  if (!format) throw new Error("不支持使用侧边栏查看器预览此文件格式");
+  if (info.size > format.maxBytes) {
+    const maxSizeMb = Math.round(format.maxBytes / 1024 / 1024);
+    throw new Error(`文件超过 ${maxSizeMb} MB，暂不在侧边栏中预览`);
+  }
+  const buffer = await readFile(target);
+  return {
+    name: path.basename(target),
+    path: target,
+    size: info.size,
+    modifiedAt: info.mtime.toISOString(),
+    mimeType: format.mimeType,
+    data: Uint8Array.from(buffer),
   };
 }

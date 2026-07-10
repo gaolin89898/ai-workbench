@@ -1,10 +1,13 @@
 <script setup lang="ts">
-import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
+import { computed, defineAsyncComponent, nextTick, onBeforeUnmount, onMounted, ref, shallowRef, watch } from "vue";
 import ChatMessageRow from "./ChatMessageRow.vue";
-import ApprovalSegment from "./ChatSegment.vue";
+import ChatSegmentView from "./ChatSegment.vue";
 import TerminalView from "./TerminalView.vue";
-import { useWorkspace } from "../composables/useWorkspace";
+import { useWorkspace, type QueuedAiMessage } from "../composables/useWorkspace";
 import { desktopApi, type AiChatOptions, type AiProvider, type AiRunSettingsState, type ChatImageAttachment, type ChatMessage, type ChatSegment, type ClaudeReasoningEffort, type AcpConfigOption, type CodexApprovalMode, type CodexModelOption, type CodexReasoningEffort, type CodexRunMode, type ProjectEnvironmentInfo, type ProjectFilePreview } from "../services/desktop";
+import { isProjectFileViewerSupported } from "../shared/project_file_formats";
+
+const ProjectFileViewer = defineAsyncComponent(() => import("./ProjectFileViewer.vue"));
 
 type RunPreferenceProviderId = "codex" | "claude" | "opencode" | "mimo";
 type RunPreference = { model: string; reasoningEffort: string };
@@ -51,10 +54,15 @@ const providerCodexIcon = new URL("../assets/icons/provider-codex.svg", import.m
 const providerOpencodeIcon = new URL("../assets/icons/provider-opencode.svg", import.meta.url).href;
 const providerMimoIcon = new URL("../assets/icons/provider-mimo.svg", import.meta.url).href;
 const sendIcon = new URL("../assets/icons/send.svg", import.meta.url).href;
+const editIcon = new URL("../assets/icons/edit.svg", import.meta.url).href;
+const trashIcon = new URL("../assets/icons/trash.svg", import.meta.url).href;
 const imageRemoveIcon = new URL("../assets/icons/image-remove.svg", import.meta.url).href;
 const ws = useWorkspace();
 
 const prompt = ref("");
+const followUpMode = ref<"steer" | "queue">("steer");
+const editingQueuedMessageId = ref<string | null>(null);
+const editingQueuedMessageText = ref("");
 const imageAttachments = ref<ChatImageAttachment[]>([]);
 const previewImage = ref<ChatImageAttachment | null>(null);
 const chatScroll = ref<HTMLDivElement | null>(null);
@@ -62,6 +70,7 @@ const startPromptBox = ref<HTMLFormElement | null>(null);
 const chatComposer = ref<HTMLDivElement | null>(null);
 const splitWorkspace = ref<HTMLElement | null>(null);
 const previewFile = ref<ProjectFilePreview | null>(null);
+const previewViewerFile = shallowRef<File | null>(null);
 const previewLoading = ref(false);
 const previewError = ref("");
 const activeTab = ref<"chat" | "terminal">("chat");
@@ -240,7 +249,18 @@ const pendingApprovalSegment = computed<Extract<ChatSegment, { type: "approval" 
 });
 
 const approvalInputLocked = computed(() => Boolean(pendingApprovalSegment.value));
-const canSend = computed(() => Boolean(ws.activeChatIsRunning.value || (!approvalInputLocked.value && (prompt.value.trim() || imageAttachments.value.length))));
+const showFollowUpMode = computed(() => ws.activeChatIsRunning.value && showCodexRunControls.value);
+const canSend = computed(() => Boolean(!approvalInputLocked.value && (prompt.value.trim() || imageAttachments.value.length)));
+const composerPlaceholder = computed(() => {
+  if (approvalInputLocked.value) return "审批期间输入框已锁定";
+  if (!ws.activeChatIsRunning.value) return "输入你的消息...";
+  if (!showCodexRunControls.value || followUpMode.value === "queue") return "输入下一轮消息...";
+  return "补充当前轮指令...";
+});
+const sendButtonTitle = computed(() => {
+  if (!ws.activeChatIsRunning.value) return "发送";
+  return showCodexRunControls.value && followUpMode.value === "steer" ? "追加到当前轮" : "加入下一轮队列";
+});
 const selectedApprovalMode = computed(() => approvalModes.find((mode) => mode.id === codexApprovalMode.value) ?? approvalModes[3]);
 const selectedApprovalModeTriggerLabel = computed(() => selectedApprovalMode.value.triggerLabel);
 type CodexReasoningOption = {
@@ -712,15 +732,36 @@ function previewFileSizeLabel(size: number) {
   return `${(size / 1024 / 1024).toFixed(1)} MB`;
 }
 
+function fileFromViewerSource(data: Uint8Array, name: string, mimeType: string) {
+  const bytes = new Uint8Array(data);
+  return new File([bytes.buffer], name, { type: mimeType });
+}
+
 async function loadFilePreview(projectPath: string, filePath: string) {
   const requestId = ++previewRequestId;
   openSplitPanel();
   previewLoading.value = true;
   previewError.value = "";
+  previewFile.value = null;
+  previewViewerFile.value = null;
   try {
-    const result = await desktopApi.readProjectFilePreview(projectPath, filePath);
-    if (requestId !== previewRequestId) return;
-    previewFile.value = result;
+    if (isProjectFileViewerSupported(filePath)) {
+      const result = await desktopApi.readProjectFileForViewer(projectPath, filePath);
+      if (requestId !== previewRequestId) return;
+      previewFile.value = {
+        name: result.name,
+        path: result.path,
+        size: result.size,
+        modifiedAt: result.modifiedAt,
+        previewKind: "binary",
+        mimeType: result.mimeType,
+      };
+      previewViewerFile.value = fileFromViewerSource(result.data, result.name, result.mimeType);
+    } else {
+      const result = await desktopApi.readProjectFilePreview(projectPath, filePath);
+      if (requestId !== previewRequestId) return;
+      previewFile.value = result;
+    }
   } catch (error) {
     if (requestId !== previewRequestId) return;
     previewError.value = String(error);
@@ -1157,6 +1198,30 @@ function closeImagePreview() {
   previewImage.value = null;
 }
 
+function queuedMessageLabel(item: QueuedAiMessage) {
+  return item.text || `查看这 ${item.images.length} 张图片`;
+}
+
+function startQueuedMessageEdit(item: QueuedAiMessage) {
+  editingQueuedMessageId.value = item.id;
+  editingQueuedMessageText.value = item.text;
+}
+
+function cancelQueuedMessageEdit() {
+  editingQueuedMessageId.value = null;
+  editingQueuedMessageText.value = "";
+}
+
+function saveQueuedMessageEdit(item: QueuedAiMessage) {
+  if (!ws.updateQueuedPrompt(item.id, editingQueuedMessageText.value)) return;
+  cancelQueuedMessageEdit();
+}
+
+function removeQueuedMessage(itemId: string) {
+  ws.removeQueuedPrompt(itemId);
+  if (editingQueuedMessageId.value === itemId) cancelQueuedMessageEdit();
+}
+
 function isChatScrolledNearBottom() {
   const el = chatScroll.value;
   if (!el) return true;
@@ -1325,10 +1390,6 @@ onBeforeUnmount(() => {
 });
 
 async function send() {
-  if (ws.activeChatIsRunning.value) {
-    await ws.stopActiveAiChat();
-    return;
-  }
   if (approvalInputLocked.value) return;
   const value = prompt.value.trim();
   const images = imageAttachments.value.map((image) => ({
@@ -1338,8 +1399,17 @@ async function send() {
     dataUrl: image.dataUrl,
   }));
   if (!value && !images.length) return;
-  prompt.value = "";
-  imageAttachments.value = [];
+  const runOptions = buildRunOptions();
+  if (ws.activeChatIsRunning.value) {
+    const accepted = showCodexRunControls.value && followUpMode.value === "steer"
+      ? await ws.steerActiveCodexChat(value, images)
+      : Boolean(ws.queuePrompt(value, images, runOptions));
+    if (accepted) {
+      prompt.value = "";
+      imageAttachments.value = [];
+    }
+    return;
+  }
   if (!ws.activeAiSession.value) {
     const project = projectForNewSession();
     if (!project) {
@@ -1356,9 +1426,15 @@ async function send() {
       return;
     }
   }
+  prompt.value = "";
+  imageAttachments.value = [];
   pendingPromptAnchorKey = latestUserAnchor()?.key ?? "__empty__";
   try {
-    await ws.sendPrompt(value, images, buildRunOptions());
+    const sent = await ws.sendPrompt(value, images, runOptions);
+    if (!sent) {
+      prompt.value = value;
+      imageAttachments.value = images;
+    }
   } finally {
     if (pendingPromptAnchorKey === (latestUserAnchor()?.key ?? "__empty__")) {
       pendingPromptAnchorKey = null;
@@ -1386,7 +1462,6 @@ function onPromptKeydown(event: KeyboardEvent) {
   if (event.key === "Enter" && event.shiftKey) return;
   if (event.key === "Enter" && !event.shiftKey) {
     event.preventDefault();
-    if (ws.activeChatIsRunning.value) return;
     void send();
   }
 }
@@ -1851,11 +1926,88 @@ function onPromptKeydown(event: KeyboardEvent) {
           :class="{ 'has-approval-cover': pendingApprovalSegment }"
         >
           <div v-if="pendingApprovalSegment" class="chat-composer-approval-cover">
-            <ApprovalSegment
+            <ChatSegmentView
               :segment="pendingApprovalSegment"
               :ai-session-id="ws.activeAiSession.value?.id"
             />
           </div>
+          <section v-if="ws.activeQueuedAiMessages.value.length" class="chat-followup-queue" aria-label="下一轮消息队列">
+            <header class="chat-followup-queue-header">
+              <div>
+                <strong>下一轮</strong>
+                <span>{{ ws.activeQueuedAiMessages.value.length }}</span>
+              </div>
+              <button
+                v-if="!ws.activeChatIsRunning.value"
+                type="button"
+                class="chat-followup-queue-send"
+                title="发送下一条"
+                aria-label="发送下一条"
+                @click="ws.sendNextQueuedPrompt()"
+              >
+                <img :src="sendIcon" alt="" aria-hidden="true" />
+              </button>
+            </header>
+            <div class="chat-followup-queue-list">
+              <div
+                v-for="(item, index) in ws.activeQueuedAiMessages.value"
+                :key="item.id"
+                class="chat-followup-queue-row"
+                :class="{ editing: editingQueuedMessageId === item.id }"
+              >
+                <span class="chat-followup-queue-order">{{ index + 1 }}</span>
+                <template v-if="editingQueuedMessageId === item.id">
+                  <input
+                    v-model="editingQueuedMessageText"
+                    class="chat-followup-queue-input"
+                    type="text"
+                    aria-label="编辑队列消息"
+                    @keydown.enter.prevent="saveQueuedMessageEdit(item)"
+                    @keydown.escape.prevent="cancelQueuedMessageEdit"
+                  />
+                  <div class="chat-followup-queue-actions">
+                    <button type="button" title="保存" aria-label="保存" @click="saveQueuedMessageEdit(item)">
+                      <svg viewBox="0 0 16 16" fill="none" aria-hidden="true">
+                        <path d="m3.5 8.2 2.7 2.7 6.3-6.3" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" />
+                      </svg>
+                    </button>
+                    <button type="button" title="取消" aria-label="取消" @click="cancelQueuedMessageEdit">
+                      <svg viewBox="0 0 16 16" fill="none" aria-hidden="true">
+                        <path d="m4.5 4.5 7 7m0-7-7 7" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" />
+                      </svg>
+                    </button>
+                  </div>
+                </template>
+                <template v-else>
+                  <div class="chat-followup-queue-copy" :title="queuedMessageLabel(item)">
+                    <span>{{ queuedMessageLabel(item) }}</span>
+                    <small v-if="item.images.length">{{ item.images.length }} 张图片</small>
+                  </div>
+                  <div v-if="item.images.length" class="chat-followup-queue-images" aria-hidden="true">
+                    <img v-for="image in item.images.slice(0, 3)" :key="image.id" :src="image.dataUrl" alt="" />
+                  </div>
+                  <div class="chat-followup-queue-actions">
+                    <button type="button" title="编辑" aria-label="编辑" @click="startQueuedMessageEdit(item)">
+                      <img :src="editIcon" alt="" aria-hidden="true" />
+                    </button>
+                    <button type="button" title="上移" aria-label="上移" :disabled="index === 0" @click="ws.moveQueuedPrompt(item.id, -1)">
+                      <svg viewBox="0 0 16 16" fill="none" aria-hidden="true">
+                        <path d="m4.5 9.5 3.5-3 3.5 3" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" />
+                      </svg>
+                    </button>
+                    <button type="button" title="下移" aria-label="下移" :disabled="index === ws.activeQueuedAiMessages.value.length - 1" @click="ws.moveQueuedPrompt(item.id, 1)">
+                      <svg viewBox="0 0 16 16" fill="none" aria-hidden="true">
+                        <path d="m4.5 6.5 3.5 3 3.5-3" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" />
+                      </svg>
+                    </button>
+                    <button type="button" title="删除" aria-label="删除" @click="removeQueuedMessage(item.id)">
+                      <img :src="trashIcon" alt="" aria-hidden="true" />
+                    </button>
+                  </div>
+                </template>
+              </div>
+            </div>
+          </section>
           <div v-if="imageAttachments.length" class="chat-image-attachments">
             <div
               v-for="image in imageAttachments"
@@ -1873,7 +2025,7 @@ function onPromptKeydown(event: KeyboardEvent) {
           <textarea
             v-model="prompt"
             rows="3"
-            :placeholder="approvalInputLocked ? '审批期间输入框已锁定' : '输入你的消息...'"
+            :placeholder="composerPlaceholder"
             :disabled="approvalInputLocked"
             @keydown="onPromptKeydown"
             @paste="onPromptPaste"
@@ -1881,6 +2033,18 @@ function onPromptKeydown(event: KeyboardEvent) {
           <div class="chat-composer-divider"></div>
           <div class="chat-composer-toolbar">
             <div class="chat-composer-toolbar-left">
+              <div v-if="showFollowUpMode" class="chat-followup-mode" role="group" aria-label="运行中消息目标">
+                <button
+                  type="button"
+                  :class="{ active: followUpMode === 'steer' }"
+                  @click="followUpMode = 'steer'"
+                >当前轮</button>
+                <button
+                  type="button"
+                  :class="{ active: followUpMode === 'queue' }"
+                  @click="followUpMode = 'queue'"
+                >下一轮<span v-if="ws.activeQueuedAiMessages.value.length">{{ ws.activeQueuedAiMessages.value.length }}</span></button>
+              </div>
               <div v-if="showModelRunControls" class="codex-composer-add-wrap">
                 <button
                   class="codex-composer-add"
@@ -2032,16 +2196,24 @@ function onPromptKeydown(event: KeyboardEvent) {
                 </div>
               </div>
               <button
+                v-if="ws.activeChatIsRunning.value"
+                class="chat-stop-button"
+                type="button"
+                title="停止当前轮"
+                aria-label="停止当前轮"
+                @click="ws.stopActiveAiChat"
+              >
+                <span class="chat-stop-icon" aria-hidden="true"></span>
+              </button>
+              <button
                 class="codex-send-button chat-send-button"
-                :class="{ stopping: ws.activeChatIsRunning.value }"
                 :disabled="!canSend"
-                :title="ws.activeChatIsRunning.value ? '中断' : '发送'"
+                :title="sendButtonTitle"
                 type="button"
                 @click="send"
-                :aria-label="ws.activeChatIsRunning.value ? '中断' : '发送'"
+                :aria-label="sendButtonTitle"
               >
-                <span v-if="ws.activeChatIsRunning.value" class="chat-stop-icon" aria-hidden="true"></span>
-                <img v-else :src="sendIcon" alt="" aria-hidden="true" />
+                <img :src="sendIcon" alt="" aria-hidden="true" />
               </button>
             </div>
           </div>
@@ -2104,7 +2276,7 @@ function onPromptKeydown(event: KeyboardEvent) {
             </svg>
           </button>
         </header>
-        <div class="chat-split-panel-body">
+        <div class="chat-split-panel-body" :class="{ 'viewer-active': previewViewerFile }">
           <div v-if="previewLoading" class="chat-split-panel-empty">
             <strong>正在读取文件</strong>
             <span>请稍候。</span>
@@ -2117,15 +2289,26 @@ function onPromptKeydown(event: KeyboardEvent) {
             <strong>选择文件开始预览</strong>
             <span>在左侧项目文件树中点击文件。</span>
           </div>
-          <div v-else class="chat-file-preview">
+          <div v-else class="chat-file-preview" :class="{ 'viewer-active': previewViewerFile }">
             <div class="chat-file-preview-path" :title="previewFile.path">{{ previewFile.path }}</div>
+            <ProjectFileViewer
+              v-if="previewViewerFile"
+              :key="`${previewFile.path}:${previewFile.modifiedAt}`"
+              class="chat-file-preview-viewer"
+              :file="previewViewerFile"
+            />
+            <ChatSegmentView
+              v-else-if="previewFile.previewKind === 'text' && previewFile.language === 'markdown'"
+              class="chat-file-preview-markdown"
+              :segment="{ type: 'text', text: previewFile.content ?? '' }"
+            />
+            <pre v-else-if="previewFile.previewKind === 'text'" class="chat-file-preview-code"><code>{{ previewFile.content }}</code></pre>
             <img
-              v-if="previewFile.previewKind === 'image' && previewFile.dataUrl"
+              v-else-if="previewFile.previewKind === 'image' && previewFile.dataUrl"
               class="chat-file-preview-image"
               :src="previewFile.dataUrl"
               :alt="previewFile.name"
             />
-            <pre v-else-if="previewFile.previewKind === 'text'" class="chat-file-preview-code"><code>{{ previewFile.content }}</code></pre>
             <div v-else-if="previewFile.previewKind === 'tooLarge'" class="chat-split-panel-empty">
               <strong>文件过大</strong>
               <span>当前文件 {{ previewFileSizeLabel(previewFile.size) }}，暂不直接预览。</span>
