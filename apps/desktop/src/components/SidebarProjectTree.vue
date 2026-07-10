@@ -217,7 +217,16 @@ async function openProjectFileEntry(project: WorkspaceProject, file: WorkspaceFi
     await toggleDirectoryNode(project, file.path);
     return;
   }
-  await copyText(file.path);
+  emit("selectProject", project.path);
+  emit("switchView", "aiSessions");
+  window.setTimeout(() => {
+    window.dispatchEvent(new CustomEvent("desktop-preview-file", {
+      detail: {
+        projectPath: project.path,
+        filePath: file.path,
+      },
+    }));
+  }, 80);
 }
 
 type VisibleFileNode = {

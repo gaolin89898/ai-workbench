@@ -11,7 +11,7 @@
 
 import { app, ipcMain, BrowserWindow, clipboard, shell, type IpcMainInvokeEvent, type WebContents } from "electron";
 import { randomUUID } from "node:crypto";
-import { readdir, stat } from "node:fs/promises";
+import { readFile, readdir, stat } from "node:fs/promises";
 import path from "node:path";
 import * as db from "./db";
 import * as pty from "./pty";
@@ -42,6 +42,8 @@ import type {
 } from "../services/desktop";
 
 let mainWindow: BrowserWindow | null = null;
+const MAX_TEXT_PREVIEW_BYTES = 1024 * 1024;
+const MAX_IMAGE_PREVIEW_BYTES = 5 * 1024 * 1024;
 
 type SafeIpcError = {
   __AI_WORKBENCH_IPC_ERROR__: true;
@@ -123,6 +125,79 @@ async function listProjectFiles(projectPath: string, directoryPath?: string | nu
     if (left.kind !== right.kind) return left.kind === "directory" ? -1 : 1;
     return left.name.localeCompare(right.name, "zh-Hans-CN", { numeric: true, sensitivity: "base" });
   });
+}
+
+function assertProjectChildPath(projectPath: string, targetPath: string) {
+  const project = db.getWorkspaceProjectByPath(projectPath);
+  if (!project) throw new Error("project is not registered");
+  const root = path.resolve(project.path);
+  const target = path.resolve(targetPath);
+  const relative = path.relative(root, target);
+  if (relative.startsWith("..") || path.isAbsolute(relative)) throw new Error("file is outside project");
+  return target;
+}
+
+function previewMimeType(filePath: string) {
+  const extension = path.extname(filePath).toLowerCase();
+  if (extension === ".png") return "image/png";
+  if (extension === ".jpg" || extension === ".jpeg") return "image/jpeg";
+  if (extension === ".gif") return "image/gif";
+  if (extension === ".webp") return "image/webp";
+  if (extension === ".svg") return "image/svg+xml";
+  return "";
+}
+
+function previewLanguage(filePath: string) {
+  const extension = path.extname(filePath).toLowerCase().slice(1);
+  const name = path.basename(filePath).toLowerCase();
+  if (name === "dockerfile") return "dockerfile";
+  if (name === "package.json" || extension === "json") return "json";
+  if (["ts", "tsx", "mts", "cts"].includes(extension)) return "typescript";
+  if (["js", "jsx", "mjs", "cjs"].includes(extension)) return "javascript";
+  if (extension === "vue") return "vue";
+  if (["css", "scss", "sass", "less"].includes(extension)) return "css";
+  if (["md", "mdx"].includes(extension)) return "markdown";
+  if (["yml", "yaml"].includes(extension)) return "yaml";
+  if (["html", "xml", "svg"].includes(extension)) return extension;
+  return extension || "text";
+}
+
+function looksBinary(buffer: Buffer) {
+  const sample = buffer.subarray(0, Math.min(buffer.length, 8000));
+  return sample.includes(0);
+}
+
+async function readProjectFilePreview(projectPath: string, filePath: string) {
+  const target = assertProjectChildPath(projectPath, filePath);
+  const info = await stat(target);
+  if (!info.isFile()) throw new Error("target is not a file");
+  const mimeType = previewMimeType(target);
+  const name = path.basename(target);
+  const base = {
+    name,
+    path: target,
+    size: info.size,
+    modifiedAt: info.mtime.toISOString(),
+  };
+  if (mimeType.startsWith("image/")) {
+    if (info.size > MAX_IMAGE_PREVIEW_BYTES) return { ...base, previewKind: "tooLarge" as const, mimeType };
+    const buffer = await readFile(target);
+    return {
+      ...base,
+      previewKind: "image" as const,
+      mimeType,
+      dataUrl: `data:${mimeType};base64,${buffer.toString("base64")}`,
+    };
+  }
+  if (info.size > MAX_TEXT_PREVIEW_BYTES) return { ...base, previewKind: "tooLarge" as const };
+  const buffer = await readFile(target);
+  if (looksBinary(buffer)) return { ...base, previewKind: "binary" as const };
+  return {
+    ...base,
+    previewKind: "text" as const,
+    content: buffer.toString("utf8"),
+    language: previewLanguage(target),
+  };
 }
 
 export function registerIpcHandlers(win?: BrowserWindow): void {
@@ -227,8 +302,16 @@ export function registerIpcHandlers(win?: BrowserWindow): void {
     projects.openProjectInFileManager(args[0])
   );
 
+  handle("get_project_environment", async (_event, args: [string]) =>
+    projects.readProjectEnvironment(args[0])
+  );
+
   handle("list_project_files", async (_event, args: [string, string | null]) =>
     listProjectFiles(args[0], args[1])
+  );
+
+  handle("read_project_file_preview", async (_event, args: [string, string]) =>
+    readProjectFilePreview(args[0], args[1])
   );
 
   // ---------- AI sessions ----------

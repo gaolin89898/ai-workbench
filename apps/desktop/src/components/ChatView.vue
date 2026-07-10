@@ -4,7 +4,7 @@ import ChatMessageRow from "./ChatMessageRow.vue";
 import ApprovalSegment from "./ChatSegment.vue";
 import TerminalView from "./TerminalView.vue";
 import { useWorkspace } from "../composables/useWorkspace";
-import { desktopApi, type AiChatOptions, type AiProvider, type ChatImageAttachment, type ChatMessage, type ChatSegment, type ClaudeReasoningEffort, type CodexApprovalMode, type CodexModelOption, type CodexReasoningEffort, type CodexRunMode } from "../services/desktop";
+import { desktopApi, type AiChatOptions, type AiProvider, type ChatImageAttachment, type ChatMessage, type ChatSegment, type ClaudeReasoningEffort, type CodexApprovalMode, type CodexModelOption, type CodexReasoningEffort, type CodexRunMode, type ProjectEnvironmentInfo, type ProjectFilePreview } from "../services/desktop";
 
 const providerClaudeIcon = new URL("../assets/icons/provider-claude.svg", import.meta.url).href;
 const providerCodexIcon = new URL("../assets/icons/provider-codex.svg", import.meta.url).href;
@@ -20,10 +20,20 @@ const previewImage = ref<ChatImageAttachment | null>(null);
 const chatScroll = ref<HTMLDivElement | null>(null);
 const startPromptBox = ref<HTMLFormElement | null>(null);
 const chatComposer = ref<HTMLDivElement | null>(null);
+const splitWorkspace = ref<HTMLElement | null>(null);
+const previewFile = ref<ProjectFilePreview | null>(null);
+const previewLoading = ref(false);
+const previewError = ref("");
 const activeTab = ref<"chat" | "terminal">("chat");
 const startMenuOpen = ref(false);
 const approvalMenuOpen = ref(false);
 const composerToolsOpen = ref(false);
+const environmentPanelOpen = ref(false);
+const environmentInfo = ref<ProjectEnvironmentInfo | null>(null);
+const environmentLoading = ref(false);
+const environmentError = ref("");
+const splitPanelOpen = ref(false);
+const splitPanelWidth = ref(420);
 const modelMenuOpen = ref(false);
 const modelSubmenuOpen = ref(false);
 const codexApprovalMode = ref<CodexApprovalMode>("autoEdit");
@@ -48,6 +58,9 @@ const floatingMenuTargetSelector = [
   ".codex-model-picker",
   ".codex-model-menu",
   ".codex-model-submenu",
+  ".chat-topbar-action",
+  ".chat-topbar-icon-action",
+  ".environment-popover",
 ].join(", ");
 
 const approvalModes = [
@@ -72,6 +85,10 @@ const VIRTUAL_MESSAGE_ESTIMATE = 156;
 const VIRTUAL_SCROLL_OVERSCAN = 900;
 const USER_ANCHOR_MIN_VISIBLE = 4;
 const USER_ANCHOR_LIMIT = 18;
+const SPLIT_PANEL_MIN_WIDTH = 320;
+const SPLIT_MAIN_MIN_WIDTH = 420;
+let splitResizeCleanup: (() => void) | null = null;
+let previewRequestId = 0;
 const USER_ANCHOR_MIN_TOP_PERCENT = 8;
 const USER_ANCHOR_MAX_TOP_PERCENT = 92;
 const USER_ANCHOR_DOT_GAP_PX = 20;
@@ -113,6 +130,31 @@ const codexModelOptions = computed(() => codexModels.value.filter((model) => mod
 const chatHeaderMeta = computed(() => {
   if (!currentProject.value) return "选择项目后开始聊天";
   return `${currentProject.value.gitBranch ?? "未知分支"} · ${currentProject.value.gitDirty ? "有变更" : "Git 干净"}`;
+});
+const environmentBranchLabel = computed(() => (
+  environmentInfo.value?.branch
+  ?? currentProject.value?.gitBranch
+  ?? "未知分支"
+));
+const environmentDirty = computed(() => environmentInfo.value?.dirty ?? currentProject.value?.gitDirty ?? false);
+const environmentChangeText = computed(() => {
+  const info = environmentInfo.value;
+  if (!environmentDirty.value) return "干净";
+  const parts = [
+    info && info.additions > 0 ? `+${info.additions}` : "",
+    info && info.deletions > 0 ? `-${info.deletions}` : "",
+  ].filter(Boolean);
+  return parts.length ? parts.join(" ") : "有变更";
+});
+const environmentCommitText = computed(() => {
+  if (!environmentDirty.value) return "无需提交";
+  if (environmentInfo.value?.githubCliAvailable) return "可提交或推送";
+  return "GitHub CLI 不可用";
+});
+const previewFileExtension = computed(() => {
+  const name = previewFile.value?.name ?? "";
+  const index = name.lastIndexOf(".");
+  return index >= 0 ? name.slice(index + 1).toUpperCase() : "FILE";
 });
 const conversationTitle = computed(() => ws.activeAiSession.value?.title ?? currentProject.value?.name ?? "新对话");
 const showCreateHint = computed(() => !ws.activeAiSession.value && ws.createAiResult.value);
@@ -359,6 +401,7 @@ function estimateMessageHeight(message?: ChatMessage) {
 }
 
 function updateVirtualViewport() {
+  if (splitPanelOpen.value) splitPanelWidth.value = clampSplitPanelWidth(splitPanelWidth.value);
   const el = chatScroll.value;
   if (!el) return;
   virtualScrollTop.value = el.scrollTop;
@@ -422,13 +465,14 @@ function isFloatingMenuTarget(target: EventTarget | null) {
 }
 
 function closeFloatingMenusOnOutsideClick(event: PointerEvent) {
-  if (!startMenuOpen.value && !approvalMenuOpen.value && !composerToolsOpen.value && !modelMenuOpen.value && !modelSubmenuOpen.value) return;
+  if (!startMenuOpen.value && !approvalMenuOpen.value && !composerToolsOpen.value && !modelMenuOpen.value && !modelSubmenuOpen.value && !environmentPanelOpen.value) return;
   if (isFloatingMenuTarget(event.target)) return;
   startMenuOpen.value = false;
   approvalMenuOpen.value = false;
   composerToolsOpen.value = false;
   modelMenuOpen.value = false;
   modelSubmenuOpen.value = false;
+  environmentPanelOpen.value = false;
 }
 
 function toggleApprovalMenu() {
@@ -439,6 +483,7 @@ function toggleApprovalMenu() {
     composerToolsOpen.value = false;
     modelMenuOpen.value = false;
     modelSubmenuOpen.value = false;
+    environmentPanelOpen.value = false;
   }
 }
 
@@ -455,13 +500,141 @@ function toggleComposerToolsMenu() {
     approvalMenuOpen.value = false;
     modelMenuOpen.value = false;
     modelSubmenuOpen.value = false;
+    environmentPanelOpen.value = false;
   }
 }
 
 function openComposerApprovalMenu() {
   if (!showCodexRunControls.value) return;
   composerToolsOpen.value = false;
+  environmentPanelOpen.value = false;
   approvalMenuOpen.value = true;
+}
+
+async function openCurrentProjectLocation() {
+  const project = currentProject.value;
+  if (!project) return;
+  await desktopApi.openProjectInFileManager(project.path);
+}
+
+async function refreshEnvironmentInfo() {
+  const project = currentProject.value;
+  if (!project) {
+    environmentInfo.value = null;
+    environmentError.value = "";
+    return;
+  }
+  environmentLoading.value = true;
+  environmentError.value = "";
+  try {
+    environmentInfo.value = await desktopApi.getProjectEnvironment(project.path);
+  } catch (error) {
+    environmentError.value = String(error);
+  } finally {
+    environmentLoading.value = false;
+  }
+}
+
+function toggleEnvironmentPanel() {
+  environmentPanelOpen.value = !environmentPanelOpen.value;
+  if (environmentPanelOpen.value) {
+    startMenuOpen.value = false;
+    approvalMenuOpen.value = false;
+    composerToolsOpen.value = false;
+    modelMenuOpen.value = false;
+    modelSubmenuOpen.value = false;
+    void refreshEnvironmentInfo();
+  }
+}
+
+function clampSplitPanelWidth(width: number) {
+  const workspaceWidth = splitWorkspace.value?.getBoundingClientRect().width ?? 0;
+  if (!workspaceWidth) return Math.max(SPLIT_PANEL_MIN_WIDTH, width);
+  const maxWidth = Math.max(SPLIT_PANEL_MIN_WIDTH, workspaceWidth - SPLIT_MAIN_MIN_WIDTH);
+  return Math.min(Math.max(width, SPLIT_PANEL_MIN_WIDTH), maxWidth);
+}
+
+function openSplitPanel() {
+  if (!splitPanelOpen.value) splitPanelOpen.value = true;
+  startMenuOpen.value = false;
+  approvalMenuOpen.value = false;
+  composerToolsOpen.value = false;
+  modelMenuOpen.value = false;
+  modelSubmenuOpen.value = false;
+  environmentPanelOpen.value = false;
+  void nextTick(() => {
+    splitPanelWidth.value = clampSplitPanelWidth(splitPanelWidth.value);
+  });
+}
+
+function toggleSplitPanel() {
+  splitPanelOpen.value = !splitPanelOpen.value;
+  if (splitPanelOpen.value) {
+    openSplitPanel();
+  } else if (splitResizeCleanup) {
+    splitResizeCleanup();
+  }
+}
+
+function previewFileSizeLabel(size: number) {
+  if (size < 1024) return `${size} B`;
+  if (size < 1024 * 1024) return `${(size / 1024).toFixed(1)} KB`;
+  return `${(size / 1024 / 1024).toFixed(1)} MB`;
+}
+
+async function loadFilePreview(projectPath: string, filePath: string) {
+  const requestId = ++previewRequestId;
+  openSplitPanel();
+  previewLoading.value = true;
+  previewError.value = "";
+  try {
+    const result = await desktopApi.readProjectFilePreview(projectPath, filePath);
+    if (requestId !== previewRequestId) return;
+    previewFile.value = result;
+  } catch (error) {
+    if (requestId !== previewRequestId) return;
+    previewError.value = String(error);
+  } finally {
+    if (requestId === previewRequestId) previewLoading.value = false;
+  }
+}
+
+function onDesktopPreviewFile(event: Event) {
+  const detail = (event as CustomEvent<{ projectPath?: string; filePath?: string }>).detail;
+  if (!detail?.projectPath || !detail.filePath) return;
+  void loadFilePreview(detail.projectPath, detail.filePath);
+}
+
+function stopSplitResize() {
+  if (!splitResizeCleanup) return;
+  splitResizeCleanup();
+}
+
+function startSplitResize(event: PointerEvent) {
+  if (!splitPanelOpen.value) return;
+  event.preventDefault();
+  stopSplitResize();
+  const startX = event.clientX;
+  const startWidth = splitPanelWidth.value;
+  document.body.classList.add("chat-split-resizing");
+
+  const onPointerMove = (moveEvent: PointerEvent) => {
+    splitPanelWidth.value = clampSplitPanelWidth(startWidth + startX - moveEvent.clientX);
+  };
+  const onPointerUp = () => {
+    stopSplitResize();
+  };
+
+  window.addEventListener("pointermove", onPointerMove);
+  window.addEventListener("pointerup", onPointerUp);
+  window.addEventListener("pointercancel", onPointerUp);
+  splitResizeCleanup = () => {
+    window.removeEventListener("pointermove", onPointerMove);
+    window.removeEventListener("pointerup", onPointerUp);
+    window.removeEventListener("pointercancel", onPointerUp);
+    document.body.classList.remove("chat-split-resizing");
+    splitResizeCleanup = null;
+  };
 }
 
 function toggleComposerPlanMode() {
@@ -482,6 +655,7 @@ function toggleModelMenu() {
     startMenuOpen.value = false;
     approvalMenuOpen.value = false;
     composerToolsOpen.value = false;
+    environmentPanelOpen.value = false;
   }
 }
 
@@ -595,13 +769,14 @@ function onWindowKeydown(event: KeyboardEvent) {
     previewImage.value = null;
     return;
   }
-  if (event.key === "Escape" && (startMenuOpen.value || approvalMenuOpen.value || composerToolsOpen.value || modelMenuOpen.value || modelSubmenuOpen.value)) {
+  if (event.key === "Escape" && (startMenuOpen.value || approvalMenuOpen.value || composerToolsOpen.value || modelMenuOpen.value || modelSubmenuOpen.value || environmentPanelOpen.value)) {
     event.preventDefault();
     startMenuOpen.value = false;
     approvalMenuOpen.value = false;
     composerToolsOpen.value = false;
     modelMenuOpen.value = false;
     modelSubmenuOpen.value = false;
+    environmentPanelOpen.value = false;
     return;
   }
   if (event.key !== "Escape" || !ws.activeChatIsRunning.value) return;
@@ -775,6 +950,15 @@ watch(
 );
 
 watch(
+  () => currentProject.value?.path,
+  () => {
+    environmentInfo.value = null;
+    environmentError.value = "";
+    if (environmentPanelOpen.value) void refreshEnvironmentInfo();
+  },
+);
+
+watch(
   () => showCodexRunControls.value,
   (visible) => {
     if (visible) void loadCodexModels();
@@ -811,6 +995,7 @@ watch(
 
 onMounted(() => {
   document.addEventListener("pointerdown", closeFloatingMenusOnOutsideClick);
+  window.addEventListener("desktop-preview-file", onDesktopPreviewFile);
   window.addEventListener("keydown", onWindowKeydown);
   window.addEventListener("resize", updateVirtualViewport);
   observeChatScroll();
@@ -821,7 +1006,9 @@ onMounted(() => {
 });
 
 onBeforeUnmount(() => {
+  stopSplitResize();
   document.removeEventListener("pointerdown", closeFloatingMenusOnOutsideClick);
+  window.removeEventListener("desktop-preview-file", onDesktopPreviewFile);
   window.removeEventListener("keydown", onWindowKeydown);
   window.removeEventListener("resize", updateVirtualViewport);
   chatScrollResizeObserver?.disconnect();
@@ -881,6 +1068,7 @@ function toggleStartMenu() {
     composerToolsOpen.value = false;
     modelMenuOpen.value = false;
     modelSubmenuOpen.value = false;
+    environmentPanelOpen.value = false;
   }
 }
 
@@ -1142,6 +1330,116 @@ function onPromptKeydown(event: KeyboardEvent) {
       </div>
       <div class="chat-topbar-meta">
         <span>{{ chatHeaderMeta }}</span>
+        <button
+          type="button"
+          class="chat-topbar-action location"
+          :disabled="!currentProject"
+          title="打开项目位置"
+          @click="openCurrentProjectLocation"
+        >
+          <svg viewBox="0 0 16 16" fill="none" aria-hidden="true">
+            <path d="M3 5.6 8 2l5 3.6v7.1a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V5.6Z" stroke="currentColor" stroke-width="1.35" stroke-linejoin="round" />
+            <path d="M6.2 13.7V9.2h3.6v4.5" stroke="currentColor" stroke-width="1.35" stroke-linejoin="round" />
+          </svg>
+          <span>打开位置</span>
+          <svg class="chat-topbar-action-chevron" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+            <path d="m4.5 6.5 3.5 3 3.5-3" stroke="currentColor" stroke-width="1.45" stroke-linecap="round" stroke-linejoin="round" />
+          </svg>
+        </button>
+        <button
+          type="button"
+          class="chat-topbar-icon-action"
+          :class="{ open: environmentPanelOpen }"
+          title="环境信息"
+          aria-label="环境信息"
+          :aria-expanded="environmentPanelOpen"
+          @click="toggleEnvironmentPanel"
+        >
+          <svg viewBox="0 0 16 16" fill="none" aria-hidden="true">
+            <path d="M3.2 4.5h9.6M3.2 8h9.6M3.2 11.5h9.6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" />
+            <circle cx="5.2" cy="4.5" r="1.15" fill="currentColor" />
+            <circle cx="10.8" cy="8" r="1.15" fill="currentColor" />
+            <circle cx="7.4" cy="11.5" r="1.15" fill="currentColor" />
+          </svg>
+        </button>
+        <button
+          type="button"
+          class="chat-topbar-mini-action"
+          :class="{ active: splitPanelOpen }"
+          :title="splitPanelOpen ? '关闭分割面板' : '打开分割面板'"
+          :aria-label="splitPanelOpen ? '关闭分割面板' : '打开分割面板'"
+          :aria-pressed="splitPanelOpen"
+          @click="toggleSplitPanel"
+        >
+          <svg viewBox="0 0 16 16" fill="none" aria-hidden="true">
+            <rect x="2.5" y="3" width="11" height="10" rx="2" stroke="currentColor" stroke-width="1.35" />
+            <path d="M10.5 3v10" stroke="currentColor" stroke-width="1.35" />
+          </svg>
+        </button>
+      </div>
+      <div v-if="environmentPanelOpen" class="environment-popover">
+        <header class="environment-popover-header">
+          <strong>环境信息</strong>
+          <button type="button" title="刷新环境信息" aria-label="刷新环境信息" @click="refreshEnvironmentInfo">
+            <svg viewBox="0 0 16 16" fill="none" aria-hidden="true">
+              <path d="M8 3.2v9.6M3.2 8h9.6" stroke="currentColor" stroke-width="1.45" stroke-linecap="round" />
+            </svg>
+          </button>
+        </header>
+        <div class="environment-popover-list">
+          <div class="environment-row">
+            <span class="environment-row-icon">
+              <svg viewBox="0 0 16 16" fill="none" aria-hidden="true">
+                <path d="M4 4h8v8H4z" stroke="currentColor" stroke-width="1.35" />
+                <path d="M8 5.5v5M5.5 8h5" stroke="currentColor" stroke-width="1.35" stroke-linecap="round" />
+              </svg>
+            </span>
+            <span>变更</span>
+            <strong :class="{ clean: !environmentDirty, dirty: environmentDirty }">{{ environmentLoading ? "读取中" : environmentChangeText }}</strong>
+          </div>
+          <div class="environment-row">
+            <span class="environment-row-icon">
+              <svg viewBox="0 0 16 16" fill="none" aria-hidden="true">
+                <path d="M3 5h10v6.5A1.5 1.5 0 0 1 11.5 13h-7A1.5 1.5 0 0 1 3 11.5V5Z" stroke="currentColor" stroke-width="1.35" />
+                <path d="M5 5V3.8h6V5" stroke="currentColor" stroke-width="1.35" stroke-linejoin="round" />
+              </svg>
+            </span>
+            <span>本地</span>
+            <small>{{ currentProject?.path ?? "暂无项目" }}</small>
+          </div>
+          <div class="environment-row">
+            <span class="environment-row-icon">
+              <svg viewBox="0 0 16 16" fill="none" aria-hidden="true">
+                <path d="M5 3.5v5.2a2.3 2.3 0 0 0 2.3 2.3H11" stroke="currentColor" stroke-width="1.35" stroke-linecap="round" />
+                <circle cx="5" cy="3.5" r="1.5" stroke="currentColor" stroke-width="1.35" />
+                <circle cx="11" cy="11" r="1.5" stroke="currentColor" stroke-width="1.35" />
+              </svg>
+            </span>
+            <span>{{ environmentBranchLabel }}</span>
+          </div>
+          <div class="environment-row">
+            <span class="environment-row-icon">
+              <svg viewBox="0 0 16 16" fill="none" aria-hidden="true">
+                <path d="M8 3.2v8.2M4.7 6.5 8 3.2l3.3 3.3" stroke="currentColor" stroke-width="1.35" stroke-linecap="round" stroke-linejoin="round" />
+                <path d="M4 12.8h8" stroke="currentColor" stroke-width="1.35" stroke-linecap="round" />
+              </svg>
+            </span>
+            <span>提交或推送</span>
+          </div>
+          <div class="environment-row muted">
+            <span class="environment-row-icon">
+              <svg viewBox="0 0 16 16" fill="none" aria-hidden="true">
+                <circle cx="8" cy="8" r="5.2" stroke="currentColor" stroke-width="1.35" />
+                <path d="M6.2 10.2 9.8 6.6M6.2 6.6l3.6 3.6" stroke="currentColor" stroke-width="1.35" stroke-linecap="round" />
+              </svg>
+            </span>
+            <span>{{ environmentError || environmentCommitText }}</span>
+          </div>
+        </div>
+        <footer class="environment-popover-source">
+          <span>来源</span>
+          <strong>暂无来源</strong>
+        </footer>
       </div>
     </header>
     <nav class="chat-mode-tabs" aria-label="聊天视图切换">
@@ -1149,11 +1447,14 @@ function onPromptKeydown(event: KeyboardEvent) {
       <button type="button" :class="{ active: activeTab === 'terminal' }" @click="activeTab = 'terminal'">终端</button>
     </nav>
     <section
+      ref="splitWorkspace"
       class="chat-workspace"
       :class="{
         'terminal-mode': activeTab === 'terminal' && Boolean(ws.activeAiSession.value),
         'terminal-empty-mode': activeTab === 'terminal' && !ws.activeAiSession.value,
+        'split-mode': splitPanelOpen,
       }"
+      :style="{ '--chat-split-panel-width': `${splitPanelWidth}px` }"
     >
       <article class="chat-main-panel">
         <div v-if="activeTab === 'chat'" ref="chatScroll" class="terminal-preview" @scroll.passive="handleChatScroll">
@@ -1437,6 +1738,59 @@ function onPromptKeydown(event: KeyboardEvent) {
           </div>
         </div>
       </article>
+      <button
+        v-if="splitPanelOpen"
+        type="button"
+        class="chat-split-resizer"
+        title="拖动调整面板宽度"
+        aria-label="拖动调整面板宽度"
+        @pointerdown="startSplitResize"
+      ></button>
+      <aside v-if="splitPanelOpen" class="chat-split-panel">
+        <header class="chat-split-panel-header">
+          <div class="chat-split-panel-title">
+            <strong>{{ previewFile?.name ?? "文件预览" }}</strong>
+            <small v-if="previewFile">{{ previewFileExtension }} · {{ previewFileSizeLabel(previewFile.size) }}</small>
+          </div>
+          <button type="button" title="关闭分割面板" aria-label="关闭分割面板" @click="toggleSplitPanel">
+            <svg viewBox="0 0 16 16" fill="none" aria-hidden="true">
+              <path d="M4.5 4.5 11.5 11.5M11.5 4.5 4.5 11.5" stroke="currentColor" stroke-width="1.55" stroke-linecap="round" />
+            </svg>
+          </button>
+        </header>
+        <div class="chat-split-panel-body">
+          <div v-if="previewLoading" class="chat-split-panel-empty">
+            <strong>正在读取文件</strong>
+            <span>请稍候。</span>
+          </div>
+          <div v-else-if="previewError" class="chat-split-panel-empty error">
+            <strong>预览失败</strong>
+            <span>{{ previewError }}</span>
+          </div>
+          <div v-else-if="!previewFile" class="chat-split-panel-empty">
+            <strong>选择文件开始预览</strong>
+            <span>在左侧项目文件树中点击文件。</span>
+          </div>
+          <div v-else class="chat-file-preview">
+            <div class="chat-file-preview-path" :title="previewFile.path">{{ previewFile.path }}</div>
+            <img
+              v-if="previewFile.previewKind === 'image' && previewFile.dataUrl"
+              class="chat-file-preview-image"
+              :src="previewFile.dataUrl"
+              :alt="previewFile.name"
+            />
+            <pre v-else-if="previewFile.previewKind === 'text'" class="chat-file-preview-code"><code>{{ previewFile.content }}</code></pre>
+            <div v-else-if="previewFile.previewKind === 'tooLarge'" class="chat-split-panel-empty">
+              <strong>文件过大</strong>
+              <span>当前文件 {{ previewFileSizeLabel(previewFile.size) }}，暂不直接预览。</span>
+            </div>
+            <div v-else class="chat-split-panel-empty">
+              <strong>无法预览二进制文件</strong>
+              <span>可以在系统文件管理器中打开查看。</span>
+            </div>
+          </div>
+        </div>
+      </aside>
     </section>
     </template>
     <div v-if="previewImage" class="chat-image-preview-overlay" role="dialog" aria-modal="true" @click="closeImagePreview">

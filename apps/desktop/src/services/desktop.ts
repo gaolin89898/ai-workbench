@@ -78,12 +78,35 @@ export type WorkspaceProject = {
   gitDirty: boolean;
 };
 
+export type ProjectEnvironmentInfo = {
+  projectPath: string;
+  branch: string | null;
+  dirty: boolean;
+  changedFiles: number;
+  additions: number;
+  deletions: number;
+  githubCliAvailable: boolean;
+};
+
 export type WorkspaceFileEntry = {
   name: string;
   path: string;
   kind: "file" | "directory";
   size: number;
   modifiedAt: string;
+};
+
+export type ProjectFilePreview = {
+  name: string;
+  path: string;
+  size: number;
+  modifiedAt: string;
+  previewKind: "text" | "image" | "binary" | "tooLarge";
+  content?: string;
+  dataUrl?: string;
+  mimeType?: string;
+  language?: string;
+  truncated?: boolean;
 };
 
 export type AiSession = {
@@ -546,8 +569,12 @@ export const desktopApi = {
     ipc<void>("remove_workspace_project", id),
   openProjectInFileManager: (path: string): Promise<void> =>
     ipc<void>("open_project_in_file_manager", path),
+  getProjectEnvironment: (path: string): Promise<ProjectEnvironmentInfo> =>
+    ipc<ProjectEnvironmentInfo>("get_project_environment", path),
   listProjectFiles: (path: string, directoryPath?: string | null): Promise<WorkspaceFileEntry[]> =>
     ipc<WorkspaceFileEntry[]>("list_project_files", path, directoryPath ?? null),
+  readProjectFilePreview: (projectPath: string, filePath: string): Promise<ProjectFilePreview> =>
+    ipc<ProjectFilePreview>("read_project_file_preview", projectPath, filePath),
   createAiSession: (req: CreateAiSessionRequest): Promise<AiSession> =>
     ipc<AiSession>("create_ai_session", req),
   restartAiSession: (aiSessionId: string): Promise<AiSession> =>

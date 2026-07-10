@@ -30,3 +30,6 @@ backend/.gocache/
 # 本地验证截图/临时文件
 mobile-*.png
 --title
+
+# Electron release assets generated locally
+apps/desktop/release-assets/
