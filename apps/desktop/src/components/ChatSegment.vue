@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed } from "vue";
+import { computed, ref } from "vue";
 import { useWorkspace } from "../composables/useWorkspace";
 import { desktopApi } from "../services/desktop";
 import type { ChatSegment as ChatSegmentType } from "../services/desktop";
@@ -10,6 +10,7 @@ const props = defineProps<{
   aiSessionId?: string;
 }>();
 const ws = useWorkspace();
+const clipboardIcon = new URL("../assets/icons/clipboard.svg", import.meta.url).href;
 
 type MarkdownBlock =
   | { type: "paragraph"; text: string }
@@ -26,8 +27,9 @@ const renderedTextBlocks = computed(() => {
 });
 
 type DiffLine = {
-  type: "add" | "delete" | "meta" | "context";
+  type: "add" | "delete" | "context";
   text: string;
+  lineNumber?: number;
 };
 
 const toolDiffLines = computed<DiffLine[]>(() => {
@@ -36,6 +38,30 @@ const toolDiffLines = computed<DiffLine[]>(() => {
   return diff ? parseDiffLines(diff) : [];
 });
 const toolHasDiff = computed(() => props.segment.type === "tool" && toolDiffLines.value.length > 0);
+const toolDiffInfo = computed(() => {
+  if (props.segment.type !== "tool") return null;
+  const diff = toolDiffText(props.segment);
+  const files = patchFileList(diff);
+  const stats = diffStats(diff);
+  const name = files.length === 1
+    ? files[0].split(/[\\/]/).pop() || files[0]
+    : files.length > 1 ? `${files.length} 个文件` : "代码更改";
+  return { name, ...stats };
+});
+const copiedDiff = ref(false);
+
+async function copyToolDiff() {
+  if (props.segment.type !== "tool") return;
+  const code = toolDiffLines.value.map((line) => {
+    const prefix = line.type === "add" ? "+" : line.type === "delete" ? "-" : " ";
+    return `${prefix}${line.text}`;
+  }).join("\n");
+  await navigator.clipboard.writeText(code);
+  copiedDiff.value = true;
+  window.setTimeout(() => {
+    copiedDiff.value = false;
+  }, 1200);
+}
 
 const approvalBusy = computed(() => props.segment.type === "approval" && props.segment.status !== "pending");
 const statusDisplay = computed(() => {
@@ -293,14 +319,49 @@ function diffStats(diff: string): { additions?: number; deletions?: number } {
 }
 
 function parseDiffLines(diff: string): DiffLine[] {
-  return diff.replace(/\r\n/g, "\n").split("\n").filter((line) => !isPatchWrapperLine(line)).map((line) => {
-    if (line.startsWith("+") && !line.startsWith("+++")) return { type: "add", text: line };
-    if (line.startsWith("-") && !line.startsWith("---")) return { type: "delete", text: line };
-    if (line.startsWith("@@") || line.startsWith("diff ") || line.startsWith("index ") || line.startsWith("+++") || line.startsWith("---") || /^\*\*\* (?:Add|Update|Delete) File: /.test(line)) {
-      return { type: "meta", text: line };
+  const result: DiffLine[] = [];
+  let oldLine: number | undefined;
+  let newLine: number | undefined;
+  let inHunk = false;
+  for (const line of diff.replace(/\r\n/g, "\n").split("\n")) {
+    if (isPatchWrapperLine(line) || line.startsWith("\\ No newline at end of file")) continue;
+    if (/^\*\*\* (?:Add|Update|Delete) File: /.test(line) || line.startsWith("diff ")) {
+      inHunk = false;
+      continue;
     }
-    return { type: "context", text: line };
-  });
+    if (line.startsWith("index ")
+      || line.startsWith("---")
+      || line.startsWith("+++")) continue;
+    const hunk = line.match(/^@@\s+-(\d+)(?:,\d+)?\s+\+(\d+)(?:,\d+)?\s+@@/);
+    if (hunk) {
+      oldLine = Number(hunk[1]);
+      newLine = Number(hunk[2]);
+      inHunk = true;
+      continue;
+    }
+    if (line.startsWith("@@")) {
+      oldLine = undefined;
+      newLine = undefined;
+      inHunk = true;
+      continue;
+    }
+    if (!inHunk && !line.startsWith("+") && !line.startsWith("-")) continue;
+    if (line.startsWith("+") && !line.startsWith("+++")) {
+      result.push({ type: "add", text: line.slice(1), lineNumber: newLine });
+      if (newLine !== undefined) newLine += 1;
+      continue;
+    }
+    if (line.startsWith("-") && !line.startsWith("---")) {
+      result.push({ type: "delete", text: line.slice(1), lineNumber: oldLine });
+      if (oldLine !== undefined) oldLine += 1;
+      continue;
+    }
+    const text = line.startsWith(" ") ? line.slice(1) : line;
+    result.push({ type: "context", text, lineNumber: newLine });
+    if (oldLine !== undefined) oldLine += 1;
+    if (newLine !== undefined) newLine += 1;
+  }
+  return result;
 }
 
 function isPatchWrapperLine(line: string) {
@@ -635,6 +696,14 @@ async function respondApproval(decision: "approved" | "denied") {
 
   <template v-else-if="segment.type === 'tool'">
     <article v-if="toolHasDiff" class="chat-segment-tool-diff-only">
+      <header class="chat-segment-diff-header">
+        <strong>{{ toolDiffInfo?.name }}</strong>
+        <span v-if="toolDiffInfo?.additions !== undefined" class="chat-segment-additions">+{{ toolDiffInfo.additions }}</span>
+        <span v-if="toolDiffInfo?.deletions !== undefined" class="chat-segment-deletions">-{{ toolDiffInfo.deletions }}</span>
+        <button type="button" :title="copiedDiff ? '已复制' : '复制代码更改'" :aria-label="copiedDiff ? '已复制代码更改' : '复制代码更改'" @click="copyToolDiff">
+          <img :src="clipboardIcon" alt="" />
+        </button>
+      </header>
       <div class="chat-segment-diff">
         <div
           v-for="(line, lineIndex) in toolDiffLines"
@@ -642,6 +711,8 @@ async function respondApproval(decision: "approved" | "denied") {
           class="chat-segment-diff-line"
           :class="line.type"
         >
+          <span class="chat-segment-diff-line-number">{{ line.lineNumber ?? "" }}</span>
+          <span class="chat-segment-diff-marker">{{ line.type === "add" ? "+" : line.type === "delete" ? "-" : " " }}</span>
           <code>{{ line.text || " " }}</code>
         </div>
       </div>

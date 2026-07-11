@@ -67,7 +67,7 @@ const imageRemoveIcon = new URL("../assets/icons/image-remove.svg", import.meta.
 const folderOpenIcon = new URL("../assets/icons/folder-open.svg", import.meta.url).href;
 const terminalIcon = new URL("../assets/icons/terminal.svg", import.meta.url).href;
 const vscodeIcon = new URL("../assets/icons/vscode.svg", import.meta.url).href;
-const visualStudioIcon = new URL("../assets/icons/visual-studio.svg", import.meta.url).href;
+const traeCnIcon = new URL("../assets/icons/trae-cn.png", import.meta.url).href;
 const gitIcon = new URL("../assets/icons/git.svg", import.meta.url).href;
 const linuxIcon = new URL("../assets/icons/linux.svg", import.meta.url).href;
 const ws = useWorkspace();
@@ -82,7 +82,7 @@ type ProjectOpenOption = {
 const projectOpenTargetStorageKey = "ai-workbench.projectOpenTarget.v1";
 const projectOpenOptions: ProjectOpenOption[] = [
   { id: "vscode", label: "VS Code", iconSrc: vscodeIcon, iconClass: "brand-vscode" },
-  { id: "visualStudio", label: "Visual Studio", iconSrc: visualStudioIcon, iconClass: "brand-visual-studio" },
+  { id: "traeCn", label: "Trae CN", iconSrc: traeCnIcon, iconClass: "brand-trae-cn" },
   { id: "fileManager", label: "File Explorer", iconSrc: folderOpenIcon },
   { id: "terminal", label: "Terminal", iconSrc: terminalIcon, iconClass: "terminal" },
   { id: "gitBash", label: "Git Bash", iconSrc: gitIcon, iconClass: "brand-git" },
@@ -91,6 +91,7 @@ const projectOpenOptions: ProjectOpenOption[] = [
 
 function readProjectOpenTarget(): ProjectOpenTarget {
   const stored = window.localStorage.getItem(projectOpenTargetStorageKey);
+  if (stored === "visualStudio") return "traeCn";
   return projectOpenOptions.some((option) => option.id === stored)
     ? stored as ProjectOpenTarget
     : "vscode";
@@ -111,7 +112,8 @@ const previewViewerFile = shallowRef<File | null>(null);
 const previewLoading = ref(false);
 const previewError = ref("");
 const processPanelSelection = ref<ProcessPanelSelection | null>(null);
-const activeTab = ref<"chat" | "terminal">("chat");
+const terminalPanelOpen = ref(false);
+const terminalPanelHeight = ref(Math.min(360, Math.max(220, Math.round(window.innerHeight * 0.32))));
 const startMenuOpen = ref(false);
 const approvalMenuOpen = ref(false);
 const composerToolsOpen = ref(false);
@@ -209,7 +211,10 @@ const USER_ANCHOR_MIN_VISIBLE = 4;
 const USER_ANCHOR_LIMIT = 18;
 const SPLIT_PANEL_MIN_WIDTH = 320;
 const SPLIT_MAIN_MIN_WIDTH = 420;
+const TERMINAL_PANEL_MIN_HEIGHT = 160;
+const TERMINAL_MAIN_MIN_HEIGHT = 260;
 let splitResizeCleanup: (() => void) | null = null;
+let terminalResizeCleanup: (() => void) | null = null;
 let previewRequestId = 0;
 const USER_ANCHOR_MIN_TOP_PERCENT = 8;
 const USER_ANCHOR_MAX_TOP_PERCENT = 92;
@@ -259,10 +264,6 @@ const showAcpRunControls = computed(() => {
 const acpProviderId = computed(() => ws.activeAiSession.value?.providerId ?? selectedProvider.value?.id ?? ws.selectedProviderId.value ?? "opencode");
 const showModelRunControls = computed(() => showCodexRunControls.value || showClaudeRunControls.value || showAcpRunControls.value);
 const codexModelOptions = computed(() => codexModels.value.filter((model) => model.model.trim().length > 0));
-const chatHeaderMeta = computed(() => {
-  if (!currentProject.value) return "选择项目后开始聊天";
-  return currentProject.value.gitBranch ?? "未知分支";
-});
 const environmentBranchLabel = computed(() => (
   environmentInfo.value?.branch
   ?? currentProject.value?.gitBranch
@@ -683,6 +684,7 @@ function estimateMessageHeight(message?: ChatMessage) {
 
 function updateVirtualViewport() {
   if (splitPanelOpen.value) splitPanelWidth.value = clampSplitPanelWidth(splitPanelWidth.value);
+  if (terminalPanelOpen.value) terminalPanelHeight.value = clampTerminalPanelHeight(terminalPanelHeight.value);
   const el = chatScroll.value;
   if (!el) return;
   virtualScrollTop.value = el.scrollTop;
@@ -975,6 +977,56 @@ function startSplitResize(event: PointerEvent) {
     document.body.classList.remove("chat-split-resizing");
     splitResizeCleanup = null;
   };
+}
+
+function clampTerminalPanelHeight(height: number) {
+  const workspaceHeight = splitWorkspace.value?.getBoundingClientRect().height ?? 0;
+  if (!workspaceHeight) return Math.max(TERMINAL_PANEL_MIN_HEIGHT, height);
+  const maxHeight = Math.max(TERMINAL_PANEL_MIN_HEIGHT, workspaceHeight - TERMINAL_MAIN_MIN_HEIGHT);
+  return Math.min(Math.max(height, TERMINAL_PANEL_MIN_HEIGHT), maxHeight);
+}
+
+function stopTerminalResize() {
+  if (!terminalResizeCleanup) return;
+  terminalResizeCleanup();
+}
+
+function startTerminalResize(event: PointerEvent) {
+  if (!terminalPanelOpen.value) return;
+  event.preventDefault();
+  stopTerminalResize();
+  const startY = event.clientY;
+  const startHeight = terminalPanelHeight.value;
+  document.body.classList.add("chat-terminal-resizing");
+
+  const onPointerMove = (moveEvent: PointerEvent) => {
+    terminalPanelHeight.value = clampTerminalPanelHeight(startHeight + startY - moveEvent.clientY);
+  };
+  const onPointerUp = () => stopTerminalResize();
+
+  window.addEventListener("pointermove", onPointerMove);
+  window.addEventListener("pointerup", onPointerUp);
+  window.addEventListener("pointercancel", onPointerUp);
+  terminalResizeCleanup = () => {
+    window.removeEventListener("pointermove", onPointerMove);
+    window.removeEventListener("pointerup", onPointerUp);
+    window.removeEventListener("pointercancel", onPointerUp);
+    document.body.classList.remove("chat-terminal-resizing");
+    terminalResizeCleanup = null;
+  };
+}
+
+function toggleTerminalPanel() {
+  terminalPanelOpen.value = !terminalPanelOpen.value;
+  if (!terminalPanelOpen.value) stopTerminalResize();
+  else void nextTick(() => {
+    terminalPanelHeight.value = clampTerminalPanelHeight(terminalPanelHeight.value);
+  });
+}
+
+function closeTerminalPanel() {
+  terminalPanelOpen.value = false;
+  stopTerminalResize();
 }
 
 function toggleComposerPlanMode() {
@@ -1723,14 +1775,6 @@ watch(
   { immediate: true },
 );
 
-watch(
-  () => activeTab.value,
-  async () => {
-    await nextTick();
-    observeChatScroll();
-  },
-);
-
 onMounted(() => {
   document.addEventListener("pointerdown", closeFloatingMenusOnOutsideClick);
   window.addEventListener("desktop-preview-file", onDesktopPreviewFile);
@@ -1748,6 +1792,7 @@ onMounted(() => {
 
 onBeforeUnmount(() => {
   stopSplitResize();
+  stopTerminalResize();
   document.removeEventListener("pointerdown", closeFloatingMenusOnOutsideClick);
   window.removeEventListener("desktop-preview-file", onDesktopPreviewFile);
   window.removeEventListener("keydown", onWindowKeydown);
@@ -2145,7 +2190,6 @@ function onPromptKeydown(event: KeyboardEvent) {
         </span>
       </div>
       <div class="chat-topbar-meta">
-        <span>{{ chatHeaderMeta }}</span>
         <div class="chat-location-menu-wrap">
           <div class="chat-location-split-button" :class="{ open: locationMenuOpen }">
             <button
@@ -2212,6 +2256,17 @@ function onPromptKeydown(event: KeyboardEvent) {
             <circle cx="10.8" cy="8" r="1.15" fill="currentColor" />
             <circle cx="7.4" cy="11.5" r="1.15" fill="currentColor" />
           </svg>
+        </button>
+        <button
+          type="button"
+          class="chat-topbar-mini-action"
+          :class="{ active: terminalPanelOpen }"
+          :title="terminalPanelOpen ? '关闭终端' : '打开终端'"
+          :aria-label="terminalPanelOpen ? '关闭终端' : '打开终端'"
+          :aria-pressed="terminalPanelOpen"
+          @click="toggleTerminalPanel"
+        >
+          <img :src="terminalIcon" alt="" aria-hidden="true" />
         </button>
         <button
           type="button"
@@ -2293,22 +2348,18 @@ function onPromptKeydown(event: KeyboardEvent) {
         </footer>
       </div>
     </header>
-    <nav class="chat-mode-tabs" aria-label="聊天视图切换">
-      <button type="button" :class="{ active: activeTab === 'chat' }" @click="activeTab = 'chat'">聊天</button>
-      <button type="button" :class="{ active: activeTab === 'terminal' }" @click="activeTab = 'terminal'">终端</button>
-    </nav>
     <section
       ref="splitWorkspace"
       class="chat-workspace"
       :class="{
-        'terminal-mode': activeTab === 'terminal' && Boolean(ws.activeAiSession.value),
-        'terminal-empty-mode': activeTab === 'terminal' && !ws.activeAiSession.value,
         'split-mode': splitPanelOpen,
       }"
       :style="{ '--chat-split-panel-width': `${splitPanelWidth}px` }"
     >
-      <article class="chat-main-panel">
-        <div v-if="activeTab === 'chat'" ref="chatScroll" class="terminal-preview" @scroll.passive="handleChatScroll">
+      <div class="chat-workspace-main">
+        <article class="chat-main-panel" :class="{ 'terminal-open': terminalPanelOpen }">
+          <div class="chat-conversation-view">
+            <div ref="chatScroll" class="terminal-preview" @scroll.passive="handleChatScroll">
           <div v-if="!ws.activeAiSession.value && ws.chatMessages.value.length === 1 && ws.chatMessages.value[0]?.role === 'system'" class="chat-welcome">
             <h2>从一个项目开始聊天</h2>
             <p>左侧选择本地项目，然后新建 AI 会话。聊天页支持 Codex / Claude Code，终端页只提供项目 shell。</p>
@@ -2334,32 +2385,30 @@ function onPromptKeydown(event: KeyboardEvent) {
               />
             </div>
           </div>
-        </div>
-        <div
-          v-if="activeTab === 'chat' && userMessageAnchors.length >= USER_ANCHOR_MIN_VISIBLE"
-          class="chat-user-anchor-rail"
-          aria-label="用户消息快速跳转"
-        >
-          <button
-            v-for="anchor in userMessageAnchors"
-            :key="anchor.key"
-            class="chat-user-anchor"
-            :class="{ active: anchor.index === activeUserAnchorIndex }"
-            :style="{ top: `${anchor.topPercent}%` }"
-            type="button"
-            :aria-label="`跳转到${anchor.label}`"
-            @click="scrollToUserMessage(anchor.index)"
-          >
-            <span class="chat-user-anchor-dot" aria-hidden="true"></span>
-            <span class="chat-user-anchor-tooltip">{{ anchor.label }}</span>
-          </button>
-        </div>
-        <div v-if="activeTab === 'terminal'" class="terminal-shell">
-          <TerminalView />
-        </div>
+            </div>
+            <div
+              v-if="userMessageAnchors.length >= USER_ANCHOR_MIN_VISIBLE"
+              class="chat-user-anchor-rail"
+              aria-label="用户消息快速跳转"
+            >
+              <button
+                v-for="anchor in userMessageAnchors"
+                :key="anchor.key"
+                class="chat-user-anchor"
+                :class="{ active: anchor.index === activeUserAnchorIndex }"
+                :style="{ top: `${anchor.topPercent}%` }"
+                type="button"
+                :aria-label="`跳转到${anchor.label}`"
+                @click="scrollToUserMessage(anchor.index)"
+              >
+                <span class="chat-user-anchor-dot" aria-hidden="true"></span>
+                <span class="chat-user-anchor-tooltip">{{ anchor.label }}</span>
+              </button>
+            </div>
+          </div>
         <div v-if="showCreateHint" class="chat-toast" :class="{ error: ws.createAiError.value }">{{ ws.createAiResult.value }}</div>
         <div
-          v-if="activeTab === 'chat' && showModelRunControls && codexGoalEnabled"
+          v-if="showModelRunControls && codexGoalEnabled"
           class="codex-goal-bar"
         >
           <svg class="codex-goal-bar-icon" viewBox="0 0 16 16" fill="none" aria-hidden="true">
@@ -2394,9 +2443,8 @@ function onPromptKeydown(event: KeyboardEvent) {
             </svg>
           </button>
         </div>
-        <div v-if="activeTab === 'chat' && codexCompactNotice" class="chat-operation-notice">{{ codexCompactNotice }}</div>
+        <div v-if="codexCompactNotice" class="chat-operation-notice">{{ codexCompactNotice }}</div>
         <div
-          v-if="activeTab === 'chat'"
           ref="chatComposer"
           class="chat-composer"
           :class="{ 'has-approval-cover': pendingApprovalSegment }"
@@ -2751,14 +2799,21 @@ function onPromptKeydown(event: KeyboardEvent) {
         </div>
       </article>
       <button
-        v-if="splitPanelOpen"
         type="button"
         class="chat-split-resizer"
+        :class="{ open: splitPanelOpen }"
         title="拖动调整面板宽度"
         aria-label="拖动调整面板宽度"
+        :aria-hidden="!splitPanelOpen"
+        :tabindex="splitPanelOpen ? 0 : -1"
         @pointerdown="startSplitResize"
       ></button>
-      <aside v-if="splitPanelOpen" class="chat-split-panel">
+      <aside
+        class="chat-split-panel"
+        :class="{ open: splitPanelOpen }"
+        :aria-hidden="!splitPanelOpen"
+        :inert="!splitPanelOpen"
+      >
         <header class="chat-split-panel-header">
           <div class="chat-split-panel-title">
             <strong>{{ processPanelSelection ? "执行详情" : previewFile?.name ?? "文件预览" }}</strong>
@@ -2827,7 +2882,40 @@ function onPromptKeydown(event: KeyboardEvent) {
             </div>
           </div>
         </div>
-      </aside>
+        </aside>
+      </div>
+      <section
+        class="chat-bottom-terminal"
+        :class="{ open: terminalPanelOpen }"
+        aria-label="项目终端"
+        :aria-hidden="!terminalPanelOpen"
+        :style="{ height: terminalPanelOpen ? `${terminalPanelHeight}px` : '0px' }"
+      >
+        <template v-if="terminalPanelOpen">
+          <button
+            type="button"
+            class="chat-bottom-terminal-resizer"
+            title="拖动调整终端高度"
+            aria-label="拖动调整终端高度"
+            @pointerdown="startTerminalResize"
+          ></button>
+          <header class="chat-bottom-terminal-header">
+            <div>
+              <img :src="terminalIcon" alt="" aria-hidden="true" />
+              <strong>终端</strong>
+              <span>{{ currentProject?.name ?? "项目 shell" }}</span>
+            </div>
+            <button type="button" title="关闭终端" aria-label="关闭终端" @click="closeTerminalPanel">
+              <svg viewBox="0 0 16 16" fill="none" aria-hidden="true">
+                <path d="M4.5 4.5 11.5 11.5M11.5 4.5 4.5 11.5" stroke="currentColor" stroke-width="1.55" stroke-linecap="round" />
+              </svg>
+            </button>
+          </header>
+          <div class="terminal-shell">
+            <TerminalView />
+          </div>
+        </template>
+      </section>
     </section>
     </template>
     <div v-if="previewImage" class="chat-image-preview-overlay" role="dialog" aria-modal="true" @click="closeImagePreview">

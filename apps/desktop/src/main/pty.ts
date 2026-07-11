@@ -101,6 +101,7 @@ export function startShellPty(req: StartShellPtyRequest, sender: WebContents): v
   });
 
   proc.onExit(({ exitCode }) => {
+    if (sessions.get(aiSessionId) !== session) return;
     const status: ShellSessionStatus = exitCode === 0 ? "exited" : "failed";
     session.status = status;
     sender.send("shell-session-status", {

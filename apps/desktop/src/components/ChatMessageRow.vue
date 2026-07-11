@@ -376,9 +376,9 @@ function processGroupHasFinalText(groupIndex: number) {
 function processGroupTitle(group: Extract<RenderGroup, { type: "process" }>, groupIndex: number) {
   const duration = processGroupDurationMs(group.segments);
   const hasFinalText = processGroupHasFinalText(groupIndex);
-  const prefix = hasFinalText
-    ? "已处理"
-    : processGroupHasError(group) ? "执行失败" : props.message.pending ? "正在处理" : "已处理";
+  const prefix = props.message.pending
+    ? "正在处理"
+    : hasFinalText ? "已处理" : processGroupHasError(group) ? "执行失败" : "已处理";
   return duration ? `${prefix} ${formatCompactDuration(duration)}` : prefix;
 }
 
@@ -392,7 +392,7 @@ function processGroupHasError(group: Extract<RenderGroup, { type: "process" }>) 
 }
 
 function processGroupFailed(group: Extract<RenderGroup, { type: "process" }>, groupIndex: number) {
-  return processGroupHasError(group) && !processGroupHasFinalText(groupIndex);
+  return !props.message.pending && processGroupHasError(group) && !processGroupHasFinalText(groupIndex);
 }
 
 function processGroupKey(groupIndex: number) {
@@ -629,8 +629,6 @@ function isStandaloneProcessConclusion(segment: ChatSegmentType) {
 }
 
 function processStageTitle(segments: ChatSegmentType[]) {
-  const errorSegment = segments.find((segment) => segment.type === "error");
-  if (props.message.pending && errorSegment?.type === "error") return errorSegment.title || "执行失败";
   const runningThinking = segments.find((segment) => isThinkingStatusSegment(segment) && segment.status === "running");
   if (runningThinking) return "正在思考";
   const toolSegments = segments.filter((segment): segment is Extract<ChatSegmentType, { type: "tool" }> => segment.type === "tool");
@@ -658,10 +656,8 @@ function aggregateToolStageTitle(segments: Extract<ChatSegmentType, { type: "too
   if (!segments.length) return "";
   const counts = { read: 0, search: 0, edit: 0, command: 0 };
   let hasRunning = false;
-  let hasError = false;
   for (const segment of segments) {
     if (segment.status === "running") hasRunning = true;
-    if (props.message.pending && segment.status === "error") hasError = true;
     const kind = toolOperationKind(segment);
     counts[kind] += 1;
   }
@@ -672,7 +668,7 @@ function aggregateToolStageTitle(segments: Extract<ChatSegmentType, { type: "too
     counts.command ? `运行 ${counts.command} 条命令` : "",
   ].filter(Boolean);
   if (!parts.length) return "";
-  const prefix = hasError ? "部分失败：" : hasRunning ? "正在" : "已";
+  const prefix = hasRunning ? "正在" : "已";
   return `${prefix}${parts.join("，")}`;
 }
 
@@ -688,12 +684,10 @@ function toolOperationKind(segment: Extract<ChatSegmentType, { type: "tool" }>):
 }
 
 function toolStageTitle(segment: Extract<ChatSegmentType, { type: "tool" }>) {
-  const showFailure = props.message.pending && segment.status === "error";
   const verb = props.message.pending && segment.status === "running" ? "正在" : "已";
   const commandText = normalizeCommandForTitle(segment.command ?? "");
   const fileChanges = segment.diff ? extractFileChangePaths(segment.diff) : null;
   if (segment.toolName.includes("修改") || fileChanges) {
-    if (showFailure) return "修改文件失败";
     const filePath = fileChanges?.[0];
     if (filePath) {
       const fileName = filePath.split(/[\\/]/).pop() || filePath;
@@ -702,15 +696,12 @@ function toolStageTitle(segment: Extract<ChatSegmentType, { type: "tool" }>) {
     return `${verb}修改文件`;
   }
   if (segment.toolName.includes("扫描")) {
-    if (showFailure) return "扫描项目失败";
     return `${verb}扫描项目`;
   }
   if (segment.toolName.includes("命令") || commandText) {
-    if (showFailure) return "运行命令失败";
     if (commandText) return `${verb}${toolOperationTitleVerb(toolOperationKind(segment))} ${commandText}`;
     return `${verb}运行命令`;
   }
-  if (showFailure) return segment.summary || `处理失败 ${segment.toolName}`;
   return segment.summary || `${verb}处理 ${segment.toolName}`;
 }
 
@@ -738,6 +729,11 @@ function extractFileChangePaths(diff: string): string[] | null {
   const lines = diff.split("\n");
   const paths: string[] = [];
   for (const line of lines) {
+    const patchFile = line.match(/^\*\*\* (?:Add|Update|Delete) File: (.+)$/);
+    if (patchFile) {
+      paths.push(patchFile[1]);
+      continue;
+    }
     const match = line.match(/^diff --git a\/(.+?) b\/(.+)$/);
     if (match) {
       paths.push(match[2]);
@@ -748,7 +744,8 @@ function extractFileChangePaths(diff: string): string[] | null {
       paths.push(patchMatch[1]);
     }
   }
-  return paths.length ? paths : null;
+  const uniquePaths = [...new Set(paths)];
+  return uniquePaths.length ? uniquePaths : null;
 }
 
 function processStageDurationMs(segments: ChatSegmentType[]) {
@@ -767,6 +764,29 @@ function visibleStageSegments(segments: ChatSegmentType[]) {
   return isThinkingStage(segments) ? [] : segments;
 }
 
+function panelCodeChangeSegments(segments: ChatSegmentType[]) {
+  return visibleStageSegments(segments).filter((segment): segment is Extract<ChatSegmentType, { type: "tool" }> => (
+    segment.type === "tool" && segmentHasCodeDiff(segment)
+  ));
+}
+
+function panelStageHasCodeChanges(segments: ChatSegmentType[]) {
+  return segments.some((segment) => segment.type === "tool" && segmentHasCodeDiff(segment));
+}
+
+function segmentHasCodeDiff(segment: Extract<ChatSegmentType, { type: "tool" }>) {
+  return Boolean(segment.diff?.trim() || segment.input?.trim().startsWith("*** Begin Patch"));
+}
+
+function codeChangeTitle(segment: Extract<ChatSegmentType, { type: "tool" }>) {
+  const diff = segment.diff?.trim() || segment.input?.trim() || "";
+  const files = extractFileChangePaths(diff);
+  const target = files?.length === 1
+    ? files[0].split(/[\\/]/).pop() || files[0]
+    : files?.length ? `${files.length} 个文件` : "文件";
+  return `${segment.status === "running" ? "正在修改" : "已修改"} ${target}`;
+}
+
 function conclusionText(segment: ChatSegmentType) {
   if (segment.type === "thought" || segment.type === "text") return segment.text;
   if (segment.type === "error") return segment.message;
@@ -783,19 +803,6 @@ function processStageRunning(segments: ChatSegmentType[]) {
 
 function processStageStoppedByUser(segments: ChatSegmentType[]) {
   return segments.some((segment) => segment.type === "status" && isUserStoppedStatus(segment));
-}
-
-function processStageHasError(segments: ChatSegmentType[]) {
-  return segments.some((segment) => (
-    segment.type === "error"
-    || (segment.type === "tool" && segment.status === "error")
-    || (segment.type === "status" && segment.status === "failed")
-    || (segment.type === "approval" && segment.status === "failed")
-  ));
-}
-
-function processStageShowsError(segments: ChatSegmentType[]) {
-  return props.message.pending && processStageHasError(segments);
 }
 
 function isUserStoppedStatus(segment: Extract<ChatSegmentType, { type: "status" }>) {
@@ -980,13 +987,34 @@ function countCommandOutputSignals(text: string) {
     class="chat-process-panel-content"
   >
     <template v-if="panelProcessItem?.type === 'stage'">
-      <ChatSegment
-        v-for="(segment, segmentIndex) in visibleStageSegments(panelProcessItem.segments)"
-        :key="segmentIndex"
-        :segment="segment"
-        :ai-session-id="aiSessionId"
-      />
-      <div v-if="panelProcessItem.conclusion" class="chat-process-stage-conclusion panel">
+      <template v-if="panelCodeChangeSegments(panelProcessItem.segments).length">
+        <details
+          v-for="(segment, segmentIndex) in panelCodeChangeSegments(panelProcessItem.segments)"
+          :key="segment.stepId ?? segmentIndex"
+          class="chat-process-stage chat-process-panel-code-change"
+          :open="segment.status === 'running'"
+        >
+          <summary class="chat-process-stage-header">
+            <span class="chat-process-stage-dot" :class="{ running: segment.status === 'running' }" aria-hidden="true"></span>
+            <strong>{{ codeChangeTitle(segment) }}</strong>
+            <svg class="chat-process-stage-chevron" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+              <path d="M5 6.5 8 9.5l3-3" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" />
+            </svg>
+          </summary>
+          <div class="chat-process-stage-body">
+            <ChatSegment :segment="segment" :ai-session-id="aiSessionId" />
+          </div>
+        </details>
+      </template>
+      <template v-else>
+        <ChatSegment
+          v-for="(segment, segmentIndex) in visibleStageSegments(panelProcessItem.segments)"
+          :key="segmentIndex"
+          :segment="segment"
+          :ai-session-id="aiSessionId"
+        />
+      </template>
+      <div v-if="panelProcessItem.conclusion && !panelStageHasCodeChanges(panelProcessItem.segments)" class="chat-process-stage-conclusion panel">
         {{ conclusionText(panelProcessItem.conclusion) }}
       </div>
     </template>
@@ -1027,8 +1055,8 @@ function countCommandOutputSignals(text: string) {
               <ChatSegment v-if="item.type === 'segment' && !isStandaloneProcessConclusion(item.segment)" :segment="item.segment" :ai-session-id="aiSessionId" />
               <div v-else-if="item.type === 'segment'" class="chat-process-stage-conclusion standalone">{{ conclusionText(item.segment) }}</div>
               <div v-else-if="isThinkingStage(item.segments)" class="chat-process-stage thinking-only">
-                <div class="chat-process-stage-header static" :class="{ danger: processStageStoppedByUser(item.segments) || processStageShowsError(item.segments) }">
-                  <span class="chat-process-stage-dot" :class="{ running: processStageRunning(item.segments), danger: processStageStoppedByUser(item.segments) || processStageShowsError(item.segments) }" aria-hidden="true"></span>
+                <div class="chat-process-stage-header static" :class="{ danger: processStageStoppedByUser(item.segments) }">
+                  <span class="chat-process-stage-dot" :class="{ running: processStageRunning(item.segments), danger: processStageStoppedByUser(item.segments) }" aria-hidden="true"></span>
                   <strong :class="{ 'chat-shimmer': thinkingStageRunning(item.segments) }">{{ item.title }}</strong>
                 </div>
               </div>
@@ -1036,11 +1064,11 @@ function countCommandOutputSignals(text: string) {
                 <button
                   type="button"
                   class="chat-process-stage-header chat-process-stage-trigger"
-                  :class="{ danger: processStageStoppedByUser(item.segments) || processStageShowsError(item.segments) }"
+                  :class="{ danger: processStageStoppedByUser(item.segments) }"
                   :aria-label="`查看执行详情：${item.title}`"
                   @click="openProcessStage(index, itemIndex, item)"
                 >
-                  <span class="chat-process-stage-dot" :class="{ running: processStageRunning(item.segments), danger: processStageStoppedByUser(item.segments) || processStageShowsError(item.segments) }" aria-hidden="true"></span>
+                  <span class="chat-process-stage-dot" :class="{ running: processStageRunning(item.segments), danger: processStageStoppedByUser(item.segments) }" aria-hidden="true"></span>
                   <strong :class="{ 'chat-shimmer': thinkingStageRunning(item.segments) }">{{ item.title }}</strong>
                   <svg class="chat-process-stage-chevron" viewBox="0 0 16 16" fill="none" aria-hidden="true">
                     <path d="M6 4.5 9.5 8 6 11.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" />
@@ -1111,14 +1139,14 @@ function countCommandOutputSignals(text: string) {
               <ChatSegment v-if="item.type === 'segment' && !isStandaloneProcessConclusion(item.segment)" :segment="item.segment" :ai-session-id="aiSessionId" />
               <div v-else-if="item.type === 'segment'" class="chat-process-stage-conclusion standalone">{{ conclusionText(item.segment) }}</div>
               <div v-else-if="isThinkingStage(item.segments)" class="chat-process-stage thinking-only">
-                <div class="chat-process-stage-header static" :class="{ danger: processStageStoppedByUser(item.segments) || processStageShowsError(item.segments) }">
-                  <span class="chat-process-stage-dot" :class="{ running: processStageRunning(item.segments), danger: processStageStoppedByUser(item.segments) || processStageShowsError(item.segments) }" aria-hidden="true"></span>
+                <div class="chat-process-stage-header static" :class="{ danger: processStageStoppedByUser(item.segments) }">
+                  <span class="chat-process-stage-dot" :class="{ running: processStageRunning(item.segments), danger: processStageStoppedByUser(item.segments) }" aria-hidden="true"></span>
                   <strong>{{ item.title }}</strong>
                 </div>
               </div>
               <details v-else class="chat-process-stage" open>
-                <summary class="chat-process-stage-header" :class="{ danger: processStageStoppedByUser(item.segments) || processStageShowsError(item.segments) }">
-                  <span class="chat-process-stage-dot" :class="{ running: processStageRunning(item.segments), danger: processStageStoppedByUser(item.segments) || processStageShowsError(item.segments) }" aria-hidden="true"></span>
+                <summary class="chat-process-stage-header" :class="{ danger: processStageStoppedByUser(item.segments) }">
+                  <span class="chat-process-stage-dot" :class="{ running: processStageRunning(item.segments), danger: processStageStoppedByUser(item.segments) }" aria-hidden="true"></span>
                   <strong>{{ item.title }}</strong>
                   <svg class="chat-process-stage-chevron" viewBox="0 0 16 16" fill="none" aria-hidden="true">
                     <path d="M5 6.5 8 9.5l3-3" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" />

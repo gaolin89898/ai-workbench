@@ -6,7 +6,7 @@ import { BrowserWindow, dialog, shell } from "electron";
 import simpleGit from "simple-git";
 import fs from "node:fs";
 import path from "node:path";
-import { spawn, spawnSync } from "node:child_process";
+import { spawn } from "node:child_process";
 import type { ProjectOpenTarget } from "../services/desktop";
 
 // Select a folder via the native open dialog. Returns the chosen path or null.
@@ -147,22 +147,13 @@ function spawnDetached(command: string, args: string[], cwd: string): Promise<vo
   });
 }
 
-function visualStudioExecutable(): string {
-  const installerRoot = process.env["ProgramFiles(x86)"];
-  const vswhere = installerRoot
-    ? path.join(installerRoot, "Microsoft Visual Studio", "Installer", "vswhere.exe")
-    : "";
-  if (vswhere && fs.existsSync(vswhere)) {
-    const result = spawnSync(vswhere, [
-      "-latest",
-      "-products", "*",
-      "-requires", "Microsoft.Component.MSBuild",
-      "-find", "Common7\\IDE\\devenv.exe",
-    ], { encoding: "utf8", windowsHide: true });
-    const executable = result.stdout.trim().split(/\r?\n/)[0];
-    if (executable && fs.existsSync(executable)) return executable;
-  }
-  return "devenv.exe";
+function traeCnExecutable(): string {
+  const candidates = [
+    process.env.LOCALAPPDATA && path.join(process.env.LOCALAPPDATA, "Programs", "Trae CN", "Trae CN.exe"),
+    process.env.ProgramFiles && path.join(process.env.ProgramFiles, "Trae CN", "Trae CN.exe"),
+    process.env["ProgramFiles(x86)"] && path.join(process.env["ProgramFiles(x86)"], "Trae CN", "Trae CN.exe"),
+  ].filter((candidate): candidate is string => Boolean(candidate));
+  return candidates.find((candidate) => fs.existsSync(candidate)) ?? "Trae CN.exe";
 }
 
 function visualStudioCodeExecutable(): string {
@@ -196,8 +187,8 @@ export async function openProjectWith(projectPath: string, target: ProjectOpenTa
       await spawnDetached(visualStudioCodeExecutable(), [projectPath], projectPath);
       return;
     }
-    if (target === "visualStudio") {
-      await spawnDetached(visualStudioExecutable(), [projectPath], projectPath);
+    if (target === "traeCn") {
+      await spawnDetached(traeCnExecutable(), [projectPath], projectPath);
       return;
     }
     if (target === "terminal") {
@@ -224,7 +215,7 @@ export async function openProjectWith(projectPath: string, target: ProjectOpenTa
   } catch {
     const labels: Record<ProjectOpenTarget, string> = {
       vscode: "VS Code",
-      visualStudio: "Visual Studio",
+      traeCn: "Trae CN",
       fileManager: "文件资源管理器",
       terminal: "Terminal",
       gitBash: "Git Bash",
