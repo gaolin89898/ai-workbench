@@ -2,7 +2,7 @@
 import { computed, onMounted, ref, watch } from "vue";
 import { useRouter } from "vue-router";
 import { useWorkspace } from "../composables/useWorkspace";
-import { desktopApi, type AiProvider, type DesktopRuntimeInfo, type ProviderActionKind, type ProviderStatus, type TokenUsageSummary, type TokenUsageSummaryItem } from "../services/desktop";
+import { desktopApi, type AiActivitySummary, type AiProvider, type DesktopRuntimeInfo, type ProviderActionKind, type ProviderStatus, type TokenUsageSummary, type TokenUsageSummaryItem } from "../services/desktop";
 import CodexManagementPanel from "./CodexManagementPanel.vue";
 
 const settingsIcon = new URL("../assets/icons/settings.svg", import.meta.url).href;
@@ -525,6 +525,7 @@ const deviceIdDisplay = computed(() => {
 });
 
 const tokenUsageSummary = ref<TokenUsageSummary | null>(null);
+const aiActivitySummary = ref<AiActivitySummary | null>(null);
 const tokenUsageLoading = ref(false);
 const tokenUsageError = ref<string>("");
 const tokenUsageLoaded = ref(false);
@@ -549,6 +550,71 @@ const tokenUsageTotals = computed<TokenUsageSummaryItem>(() => {
   };
 });
 
+type ActivityCell = {
+  date: string;
+  count: number;
+  level: number;
+  future: boolean;
+};
+
+function parseLocalDate(value: string): Date {
+  const [year, month, day] = value.split("-").map(Number);
+  return new Date(year, month - 1, day, 12);
+}
+
+function dateKey(date: Date): string {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function activityLevel(count: number): number {
+  if (count <= 0) return 0;
+  if (count === 1) return 1;
+  if (count <= 3) return 2;
+  if (count <= 7) return 3;
+  return 4;
+}
+
+const activityCells = computed<ActivityCell[]>(() => {
+  const summary = aiActivitySummary.value;
+  if (!summary) return [];
+  const counts = new Map(summary.days.map((day) => [day.date, day.count]));
+  const today = dateKey(new Date());
+  const cursor = parseLocalDate(summary.rangeStart);
+  const end = parseLocalDate(summary.rangeEnd);
+  const cells: ActivityCell[] = [];
+  while (cursor <= end) {
+    const date = dateKey(cursor);
+    const count = counts.get(date) ?? 0;
+    cells.push({ date, count, level: activityLevel(count), future: date > today });
+    cursor.setDate(cursor.getDate() + 1);
+  }
+  return cells;
+});
+
+const activityMonths = computed(() => {
+  const startValue = aiActivitySummary.value?.rangeStart;
+  if (!startValue) return [];
+  const start = parseLocalDate(startValue);
+  const months: Array<{ label: string; column: number }> = [];
+  let previousMonth = -1;
+  for (let column = 1; column <= 53; column += 1) {
+    const date = new Date(start);
+    date.setDate(start.getDate() + (column - 1) * 7);
+    if (date.getMonth() !== previousMonth) {
+      months.push({ label: `${date.getMonth() + 1}月`, column });
+      previousMonth = date.getMonth();
+    }
+  }
+  return months;
+});
+
+function activityTitle(cell: ActivityCell): string {
+  return `${cell.date} · ${cell.count} 次交互`;
+}
+
 function providerNameForId(id: string) {
   const map: Record<string, string> = { codex: "Codex", claude: "Claude Code", opencode: "OpenCode", mimo: "MiMo Code" };
   return map[id] ?? id;
@@ -565,11 +631,25 @@ async function refreshTokenUsage() {
   tokenUsageLoading.value = true;
   tokenUsageError.value = "";
   try {
-    tokenUsageSummary.value = await desktopApi.getTokenUsageSummary();
+    const [tokenResult, activityResult] = await Promise.allSettled([
+      desktopApi.getTokenUsageSummary(),
+      desktopApi.getAiActivitySummary(),
+    ]);
+    if (tokenResult.status === "fulfilled") {
+      tokenUsageSummary.value = tokenResult.value;
+    } else {
+      tokenUsageSummary.value = null;
+      tokenUsageError.value = tokenResult.reason instanceof Error ? tokenResult.reason.message : "Token 用量加载失败";
+    }
+    if (activityResult.status === "fulfilled") {
+      aiActivitySummary.value = activityResult.value;
+    } else {
+      aiActivitySummary.value = null;
+      if (!tokenUsageError.value) {
+        tokenUsageError.value = activityResult.reason instanceof Error ? activityResult.reason.message : "活跃记录加载失败";
+      }
+    }
     tokenUsageLoaded.value = true;
-  } catch (e) {
-    tokenUsageError.value = e instanceof Error ? e.message : "加载失败";
-    tokenUsageSummary.value = null;
   } finally {
     tokenUsageLoading.value = false;
   }
@@ -931,6 +1011,56 @@ async function restoreSession(sessionId: string) {
 
           <section v-else-if="settingsPanel === 'tokenUsage'" class="settings-section settings-token-usage">
             <p v-if="tokenUsageError" class="settings-token-usage-error">{{ tokenUsageError }}</p>
+
+            <div v-if="aiActivitySummary" class="settings-activity">
+              <div class="settings-activity-head">
+                <div>
+                  <h3>AI 活跃记录</h3>
+                  <p>最近 12 个月的本地对话交互</p>
+                </div>
+                <div class="settings-activity-stats" aria-label="AI 活跃统计">
+                  <span><strong>{{ aiActivitySummary.activeDays }}</strong>活跃天数</span>
+                  <span><strong>{{ aiActivitySummary.currentStreak }}</strong>当前连续</span>
+                  <span><strong>{{ aiActivitySummary.longestStreak }}</strong>最长连续</span>
+                  <span><strong>{{ aiActivitySummary.totalInteractions }}</strong>总交互</span>
+                </div>
+              </div>
+
+              <div class="settings-activity-scroll">
+                <div class="settings-activity-chart">
+                  <div class="settings-activity-months" aria-hidden="true">
+                    <span
+                      v-for="month in activityMonths"
+                      :key="`${month.label}-${month.column}`"
+                      :style="{ gridColumn: month.column }"
+                    >{{ month.label }}</span>
+                  </div>
+                  <div class="settings-activity-body">
+                    <div class="settings-activity-weekdays" aria-hidden="true">
+                      <span></span><span>周一</span><span></span><span>周三</span><span></span><span>周五</span><span></span>
+                    </div>
+                    <div class="settings-activity-grid" aria-label="最近 12 个月 AI 活跃日历">
+                      <span
+                        v-for="cell in activityCells"
+                        :key="cell.date"
+                        class="settings-activity-cell"
+                        :class="[`level-${cell.level}`, { future: cell.future }]"
+                        :title="activityTitle(cell)"
+                      ></span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div class="settings-activity-foot">
+                <span>每个方格代表一天，仅统计你发送的消息</span>
+                <span class="settings-activity-legend">
+                  少
+                  <i v-for="level in [0, 1, 2, 3, 4]" :key="level" :class="`level-${level}`"></i>
+                  多
+                </span>
+              </div>
+            </div>
 
             <div class="settings-token-usage-overview">
               <article class="settings-token-usage-card">

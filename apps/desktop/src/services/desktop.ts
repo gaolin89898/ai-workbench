@@ -159,6 +159,21 @@ export type TokenUsageSummary = {
   totals: TokenUsageSummaryItem;
 };
 
+export type AiActivityDay = {
+  date: string;
+  count: number;
+};
+
+export type AiActivitySummary = {
+  days: AiActivityDay[];
+  activeDays: number;
+  currentStreak: number;
+  longestStreak: number;
+  totalInteractions: number;
+  rangeStart: string;
+  rangeEnd: string;
+};
+
 export type ChatSegment =
   | {
       type: "text";
@@ -802,6 +817,8 @@ export const desktopApi = {
     ipc<SavedCloudConfig | null>("get_cloud_config"),
   getTokenUsageSummary: (): Promise<TokenUsageSummary | null> =>
     ipc<TokenUsageSummary | null>("get_token_usage_summary"),
+  getAiActivitySummary: (): Promise<AiActivitySummary> =>
+    ipc<AiActivitySummary>("get_ai_activity_summary"),
   readClipboardImage: (): Promise<ClipboardImage | null> =>
     ipc<ClipboardImage | null>("read_clipboard_image"),
   listAiProviders: (): Promise<AiProvider[]> =>

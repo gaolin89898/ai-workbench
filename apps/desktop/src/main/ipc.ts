@@ -161,6 +161,8 @@ export function registerIpcHandlers(win?: BrowserWindow): void {
 
   handle("get_token_usage_summary", async () => fetchTokenUsageSummary());
 
+  handle("get_ai_activity_summary", async () => db.getAiActivitySummary());
+
   handle("read_clipboard_image", async () => {
     const image = clipboard.readImage();
     if (image.isEmpty()) return null;

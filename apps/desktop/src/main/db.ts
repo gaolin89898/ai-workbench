@@ -15,6 +15,7 @@ import type {
   AiHistoryMessage,
   ChatMessage,
   AiProviderTrace,
+  AiActivitySummary,
 } from "../services/desktop";
 
 // ---------- DB path resolution & initialization ----------
@@ -556,6 +557,79 @@ function writeLocalAiSessionLog(aiSessionId: string): void {
   }
 }
 // ---------- AI messages ----------
+
+function localDateKey(date: Date): string {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+export function getAiActivitySummary(): AiActivitySummary {
+  const today = new Date();
+  today.setHours(12, 0, 0, 0);
+
+  const rangeStart = new Date(today);
+  rangeStart.setDate(today.getDate() - today.getDay() - 52 * 7);
+  const rangeEnd = new Date(rangeStart);
+  rangeEnd.setDate(rangeStart.getDate() + 53 * 7 - 1);
+
+  const queryStart = new Date(rangeStart);
+  queryStart.setHours(0, 0, 0, 0);
+  const rows = db
+    .prepare(
+      `SELECT created_at FROM local_ai_messages
+       WHERE role = 'user' AND datetime(created_at) >= datetime(?)
+       ORDER BY datetime(created_at) ASC`,
+    )
+    .all(queryStart.toISOString()) as Array<{ created_at: string }>;
+
+  const counts = new Map<string, number>();
+  for (const row of rows) {
+    const date = new Date(row.created_at);
+    if (Number.isNaN(date.getTime())) continue;
+    const key = localDateKey(date);
+    if (key < localDateKey(rangeStart) || key > localDateKey(rangeEnd)) continue;
+    counts.set(key, (counts.get(key) ?? 0) + 1);
+  }
+
+  let longestStreak = 0;
+  let runningStreak = 0;
+  const cursor = new Date(rangeStart);
+  while (cursor <= today) {
+    if ((counts.get(localDateKey(cursor)) ?? 0) > 0) {
+      runningStreak += 1;
+      longestStreak = Math.max(longestStreak, runningStreak);
+    } else {
+      runningStreak = 0;
+    }
+    cursor.setDate(cursor.getDate() + 1);
+  }
+
+  const currentCursor = new Date(today);
+  if (!counts.has(localDateKey(currentCursor))) {
+    currentCursor.setDate(currentCursor.getDate() - 1);
+  }
+  let currentStreak = 0;
+  while (currentCursor >= rangeStart && counts.has(localDateKey(currentCursor))) {
+    currentStreak += 1;
+    currentCursor.setDate(currentCursor.getDate() - 1);
+  }
+
+  const days = [...counts.entries()]
+    .map(([date, count]) => ({ date, count }))
+    .sort((left, right) => left.date.localeCompare(right.date));
+
+  return {
+    days,
+    activeDays: days.length,
+    currentStreak,
+    longestStreak,
+    totalInteractions: days.reduce((total, day) => total + day.count, 0),
+    rangeStart: localDateKey(rangeStart),
+    rangeEnd: localDateKey(rangeEnd),
+  };
+}
 
 export function appendLocalAiMessage(
   aiSessionId: string,

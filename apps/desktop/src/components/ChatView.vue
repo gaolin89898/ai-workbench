@@ -410,6 +410,7 @@ const virtualRowObservers = new Map<number, ResizeObserver>();
 let chatScrollResizeObserver: ResizeObserver | null = null;
 let pendingPromptAnchorKey: string | null = null;
 let anchorScrollVersion = 0;
+let sessionBottomScrollVersion = 0;
 
 type UserMessageAnchor = {
   index: number;
@@ -1265,6 +1266,15 @@ function scrollChatToBottom() {
   updateVirtualViewport();
 }
 
+async function scrollSessionToBottomStable(version: number) {
+  for (let pass = 0; pass < 3; pass += 1) {
+    await nextTick();
+    if (version !== sessionBottomScrollVersion || !chatScroll.value) return;
+    scrollChatToBottom();
+    await new Promise<void>((resolve) => window.requestAnimationFrame(() => resolve()));
+  }
+}
+
 function scrollToUserMessage(index: number) {
   const el = chatScroll.value;
   if (!el) return;
@@ -1329,7 +1339,14 @@ watch(
 
 watch(
   () => ws.activeAiSession.value?.id,
-  resetVirtualMeasurements,
+  (sessionId, previousSessionId) => {
+    resetVirtualMeasurements();
+    anchorScrollVersion += 1;
+    const version = ++sessionBottomScrollVersion;
+    if (!sessionId || sessionId === previousSessionId) return;
+    pendingPromptAnchorKey = null;
+    void scrollSessionToBottomStable(version);
+  },
 );
 
 watch(
