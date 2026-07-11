@@ -896,7 +896,7 @@ onBeforeUnmount(() => {
         <span class="sidebar-update-copy">
           <strong>发现更新</strong>
           <small v-if="hasAppUpdate">软件 {{ appUpdatePromptText }}</small>
-          <small v-if="providerUpdateCount > 0">CLI {{ providerUpdatePromptText }}</small>
+          <small v-if="providerUpdateCount > 0">{{ providerUpdatePromptText }}</small>
         </span>
       </button>
       <div v-if="accountMenuOpen" class="account-menu-popover" role="menu" aria-label="个人账户菜单">

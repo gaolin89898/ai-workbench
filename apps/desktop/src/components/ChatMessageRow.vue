@@ -9,6 +9,13 @@ const clipboardIcon = new URL("../assets/icons/clipboard.svg", import.meta.url).
 const props = defineProps<{
   message: ChatMessage;
   aiSessionId?: string;
+  messageIndex?: number;
+  turnStartedAt?: string;
+  processPanelGroupIndex?: number;
+  processPanelItemIndex?: number;
+}>();
+const emit = defineEmits<{
+  openProcess: [payload: { messageIndex: number; groupIndex: number; itemIndex: number; title: string }];
 }>();
 const activeMobileProcessGroupIndex = ref<number | null>(null);
 const nowTick = ref(Date.now());
@@ -275,6 +282,15 @@ const activeMobileProcessGroup = computed(() => {
   return group?.type === "process" ? { group, index } : null;
 });
 
+const panelProcessItem = computed(() => {
+  const groupIndex = props.processPanelGroupIndex;
+  const itemIndex = props.processPanelItemIndex;
+  if (groupIndex === undefined || itemIndex === undefined) return null;
+  const group = contentGroups.value[groupIndex];
+  if (group?.type !== "process") return null;
+  return processBodyItems(group)[itemIndex] ?? null;
+});
+
 function isProcessSegment(segment: ChatSegmentType) {
   return segment.type === "tool" || segment.type === "status" || segment.type === "thought" || segment.type === "approval" || segment.type === "error";
 }
@@ -356,9 +372,10 @@ function processGroupHasFinalText(groupIndex: number) {
 
 function processGroupTitle(group: Extract<RenderGroup, { type: "process" }>, groupIndex: number) {
   const duration = processGroupDurationMs(group.segments);
-  const prefix = processGroupHasError(group)
-    ? "执行失败"
-    : props.message.pending && !processGroupHasFinalText(groupIndex) ? "正在处理" : "已处理";
+  const hasFinalText = processGroupHasFinalText(groupIndex);
+  const prefix = hasFinalText
+    ? "已处理"
+    : processGroupHasError(group) ? "执行失败" : props.message.pending ? "正在处理" : "已处理";
   return duration ? `${prefix} ${formatCompactDuration(duration)}` : prefix;
 }
 
@@ -369,6 +386,10 @@ function processGroupHasError(group: Extract<RenderGroup, { type: "process" }>) 
     || (segment.type === "status" && segment.status === "failed")
     || (segment.type === "approval" && segment.status === "failed")
   ));
+}
+
+function processGroupFailed(group: Extract<RenderGroup, { type: "process" }>, groupIndex: number) {
+  return processGroupHasError(group) && !processGroupHasFinalText(groupIndex);
 }
 
 function processGroupKey(groupIndex: number) {
@@ -432,11 +453,21 @@ function processGroupDurationMs(segments: ChatSegmentType[]) {
     }
   }
   if (cachedRuntimeDurationMs.value && cachedRuntimeDurationMs.value > 0) return cachedRuntimeDurationMs.value;
+  const persistedTurnDuration = persistedTurnDurationMs();
+  if (persistedTurnDuration > 0) return persistedTurnDuration;
   const groupDuration = segments.reduce((total, segment) => {
     if (segment.type !== "tool" && segment.type !== "thought") return total;
     return total + (segment.durationMs ?? 0);
   }, 0);
   return groupDuration;
+}
+
+function persistedTurnDurationMs() {
+  if (props.message.pending || !props.turnStartedAt || !props.message.createdAt) return 0;
+  const startedAt = Date.parse(props.turnStartedAt);
+  const completedAt = Date.parse(props.message.createdAt);
+  if (!Number.isFinite(startedAt) || !Number.isFinite(completedAt) || completedAt <= startedAt) return 0;
+  return completedAt - startedAt;
 }
 
 function onProcessSummaryClick(event: MouseEvent, group: Extract<RenderGroup, { type: "process" }>, groupIndex: number) {
@@ -446,6 +477,21 @@ function onProcessSummaryClick(event: MouseEvent, group: Extract<RenderGroup, { 
   }
   event.preventDefault();
   activeMobileProcessGroupIndex.value = groupIndex;
+}
+
+function openProcessStage(groupIndex: number, itemIndex: number, item: ProcessBodyItem) {
+  if (item.type !== "stage") return;
+  if (isMobileProcessSheetViewport()) {
+    activeMobileProcessGroupIndex.value = groupIndex;
+    return;
+  }
+  if (props.messageIndex === undefined) return;
+  emit("openProcess", {
+    messageIndex: props.messageIndex,
+    groupIndex,
+    itemIndex,
+    title: item.title,
+  });
 }
 
 function closeMobileProcessSheet() {
@@ -899,7 +945,24 @@ function countCommandOutputSignals(text: string) {
 </script>
 
 <template>
-  <div class="chat-message-row" :class="[message.role, { pending: message.pending }]">
+  <div
+    v-if="processPanelGroupIndex !== undefined && processPanelItemIndex !== undefined"
+    class="chat-process-panel-content"
+  >
+    <template v-if="panelProcessItem?.type === 'stage'">
+      <ChatSegment
+        v-for="(segment, segmentIndex) in visibleStageSegments(panelProcessItem.segments)"
+        :key="segmentIndex"
+        :segment="segment"
+        :ai-session-id="aiSessionId"
+      />
+      <div v-if="panelProcessItem.conclusion" class="chat-process-stage-conclusion panel">
+        {{ conclusionText(panelProcessItem.conclusion) }}
+      </div>
+    </template>
+    <div v-else class="chat-process-panel-empty">该执行过程已不可用。</div>
+  </div>
+  <div v-else class="chat-message-row" :class="[message.role, { pending: message.pending }]">
     <span v-if="message.role === 'assistant'" class="chat-ai-avatar" aria-hidden="true">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
         <path d="M12 3l1.9 5.8a2 2 0 0 0 1.3 1.3L21 12l-5.8 1.9a2 2 0 0 0-1.3 1.3L12 21l-1.9-5.8a2 2 0 0 0-1.3-1.3L3 12l5.8-1.9a2 2 0 0 0 1.3-1.3L12 3z" />
@@ -919,8 +982,8 @@ function countCommandOutputSignals(text: string) {
           </div>
         </div>
         <details v-else class="chat-process-group" :open="processGroupOpen(group, index)" @toggle="onProcessGroupToggle($event, index)">
-          <summary class="chat-process-group-summary" :class="{ danger: processGroupHasError(group) }" @click="onProcessSummaryClick($event, group, index)">
-            <span class="chat-process-group-icon" :class="{ running: message.pending, danger: processGroupHasError(group) }" aria-hidden="true"></span>
+          <summary class="chat-process-group-summary" :class="{ danger: processGroupFailed(group, index) }" @click="onProcessSummaryClick($event, group, index)">
+            <span class="chat-process-group-icon" :class="{ running: message.pending, danger: processGroupFailed(group, index) }" aria-hidden="true"></span>
             <span>{{ processGroupTitle(group, index) }}</span>
             <svg class="chat-process-chevron" viewBox="0 0 16 16" fill="none" aria-hidden="true">
               <path d="M5 6.5 8 9.5l3-3" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" />
@@ -938,23 +1001,21 @@ function countCommandOutputSignals(text: string) {
                   <strong :class="{ 'chat-shimmer': thinkingStageRunning(item.segments) }">{{ item.title }}</strong>
                 </div>
               </div>
-              <details v-else class="chat-process-stage" open>
-                <summary class="chat-process-stage-header" :class="{ danger: processStageStoppedByUser(item.segments) || processStageHasError(item.segments) }">
+              <div v-else class="chat-process-stage">
+                <button
+                  type="button"
+                  class="chat-process-stage-header chat-process-stage-trigger"
+                  :class="{ danger: processStageStoppedByUser(item.segments) || processStageHasError(item.segments) }"
+                  :aria-label="`查看执行详情：${item.title}`"
+                  @click="openProcessStage(index, itemIndex, item)"
+                >
                   <span class="chat-process-stage-dot" :class="{ running: processStageRunning(item.segments), danger: processStageStoppedByUser(item.segments) || processStageHasError(item.segments) }" aria-hidden="true"></span>
                   <strong :class="{ 'chat-shimmer': thinkingStageRunning(item.segments) }">{{ item.title }}</strong>
                   <svg class="chat-process-stage-chevron" viewBox="0 0 16 16" fill="none" aria-hidden="true">
-                    <path d="M5 6.5 8 9.5l3-3" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" />
+                    <path d="M6 4.5 9.5 8 6 11.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" />
                   </svg>
-                </summary>
-                <div class="chat-process-stage-body">
-                  <ChatSegment
-                    v-for="(segment, segmentIndex) in visibleStageSegments(item.segments)"
-                    :key="segmentIndex"
-                    :segment="segment"
-                    :ai-session-id="aiSessionId"
-                  />
-                </div>
-              </details>
+                </button>
+              </div>
               <div v-if="item.conclusion" class="chat-process-stage-conclusion">
                 {{ conclusionText(item.conclusion) }}
               </div>

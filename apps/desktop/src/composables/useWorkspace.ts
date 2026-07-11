@@ -973,7 +973,7 @@ function mergeTraceSegments(existing: ChatSegment[] = [], incoming: ChatSegment[
   return order
     .map((key) => merged.get(key))
     .filter((segment): segment is ChatSegment => Boolean(segment))
-    .filter((segment) => !(done && (segment.stepId === "runtime-status" || segment.stepId === "initial-thinking")))
+    .filter((segment) => !(done && segment.stepId === "initial-thinking"))
     .map((segment) => finalizeSegmentForDone(segment, done));
 }
 
@@ -1738,14 +1738,20 @@ function finalizeSegmentForDone(segment: ChatSegment, done: boolean): ChatSegmen
 function upsertCompletionSummary(sessionId: string) {
   const pending = pendingAssistants.get(sessionId);
   if (!pending) return;
-  // 移除 final-summary，completed 状态已绑定到各个执行步骤
-  pending.steps.delete("runtime-status");
+  const durationMs = Math.max(0, Math.round(performance.now() - pending.startedAt));
+  pending.steps.set("runtime-status", {
+    type: "status",
+    stepId: "runtime-status",
+    label: "已处理",
+    icon: "think",
+    status: "completed",
+    durationMs,
+  });
   pending.steps.delete("initial-thinking");
 }
 
 function isPersistentStatusSegment(segment: ChatSegment) {
-  // 移除 final-summary，所有状态都绑定到具体步骤
-  return false;
+  return segment.stepId === "runtime-status" && Boolean(segment.durationMs && segment.durationMs > 0);
 }
 
 function shouldHideBackendStatus(text: string) {

@@ -213,7 +213,7 @@ function encodeImportedAssistantMessage(text: string, segments: ChatSegment[]) {
   return `${STRUCTURED_MESSAGE_PREFIX}${JSON.stringify({
     text,
     segments,
-    codexHistoryImportVersion: 3,
+    codexHistoryImportVersion: 4,
   })}`;
 }
 
@@ -221,7 +221,17 @@ function flushAssistantDraft(messages: AiHistoryMessage[], draft: ImportedAssist
   if (!draft) return;
   const promoted = promoteFinalTextFromProcessSegments(draft);
   const text = promoted.text;
-  const segments = promoted.segments;
+  const segments = [...promoted.segments];
+  if (draft.completedDurationMs && draft.completedDurationMs > 0) {
+    segments.unshift({
+      type: "status",
+      stepId: "runtime-status",
+      label: "已处理",
+      icon: "think",
+      status: "completed",
+      durationMs: draft.completedDurationMs,
+    });
+  }
   // 移除 final-summary，completed 状态已绑定到各个执行步骤
   messages.push({
     role: "assistant",
@@ -622,7 +632,7 @@ function hasImportedCodexHistory(messages: Array<{ role: string; content: string
   return messages.some((message) =>
     message.role === "assistant"
     && message.content.includes(STRUCTURED_MESSAGE_PREFIX)
-    && /"codexHistoryImportVersion":(?:2|3)/.test(message.content)
+    && /"codexHistoryImportVersion":(?:2|3|4)/.test(message.content)
   );
 }
 
@@ -645,7 +655,7 @@ function hasToolCodexHistory(messages: Array<{ role: string; content: string }>)
     message.role === "assistant"
     && message.content.includes(STRUCTURED_MESSAGE_PREFIX)
     && message.content.includes("\"type\":\"tool\"")
-    && message.content.includes("\"codexHistoryImportVersion\":3")
+    && message.content.includes("\"codexHistoryImportVersion\":4")
   );
 }
 

@@ -287,7 +287,7 @@ async function installAppUpdateSafely() {
 async function runProviderAction(row: ProviderRow) {
   const kind = providerActionKind(row);
   const label = providerActionLabel(row);
-  if (!kind || !label || !row.status || providerActionBusy.value) return;
+  if (!kind || !label || !row.status || providerActionBusy.value || providerRefreshLoading.value) return;
   npmRegistryDropdownOpen.value = false;
   providerActionLoading.value = { ...providerActionLoading.value, [row.provider.id]: true };
   try {
@@ -312,9 +312,22 @@ async function runProviderAction(row: ProviderRow) {
       const detail = result.output ? `：${result.output.slice(0, 180)}` : "";
       throw new Error(`${label}命令执行失败${detail}`);
     }
-    providerActionMessages.value = { ...providerActionMessages.value, [row.provider.id]: `${label}完成，正在重新检测...` };
-    await refreshProviderDiagnostics();
-    providerActionMessages.value = { ...providerActionMessages.value, [row.provider.id]: `${label}完成` };
+    providerActionMessages.value = { ...providerActionMessages.value, [row.provider.id]: `${label}命令已完成，正在重新检测...` };
+    const refreshed = await refreshProviderDiagnosticsNow();
+    const refreshedStatus = ws.providerStatuses.value.find((status) => status.providerId === row.provider.id);
+    let message: string;
+    if (!refreshed) {
+      message = `${label}命令已完成，但重新检测失败，请手动刷新`;
+    } else if (kind === "install") {
+      message = refreshedStatus?.installed ? "安装完成" : "安装命令已完成，但未检测到本机命令";
+    } else if (refreshedStatus?.updateAvailable === false) {
+      message = "更新完成";
+    } else if (refreshedStatus?.updateAvailable === true) {
+      message = "更新命令已完成，但当前版本仍低于最新版本";
+    } else {
+      message = "更新命令已完成，版本待确认";
+    }
+    providerActionMessages.value = { ...providerActionMessages.value, [row.provider.id]: message };
   } catch (error) {
     providerActionMessages.value = {
       ...providerActionMessages.value,
@@ -340,8 +353,7 @@ function checkedAt(status?: ProviderStatus) {
   return date.toLocaleTimeString();
 }
 
-async function refreshProviderDiagnostics() {
-  if (providerRefreshLoading.value || providerActionBusy.value) return;
+async function refreshProviderDiagnosticsNow(): Promise<boolean> {
   providerRefreshLoading.value = true;
   providerRefreshError.value = false;
   providerRefreshMessage.value = "正在重新检测本机命令...";
@@ -352,12 +364,19 @@ async function refreshProviderDiagnostics() {
       .filter((value) => Number.isFinite(value));
     const lastCheckedAt = checkedTimes.length ? new Date(Math.max(...checkedTimes)).toLocaleTimeString() : "";
     providerRefreshMessage.value = lastCheckedAt ? `已刷新：${lastCheckedAt}` : "已刷新";
+    return true;
   } catch (error) {
     providerRefreshError.value = true;
     providerRefreshMessage.value = `刷新失败：${error instanceof Error ? error.message : String(error)}`;
+    return false;
   } finally {
     providerRefreshLoading.value = false;
   }
+}
+
+async function refreshProviderDiagnostics() {
+  if (providerRefreshLoading.value || providerActionBusy.value) return;
+  await refreshProviderDiagnosticsNow();
 }
 
 function updateNpmRegistryState(info: Awaited<ReturnType<typeof desktopApi.getNpmRegistry>>) {
@@ -399,7 +418,7 @@ async function loadNpmRegistry() {
 }
 
 async function changeNpmRegistry(registry: string) {
-  if (!registry || npmRegistryLoading.value || providerActionBusy.value) return;
+  if (!registry || npmRegistryLoading.value || providerActionBusy.value || providerRefreshLoading.value) return;
   npmRegistryDropdownOpen.value = false;
   npmRegistryLoading.value = true;
   npmRegistryError.value = false;
@@ -419,7 +438,7 @@ async function changeNpmRegistry(registry: string) {
 }
 
 function toggleNpmRegistryDropdown() {
-  if (npmRegistryLoading.value || providerActionBusy.value) return;
+  if (npmRegistryLoading.value || providerActionBusy.value || providerRefreshLoading.value) return;
   npmRegistryDropdownOpen.value = !npmRegistryDropdownOpen.value;
 }
 
@@ -439,7 +458,7 @@ function selectNpmRegistry(registry: string) {
 }
 
 async function probeNpmRegistries() {
-  if (npmRegistryLoading.value || providerActionBusy.value) return;
+  if (npmRegistryLoading.value || providerActionBusy.value || providerRefreshLoading.value) return;
   npmRegistryLoading.value = true;
   npmRegistryError.value = false;
   npmRegistryMessage.value = "正在测速 npm 源...";
@@ -782,7 +801,7 @@ async function restoreSession(sessionId: string) {
                       class="settings-npm-registry-trigger"
                       :class="{ open: npmRegistryDropdownOpen }"
                       type="button"
-                      :disabled="npmRegistryLoading || providerActionBusy"
+                      :disabled="npmRegistryLoading || providerActionBusy || providerRefreshLoading"
                       aria-haspopup="listbox"
                       :aria-expanded="npmRegistryDropdownOpen"
                       @click="toggleNpmRegistryDropdown"
@@ -801,7 +820,7 @@ async function restoreSession(sessionId: string) {
                         :class="{ active: option.registry === npmRegistry }"
                         type="button"
                         role="option"
-                        :disabled="providerActionBusy"
+                        :disabled="providerActionBusy || providerRefreshLoading"
                         :aria-selected="option.registry === npmRegistry"
                         @mousedown.prevent
                         @click="selectNpmRegistry(option.registry)"
@@ -812,7 +831,7 @@ async function restoreSession(sessionId: string) {
                       </button>
                     </div>
                   </div>
-                  <button class="button secondary mini" type="button" :disabled="npmRegistryLoading || providerActionBusy" @click="probeNpmRegistries">
+                  <button class="button secondary mini" type="button" :disabled="npmRegistryLoading || providerActionBusy || providerRefreshLoading" @click="probeNpmRegistries">
                     {{ npmRegistryLoading ? "检测中" : "测速选源" }}
                   </button>
                   <button class="button secondary mini" type="button" :disabled="providerRefreshLoading || providerActionBusy" @click="refreshProviderDiagnostics">
@@ -856,7 +875,7 @@ async function restoreSession(sessionId: string) {
                       v-if="providerActionKind(row)"
                       :class="['button', providerActionKind(row) === 'install' ? 'primary' : 'secondary', 'mini', 'narrow']"
                       type="button"
-                      :disabled="providerActionBusy"
+                      :disabled="providerActionBusy || providerRefreshLoading"
                       @click="runProviderAction(row)"
                     >
                       {{ providerActionLoading[row.provider.id] ? `${providerActionLabel(row)}中` : providerActionLabel(row) }}

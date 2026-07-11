@@ -81,8 +81,8 @@ function formatDuration(durationMs?: number) {
 
 function toolLineTitle(segment: Extract<ChatSegmentType, { type: "tool" }>) {
   const patchFiles = patchFileList(toolDiffText(segment));
-  const command = normalizeCommand(segment.command);
-  const displayCommand = patchFiles.length ? shortFileList(patchFiles) : shortenCommand(segment.command);
+  const command = normalizeCommand(segment.command).replace(/\s+/g, " ").trim();
+  const displayCommand = patchFiles.length ? shortFileList(patchFiles) : commandDisplayText(segment.command);
   const statusVerb = segment.status === "running" ? "正在" : "已";
   if (isStdinContinuationSegment(segment)) {
     if (segment.status === "error") return "读取命令输出失败";
@@ -171,11 +171,11 @@ function extractUserRequest(text: string) {
   return (match?.[1] ?? text).trim();
 }
 
-function shortenCommand(command?: string) {
+function commandDisplayText(command?: string) {
   if (!command) return "";
-  const unquoted = normalizeCommand(command);
+  const unquoted = normalizeCommand(command).replace(/\s+/g, " ").trim();
   const display = isPowerShellCommand(command) ? `PowerShell: ${unquoted}` : unquoted;
-  return display.length > 88 ? `${display.slice(0, 85)}...` : display;
+  return display;
 }
 
 function normalizeCommand(command?: string) {
@@ -194,44 +194,21 @@ function isPowerShellCommand(command?: string) {
 
 function commandOperationTitle(command: string, status: string) {
   const verb = status === "running" ? "正在" : "已";
-  const target = commandTarget(command);
   if (/^(?:Get-Content|cat|type|head|tail|sed\b|Select-String\b)/i.test(command)) {
-    if (status === "error") return target ? `读取 ${target} 失败` : "读取文件失败";
-    return target ? `${verb}读取 ${target}` : `${verb}读取文件`;
+    if (status === "error") return `读取失败 ${command}`;
+    return `${verb}读取 ${command}`;
   }
   if (/^(?:rg|grep|findstr|fd|find\b|Get-ChildItem|ls\b|dir\b)/i.test(command)) {
-    if (status === "error") return "搜索文件失败";
-    return `${verb}搜索文件`;
+    if (status === "error") return `搜索失败 ${command}`;
+    return `${verb}搜索 ${command}`;
   }
   if (/\b(?:Get-Content|cat|type)\b/i.test(command)) {
-    if (status === "error") return target ? `读取 ${target} 失败` : "读取文件失败";
-    return target ? `${verb}读取 ${target}` : `${verb}读取文件`;
+    if (status === "error") return `读取失败 ${command}`;
+    return `${verb}读取 ${command}`;
   }
   if (/\b(?:rg|grep|findstr|Get-ChildItem)\b/i.test(command)) {
-    if (status === "error") return "搜索文件失败";
-    return `${verb}搜索文件`;
-  }
-  return "";
-}
-
-function commandTarget(command: string) {
-  const tokens = command.match(/(?:"[^"]+"|'[^']+'|\S+)/g)?.map((token) => unquoteCommand(token)) ?? [];
-  const commandNames = /^(?:Get-Content|cat|type|head|tail|sed|Select-String|PowerShell:)$/i;
-  const optionsWithValue = /^(?:-Encoding|-TotalCount|-Tail|-Head|-Filter|-Include|-Exclude|-Context|-Pattern)$/i;
-  let skipNext = false;
-  for (const token of tokens) {
-    if (!token || commandNames.test(token)) continue;
-    if (skipNext) {
-      skipNext = false;
-      continue;
-    }
-    if (optionsWithValue.test(token)) {
-      skipNext = true;
-      continue;
-    }
-    if (token.startsWith("-")) continue;
-    if (/^\d+$/.test(token)) continue;
-    return token.split(/[\\/]/).pop() || token;
+    if (status === "error") return `搜索失败 ${command}`;
+    return `${verb}搜索 ${command}`;
   }
   return "";
 }
@@ -673,7 +650,7 @@ async function respondApproval(decision: "approved" | "denied") {
     >
       <summary class="chat-segment-tool-line">
         <span class="chat-segment-tool-copy" :class="{ shimmer: segment.status === 'running' }">
-          <strong>{{ toolLineTitle(segment) }}</strong>
+          <strong :title="toolLineTitle(segment)">{{ toolLineTitle(segment) }}</strong>
           <small v-if="toolLineMeta(segment).length" class="chat-segment-tool-meta">
             <span
               v-for="(item, itemIndex) in toolLineMeta(segment)"
@@ -708,7 +685,7 @@ async function respondApproval(decision: "approved" | "denied") {
     <div v-else class="chat-segment-tool" :class="segment.status">
       <div class="chat-segment-tool-line">
         <span class="chat-segment-tool-copy" :class="{ shimmer: segment.status === 'running' }">
-          <strong>{{ toolLineTitle(segment) }}</strong>
+          <strong :title="toolLineTitle(segment)">{{ toolLineTitle(segment) }}</strong>
           <small v-if="toolLineMeta(segment).length" class="chat-segment-tool-meta">
             <span
               v-for="(item, itemIndex) in toolLineMeta(segment)"
