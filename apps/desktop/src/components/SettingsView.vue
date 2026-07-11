@@ -2,7 +2,7 @@
 import { computed, onMounted, ref, watch } from "vue";
 import { useRouter } from "vue-router";
 import { useWorkspace } from "../composables/useWorkspace";
-import { desktopApi, type AiActivitySummary, type AiProvider, type DesktopRuntimeInfo, type ProviderActionKind, type ProviderStatus, type TokenUsageSummary, type TokenUsageSummaryItem } from "../services/desktop";
+import { desktopApi, type AiActivityDay, type AiActivitySummary, type AiProvider, type DesktopRuntimeInfo, type ProviderActionKind, type ProviderStatus, type TokenUsageDailyItem, type TokenUsageSummary, type TokenUsageSummaryItem } from "../services/desktop";
 import CodexManagementPanel from "./CodexManagementPanel.vue";
 
 const settingsIcon = new URL("../assets/icons/settings.svg", import.meta.url).href;
@@ -15,7 +15,7 @@ const providerClaudeIcon = new URL("../assets/icons/provider-claude.svg", import
 const providerOpencodeIcon = new URL("../assets/icons/provider-opencode.svg", import.meta.url).href;
 const providerMimoIcon = new URL("../assets/icons/provider-mimo.svg", import.meta.url).href;
 
-type SettingsPanel = "connection" | "codex" | "mcp" | "security" | "about" | "archive" | "tokenUsage";
+type SettingsPanel = "connection" | "codex" | "mcp" | "security" | "activity" | "about" | "archive" | "tokenUsage";
 type ProviderRow = {
   provider: AiProvider;
   status?: ProviderStatus;
@@ -102,6 +102,13 @@ const settingsPanels: SettingsPanelItem[] = [
     eyebrow: "保护",
     description: "高危确认、命令摘要和重连策略",
     icon: riskGuardIcon,
+  },
+  {
+    id: "activity",
+    label: "AI 活跃记录",
+    eyebrow: "本地",
+    description: "查看最近 12 个月的本地对话交互、连续活跃和使用节奏",
+    icon: aiProvidersIcon,
   },
   {
     id: "archive",
@@ -529,14 +536,40 @@ const aiActivitySummary = ref<AiActivitySummary | null>(null);
 const tokenUsageLoading = ref(false);
 const tokenUsageError = ref<string>("");
 const tokenUsageLoaded = ref(false);
+const tokenUsagePeriod = ref<7 | 30 | 90>(30);
+const tokenUsagePeriods = [7, 30, 90] as const;
+const activityLoading = ref(false);
+const activityError = ref("");
+const activityLoaded = ref(false);
 
-const tokenUsageRows = computed<(TokenUsageSummaryItem & { name: string; icon: string })[]>(() => {
+type TokenUsageRow = TokenUsageSummaryItem & {
+  name: string;
+  icon: string;
+  averageTokens: number;
+  sharePercent: number;
+  statusLabel: string;
+  statusTone: "success" | "warning" | "neutral";
+};
+
+const tokenUsageRows = computed<TokenUsageRow[]>(() => {
   const rows = tokenUsageSummary.value?.providers ?? [];
-  return rows.map((row) => ({
-    ...row,
-    name: providerNameForId(row.providerId),
-    icon: providerIcon(row.providerId),
-  }));
+  const total = tokenUsageSummary.value?.totals.totalTokens ?? 0;
+  return rows
+    .map((row) => {
+      const sharePercent = total > 0 ? (row.totalTokens / total) * 100 : 0;
+      const reasoningPercent = row.totalTokens > 0 ? row.reasoningTokens / row.totalTokens : 0;
+      const statusLabel = sharePercent >= 50 ? "高频" : reasoningPercent >= 0.12 ? "推理偏高" : sharePercent >= 15 ? "活跃" : "稳定";
+      return {
+        ...row,
+        name: providerNameForId(row.providerId),
+        icon: providerIcon(row.providerId),
+        averageTokens: row.turnCount > 0 ? Math.round(row.totalTokens / row.turnCount) : 0,
+        sharePercent,
+        statusLabel,
+        statusTone: reasoningPercent >= 0.12 ? "warning" as const : sharePercent >= 15 ? "success" as const : "neutral" as const,
+      };
+    })
+    .sort((left, right) => right.totalTokens - left.totalTokens);
 });
 
 const tokenUsageTotals = computed<TokenUsageSummaryItem>(() => {
@@ -549,6 +582,51 @@ const tokenUsageTotals = computed<TokenUsageSummaryItem>(() => {
     turnCount: 0,
   };
 });
+
+const tokenAveragePerTurn = computed(() => tokenUsageTotals.value.turnCount > 0
+  ? Math.round(tokenUsageTotals.value.totalTokens / tokenUsageTotals.value.turnCount)
+  : 0);
+
+const tokenMix = computed(() => {
+  const total = tokenUsageTotals.value.inputTokens + tokenUsageTotals.value.outputTokens + tokenUsageTotals.value.reasoningTokens;
+  const percentage = (value: number) => total > 0 ? (value / total) * 100 : 0;
+  return [
+    { id: "input", label: "输入", value: tokenUsageTotals.value.inputTokens, percent: percentage(tokenUsageTotals.value.inputTokens), note: "提示词与上下文" },
+    { id: "output", label: "输出", value: tokenUsageTotals.value.outputTokens, percent: percentage(tokenUsageTotals.value.outputTokens), note: "回复与代码生成" },
+    { id: "reasoning", label: "推理", value: tokenUsageTotals.value.reasoningTokens, percent: percentage(tokenUsageTotals.value.reasoningTokens), note: "复杂任务推理" },
+  ];
+});
+
+const tokenTrendDays = computed<TokenUsageDailyItem[]>(() => {
+  const length = Math.min(14, tokenUsagePeriod.value);
+  const source = new Map((tokenUsageSummary.value?.daily ?? []).map((day) => [day.date, day]));
+  const days: TokenUsageDailyItem[] = [];
+  const cursor = new Date();
+  cursor.setHours(12, 0, 0, 0);
+  cursor.setDate(cursor.getDate() - length + 1);
+  for (let index = 0; index < length; index += 1) {
+    const date = dateKey(cursor);
+    days.push(source.get(date) ?? { date, inputTokens: 0, outputTokens: 0, reasoningTokens: 0, totalTokens: 0, turnCount: 0 });
+    cursor.setDate(cursor.getDate() + 1);
+  }
+  return days;
+});
+
+const tokenTrendMax = computed(() => Math.max(0, ...tokenTrendDays.value.map((day) => day.totalTokens)));
+
+const tokenTrendLinePath = computed(() => {
+  const days = tokenTrendDays.value;
+  const max = tokenTrendMax.value || 1;
+  return days.map((day, index) => {
+    const x = days.length <= 1 ? 380 : (index / (days.length - 1)) * 760;
+    const y = 158 - (day.totalTokens / max) * 126;
+    return `${index ? "L" : "M"}${x.toFixed(1)} ${y.toFixed(1)}`;
+  }).join(" ");
+});
+
+const tokenTrendAreaPath = computed(() => tokenTrendLinePath.value
+  ? `${tokenTrendLinePath.value} L760 180 L0 180 Z`
+  : "");
 
 type ActivityCell = {
   date: string;
@@ -611,6 +689,15 @@ const activityMonths = computed(() => {
   return months;
 });
 
+const activityRecentDays = computed<AiActivityDay[]>(() => [...(aiActivitySummary.value?.days ?? [])]
+  .sort((left, right) => right.date.localeCompare(left.date))
+  .slice(0, 7));
+
+const activityDailyAverage = computed(() => {
+  const total = aiActivitySummary.value?.totalInteractions ?? 0;
+  return (total / 365).toFixed(1);
+});
+
 function activityTitle(cell: ActivityCell): string {
   return `${cell.date} · ${cell.count} 次交互`;
 }
@@ -626,32 +713,64 @@ function formatTokens(n: number): string {
   return String(n);
 }
 
+function formatPercent(value: number): string {
+  return `${value.toFixed(value >= 10 ? 0 : 1)}%`;
+}
+
+function csvCell(value: string | number): string {
+  const text = String(value);
+  return /[",\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
+}
+
+async function exportTokenUsage() {
+  const rows = [
+    ["工具", "输入 Token", "输出 Token", "推理 Token", "合计", "轮次", "平均每轮", "占比"],
+    ...tokenUsageRows.value.map((row) => [row.name, row.inputTokens, row.outputTokens, row.reasoningTokens, row.totalTokens, row.turnCount, row.averageTokens, formatPercent(row.sharePercent)]),
+  ];
+  await desktopApi.exportTextFile(`token-usage-${tokenUsagePeriod.value}d-${dateKey(new Date())}.csv`, rows.map((row) => row.map(csvCell).join(",")).join("\n"));
+}
+
+async function exportActivity() {
+  const rows = [
+    ["日期", "交互次数", "主要工具"],
+    ...(aiActivitySummary.value?.days ?? []).map((day) => [day.date, day.count, providerNameForId(day.providerId ?? "")]),
+  ];
+  await desktopApi.exportTextFile(`ai-activity-${dateKey(new Date())}.csv`, rows.map((row) => row.map(csvCell).join(",")).join("\n"));
+}
+
+async function selectTokenUsagePeriod(days: 7 | 30 | 90) {
+  if (tokenUsagePeriod.value === days && tokenUsageLoaded.value && tokenUsageSummary.value) return;
+  tokenUsagePeriod.value = days;
+  await refreshTokenUsage();
+}
+
 async function refreshTokenUsage() {
   if (tokenUsageLoading.value) return;
   tokenUsageLoading.value = true;
   tokenUsageError.value = "";
   try {
-    const [tokenResult, activityResult] = await Promise.allSettled([
-      desktopApi.getTokenUsageSummary(),
-      desktopApi.getAiActivitySummary(),
-    ]);
-    if (tokenResult.status === "fulfilled") {
-      tokenUsageSummary.value = tokenResult.value;
-    } else {
-      tokenUsageSummary.value = null;
-      tokenUsageError.value = tokenResult.reason instanceof Error ? tokenResult.reason.message : "Token 用量加载失败";
-    }
-    if (activityResult.status === "fulfilled") {
-      aiActivitySummary.value = activityResult.value;
-    } else {
-      aiActivitySummary.value = null;
-      if (!tokenUsageError.value) {
-        tokenUsageError.value = activityResult.reason instanceof Error ? activityResult.reason.message : "活跃记录加载失败";
-      }
-    }
+    tokenUsageSummary.value = await desktopApi.getTokenUsageSummary(tokenUsagePeriod.value);
     tokenUsageLoaded.value = true;
+  } catch (error) {
+    tokenUsageSummary.value = null;
+    tokenUsageError.value = error instanceof Error ? error.message : "Token 用量加载失败";
   } finally {
     tokenUsageLoading.value = false;
+  }
+}
+
+async function refreshAiActivity() {
+  if (activityLoading.value) return;
+  activityLoading.value = true;
+  activityError.value = "";
+  try {
+    aiActivitySummary.value = await desktopApi.getAiActivitySummary();
+    activityLoaded.value = true;
+  } catch (error) {
+    aiActivitySummary.value = null;
+    activityError.value = error instanceof Error ? error.message : "活跃记录加载失败";
+  } finally {
+    activityLoading.value = false;
   }
 }
 
@@ -659,6 +778,7 @@ watch(settingsPanel, (panel) => {
   if (panel === "tokenUsage" && !tokenUsageLoaded.value) {
     void refreshTokenUsage();
   }
+  if (panel === "activity" && !activityLoaded.value) void refreshAiActivity();
 });
 
 onMounted(() => {
@@ -731,16 +851,39 @@ async function restoreSession(sessionId: string) {
       </aside>
 
       <div class="settings-content">
-        <div class="settings-scroll">
+        <div class="settings-scroll" :class="{ 'settings-scroll-analytics': settingsPanel === 'tokenUsage' || settingsPanel === 'activity' }">
           <header class="settings-header">
             <div>
               <span class="settings-kicker">Desktop Settings</span>
               <h1>{{ activePanelMeta.label }}</h1>
               <p>{{ activePanelMeta.description }}。</p>
             </div>
-            <button v-if="settingsPanel === 'tokenUsage'" class="button secondary narrow" type="button" :disabled="tokenUsageLoading" @click="refreshTokenUsage">
-              {{ tokenUsageLoading ? "刷新中…" : "刷新" }}
-            </button>
+            <div v-if="settingsPanel === 'tokenUsage'" class="settings-analytics-toolbar">
+              <div class="settings-period-control" aria-label="统计周期">
+                <button v-for="days in tokenUsagePeriods" :key="days" type="button" :disabled="tokenUsageLoading" :class="{ active: tokenUsagePeriod === days }" @click="selectTokenUsagePeriod(days)">
+                  {{ days === 30 ? "近 30 天" : `${days} 天` }}
+                </button>
+              </div>
+              <button class="settings-analytics-action" type="button" :disabled="tokenUsageLoading" @click="refreshTokenUsage">
+                <svg viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M13 5.5A5.5 5.5 0 1 0 13.2 10" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/><path d="M10.5 3.5H13v2.6" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                {{ tokenUsageLoading ? "刷新中" : "刷新" }}
+              </button>
+              <button class="settings-analytics-action solid" type="button" :disabled="!tokenUsageSummary" @click="exportTokenUsage">
+                <svg viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M8 2v8m0 0 3-3m-3 3L5 7M3 13h10" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                导出
+              </button>
+            </div>
+            <div v-else-if="settingsPanel === 'activity'" class="settings-analytics-toolbar">
+              <div class="settings-range-label"><span>时间范围</span><strong>近 12 个月</strong></div>
+              <button class="settings-analytics-action" type="button" :disabled="activityLoading" @click="refreshAiActivity">
+                <svg viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M13 5.5A5.5 5.5 0 1 0 13.2 10" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/><path d="M10.5 3.5H13v2.6" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                {{ activityLoading ? "刷新中" : "刷新" }}
+              </button>
+              <button class="settings-analytics-action solid" type="button" :disabled="!aiActivitySummary" @click="exportActivity">
+                <svg viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M8 2v8m0 0 3-3m-3 3L5 7M3 13h10" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                导出
+              </button>
+            </div>
           </header>
 
           <div v-if="settingsPanel === 'connection'" class="settings-overview settings-overview-status" aria-label="连接概览">
@@ -1009,100 +1152,92 @@ async function restoreSession(sessionId: string) {
             </div>
           </section>
 
-          <section v-else-if="settingsPanel === 'tokenUsage'" class="settings-section settings-token-usage">
-            <p v-if="tokenUsageError" class="settings-token-usage-error">{{ tokenUsageError }}</p>
+          <section v-else-if="settingsPanel === 'activity'" class="settings-section settings-activity-page">
+            <p v-if="activityError" class="settings-token-usage-error">{{ activityError }}</p>
 
-            <div v-if="aiActivitySummary" class="settings-activity">
+            <div v-if="aiActivitySummary" class="settings-activity-metrics" aria-label="活跃概览">
+              <article><span>活跃天数</span><strong>{{ aiActivitySummary.activeDays }}</strong><em>最近 365 天</em></article>
+              <article><span>当前连续</span><strong>{{ aiActivitySummary.currentStreak }}</strong><em>连续交互日</em></article>
+              <article><span>最长连续</span><strong>{{ aiActivitySummary.longestStreak }}</strong><em>历史最佳</em></article>
+              <article><span>总交互</span><strong>{{ aiActivitySummary.totalInteractions.toLocaleString() }}</strong><em>你发送的消息</em></article>
+              <article><span>日均交互</span><strong>{{ activityDailyAverage }}</strong><em>活跃节奏</em></article>
+            </div>
+
+            <article v-if="aiActivitySummary" class="settings-activity settings-activity-heatmap">
               <div class="settings-activity-head">
-                <div>
-                  <h3>AI 活跃记录</h3>
-                  <p>最近 12 个月的本地对话交互</p>
-                </div>
-                <div class="settings-activity-stats" aria-label="AI 活跃统计">
-                  <span><strong>{{ aiActivitySummary.activeDays }}</strong>活跃天数</span>
-                  <span><strong>{{ aiActivitySummary.currentStreak }}</strong>当前连续</span>
-                  <span><strong>{{ aiActivitySummary.longestStreak }}</strong>最长连续</span>
-                  <span><strong>{{ aiActivitySummary.totalInteractions }}</strong>总交互</span>
-                </div>
+                <div><h3>年度热力</h3><p>最近 12 个月的每日本地对话交互强度。</p></div>
+                <span class="settings-activity-legend">
+                  少 <i v-for="level in [0, 1, 2, 3, 4]" :key="level" :class="`level-${level}`"></i> 多
+                </span>
               </div>
-
               <div class="settings-activity-scroll">
                 <div class="settings-activity-chart">
                   <div class="settings-activity-months" aria-hidden="true">
-                    <span
-                      v-for="month in activityMonths"
-                      :key="`${month.label}-${month.column}`"
-                      :style="{ gridColumn: month.column }"
-                    >{{ month.label }}</span>
+                    <span v-for="month in activityMonths" :key="`${month.label}-${month.column}`" :style="{ gridColumn: month.column }">{{ month.label }}</span>
                   </div>
                   <div class="settings-activity-body">
-                    <div class="settings-activity-weekdays" aria-hidden="true">
-                      <span></span><span>周一</span><span></span><span>周三</span><span></span><span>周五</span><span></span>
-                    </div>
+                    <div class="settings-activity-weekdays" aria-hidden="true"><span></span><span>周一</span><span></span><span>周三</span><span></span><span>周五</span><span></span></div>
                     <div class="settings-activity-grid" aria-label="最近 12 个月 AI 活跃日历">
-                      <span
-                        v-for="cell in activityCells"
-                        :key="cell.date"
-                        class="settings-activity-cell"
-                        :class="[`level-${cell.level}`, { future: cell.future }]"
-                        :title="activityTitle(cell)"
-                      ></span>
+                      <span v-for="cell in activityCells" :key="cell.date" class="settings-activity-cell" :class="[`level-${cell.level}`, { future: cell.future }]" :title="activityTitle(cell)"></span>
                     </div>
                   </div>
                 </div>
               </div>
+              <p class="settings-activity-caption">每个方格代表一天，仅统计你发送的消息。</p>
+            </article>
 
-              <div class="settings-activity-foot">
-                <span>每个方格代表一天，仅统计你发送的消息</span>
-                <span class="settings-activity-legend">
-                  少
-                  <i v-for="level in [0, 1, 2, 3, 4]" :key="level" :class="`level-${level}`"></i>
-                  多
-                </span>
+            <article v-if="aiActivitySummary" class="settings-activity-days">
+              <div class="settings-analytics-panel-head"><h3>活跃日</h3><span>最近记录</span></div>
+              <div v-if="!activityRecentDays.length" class="settings-token-usage-empty compact"><strong>暂无活跃记录</strong></div>
+              <div v-else class="settings-token-usage-table-wrap">
+                <table class="settings-token-usage-table activity-table">
+                  <thead><tr><th>日期</th><th>交互</th><th>主要工具</th><th>备注</th></tr></thead>
+                  <tbody>
+                    <tr v-for="day in activityRecentDays" :key="day.date">
+                      <td>{{ day.date }}</td><td class="num total">{{ day.count }}</td><td>{{ providerNameForId(day.providerId ?? '') || 'AI Chat' }}</td><td>{{ day.count }} 次本地对话交互</td>
+                    </tr>
+                  </tbody>
+                </table>
               </div>
-            </div>
+            </article>
+            <p class="settings-activity-note">AI 活跃记录为本地行为分析，不包含 Token 成本统计。</p>
+          </section>
+
+          <section v-else-if="settingsPanel === 'tokenUsage'" class="settings-section settings-token-usage">
+            <p v-if="tokenUsageError" class="settings-token-usage-error">{{ tokenUsageError }}</p>
 
             <div class="settings-token-usage-overview">
-              <article class="settings-token-usage-card">
-                <div class="settings-token-usage-card-head">
-                  <span class="settings-token-usage-icon icon-info" aria-hidden="true">
-                    <svg viewBox="0 0 24 24"><path d="M12 3v12m0 4v2" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" fill="none"/><path d="M12 3l-6 8h12L12 3z" fill="currentColor"/></svg>
-                  </span>
-                  <span class="settings-token-usage-card-label">总输入</span>
-                </div>
-                <strong>{{ formatTokens(tokenUsageTotals.inputTokens) }}</strong>
-              </article>
-              <article class="settings-token-usage-card">
-                <div class="settings-token-usage-card-head">
-                  <span class="settings-token-usage-icon icon-success" aria-hidden="true">
-                    <svg viewBox="0 0 24 24"><path d="M12 21V9m0 0L7 4m5 5l5-5" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" fill="none"/></svg>
-                  </span>
-                  <span class="settings-token-usage-card-label">总输出</span>
-                </div>
-                <strong>{{ formatTokens(tokenUsageTotals.outputTokens) }}</strong>
-              </article>
-              <article class="settings-token-usage-card">
-                <div class="settings-token-usage-card-head">
-                  <span class="settings-token-usage-icon icon-warning" aria-hidden="true">
-                    <svg viewBox="0 0 24 24"><path d="M9 4c0-1.7 1.3-3 3-3s3 1.3 3 3v9c0 1.7-1.3 3-3 3s-3-1.3-3-3V4z" fill="currentColor"/><path d="M12 19v3" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" fill="none"/></svg>
-                  </span>
-                  <span class="settings-token-usage-card-label">推理 Token</span>
-                </div>
-                <strong>{{ formatTokens(tokenUsageTotals.reasoningTokens) }}</strong>
-              </article>
-              <article class="settings-token-usage-card highlight">
-                <div class="settings-token-usage-card-head">
-                  <span class="settings-token-usage-icon icon-primary" aria-hidden="true">
-                    <svg viewBox="0 0 24 24"><path d="M4 4h6v6H4zM14 4h6v6h-6zM4 14h6v6H4zM14 14h6v6h-6z" fill="currentColor"/></svg>
-                  </span>
-                  <span class="settings-token-usage-card-label">合计</span>
-                </div>
-                <strong>{{ formatTokens(tokenUsageTotals.totalTokens) }}</strong>
-              </article>
+              <article class="settings-token-usage-card total"><span class="settings-token-usage-card-label">Token 合计</span><strong>{{ formatTokens(tokenUsageTotals.totalTokens) }}</strong><small>近 {{ tokenUsagePeriod }} 天</small></article>
+              <article class="settings-token-usage-card"><span class="settings-token-usage-card-label">活跃会话</span><strong>{{ tokenUsageTotals.turnCount }}</strong><small>跨工具轮次</small></article>
+              <article class="settings-token-usage-card"><span class="settings-token-usage-card-label">平均每轮</span><strong>{{ formatTokens(tokenAveragePerTurn) }}</strong><small>Token / turn</small></article>
+              <article class="settings-token-usage-card"><span class="settings-token-usage-card-label">同步状态</span><strong class="status" :class="{ online: cloudPaired }">{{ cloudPaired ? '已同步' : '未连接' }}</strong><small>云端用量数据</small></article>
+              <article class="settings-token-usage-card"><span class="settings-token-usage-card-label">数据来源</span><strong class="source">云端</strong><small>按 AI 工具聚合</small></article>
             </div>
 
+            <article class="settings-analytics-panel settings-token-mix">
+              <div class="settings-analytics-panel-head"><div><h3>Token Mix Lens</h3><p>把总量拆解为输入、输出、推理三段，快速定位成本结构。</p></div><span>{{ formatTokens(tokenUsageTotals.totalTokens) }}</span></div>
+              <div class="settings-token-mix-track" aria-label="Token 构成">
+                <i v-for="item in tokenMix" :key="item.id" :class="item.id" :style="{ width: `${item.percent}%` }"></i>
+              </div>
+              <div class="settings-token-mix-grid">
+                <div v-for="item in tokenMix" :key="item.id"><i :class="item.id"></i><span><strong>{{ item.label }} {{ formatPercent(item.percent) }}</strong><small>{{ item.note }} · {{ formatTokens(item.value) }}</small></span></div>
+              </div>
+            </article>
+
+            <article class="settings-analytics-panel settings-token-trend">
+              <div class="settings-analytics-panel-head"><div><h3>{{ tokenTrendDays.length }} 日趋势</h3><p>按日统计当前周期的真实 Token 用量。</p></div><span>峰值 {{ formatTokens(tokenTrendMax) }}</span></div>
+              <div class="settings-token-trend-chart">
+                <svg viewBox="0 0 760 180" preserveAspectRatio="none" role="img" aria-label="每日 Token 趋势">
+                  <path v-if="tokenTrendAreaPath" :d="tokenTrendAreaPath" class="area"></path>
+                  <path v-if="tokenTrendLinePath" :d="tokenTrendLinePath" class="line"></path>
+                  <line x1="0" y1="60" x2="760" y2="60"></line><line x1="0" y1="110" x2="760" y2="110"></line><line x1="0" y1="158" x2="760" y2="158"></line>
+                </svg>
+                <div class="settings-token-trend-axis"><span>{{ tokenTrendDays[0]?.date.slice(5) }}</span><span>{{ tokenTrendDays[Math.floor(tokenTrendDays.length / 2)]?.date.slice(5) }}</span><span>今天</span></div>
+              </div>
+            </article>
+
             <div class="settings-token-usage-detail">
-              <h3>工具用量明细</h3>
+              <div class="settings-analytics-panel-head"><h3>工具排行</h3><span>{{ tokenUsageRows.length }} 项</span></div>
               <div v-if="!tokenUsageLoading && tokenUsageRows.length === 0" class="settings-token-usage-empty">
                 <span class="settings-token-usage-empty-icon" aria-hidden="true">
                   <svg viewBox="0 0 24 24"><path d="M4 4h16v16H4z" stroke="currentColor" stroke-width="1.8" fill="none"/><path d="M8 16l3-4 3 2 4-6" stroke="currentColor" stroke-width="1.8" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
@@ -1115,11 +1250,14 @@ async function restoreSession(sessionId: string) {
                   <thead>
                     <tr>
                       <th>工具</th>
+                      <th>合计</th>
                       <th>输入 Token</th>
                       <th>输出 Token</th>
                       <th>推理 Token</th>
-                      <th>合计</th>
-                      <th>会话次数</th>
+                      <th>轮次</th>
+                      <th>均值</th>
+                      <th>占比</th>
+                      <th>状态</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -1132,11 +1270,14 @@ async function restoreSession(sessionId: string) {
                           <span>{{ row.name }}</span>
                         </span>
                       </td>
+                      <td class="num total">{{ formatTokens(row.totalTokens) }}</td>
                       <td class="num">{{ formatTokens(row.inputTokens) }}</td>
                       <td class="num">{{ formatTokens(row.outputTokens) }}</td>
                       <td class="num reasoning">{{ formatTokens(row.reasoningTokens) }}</td>
-                      <td class="num total">{{ formatTokens(row.totalTokens) }}</td>
                       <td class="num">{{ row.turnCount }}</td>
+                      <td class="num">{{ formatTokens(row.averageTokens) }}</td>
+                      <td><span class="settings-token-share"><i :style="{ width: `${row.sharePercent}%` }"></i></span></td>
+                      <td><span class="settings-token-status" :class="row.statusTone">{{ row.statusLabel }}</span></td>
                     </tr>
                   </tbody>
                 </table>

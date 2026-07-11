@@ -4,7 +4,7 @@ import ChatMessageRow from "./ChatMessageRow.vue";
 import ChatSegmentView from "./ChatSegment.vue";
 import TerminalView from "./TerminalView.vue";
 import { useWorkspace, type QueuedAiMessage } from "../composables/useWorkspace";
-import { desktopApi, type AiChatOptions, type AiProvider, type AiRunSettingsState, type ChatImageAttachment, type ChatMessage, type ChatSegment, type ClaudeReasoningEffort, type AcpConfigOption, type CodexApprovalMode, type CodexModelOption, type CodexReasoningEffort, type CodexRunMode, type ProjectEnvironmentInfo, type ProjectFilePreview } from "../services/desktop";
+import { desktopApi, type AiChatOptions, type AiProvider, type AiRunSettingsState, type ChatImageAttachment, type ChatMessage, type ChatSegment, type ClaudeReasoningEffort, type AcpConfigOption, type CodexApprovalMode, type CodexModelOption, type CodexReasoningEffort, type CodexRunMode, type ProjectEnvironmentInfo, type ProjectFilePreview, type ProjectOpenTarget } from "../services/desktop";
 import { isProjectFileViewerSupported } from "../shared/project_file_formats";
 
 const ProjectFileViewer = defineAsyncComponent(() => import("./ProjectFileViewer.vue"));
@@ -64,6 +64,8 @@ const sendIcon = new URL("../assets/icons/send.svg", import.meta.url).href;
 const editIcon = new URL("../assets/icons/edit.svg", import.meta.url).href;
 const trashIcon = new URL("../assets/icons/trash.svg", import.meta.url).href;
 const imageRemoveIcon = new URL("../assets/icons/image-remove.svg", import.meta.url).href;
+const folderOpenIcon = new URL("../assets/icons/folder-open.svg", import.meta.url).href;
+const terminalIcon = new URL("../assets/icons/terminal.svg", import.meta.url).href;
 const ws = useWorkspace();
 
 const prompt = ref("");
@@ -85,6 +87,8 @@ const startMenuOpen = ref(false);
 const approvalMenuOpen = ref(false);
 const composerToolsOpen = ref(false);
 const environmentPanelOpen = ref(false);
+const locationMenuOpen = ref(false);
+const locationMenuError = ref("");
 const environmentInfo = ref<ProjectEnvironmentInfo | null>(null);
 const environmentLoading = ref(false);
 const environmentError = ref("");
@@ -129,6 +133,7 @@ const floatingMenuTargetSelector = [
   ".codex-model-menu",
   ".codex-model-submenu",
   ".chat-topbar-action",
+  ".chat-location-menu",
   ".chat-topbar-icon-action",
   ".environment-popover",
 ].join(", ");
@@ -214,7 +219,7 @@ const showModelRunControls = computed(() => showCodexRunControls.value || showCl
 const codexModelOptions = computed(() => codexModels.value.filter((model) => model.model.trim().length > 0));
 const chatHeaderMeta = computed(() => {
   if (!currentProject.value) return "选择项目后开始聊天";
-  return `${currentProject.value.gitBranch ?? "未知分支"} · ${currentProject.value.gitDirty ? "有变更" : "Git 干净"}`;
+  return currentProject.value.gitBranch ?? "未知分支";
 });
 const environmentBranchLabel = computed(() => (
   environmentInfo.value?.branch
@@ -639,7 +644,7 @@ function isFloatingMenuTarget(target: EventTarget | null) {
 }
 
 function closeFloatingMenusOnOutsideClick(event: PointerEvent) {
-  if (!startMenuOpen.value && !approvalMenuOpen.value && !composerToolsOpen.value && !modelMenuOpen.value && !modelSubmenuOpen.value && !environmentPanelOpen.value) return;
+  if (!startMenuOpen.value && !approvalMenuOpen.value && !composerToolsOpen.value && !modelMenuOpen.value && !modelSubmenuOpen.value && !environmentPanelOpen.value && !locationMenuOpen.value) return;
   if (isFloatingMenuTarget(event.target)) return;
   startMenuOpen.value = false;
   approvalMenuOpen.value = false;
@@ -647,6 +652,7 @@ function closeFloatingMenusOnOutsideClick(event: PointerEvent) {
   modelMenuOpen.value = false;
   modelSubmenuOpen.value = false;
   environmentPanelOpen.value = false;
+  locationMenuOpen.value = false;
 }
 
 function toggleApprovalMenu() {
@@ -658,6 +664,7 @@ function toggleApprovalMenu() {
     modelMenuOpen.value = false;
     modelSubmenuOpen.value = false;
     environmentPanelOpen.value = false;
+    locationMenuOpen.value = false;
   }
 }
 
@@ -676,13 +683,34 @@ function toggleComposerToolsMenu() {
     modelMenuOpen.value = false;
     modelSubmenuOpen.value = false;
     environmentPanelOpen.value = false;
+    locationMenuOpen.value = false;
   }
 }
 
-async function openCurrentProjectLocation() {
+function toggleLocationMenu() {
+  if (!currentProject.value) return;
+  locationMenuOpen.value = !locationMenuOpen.value;
+  locationMenuError.value = "";
+  if (locationMenuOpen.value) {
+    environmentPanelOpen.value = false;
+    startMenuOpen.value = false;
+    approvalMenuOpen.value = false;
+    composerToolsOpen.value = false;
+    modelMenuOpen.value = false;
+    modelSubmenuOpen.value = false;
+  }
+}
+
+async function openCurrentProjectWith(target: ProjectOpenTarget) {
   const project = currentProject.value;
   if (!project) return;
-  await desktopApi.openProjectInFileManager(project.path);
+  locationMenuError.value = "";
+  try {
+    await desktopApi.openProjectWith(project.path, target);
+    locationMenuOpen.value = false;
+  } catch (error) {
+    locationMenuError.value = error instanceof Error ? error.message : "打开失败";
+  }
 }
 
 async function refreshEnvironmentInfo() {
@@ -706,6 +734,7 @@ async function refreshEnvironmentInfo() {
 function toggleEnvironmentPanel() {
   environmentPanelOpen.value = !environmentPanelOpen.value;
   if (environmentPanelOpen.value) {
+    locationMenuOpen.value = false;
     startMenuOpen.value = false;
     approvalMenuOpen.value = false;
     composerToolsOpen.value = false;
@@ -730,6 +759,7 @@ function openSplitPanel() {
   modelMenuOpen.value = false;
   modelSubmenuOpen.value = false;
   environmentPanelOpen.value = false;
+  locationMenuOpen.value = false;
   void nextTick(() => {
     splitPanelWidth.value = clampSplitPanelWidth(splitPanelWidth.value);
   });
@@ -858,6 +888,7 @@ function toggleModelMenu() {
     approvalMenuOpen.value = false;
     composerToolsOpen.value = false;
     environmentPanelOpen.value = false;
+    locationMenuOpen.value = false;
   }
 }
 
@@ -1129,7 +1160,7 @@ function onWindowKeydown(event: KeyboardEvent) {
     previewImage.value = null;
     return;
   }
-  if (event.key === "Escape" && (startMenuOpen.value || approvalMenuOpen.value || composerToolsOpen.value || modelMenuOpen.value || modelSubmenuOpen.value || environmentPanelOpen.value)) {
+  if (event.key === "Escape" && (startMenuOpen.value || approvalMenuOpen.value || composerToolsOpen.value || modelMenuOpen.value || modelSubmenuOpen.value || environmentPanelOpen.value || locationMenuOpen.value)) {
     event.preventDefault();
     startMenuOpen.value = false;
     approvalMenuOpen.value = false;
@@ -1137,6 +1168,7 @@ function onWindowKeydown(event: KeyboardEvent) {
     modelMenuOpen.value = false;
     modelSubmenuOpen.value = false;
     environmentPanelOpen.value = false;
+    locationMenuOpen.value = false;
     return;
   }
   if (event.key !== "Escape" || !ws.activeChatIsRunning.value) return;
@@ -1503,6 +1535,7 @@ function toggleStartMenu() {
     modelMenuOpen.value = false;
     modelSubmenuOpen.value = false;
     environmentPanelOpen.value = false;
+    locationMenuOpen.value = false;
   }
 }
 
@@ -1776,22 +1809,49 @@ function onPromptKeydown(event: KeyboardEvent) {
       </div>
       <div class="chat-topbar-meta">
         <span>{{ chatHeaderMeta }}</span>
-        <button
-          type="button"
-          class="chat-topbar-action location"
-          :disabled="!currentProject"
-          title="打开项目位置"
-          @click="openCurrentProjectLocation"
-        >
-          <svg viewBox="0 0 16 16" fill="none" aria-hidden="true">
-            <path d="M3 5.6 8 2l5 3.6v7.1a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V5.6Z" stroke="currentColor" stroke-width="1.35" stroke-linejoin="round" />
-            <path d="M6.2 13.7V9.2h3.6v4.5" stroke="currentColor" stroke-width="1.35" stroke-linejoin="round" />
-          </svg>
-          <span>打开位置</span>
-          <svg class="chat-topbar-action-chevron" viewBox="0 0 16 16" fill="none" aria-hidden="true">
-            <path d="m4.5 6.5 3.5 3 3.5-3" stroke="currentColor" stroke-width="1.45" stroke-linecap="round" stroke-linejoin="round" />
-          </svg>
-        </button>
+        <div class="chat-location-menu-wrap">
+          <button
+            type="button"
+            class="chat-topbar-action location"
+            :class="{ open: locationMenuOpen }"
+            :disabled="!currentProject"
+            title="打开项目位置"
+            :aria-expanded="locationMenuOpen"
+            @click="toggleLocationMenu"
+          >
+            <svg viewBox="0 0 16 16" fill="none" aria-hidden="true">
+              <path d="M3 5.6 8 2l5 3.6v7.1a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V5.6Z" stroke="currentColor" stroke-width="1.35" stroke-linejoin="round" />
+              <path d="M6.2 13.7V9.2h3.6v4.5" stroke="currentColor" stroke-width="1.35" stroke-linejoin="round" />
+            </svg>
+            <span>打开位置</span>
+            <svg class="chat-topbar-action-chevron" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+              <path d="m4.5 6.5 3.5 3 3.5-3" stroke="currentColor" stroke-width="1.45" stroke-linecap="round" stroke-linejoin="round" />
+            </svg>
+          </button>
+          <div v-if="locationMenuOpen" class="chat-location-menu" role="menu">
+            <button type="button" role="menuitem" @click="openCurrentProjectWith('visualStudio')">
+              <span class="chat-location-app-icon brand-visual-studio" aria-hidden="true">VS</span>
+              <span>Visual Studio</span>
+            </button>
+            <button type="button" role="menuitem" @click="openCurrentProjectWith('fileManager')">
+              <span class="chat-location-app-icon" aria-hidden="true"><img :src="folderOpenIcon" alt="" /></span>
+              <span>File Explorer</span>
+            </button>
+            <button type="button" role="menuitem" @click="openCurrentProjectWith('terminal')">
+              <span class="chat-location-app-icon terminal" aria-hidden="true"><img :src="terminalIcon" alt="" /></span>
+              <span>Terminal</span>
+            </button>
+            <button type="button" role="menuitem" @click="openCurrentProjectWith('gitBash')">
+              <span class="chat-location-app-icon brand-git" aria-hidden="true">◇</span>
+              <span>Git Bash</span>
+            </button>
+            <button type="button" role="menuitem" @click="openCurrentProjectWith('wsl')">
+              <span class="chat-location-app-icon brand-wsl" aria-hidden="true">&gt;_</span>
+              <span>WSL</span>
+            </button>
+            <p v-if="locationMenuError" class="chat-location-menu-error">{{ locationMenuError }}</p>
+          </div>
+        </div>
         <button
           type="button"
           class="chat-topbar-icon-action"

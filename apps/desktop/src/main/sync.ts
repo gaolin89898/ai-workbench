@@ -1587,6 +1587,15 @@ export interface TokenUsageSummaryItem {
 export interface TokenUsageSummary {
   providers: TokenUsageSummaryItem[];
   totals: TokenUsageSummaryItem;
+  daily: Array<{
+    date: string;
+    inputTokens: number;
+    outputTokens: number;
+    reasoningTokens: number;
+    totalTokens: number;
+    turnCount: number;
+  }>;
+  periodDays: number;
 }
 
 /**
@@ -1631,10 +1640,10 @@ export async function reportTokenUsage(report: TokenUsageReport): Promise<void> 
 /**
  * 查询当前用户按工具聚合的 token 用量。
  */
-export async function fetchTokenUsageSummary(): Promise<TokenUsageSummary | null> {
+export async function fetchTokenUsageSummary(days = 30): Promise<TokenUsageSummary | null> {
   const config = loadStoredConfig();
   if (!config || !config.accessToken) return null;
-  const url = `${normalizeServerUrl(config.serverUrl)}/token-usage/summary`;
+  const url = `${normalizeServerUrl(config.serverUrl)}/token-usage/summary?days=${days}`;
   return (await fetchJson(url, {
     method: "GET",
     headers: { Authorization: `Bearer ${config.accessToken}` },

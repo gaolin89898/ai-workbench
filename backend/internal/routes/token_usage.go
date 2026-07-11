@@ -8,6 +8,8 @@ package routes
 import (
 	"errors"
 	"net/http"
+	"strconv"
+	"time"
 
 	"github.com/gaolin89898/ai-workbench/backend/internal/auth"
 	"github.com/gaolin89898/ai-workbench/backend/internal/db"
@@ -89,8 +91,10 @@ func (h *Handler) reportTokenUsage(w http.ResponseWriter, r *http.Request) {
 
 // tokenUsageSummaryResponse 聚合响应。
 type tokenUsageSummaryResponse struct {
-	Providers []tokenUsageSummaryItem `json:"providers"`
-	Totals    tokenUsageSummaryItem   `json:"totals"`
+	Providers  []tokenUsageSummaryItem         `json:"providers"`
+	Totals     tokenUsageSummaryItem           `json:"totals"`
+	Daily      []models.TokenUsageDailySummary `json:"daily"`
+	PeriodDays int                             `json:"periodDays"`
 }
 
 type tokenUsageSummaryItem struct {
@@ -110,7 +114,12 @@ func (h *Handler) getTokenUsageSummary(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	rows, err := h.DB.SumTokenUsageByProvider(r.Context(), userID)
+	days := 30
+	if requested, err := strconv.Atoi(r.URL.Query().Get("days")); err == nil && (requested == 7 || requested == 30 || requested == 90) {
+		days = requested
+	}
+	since := time.Now().UTC().AddDate(0, 0, -(days - 1)).Truncate(24 * time.Hour)
+	rows, err := h.DB.SumTokenUsageByProvider(r.Context(), userID, since)
 	if err != nil {
 		if errors.Is(err, db.ErrForbidden) {
 			writeForbidden(w)
@@ -120,7 +129,15 @@ func (h *Handler) getTokenUsageSummary(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	resp := tokenUsageSummaryResponse{Providers: []tokenUsageSummaryItem{}}
+	daily, err := h.DB.SumTokenUsageByDay(r.Context(), userID, since)
+	if err != nil {
+		writeInternal(w)
+		return
+	}
+	if daily == nil {
+		daily = []models.TokenUsageDailySummary{}
+	}
+	resp := tokenUsageSummaryResponse{Providers: []tokenUsageSummaryItem{}, Daily: daily, PeriodDays: days}
 	var totals tokenUsageSummaryItem
 	for _, row := range rows {
 		item := tokenUsageSummaryItem{

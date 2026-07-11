@@ -4,8 +4,10 @@
 
 import { BrowserWindow, dialog, shell } from "electron";
 import simpleGit from "simple-git";
+import fs from "node:fs";
 import path from "node:path";
-import { spawn } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
+import type { ProjectOpenTarget } from "../services/desktop";
 
 // Select a folder via the native open dialog. Returns the chosen path or null.
 export async function chooseWorkspaceProjectPath(parent?: BrowserWindow | null): Promise<string | null> {
@@ -125,7 +127,97 @@ export async function readProjectEnvironment(projectPath: string): Promise<{
 
 // Open a project path in the host file manager.
 export async function openProjectInFileManager(projectPath: string): Promise<void> {
-  await shell.openPath(projectPath);
+  const error = await shell.openPath(projectPath);
+  if (error) throw new Error(error);
+}
+
+function spawnDetached(command: string, args: string[], cwd: string): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const child = spawn(command, args, {
+      cwd,
+      detached: true,
+      stdio: "ignore",
+      windowsHide: false,
+    });
+    child.once("error", reject);
+    child.once("spawn", () => {
+      child.unref();
+      resolve();
+    });
+  });
+}
+
+function visualStudioExecutable(): string {
+  const installerRoot = process.env["ProgramFiles(x86)"];
+  const vswhere = installerRoot
+    ? path.join(installerRoot, "Microsoft Visual Studio", "Installer", "vswhere.exe")
+    : "";
+  if (vswhere && fs.existsSync(vswhere)) {
+    const result = spawnSync(vswhere, [
+      "-latest",
+      "-products", "*",
+      "-requires", "Microsoft.Component.MSBuild",
+      "-find", "Common7\\IDE\\devenv.exe",
+    ], { encoding: "utf8", windowsHide: true });
+    const executable = result.stdout.trim().split(/\r?\n/)[0];
+    if (executable && fs.existsSync(executable)) return executable;
+  }
+  return "devenv.exe";
+}
+
+function gitBashExecutable(): string {
+  const candidates = [
+    process.env.ProgramFiles && path.join(process.env.ProgramFiles, "Git", "git-bash.exe"),
+    process.env["ProgramFiles(x86)"] && path.join(process.env["ProgramFiles(x86)"], "Git", "git-bash.exe"),
+    process.env.LOCALAPPDATA && path.join(process.env.LOCALAPPDATA, "Programs", "Git", "git-bash.exe"),
+  ].filter((candidate): candidate is string => Boolean(candidate));
+  return candidates.find((candidate) => fs.existsSync(candidate)) ?? "git-bash.exe";
+}
+
+export async function openProjectWith(projectPath: string, target: ProjectOpenTarget): Promise<void> {
+  if (target === "fileManager") {
+    await openProjectInFileManager(projectPath);
+    return;
+  }
+  if (process.platform !== "win32") {
+    throw new Error("该打开方式目前仅支持 Windows");
+  }
+  try {
+    if (target === "visualStudio") {
+      await spawnDetached(visualStudioExecutable(), [projectPath], projectPath);
+      return;
+    }
+    if (target === "terminal") {
+      try {
+        await spawnDetached("wt.exe", ["-d", projectPath], projectPath);
+      } catch {
+        await spawnDetached("powershell.exe", ["-NoExit"], projectPath);
+      }
+      return;
+    }
+    if (target === "gitBash") {
+      await spawnDetached(gitBashExecutable(), [], projectPath);
+      return;
+    }
+    if (target === "wsl") {
+      try {
+        await spawnDetached("wt.exe", ["-d", projectPath, "wsl.exe"], projectPath);
+      } catch {
+        await spawnDetached("wsl.exe", [], projectPath);
+      }
+      return;
+    }
+    throw new Error("不支持的打开方式");
+  } catch {
+    const labels: Record<ProjectOpenTarget, string> = {
+      visualStudio: "Visual Studio",
+      fileManager: "文件资源管理器",
+      terminal: "Terminal",
+      gitBash: "Git Bash",
+      wsl: "WSL",
+    };
+    throw new Error(`无法启动 ${labels[target]}，请确认它已安装`);
+  }
 }
 
 // Derive a human-friendly project name from its path.

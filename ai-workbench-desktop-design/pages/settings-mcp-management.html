@@ -1,0 +1,531 @@
+<!DOCTYPE html>
+<html lang="zh-CN" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>设置 - MCP 管理</title>
+    <style id="theme-vars">
+/* AI Workbench Desktop — Dark Theme */
+/* Based on actual project style.css, inverted to dark */
+:root {
+  /* Brand */
+  --color-primary: #2563eb;
+  --color-primary-hover: #1d4ed8;
+  --color-primary-muted: rgba(37, 99, 235, 0.15);
+  --color-primary-soft: rgba(37, 99, 235, 0.08);
+  --color-primary-ring: rgba(37, 99, 235, 0.25);
+
+  /* Surface & Background */
+  --color-bg-app: #0f1117;
+  --color-bg-body: #111318;
+  --color-bg-sidebar: #161822;
+  --color-bg-main: #1a1d2e;
+  --color-bg-content: #1e2235;
+  --color-bg-surface: #1e2235;
+  --color-bg-elevated: #252a3a;
+  --color-bg-input: #1e2235;
+  --color-bg-hover: rgba(255, 255, 255, 0.06);
+  --color-bg-active: rgba(37, 99, 235, 0.12);
+
+  /* Text */
+  --color-text-primary: #e8eaed;
+  --color-text-body: #d1d5db;
+  --color-text-secondary: #9aa0b4;
+  --color-text-muted: #6b7280;
+  --color-text-placeholder: #6b7280;
+  --color-text-inverse: #ffffff;
+
+  /* Border */
+  --color-border: rgba(255, 255, 255, 0.1);
+  --color-border-subtle: rgba(255, 255, 255, 0.06);
+  --color-border-active: rgba(37, 99, 235, 0.5);
+
+  /* State Colors */
+  --state-success: #22c55e;
+  --state-success-bg: rgba(34, 197, 94, 0.12);
+  --state-success-ring: rgba(34, 197, 94, 0.25);
+  --state-warning: #f59e0b;
+  --state-warning-bg: rgba(245, 158, 11, 0.12);
+  --state-error: #ef4444;
+  --state-error-bg: rgba(239, 68, 68, 0.12);
+  --state-info: #3b82f6;
+  --state-info-bg: rgba(59, 130, 246, 0.12);
+
+  /* Radius */
+  --radius-sm: 4px;
+  --radius-md: 7px;
+  --radius-lg: 8px;
+  --radius-xl: 12px;
+  --radius-full: 999px;
+
+  /* Typography */
+  --font-sans: "Inter", ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+
+  --text-xs: 11px;
+  --text-sm: 12px;
+  --text-base: 13px;
+  --text-md: 14px;
+  --text-lg: 16px;
+  --text-xl: 20px;
+  --text-2xl: 28px;
+
+  --leading-tight: 1.25;
+  --leading-normal: 1.5;
+  --leading-relaxed: 1.625;
+  --leading-chat: 1.62;
+
+  /* Font Weights */
+  --fw-normal: 400;
+  --fw-medium: 500;
+  --fw-semibold: 620;
+  --fw-bold: 700;
+  --fw-extrabold: 800;
+  --fw-black: 850;
+
+  /* Shadows */
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.15);
+  --shadow-md: 0 10px 24px rgba(0, 0, 0, 0.25);
+  --shadow-lg: 0 24px 56px rgba(0, 0, 0, 0.35);
+  --shadow-composer: 0 16px 42px rgba(0, 0, 0, 0.3);
+
+  /* Spacing */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-10: 40px;
+  --space-14: 56px;
+  --space-18: 72px;
+
+  /* Layout */
+  --sidebar-width: 286px;
+  --topbar-height: 56px;
+  --composer-max-width: 760px;
+
+  /* Transitions */
+  --transition-fast: 120ms ease;
+  --transition-normal: 200ms ease;
+}
+
+    </style>
+    <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4.3.1/dist/index.global.js"></script>
+    <script src="https://unpkg.com/lucide@1.8.0/dist/umd/lucide.min.js"></script>
+    <style type="text/tailwindcss">
+  @theme inline {
+    --color-primary: var(--color-primary);
+    --color-border: var(--color-border);
+  }
+  @layer base {
+    body { background: var(--color-bg-body); color: var(--color-text-primary); }
+    td, th { @apply break-words; word-break: break-all; word-break: auto-phrase; }
+    th { @apply whitespace-nowrap; }
+  }
+    </style>
+    <style>
+      .no-scrollbar::-webkit-scrollbar { display: none; }
+      .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+      [data-icon] {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        -webkit-mask-size: contain;
+        mask-size: contain;
+        -webkit-mask-repeat: no-repeat;
+        mask-repeat: no-repeat;
+        -webkit-mask-position: center;
+        mask-position: center;
+        background-color: currentColor;
+      }
+    </style>
+</head>
+<body class="min-h-screen font-sans antialiased overflow-hidden" style="background:var(--color-bg-body); color:var(--color-text-primary); font-family:var(--font-sans);">
+    <main class="flex" style="height:100vh; background:var(--color-bg-body);">
+        <aside class="settings-sidebar flex flex-col shrink-0" style="width:286px; border-right:1px solid var(--color-border); background:var(--color-bg-sidebar); padding:18px 12px 14px;">
+            <div class="flex flex-col" style="gap:18px; padding-bottom:18px;">
+                <button class="ui-button ghost inline-flex items-center justify-center gap-1.5 whitespace-nowrap cursor-pointer" style="min-height:32px; border-radius:var(--radius-md); color:var(--color-text-secondary); font-size:13px; font-weight:760; background:none; border:none; width:max-content;">
+                    <i data-lucide="arrow-left" style="width:14px; height:14px;"></i>
+                    <span>返回</span>
+                </button>
+                <div>
+                    <div style="font-size:22px; font-weight:860; color:var(--color-text-body); line-height:1.2;">设置</div>
+                    <div style="font-size:12px; color:var(--color-text-secondary); font-weight:700; margin-top:2px;">桌面工作台配置</div>
+                </div>
+            </div>
+
+            <nav class="grid settings-nav" style="gap:3px;">
+                <button class="nav-item grid items-center cursor-pointer" style="grid-template-columns:10px minmax(0,1fr) auto; gap:10px; min-height:56px; border:1px solid transparent; border-radius:var(--radius-lg); padding:10px; background:none;">
+                    <span style="width:8px; height:8px; border-radius:var(--radius-full); background:var(--color-border);"></span>
+                    <div class="flex items-center gap-2 min-w-0">
+                        <i data-lucide="server" style="width:17px; height:17px; color:var(--color-text-secondary); flex-shrink:0;"></i>
+                        <strong class="truncate" style="font-size:14px; font-weight:820; color:var(--color-text-secondary);">连接</strong>
+                    </div>
+                    <span class="tag neutral inline-flex items-center justify-center shrink-0 whitespace-nowrap">基础</span>
+                </button>
+                <button class="nav-item grid items-center cursor-pointer" style="grid-template-columns:10px minmax(0,1fr) auto; gap:10px; min-height:56px; border:1px solid transparent; border-radius:var(--radius-lg); padding:10px; background:none;">
+                    <span style="width:8px; height:8px; border-radius:var(--radius-full); background:var(--color-border);"></span>
+                    <div class="flex items-center gap-2 min-w-0">
+                        <i data-lucide="terminal" style="width:17px; height:17px; color:var(--color-text-secondary); flex-shrink:0;"></i>
+                        <strong class="truncate" style="font-size:14px; font-weight:820; color:var(--color-text-secondary);">Codex 管理</strong>
+                    </div>
+                    <span class="tag neutral inline-flex items-center justify-center shrink-0 whitespace-nowrap">CLI</span>
+                </button>
+                <button class="nav-item active grid items-center cursor-pointer" style="grid-template-columns:10px minmax(0,1fr) auto; gap:10px; min-height:56px; border:1px solid var(--color-primary-muted); border-radius:var(--radius-lg); padding:10px; background:var(--color-bg-elevated); box-shadow:var(--shadow-sm);">
+                    <span style="width:8px; height:8px; border-radius:var(--radius-full); background:var(--color-primary); box-shadow:0 0 0 4px var(--color-primary-muted);"></span>
+                    <div class="flex items-center gap-2 min-w-0">
+                        <i data-lucide="network" style="width:17px; height:17px; color:var(--color-text-body); flex-shrink:0;"></i>
+                        <strong class="truncate" style="font-size:14px; font-weight:820; color:var(--color-text-body);">MCP 管理</strong>
+                    </div>
+                    <span class="tag primary inline-flex items-center justify-center shrink-0 whitespace-nowrap">全局</span>
+                </button>
+                <button class="nav-item grid items-center cursor-pointer" style="grid-template-columns:10px minmax(0,1fr) auto; gap:10px; min-height:56px; border:1px solid transparent; border-radius:var(--radius-lg); padding:10px; background:none;">
+                    <span style="width:8px; height:8px; border-radius:var(--radius-full); background:var(--color-border);"></span>
+                    <div class="flex items-center gap-2 min-w-0">
+                        <i data-lucide="shield" style="width:17px; height:17px; color:var(--color-text-secondary); flex-shrink:0;"></i>
+                        <strong class="truncate" style="font-size:14px; font-weight:820; color:var(--color-text-secondary);">安全与历史</strong>
+                    </div>
+                    <span class="tag neutral inline-flex items-center justify-center shrink-0 whitespace-nowrap">保护</span>
+                </button>
+                <button class="nav-item grid items-center cursor-pointer" style="grid-template-columns:10px minmax(0,1fr) auto; gap:10px; min-height:56px; border:1px solid transparent; border-radius:var(--radius-lg); padding:10px; background:none;">
+                    <span style="width:8px; height:8px; border-radius:var(--radius-full); background:var(--color-border);"></span>
+                    <div class="flex items-center gap-2 min-w-0">
+                        <i data-lucide="archive" style="width:17px; height:17px; color:var(--color-text-secondary); flex-shrink:0;"></i>
+                        <strong class="truncate" style="font-size:14px; font-weight:820; color:var(--color-text-secondary);">已归档对话</strong>
+                    </div>
+                    <span class="tag neutral inline-flex items-center justify-center shrink-0 whitespace-nowrap">历史</span>
+                </button>
+                <button class="nav-item grid items-center cursor-pointer" style="grid-template-columns:10px minmax(0,1fr) auto; gap:10px; min-height:56px; border:1px solid transparent; border-radius:var(--radius-lg); padding:10px; background:none;">
+                    <span style="width:8px; height:8px; border-radius:var(--radius-full); background:var(--color-border);"></span>
+                    <div class="flex items-center gap-2 min-w-0">
+                        <i data-lucide="bar-chart-3" style="width:17px; height:17px; color:var(--color-text-secondary); flex-shrink:0;"></i>
+                        <strong class="truncate" style="font-size:14px; font-weight:820; color:var(--color-text-secondary);">用量统计</strong>
+                    </div>
+                    <span class="tag neutral inline-flex items-center justify-center shrink-0 whitespace-nowrap">统计</span>
+                </button>
+                <button class="nav-item grid items-center cursor-pointer" style="grid-template-columns:10px minmax(0,1fr) auto; gap:10px; min-height:56px; border:1px solid transparent; border-radius:var(--radius-lg); padding:10px; background:none;">
+                    <span style="width:8px; height:8px; border-radius:var(--radius-full); background:var(--color-border);"></span>
+                    <div class="flex items-center gap-2 min-w-0">
+                        <i data-lucide="info" style="width:17px; height:17px; color:var(--color-text-secondary); flex-shrink:0;"></i>
+                        <strong class="truncate" style="font-size:14px; font-weight:820; color:var(--color-text-secondary);">关于</strong>
+                    </div>
+                    <span class="tag neutral inline-flex items-center justify-center shrink-0 whitespace-nowrap">信息</span>
+                </button>
+            </nav>
+
+            <div class="mt-auto" style="border:1px solid var(--color-border); border-radius:var(--radius-lg); background:var(--color-bg-elevated); padding:12px;">
+                <div style="font-size:11px; font-weight:850; color:var(--color-text-muted);">全局配置</div>
+                <div class="truncate" style="font-size:12px; font-weight:760; color:var(--color-text-secondary); margin-top:2px;">mcp_servers.json</div>
+            </div>
+        </aside>
+
+        <div class="content-scroll flex-1 overflow-y-auto" style="padding:32px 0 28px;">
+            <div class="page-frame mx-auto" style="max-width:1320px; padding:0 32px;">
+                <header class="title-layer flex items-start justify-between gap-4" style="margin-bottom:16px;">
+                    <div class="min-w-0">
+                        <div class="flex items-center gap-2" style="margin-bottom:6px;">
+                            <h1 style="font-size:28px; font-weight:880; color:var(--color-text-primary); line-height:1.2; text-wrap:balance; word-break:keep-all; overflow-wrap:break-word;">MCP 管理</h1>
+                            <span class="tag primary inline-flex items-center justify-center shrink-0 whitespace-nowrap">全局 Server</span>
+                        </div>
+                        <p class="line-clamp-2" style="font-size:13px; color:var(--color-text-secondary); line-height:var(--leading-normal); max-width:680px;">管理全局 MCP Server、工具、资源和认证状态。</p>
+                    </div>
+                    <div class="toolbar flex items-center gap-2 shrink-0">
+                        <button class="ui-button secondary inline-flex items-center justify-center gap-2 whitespace-nowrap cursor-pointer" style="min-height:34px; border-radius:var(--radius-lg); background:transparent; border:1px solid var(--color-border); color:var(--color-text-secondary); font-size:13px; font-weight:760; padding:0 12px; font-family:var(--font-sans);">
+                            <i data-lucide="refresh-cw" style="width:14px; height:14px;"></i>
+                            刷新状态
+                        </button>
+                        <button class="ui-button primary inline-flex items-center justify-center gap-2 whitespace-nowrap cursor-pointer" style="min-height:34px; border-radius:var(--radius-lg); background:var(--color-primary); border:none; color:var(--color-text-inverse); font-size:13px; font-weight:760; padding:0 14px; font-family:var(--font-sans);">
+                            <i data-lucide="plus" style="width:14px; height:14px;"></i>
+                            新增 Server
+                        </button>
+                    </div>
+                </header>
+
+                <section class="kpi-grid grid" style="grid-template-columns:repeat(5, minmax(120px, 1fr)); gap:10px; margin-bottom:14px;">
+                    <div class="kpi-card" style="border:1px solid var(--color-border); border-radius:var(--radius-lg); background:var(--color-bg-surface); padding:12px 14px; min-height:70px;">
+                        <div class="truncate" style="font-size:12px; font-weight:750; color:var(--color-text-muted);">Server 总数</div>
+                        <div class="whitespace-nowrap" style="font-size:24px; font-weight:900; color:var(--color-text-primary); line-height:1.2; font-variant-numeric:tabular-nums;">6</div>
+                    </div>
+                    <div class="kpi-card" style="border:1px solid var(--color-border); border-radius:var(--radius-lg); background:var(--color-bg-surface); padding:12px 14px; min-height:70px;">
+                        <div class="truncate" style="font-size:12px; font-weight:750; color:var(--color-text-muted);">就绪</div>
+                        <div class="whitespace-nowrap" style="font-size:24px; font-weight:900; color:var(--state-success); line-height:1.2; font-variant-numeric:tabular-nums;">4</div>
+                    </div>
+                    <div class="kpi-card" style="border:1px solid var(--color-border); border-radius:var(--radius-lg); background:var(--color-bg-surface); padding:12px 14px; min-height:70px;">
+                        <div class="truncate" style="font-size:12px; font-weight:750; color:var(--color-text-muted);">工具</div>
+                        <div class="whitespace-nowrap" style="font-size:24px; font-weight:900; color:var(--color-primary); line-height:1.2; font-variant-numeric:tabular-nums;">28</div>
+                    </div>
+                    <div class="kpi-card" style="border:1px solid var(--color-border); border-radius:var(--radius-lg); background:var(--color-bg-surface); padding:12px 14px; min-height:70px;">
+                        <div class="truncate" style="font-size:12px; font-weight:750; color:var(--color-text-muted);">资源</div>
+                        <div class="whitespace-nowrap" style="font-size:24px; font-weight:900; color:var(--color-text-primary); line-height:1.2; font-variant-numeric:tabular-nums;">12</div>
+                    </div>
+                    <div class="kpi-card" style="border:1px solid var(--color-border); border-radius:var(--radius-lg); background:var(--color-bg-surface); padding:12px 14px; min-height:70px;">
+                        <div class="truncate" style="font-size:12px; font-weight:750; color:var(--color-text-muted);">需要认证</div>
+                        <div class="whitespace-nowrap" style="font-size:24px; font-weight:900; color:var(--state-warning); line-height:1.2; font-variant-numeric:tabular-nums;">2</div>
+                    </div>
+                </section>
+
+                <section class="admin-grid grid" style="grid-template-columns:minmax(240px, 0.82fr) minmax(360px, 1.18fr) minmax(340px, 1fr); gap:12px; align-items:stretch;">
+                    <div class="panel server-panel flex flex-col min-w-0" style="border:1px solid var(--color-border); border-radius:var(--radius-lg); background:var(--color-bg-surface); min-height:640px;">
+                        <div class="panel-header" style="padding:14px; border-bottom:1px solid var(--color-border-subtle);">
+                            <div class="flex items-center justify-between gap-3" style="margin-bottom:10px;">
+                                <h2 style="font-size:16px; font-weight:840; color:var(--color-text-body); line-height:1.3;">Server 列表</h2>
+                                <span class="tag neutral inline-flex items-center justify-center shrink-0 whitespace-nowrap">6 项</span>
+                            </div>
+                            <label class="search-box flex items-center gap-2" style="min-height:34px; border:1px solid var(--color-border); border-radius:var(--radius-md); background:var(--color-bg-input); padding:0 10px;">
+                                <i data-lucide="search" style="width:14px; height:14px; color:var(--color-text-muted); flex-shrink:0;"></i>
+                                <input aria-label="搜索 Server" value="mcp" style="width:100%; min-width:0; background:transparent; border:none; outline:none; color:var(--color-text-body); font-size:13px; font-family:var(--font-sans);" />
+                            </label>
+                        </div>
+                        <div class="server-list flex flex-col" style="padding:8px; gap:6px; overflow:auto;">
+                            <button class="server-row active text-left cursor-pointer" style="border:1px solid var(--color-border-active); border-radius:var(--radius-lg); background:var(--color-bg-active); padding:10px;">
+                                <div class="flex items-start justify-between gap-2">
+                                    <div class="min-w-0">
+                                        <div class="flex items-center gap-2 min-w-0">
+                                            <i data-lucide="globe-2" style="width:15px; height:15px; color:var(--color-primary); flex-shrink:0;"></i>
+                                            <strong class="truncate" style="font-size:13px; color:var(--color-text-body); font-weight:820; display:block;">integrated_browser</strong>
+                                        </div>
+                                        <div class="truncate" style="font-size:11px; color:var(--color-text-muted); margin-top:4px; font-family:var(--font-mono);">stdio · browser-mcp</div>
+                                    </div>
+                                    <span class="status success inline-flex items-center justify-center shrink-0 whitespace-nowrap">就绪</span>
+                                </div>
+                                <div class="flex items-center gap-2" style="margin-top:8px;">
+                                    <span class="tag neutral inline-flex items-center justify-center shrink-0 whitespace-nowrap">无需认证</span>
+                                    <span class="tag neutral inline-flex items-center justify-center shrink-0 whitespace-nowrap">8 工具</span>
+                                </div>
+                            </button>
+
+                            <button class="server-row text-left cursor-pointer" style="border:1px solid transparent; border-radius:var(--radius-lg); background:transparent; padding:10px;">
+                                <div class="flex items-start justify-between gap-2">
+                                    <div class="min-w-0">
+                                        <div class="flex items-center gap-2 min-w-0"><i data-lucide="book-open" style="width:15px; height:15px; color:var(--color-text-secondary); flex-shrink:0;"></i><strong class="truncate" style="font-size:13px; color:var(--color-text-body); font-weight:820; display:block;">openai-docs</strong></div>
+                                        <div class="truncate" style="font-size:11px; color:var(--color-text-muted); margin-top:4px; font-family:var(--font-mono);">http · docs.openai.com</div>
+                                    </div>
+                                    <span class="status success inline-flex items-center justify-center shrink-0 whitespace-nowrap">就绪</span>
+                                </div>
+                                <div class="flex items-center gap-2" style="margin-top:8px;"><span class="tag neutral inline-flex items-center justify-center shrink-0 whitespace-nowrap">Token 已配置</span><span class="tag neutral inline-flex items-center justify-center shrink-0 whitespace-nowrap">5 工具</span></div>
+                            </button>
+
+                            <button class="server-row text-left cursor-pointer" style="border:1px solid transparent; border-radius:var(--radius-lg); background:transparent; padding:10px;">
+                                <div class="flex items-start justify-between gap-2">
+                                    <div class="min-w-0">
+                                        <div class="flex items-center gap-2 min-w-0"><i data-lucide="folder" style="width:15px; height:15px; color:var(--color-text-secondary); flex-shrink:0;"></i><strong class="truncate" style="font-size:13px; color:var(--color-text-body); font-weight:820; display:block;">filesystem</strong></div>
+                                        <div class="truncate" style="font-size:11px; color:var(--color-text-muted); margin-top:4px; font-family:var(--font-mono);">stdio · local scope</div>
+                                    </div>
+                                    <span class="status success inline-flex items-center justify-center shrink-0 whitespace-nowrap">就绪</span>
+                                </div>
+                                <div class="flex items-center gap-2" style="margin-top:8px;"><span class="tag neutral inline-flex items-center justify-center shrink-0 whitespace-nowrap">无需认证</span><span class="tag neutral inline-flex items-center justify-center shrink-0 whitespace-nowrap">4 工具</span></div>
+                            </button>
+
+                            <button class="server-row text-left cursor-pointer" style="border:1px solid transparent; border-radius:var(--radius-lg); background:transparent; padding:10px;">
+                                <div class="flex items-start justify-between gap-2">
+                                    <div class="min-w-0">
+                                        <div class="flex items-center gap-2 min-w-0"><i data-lucide="github" style="width:15px; height:15px; color:var(--color-text-secondary); flex-shrink:0;"></i><strong class="truncate" style="font-size:13px; color:var(--color-text-body); font-weight:820; display:block;">github</strong></div>
+                                        <div class="truncate" style="font-size:11px; color:var(--color-text-muted); margin-top:4px; font-family:var(--font-mono);">http · api.github.com</div>
+                                    </div>
+                                    <span class="status starting inline-flex items-center justify-center shrink-0 whitespace-nowrap">启动中</span>
+                                </div>
+                                <div class="flex items-center gap-2" style="margin-top:8px;"><span class="tag neutral inline-flex items-center justify-center shrink-0 whitespace-nowrap">OAuth 已登录</span><span class="tag neutral inline-flex items-center justify-center shrink-0 whitespace-nowrap">6 工具</span></div>
+                            </button>
+
+                            <button class="server-row needs text-left cursor-pointer" style="border:1px solid var(--state-warning-bg); border-radius:var(--radius-lg); background:transparent; padding:10px;">
+                                <div class="flex items-start justify-between gap-2">
+                                    <div class="min-w-0">
+                                        <div class="flex items-center gap-2 min-w-0"><i data-lucide="message-square" style="width:15px; height:15px; color:var(--state-warning); flex-shrink:0;"></i><strong class="truncate" style="font-size:13px; color:var(--color-text-body); font-weight:820; display:block;">feishu</strong></div>
+                                        <div class="truncate" style="font-size:11px; color:var(--color-text-muted); margin-top:4px; font-family:var(--font-mono);">sse · open.feishu.cn</div>
+                                    </div>
+                                    <span class="status warning inline-flex items-center justify-center shrink-0 whitespace-nowrap">已取消</span>
+                                </div>
+                                <div class="flex items-center gap-2" style="margin-top:8px;"><span class="status warning inline-flex items-center justify-center shrink-0 whitespace-nowrap">需要登录</span><span class="tag neutral inline-flex items-center justify-center shrink-0 whitespace-nowrap">3 工具</span></div>
+                            </button>
+
+                            <button class="server-row failed text-left cursor-pointer" style="border:1px solid var(--state-error-bg); border-radius:var(--radius-lg); background:transparent; padding:10px;">
+                                <div class="flex items-start justify-between gap-2">
+                                    <div class="min-w-0">
+                                        <div class="flex items-center gap-2 min-w-0"><i data-lucide="database" style="width:15px; height:15px; color:var(--state-error); flex-shrink:0;"></i><strong class="truncate" style="font-size:13px; color:var(--color-text-body); font-weight:820; display:block;">postgres-local</strong></div>
+                                        <div class="truncate" style="font-size:11px; color:var(--color-text-muted); margin-top:4px; font-family:var(--font-mono);">tcp · 127.0.0.1:5432</div>
+                                    </div>
+                                    <span class="status error inline-flex items-center justify-center shrink-0 whitespace-nowrap">启动失败</span>
+                                </div>
+                                <div class="flex items-center gap-2" style="margin-top:8px;"><span class="tag neutral inline-flex items-center justify-center shrink-0 whitespace-nowrap">Token 已配置</span><span class="tag neutral inline-flex items-center justify-center shrink-0 whitespace-nowrap">2 资源</span></div>
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="panel inventory-panel flex flex-col min-w-0" style="border:1px solid var(--color-border); border-radius:var(--radius-lg); background:var(--color-bg-surface); min-height:640px;">
+                        <div class="panel-header" style="padding:14px; border-bottom:1px solid var(--color-border-subtle);">
+                            <div class="flex items-center justify-between gap-3" style="margin-bottom:12px;">
+                                <h2 style="font-size:16px; font-weight:840; color:var(--color-text-body); line-height:1.3;">清单</h2>
+                                <div class="controls flex items-center gap-2">
+                                    <button class="seg-btn active inline-flex items-center justify-center whitespace-nowrap cursor-pointer">中</button>
+                                    <button class="seg-btn inline-flex items-center justify-center whitespace-nowrap cursor-pointer">EN</button>
+                                    <button class="switch-btn inline-flex items-center justify-center gap-2 whitespace-nowrap cursor-pointer"><span class="switch-dot"></span>高级</button>
+                                </div>
+                            </div>
+                            <div class="tabs flex items-center gap-2" style="border:1px solid var(--color-border); border-radius:var(--radius-lg); background:var(--color-bg-input); padding:3px;">
+                                <button class="tab active inline-flex items-center justify-center gap-1.5 whitespace-nowrap cursor-pointer"><i data-lucide="wrench" style="width:13px; height:13px;"></i>工具</button>
+                                <button class="tab inline-flex items-center justify-center gap-1.5 whitespace-nowrap cursor-pointer"><i data-lucide="box" style="width:13px; height:13px;"></i>资源</button>
+                                <button class="tab inline-flex items-center justify-center gap-1.5 whitespace-nowrap cursor-pointer"><i data-lucide="file-code-2" style="width:13px; height:13px;"></i>模板</button>
+                            </div>
+                        </div>
+                        <div class="inventory-list flex flex-col" style="padding:8px; gap:6px; overflow:auto;">
+                            <div class="tool-row selected grid items-center" style="grid-template-columns:minmax(0,1fr) auto; gap:12px; border:1px solid var(--color-border-active); border-radius:var(--radius-lg); background:var(--color-bg-active); padding:10px 12px;">
+                                <div class="min-w-0"><div class="flex items-center gap-2 min-w-0"><strong class="truncate" style="font-size:13px; color:var(--color-text-body); font-weight:820;">browser.navigate</strong><span class="tag primary inline-flex items-center justify-center shrink-0 whitespace-nowrap">选中</span></div><p class="truncate" style="font-size:12px; color:var(--color-text-secondary); margin-top:3px;">打开指定 URL 并等待页面稳定</p></div>
+                                <code class="mono-chip whitespace-nowrap">tool</code>
+                            </div>
+                            <div class="tool-row grid items-center" style="grid-template-columns:minmax(0,1fr) auto; gap:12px; border:1px solid var(--color-border-subtle); border-radius:var(--radius-lg); background:transparent; padding:10px 12px;">
+                                <div class="min-w-0"><strong class="truncate" style="font-size:13px; color:var(--color-text-body); font-weight:820; display:block;">browser.screenshot</strong><p class="truncate" style="font-size:12px; color:var(--color-text-secondary); margin-top:3px;">捕获当前窗口并返回图像引用</p></div><code class="mono-chip whitespace-nowrap">tool</code>
+                            </div>
+                            <div class="tool-row grid items-center" style="grid-template-columns:minmax(0,1fr) auto; gap:12px; border:1px solid var(--color-border-subtle); border-radius:var(--radius-lg); background:transparent; padding:10px 12px;">
+                                <div class="min-w-0"><strong class="truncate" style="font-size:13px; color:var(--color-text-body); font-weight:820; display:block;">browser.extract_text</strong><p class="truncate" style="font-size:12px; color:var(--color-text-secondary); margin-top:3px;">读取页面可见文本和结构摘要</p></div><code class="mono-chip whitespace-nowrap">tool</code>
+                            </div>
+                            <div class="tool-row grid items-center" style="grid-template-columns:minmax(0,1fr) auto; gap:12px; border:1px solid var(--color-border-subtle); border-radius:var(--radius-lg); background:transparent; padding:10px 12px;">
+                                <div class="min-w-0"><strong class="truncate" style="font-size:13px; color:var(--color-text-body); font-weight:820; display:block;">docs.search</strong><p class="truncate" style="font-size:12px; color:var(--color-text-secondary); margin-top:3px;">检索 OpenAI 文档段落和接口说明</p></div><code class="mono-chip whitespace-nowrap">tool</code>
+                            </div>
+                            <div class="tool-row grid items-center" style="grid-template-columns:minmax(0,1fr) auto; gap:12px; border:1px solid var(--color-border-subtle); border-radius:var(--radius-lg); background:transparent; padding:10px 12px;">
+                                <div class="min-w-0"><strong class="truncate" style="font-size:13px; color:var(--color-text-body); font-weight:820; display:block;">filesystem.read_file</strong><p class="truncate" style="font-size:12px; color:var(--color-text-secondary); margin-top:3px;">在授权目录内读取文件内容</p></div><code class="mono-chip whitespace-nowrap">tool</code>
+                            </div>
+                            <div class="tool-row grid items-center" style="grid-template-columns:minmax(0,1fr) auto; gap:12px; border:1px solid var(--color-border-subtle); border-radius:var(--radius-lg); background:transparent; padding:10px 12px;">
+                                <div class="min-w-0"><strong class="truncate" style="font-size:13px; color:var(--color-text-body); font-weight:820; display:block;">github.create_issue</strong><p class="truncate" style="font-size:12px; color:var(--color-text-secondary); margin-top:3px;">在仓库中创建 Issue 并附加标签</p></div><code class="mono-chip whitespace-nowrap">tool</code>
+                            </div>
+                            <div class="tool-row grid items-center" style="grid-template-columns:minmax(0,1fr) auto; gap:12px; border:1px solid var(--state-warning-bg); border-radius:var(--radius-lg); background:transparent; padding:10px 12px;">
+                                <div class="min-w-0"><strong class="truncate" style="font-size:13px; color:var(--color-text-body); font-weight:820; display:block;">feishu.message.send</strong><p class="truncate" style="font-size:12px; color:var(--color-text-secondary); margin-top:3px;">需要 OAuth 登录后发送消息</p></div><span class="status warning inline-flex items-center justify-center shrink-0 whitespace-nowrap">需要登录</span>
+                            </div>
+                            <div class="tool-row grid items-center" style="grid-template-columns:minmax(0,1fr) auto; gap:12px; border:1px solid var(--state-error-bg); border-radius:var(--radius-lg); background:transparent; padding:10px 12px;">
+                                <div class="min-w-0"><strong class="truncate" style="font-size:13px; color:var(--color-text-body); font-weight:820; display:block;">postgres.query</strong><p class="truncate" style="font-size:12px; color:var(--color-text-secondary); margin-top:3px;">连接失败，未加载表结构资源</p></div><span class="status error inline-flex items-center justify-center shrink-0 whitespace-nowrap">不可用</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="panel detail-panel flex flex-col min-w-0" style="border:1px solid var(--color-border); border-radius:var(--radius-lg); background:var(--color-bg-surface); min-height:640px;">
+                        <div class="panel-header" style="padding:14px; border-bottom:1px solid var(--color-border-subtle);">
+                            <div class="flex items-start justify-between gap-3" style="margin-bottom:12px;">
+                                <div class="min-w-0">
+                                    <h2 class="truncate" style="font-size:16px; font-weight:840; color:var(--color-text-body); line-height:1.3;">browser.navigate</h2>
+                                    <p class="truncate" style="font-size:12px; color:var(--color-text-secondary); margin-top:3px; font-family:var(--font-mono);">integrated_browser · tool</p>
+                                </div>
+                                <span class="status success inline-flex items-center justify-center shrink-0 whitespace-nowrap">就绪</span>
+                            </div>
+                            <div class="topology-strip flex items-center gap-2" aria-label="连接拓扑">
+                                <span class="topology-chip inline-flex items-center justify-center whitespace-nowrap">Server</span>
+                                <span class="topology-line"></span>
+                                <span class="topology-chip active inline-flex items-center justify-center whitespace-nowrap">Tools</span>
+                                <span class="topology-line"></span>
+                                <span class="topology-chip inline-flex items-center justify-center whitespace-nowrap">Resources</span>
+                                <span class="topology-line"></span>
+                                <span class="topology-chip auth inline-flex items-center justify-center whitespace-nowrap">Auth</span>
+                            </div>
+                        </div>
+
+                        <div class="detail-body flex flex-col" style="padding:14px; gap:14px; overflow:auto;">
+                            <section class="detail-section">
+                                <div class="section-title flex items-center justify-between gap-2" style="margin-bottom:8px;">
+                                    <h3 style="font-size:14px; font-weight:820; color:var(--color-text-body); line-height:1.3;">认证状态</h3>
+                                    <button class="ui-button secondary inline-flex items-center justify-center gap-2 whitespace-nowrap cursor-pointer" style="min-height:30px; border-radius:var(--radius-md); background:transparent; border:1px solid var(--color-border); color:var(--color-text-secondary); font-size:12px; font-weight:760; padding:0 10px; font-family:var(--font-sans);">
+                                        <i data-lucide="log-in" style="width:13px; height:13px;"></i>
+                                        OAuth 登录
+                                    </button>
+                                </div>
+                                <div class="meta-grid grid" style="grid-template-columns:1fr 1fr; gap:8px;">
+                                    <div class="meta-item"><span>认证</span><strong>无需认证</strong></div>
+                                    <div class="meta-item"><span>调用</span><strong>127 次</strong></div>
+                                    <div class="meta-item"><span>延迟</span><strong>42ms</strong></div>
+                                    <div class="meta-item"><span>版本</span><strong>1.4.2</strong></div>
+                                </div>
+                            </section>
+
+                            <section class="detail-section">
+                                <div class="section-title flex items-center justify-between gap-2" style="margin-bottom:8px;">
+                                    <h3 style="font-size:14px; font-weight:820; color:var(--color-text-body); line-height:1.3;">元数据</h3>
+                                    <span class="tag neutral inline-flex items-center justify-center shrink-0 whitespace-nowrap">只读</span>
+                                </div>
+                                <div class="dense-table" style="border:1px solid var(--color-border-subtle); border-radius:var(--radius-lg); overflow:hidden;">
+                                    <div class="table-row grid" style="grid-template-columns:92px minmax(0,1fr);"><span>名称</span><code>browser.navigate</code></div>
+                                    <div class="table-row grid" style="grid-template-columns:92px minmax(0,1fr);"><span>输入</span><code>url, waitUntil</code></div>
+                                    <div class="table-row grid" style="grid-template-columns:92px minmax(0,1fr);"><span>输出</span><code>pageId, title, status</code></div>
+                                </div>
+                            </section>
+
+                            <section class="detail-section">
+                                <div class="section-title flex items-center justify-between gap-2" style="margin-bottom:8px;">
+                                    <h3 style="font-size:14px; font-weight:820; color:var(--color-text-body); line-height:1.3;">Schema</h3>
+                                    <span class="tag neutral inline-flex items-center justify-center shrink-0 whitespace-nowrap">JSON</span>
+                                </div>
+                                <pre class="schema-block"><code>{
+  "type": "object",
+  "required": ["url"],
+  "properties": {
+    "url": { "type": "string" },
+    "waitUntil": {
+      "enum": ["load", "networkidle"]
+    }
+  }
+}</code></pre>
+                            </section>
+
+                            <section class="detail-section">
+                                <div class="section-title flex items-center justify-between gap-2" style="margin-bottom:8px;">
+                                    <h3 style="font-size:14px; font-weight:820; color:var(--color-text-body); line-height:1.3;">最近事件</h3>
+                                    <span class="tag neutral inline-flex items-center justify-center shrink-0 whitespace-nowrap">4 条</span>
+                                </div>
+                                <div class="event-list flex flex-col" style="gap:8px;">
+                                    <div class="event-row"><span class="event-dot success"></span><div class="min-w-0"><strong class="truncate">工具调用完成</strong><p class="truncate">browser.navigate · 42ms · 刚刚</p></div></div>
+                                    <div class="event-row"><span class="event-dot info"></span><div class="min-w-0"><strong class="truncate">资源缓存更新</strong><p class="truncate">browser://tabs · 2 分钟前</p></div></div>
+                                    <div class="event-row"><span class="event-dot warning"></span><div class="min-w-0"><strong class="truncate">feishu 认证取消</strong><p class="truncate">OAuth 流程由用户取消 · 8 分钟前</p></div></div>
+                                    <div class="event-row"><span class="event-dot error"></span><div class="min-w-0"><strong class="truncate">postgres 启动失败</strong><p class="truncate">ECONNREFUSED 127.0.0.1:5432</p></div></div>
+                                </div>
+                            </section>
+                        </div>
+                    </div>
+                </section>
+            </div>
+        </div>
+    </main>
+
+    <style>
+        .ui-button, .nav-item, .server-row, .tool-row, .tab, .seg-btn, .switch-btn { transition: background var(--transition-fast), border-color var(--transition-fast), color var(--transition-fast), transform var(--transition-fast); }
+        .ui-button:hover, .nav-item:hover, .server-row:hover, .tool-row:hover { background: var(--color-bg-hover) !important; }
+        .ui-button:active, .server-row:active, .tool-row:active { transform: translateY(1px); }
+        .ui-button:focus-visible, .nav-item:focus-visible, .server-row:focus-visible, .tool-row:focus-visible, .tab:focus-visible, .seg-btn:focus-visible, .switch-btn:focus-visible, input:focus-visible { outline:2px solid var(--color-primary-ring); outline-offset:2px; }
+        .tag { min-height:24px; border-radius:var(--radius-md); font-size:11px; font-weight:850; padding:0 8px; }
+        .tag.neutral { background:var(--color-bg-elevated); color:var(--color-text-muted); border:1px solid var(--color-border-subtle); }
+        .tag.primary { background:var(--color-primary-muted); color:var(--color-primary); border:1px solid var(--color-primary-muted); }
+        .status { min-height:24px; border-radius:var(--radius-md); font-size:11px; font-weight:850; padding:0 8px; }
+        .status.success { color:var(--state-success); background:var(--state-success-bg); }
+        .status.warning, .status.starting { color:var(--state-warning); background:var(--state-warning-bg); }
+        .status.error { color:var(--state-error); background:var(--state-error-bg); }
+        .tab { flex:1; min-height:28px; border-radius:var(--radius-md); border:none; background:transparent; color:var(--color-text-secondary); font-size:12px; font-weight:800; font-family:var(--font-sans); }
+        .tab.active { background:var(--color-bg-elevated); color:var(--color-text-body); }
+        .seg-btn { min-height:28px; min-width:34px; border:1px solid var(--color-border); border-radius:var(--radius-md); background:transparent; color:var(--color-text-secondary); font-size:12px; font-weight:820; font-family:var(--font-sans); }
+        .seg-btn.active { border-color:var(--color-border-active); background:var(--color-primary-muted); color:var(--color-primary); }
+        .switch-btn { min-height:28px; border:1px solid var(--color-border); border-radius:var(--radius-md); background:transparent; color:var(--color-text-secondary); font-size:12px; font-weight:820; padding:0 9px; font-family:var(--font-sans); }
+        .switch-dot { width:8px; height:8px; border-radius:var(--radius-full); background:var(--state-success); box-shadow:0 0 0 3px var(--state-success-bg); }
+        .mono-chip { font-family:var(--font-mono); color:var(--color-text-muted); background:var(--color-bg-elevated); border:1px solid var(--color-border-subtle); border-radius:var(--radius-md); padding:4px 8px; font-size:11px; }
+        .topology-strip { border:1px solid var(--color-border-subtle); border-radius:var(--radius-lg); background:var(--color-bg-input); padding:8px; overflow-x:auto; }
+        .topology-chip { min-height:26px; border-radius:var(--radius-md); background:var(--color-bg-elevated); color:var(--color-text-secondary); border:1px solid var(--color-border-subtle); padding:0 9px; font-size:11px; font-weight:850; }
+        .topology-chip.active { color:var(--color-primary); background:var(--color-primary-muted); border-color:var(--color-border-active); }
+        .topology-chip.auth { color:var(--state-success); background:var(--state-success-bg); }
+        .topology-line { width:18px; height:1px; background:var(--color-border); flex-shrink:0; }
+        .meta-item { border:1px solid var(--color-border-subtle); border-radius:var(--radius-md); background:var(--color-bg-input); padding:9px; min-width:0; }
+        .meta-item span { display:block; font-size:11px; color:var(--color-text-muted); font-weight:760; }
+        .meta-item strong { display:block; margin-top:4px; font-size:12px; color:var(--color-text-body); font-weight:820; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+        .table-row { border-bottom:1px solid var(--color-border-subtle); min-height:34px; align-items:center; }
+        .table-row:last-child { border-bottom:none; }
+        .table-row span { color:var(--color-text-muted); font-size:12px; font-weight:760; padding:8px 10px; }
+        .table-row code { color:var(--color-text-secondary); font-size:12px; font-family:var(--font-mono); padding:8px 10px; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+        .schema-block { margin:0; border:1px solid var(--color-border-subtle); border-radius:var(--radius-lg); background:var(--color-bg-input); color:var(--color-text-secondary); padding:12px; font-family:var(--font-mono); font-size:12px; line-height:1.55; overflow:auto; max-height:180px; }
+        .event-row { display:grid; grid-template-columns:10px minmax(0,1fr); gap:10px; align-items:start; border:1px solid var(--color-border-subtle); border-radius:var(--radius-md); padding:9px; background:transparent; }
+        .event-dot { width:8px; height:8px; border-radius:var(--radius-full); margin-top:5px; }
+        .event-dot.success { background:var(--state-success); } .event-dot.info { background:var(--state-info); } .event-dot.warning { background:var(--state-warning); } .event-dot.error { background:var(--state-error); }
+        .event-row strong { display:block; font-size:12px; color:var(--color-text-body); font-weight:820; }
+        .event-row p { font-size:11px; color:var(--color-text-muted); margin-top:2px; }
+        .content-scroll::-webkit-scrollbar, .server-list::-webkit-scrollbar, .inventory-list::-webkit-scrollbar, .detail-body::-webkit-scrollbar, .topology-strip::-webkit-scrollbar { width:6px; height:6px; }
+        .content-scroll::-webkit-scrollbar-thumb, .server-list::-webkit-scrollbar-thumb, .inventory-list::-webkit-scrollbar-thumb, .detail-body::-webkit-scrollbar-thumb, .topology-strip::-webkit-scrollbar-thumb { background:var(--color-border); border-radius:3px; }
+        @media (max-width: 1180px) { .admin-grid { grid-template-columns:1fr 1fr !important; } .detail-panel { grid-column:1 / -1; } .kpi-grid { grid-template-columns:repeat(5, minmax(120px, 1fr)) !important; overflow-x:auto; } }
+        @media (max-width: 760px) { body { overflow:auto !important; } main { flex-direction:column !important; height:auto !important; min-height:100vh; } .settings-sidebar { width:100% !important; border-right:none !important; border-bottom:1px solid var(--color-border) !important; } .settings-nav { display:flex !important; overflow-x:auto; } .nav-item { min-width:190px; } .content-scroll { padding:22px 0 !important; } .page-frame { padding:0 16px !important; } .title-layer { flex-direction:column; } .toolbar { width:100%; justify-content:flex-start; flex-wrap:wrap; } .kpi-grid { display:flex !important; overflow-x:auto; } .kpi-card { min-width:128px; } .admin-grid { grid-template-columns:1fr !important; } .panel { min-height:auto !important; } }
+        @media (prefers-reduced-motion: reduce) { .ui-button, .nav-item, .server-row, .tool-row, .tab, .seg-btn, .switch-btn { transition-duration:0.01ms; } }
+    </style>
+    <script>lucide.createIcons();</script>
+</body>
+</html>

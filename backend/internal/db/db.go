@@ -355,7 +355,7 @@ func (d *DB) InsertTokenUsage(ctx context.Context, item models.TokenUsageInsert)
 }
 
 // SumTokenUsageByProvider 按 provider 聚合指定用户的 token 用量。
-func (d *DB) SumTokenUsageByProvider(ctx context.Context, userID string) ([]models.TokenUsageSummary, error) {
+func (d *DB) SumTokenUsageByProvider(ctx context.Context, userID string, since time.Time) ([]models.TokenUsageSummary, error) {
 	rows, err := d.Pool.Query(ctx,
 		`SELECT provider_id,
 		        COALESCE(SUM(input_tokens), 0),
@@ -364,10 +364,10 @@ func (d *DB) SumTokenUsageByProvider(ctx context.Context, userID string) ([]mode
 		        COALESCE(SUM(total_tokens), 0),
 		        COUNT(*)
 		 FROM token_usage
-		 WHERE user_id = $1
+		 WHERE user_id = $1 AND created_at >= $2
 		 GROUP BY provider_id
 		 ORDER BY provider_id`,
-		userID,
+		userID, since,
 	)
 	if err != nil {
 		return nil, err
@@ -380,6 +380,35 @@ func (d *DB) SumTokenUsageByProvider(ctx context.Context, userID string) ([]mode
 			return nil, err
 		}
 		out = append(out, s)
+	}
+	return out, rows.Err()
+}
+
+func (d *DB) SumTokenUsageByDay(ctx context.Context, userID string, since time.Time) ([]models.TokenUsageDailySummary, error) {
+	rows, err := d.Pool.Query(ctx,
+		`SELECT TO_CHAR(created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD'),
+		        COALESCE(SUM(input_tokens), 0),
+		        COALESCE(SUM(output_tokens), 0),
+		        COALESCE(SUM(reasoning_tokens), 0),
+		        COALESCE(SUM(total_tokens), 0),
+		        COUNT(*)
+		 FROM token_usage
+		 WHERE user_id = $1 AND created_at >= $2
+		 GROUP BY 1
+		 ORDER BY 1`,
+		userID, since,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []models.TokenUsageDailySummary
+	for rows.Next() {
+		var item models.TokenUsageDailySummary
+		if err := rows.Scan(&item.Date, &item.InputTokens, &item.OutputTokens, &item.ReasoningTokens, &item.TotalTokens, &item.TurnCount); err != nil {
+			return nil, err
+		}
+		out = append(out, item)
 	}
 	return out, rows.Err()
 }

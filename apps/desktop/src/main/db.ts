@@ -573,29 +573,39 @@ export function getAiActivitySummary(): AiActivitySummary {
   rangeStart.setDate(today.getDate() - today.getDay() - 52 * 7);
   const rangeEnd = new Date(rangeStart);
   rangeEnd.setDate(rangeStart.getDate() + 53 * 7 - 1);
+  const statisticsStart = new Date(today);
+  statisticsStart.setDate(today.getDate() - 364);
 
   const queryStart = new Date(rangeStart);
   queryStart.setHours(0, 0, 0, 0);
   const rows = db
     .prepare(
-      `SELECT created_at FROM local_ai_messages
-       WHERE role = 'user' AND datetime(created_at) >= datetime(?)
-       ORDER BY datetime(created_at) ASC`,
+      `SELECT messages.created_at, sessions.provider_id
+       FROM local_ai_messages AS messages
+       LEFT JOIN local_ai_sessions AS sessions ON sessions.id = messages.ai_session_id
+       WHERE messages.role = 'user' AND datetime(messages.created_at) >= datetime(?)
+       ORDER BY datetime(messages.created_at) ASC`,
     )
-    .all(queryStart.toISOString()) as Array<{ created_at: string }>;
+    .all(queryStart.toISOString()) as Array<{ created_at: string; provider_id: string | null }>;
 
   const counts = new Map<string, number>();
+  const providerCounts = new Map<string, Map<string, number>>();
   for (const row of rows) {
     const date = new Date(row.created_at);
     if (Number.isNaN(date.getTime())) continue;
     const key = localDateKey(date);
     if (key < localDateKey(rangeStart) || key > localDateKey(rangeEnd)) continue;
     counts.set(key, (counts.get(key) ?? 0) + 1);
+    if (row.provider_id) {
+      const dayProviders = providerCounts.get(key) ?? new Map<string, number>();
+      dayProviders.set(row.provider_id, (dayProviders.get(row.provider_id) ?? 0) + 1);
+      providerCounts.set(key, dayProviders);
+    }
   }
 
   let longestStreak = 0;
   let runningStreak = 0;
-  const cursor = new Date(rangeStart);
+  const cursor = new Date(statisticsStart);
   while (cursor <= today) {
     if ((counts.get(localDateKey(cursor)) ?? 0) > 0) {
       runningStreak += 1;
@@ -611,21 +621,26 @@ export function getAiActivitySummary(): AiActivitySummary {
     currentCursor.setDate(currentCursor.getDate() - 1);
   }
   let currentStreak = 0;
-  while (currentCursor >= rangeStart && counts.has(localDateKey(currentCursor))) {
+  while (currentCursor >= statisticsStart && counts.has(localDateKey(currentCursor))) {
     currentStreak += 1;
     currentCursor.setDate(currentCursor.getDate() - 1);
   }
 
   const days = [...counts.entries()]
-    .map(([date, count]) => ({ date, count }))
+    .map(([date, count]) => {
+      const providers = [...(providerCounts.get(date)?.entries() ?? [])]
+        .sort((left, right) => right[1] - left[1]);
+      return { date, count, providerId: providers[0]?.[0] };
+    })
     .sort((left, right) => left.date.localeCompare(right.date));
+  const statisticDays = days.filter((day) => day.date >= localDateKey(statisticsStart) && day.date <= localDateKey(today));
 
   return {
     days,
-    activeDays: days.length,
+    activeDays: statisticDays.length,
     currentStreak,
     longestStreak,
-    totalInteractions: days.reduce((total, day) => total + day.count, 0),
+    totalInteractions: statisticDays.reduce((total, day) => total + day.count, 0),
     rangeStart: localDateKey(rangeStart),
     rangeEnd: localDateKey(rangeEnd),
   };

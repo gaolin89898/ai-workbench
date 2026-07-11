@@ -78,6 +78,8 @@ export type WorkspaceProject = {
   gitDirty: boolean;
 };
 
+export type ProjectOpenTarget = "visualStudio" | "fileManager" | "terminal" | "gitBash" | "wsl";
+
 export type ProjectEnvironmentInfo = {
   projectPath: string;
   branch: string | null;
@@ -157,11 +159,23 @@ export type TokenUsageSummaryItem = {
 export type TokenUsageSummary = {
   providers: TokenUsageSummaryItem[];
   totals: TokenUsageSummaryItem;
+  daily?: TokenUsageDailyItem[];
+  periodDays?: number;
+};
+
+export type TokenUsageDailyItem = {
+  date: string;
+  inputTokens: number;
+  outputTokens: number;
+  reasoningTokens: number;
+  totalTokens: number;
+  turnCount: number;
 };
 
 export type AiActivityDay = {
   date: string;
   count: number;
+  providerId?: string;
 };
 
 export type AiActivitySummary = {
@@ -815,10 +829,12 @@ export const desktopApi = {
     ipc<void>("open_external_url", url),
   getCloudConfig: (): Promise<SavedCloudConfig | null> =>
     ipc<SavedCloudConfig | null>("get_cloud_config"),
-  getTokenUsageSummary: (): Promise<TokenUsageSummary | null> =>
-    ipc<TokenUsageSummary | null>("get_token_usage_summary"),
+  getTokenUsageSummary: (days = 30): Promise<TokenUsageSummary | null> =>
+    ipc<TokenUsageSummary | null>("get_token_usage_summary", days),
   getAiActivitySummary: (): Promise<AiActivitySummary> =>
     ipc<AiActivitySummary>("get_ai_activity_summary"),
+  exportTextFile: (defaultName: string, content: string): Promise<boolean> =>
+    ipc<boolean>("export_text_file", defaultName, content),
   readClipboardImage: (): Promise<ClipboardImage | null> =>
     ipc<ClipboardImage | null>("read_clipboard_image"),
   listAiProviders: (): Promise<AiProvider[]> =>
@@ -845,6 +861,8 @@ export const desktopApi = {
     ipc<void>("remove_workspace_project", id),
   openProjectInFileManager: (path: string): Promise<void> =>
     ipc<void>("open_project_in_file_manager", path),
+  openProjectWith: (path: string, target: ProjectOpenTarget): Promise<void> =>
+    ipc<void>("open_project_with", path, target),
   getProjectEnvironment: (path: string): Promise<ProjectEnvironmentInfo> =>
     ipc<ProjectEnvironmentInfo>("get_project_environment", path),
   listProjectFiles: (path: string, directoryPath?: string | null): Promise<WorkspaceFileEntry[]> =>

@@ -206,3 +206,12 @@ type TokenUsageSummary struct {
 	TotalTokens     int64  `json:"totalTokens"`
 	TurnCount       int64  `json:"turnCount"`
 }
+
+type TokenUsageDailySummary struct {
+	Date            string `json:"date"`
+	InputTokens     int64  `json:"inputTokens"`
+	OutputTokens    int64  `json:"outputTokens"`
+	ReasoningTokens int64  `json:"reasoningTokens"`
+	TotalTokens     int64  `json:"totalTokens"`
+	TurnCount       int64  `json:"turnCount"`
+}

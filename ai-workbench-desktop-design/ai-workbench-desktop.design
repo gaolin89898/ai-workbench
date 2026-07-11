@@ -65,13 +65,45 @@
       }
     },
     {
+      "id": "page-token-usage-redesign",
+      "title": "用量统计 - 重设计",
+      "type": "page",
+      "version": 1,
+      "createdAt": 1783717200000,
+      "canvasData": {
+        "x": 2480,
+        "y": 0,
+        "group": 0
+      },
+      "devMetadata": {
+        "htmlSrc": "pages/token-usage-redesign.html",
+        "interactions": []
+      }
+    },
+    {
+      "id": "page-ai-activity-records",
+      "title": "AI 活跃记录",
+      "type": "page",
+      "version": 1,
+      "createdAt": 1783720800000,
+      "canvasData": {
+        "x": 3100,
+        "y": 0,
+        "group": 0
+      },
+      "devMetadata": {
+        "htmlSrc": "pages/ai-activity-records.html",
+        "interactions": []
+      }
+    },
+    {
       "id": "page-chat-fs-permission",
       "title": "AI 会话 - 文件写入权限审批",
       "type": "page",
       "version": 1,
       "createdAt": 1783351200000,
       "canvasData": {
-        "x": 2480,
+        "x": 3720,
         "y": 0,
         "group": 0
       },
@@ -87,7 +119,7 @@
       "version": 1,
       "createdAt": 1783350000000,
       "canvasData": {
-        "x": 3100,
+        "x": 4340,
         "y": 0,
         "group": 0
       },
@@ -103,7 +135,7 @@
       "version": 1,
       "createdAt": 1782513600000,
       "canvasData": {
-        "x": 3720,
+        "x": 4960,
         "y": 0,
         "group": 0
       },
@@ -119,7 +151,7 @@
       "version": 1,
       "createdAt": 1782513600000,
       "canvasData": {
-        "x": 4340,
+        "x": 5580,
         "y": 0,
         "group": 0
       },
@@ -135,12 +167,28 @@
       "version": 1,
       "createdAt": 1782513600000,
       "canvasData": {
-        "x": 4960,
+        "x": 6200,
         "y": 0,
         "group": 0
       },
       "devMetadata": {
         "htmlSrc": "pages/settings.html",
+        "interactions": []
+      }
+    },
+    {
+      "id": "page-settings-mcp-management",
+      "title": "设置 - MCP 管理",
+      "type": "page",
+      "version": 1,
+      "createdAt": 1783713600000,
+      "canvasData": {
+        "x": 6820,
+        "y": 0,
+        "group": 0
+      },
+      "devMetadata": {
+        "htmlSrc": "pages/settings-mcp-management.html",
         "interactions": []
       }
     },
@@ -151,7 +199,7 @@
       "version": 1,
       "createdAt": 1782513600000,
       "canvasData": {
-        "x": 5580,
+        "x": 7440,
         "y": 0,
         "group": 0
       },
@@ -167,7 +215,7 @@
       "version": 1,
       "createdAt": 1782513600000,
       "canvasData": {
-        "x": 6200,
+        "x": 8060,
         "y": 0,
         "group": 0
       },
@@ -183,7 +231,7 @@
       "version": 1,
       "createdAt": 1782513600000,
       "canvasData": {
-        "x": 6820,
+        "x": 8680,
         "y": 0,
         "group": 0
       },
@@ -199,7 +247,7 @@
       "version": 1,
       "createdAt": 1782667000000,
       "canvasData": {
-        "x": 7440,
+        "x": 9300,
         "y": 0,
         "group": 0
       },
@@ -215,7 +263,7 @@
       "version": 1,
       "createdAt": 1782667600000,
       "canvasData": {
-        "x": 8060,
+        "x": 9920,
         "y": 0,
         "group": 0
       },
@@ -231,7 +279,7 @@
       "version": 1,
       "createdAt": 1782665197000,
       "canvasData": {
-        "x": 8680,
+        "x": 10540,
         "y": 0,
         "group": 0
       },

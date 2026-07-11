@@ -9,7 +9,8 @@
 // Example: window.desktop.ipc.loginDesktop("http://...", "user@example.com", "password") ->
 //   ipcMain.handle("login_desktop", (_event, args) => { const [server, email, password] = args; ... })
 
-import { app, ipcMain, BrowserWindow, clipboard, shell, type IpcMainInvokeEvent, type WebContents } from "electron";
+import { app, ipcMain, BrowserWindow, clipboard, dialog, shell, type IpcMainInvokeEvent, type WebContents } from "electron";
+import { writeFile } from "node:fs/promises";
 import { randomUUID } from "node:crypto";
 import * as db from "./db";
 import * as pty from "./pty";
@@ -63,6 +64,7 @@ import type {
   CodexThreadReadRequest,
   CodexThreadRenameRequest,
   ChatMessage,
+  ProjectOpenTarget,
 } from "../services/desktop";
 
 let mainWindow: BrowserWindow | null = null;
@@ -159,9 +161,22 @@ export function registerIpcHandlers(win?: BrowserWindow): void {
 
   handle("get_cloud_config", async () => getCloudConfig());
 
-  handle("get_token_usage_summary", async () => fetchTokenUsageSummary());
+  handle("get_token_usage_summary", async (_event, args: [number]) => fetchTokenUsageSummary(args[0]));
 
   handle("get_ai_activity_summary", async () => db.getAiActivitySummary());
+
+  handle("export_text_file", async (_event, args: [string, string]) => {
+    const options = {
+      defaultPath: args[0],
+      filters: [{ name: "CSV", extensions: ["csv"] }],
+    };
+    const result = mainWindow && !mainWindow.isDestroyed()
+      ? await dialog.showSaveDialog(mainWindow, options)
+      : await dialog.showSaveDialog(options);
+    if (result.canceled || !result.filePath) return false;
+    await writeFile(result.filePath, `\uFEFF${args[1]}`, "utf8");
+    return true;
+  });
 
   handle("read_clipboard_image", async () => {
     const image = clipboard.readImage();
@@ -221,6 +236,10 @@ export function registerIpcHandlers(win?: BrowserWindow): void {
 
   handle("open_project_in_file_manager", async (_event, args: [string]) =>
     projects.openProjectInFileManager(args[0])
+  );
+
+  handle("open_project_with", async (_event, args: [string, ProjectOpenTarget]) =>
+    projects.openProjectWith(args[0], args[1])
   );
 
   handle("get_project_environment", async (_event, args: [string]) =>

@@ -1,0 +1,319 @@
+<!DOCTYPE html>
+<html lang="zh-CN" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Workbench — AI 活跃记录</title>
+    <style id="theme-vars">
+/* AI Workbench Desktop — Dark Theme */
+/* Based on actual project style.css, inverted to dark */
+:root {
+  /* Brand */
+  --color-primary: #2563eb;
+  --color-primary-hover: #1d4ed8;
+  --color-primary-muted: rgba(37, 99, 235, 0.15);
+  --color-primary-soft: rgba(37, 99, 235, 0.08);
+  --color-primary-ring: rgba(37, 99, 235, 0.25);
+
+  /* Surface & Background */
+  --color-bg-app: #0f1117;
+  --color-bg-body: #111318;
+  --color-bg-sidebar: #161822;
+  --color-bg-main: #1a1d2e;
+  --color-bg-content: #1e2235;
+  --color-bg-surface: #1e2235;
+  --color-bg-elevated: #252a3a;
+  --color-bg-input: #1e2235;
+  --color-bg-hover: rgba(255, 255, 255, 0.06);
+  --color-bg-active: rgba(37, 99, 235, 0.12);
+
+  /* Text */
+  --color-text-primary: #e8eaed;
+  --color-text-body: #d1d5db;
+  --color-text-secondary: #9aa0b4;
+  --color-text-muted: #6b7280;
+  --color-text-placeholder: #6b7280;
+  --color-text-inverse: #ffffff;
+
+  /* Border */
+  --color-border: rgba(255, 255, 255, 0.1);
+  --color-border-subtle: rgba(255, 255, 255, 0.06);
+  --color-border-active: rgba(37, 99, 235, 0.5);
+
+  /* State Colors */
+  --state-success: #22c55e;
+  --state-success-bg: rgba(34, 197, 94, 0.12);
+  --state-success-ring: rgba(34, 197, 94, 0.25);
+  --state-warning: #f59e0b;
+  --state-warning-bg: rgba(245, 158, 11, 0.12);
+  --state-error: #ef4444;
+  --state-error-bg: rgba(239, 68, 68, 0.12);
+  --state-info: #3b82f6;
+  --state-info-bg: rgba(59, 130, 246, 0.12);
+
+  /* Radius */
+  --radius-sm: 4px;
+  --radius-md: 7px;
+  --radius-lg: 8px;
+  --radius-xl: 12px;
+  --radius-full: 999px;
+
+  /* Typography */
+  --font-sans: "Inter", ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+
+  --text-xs: 11px;
+  --text-sm: 12px;
+  --text-base: 13px;
+  --text-md: 14px;
+  --text-lg: 16px;
+  --text-xl: 20px;
+  --text-2xl: 28px;
+
+  --leading-tight: 1.25;
+  --leading-normal: 1.5;
+  --leading-relaxed: 1.625;
+  --leading-chat: 1.62;
+
+  /* Font Weights */
+  --fw-normal: 400;
+  --fw-medium: 500;
+  --fw-semibold: 620;
+  --fw-bold: 700;
+  --fw-extrabold: 800;
+  --fw-black: 850;
+
+  /* Shadows */
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.15);
+  --shadow-md: 0 10px 24px rgba(0, 0, 0, 0.25);
+  --shadow-lg: 0 24px 56px rgba(0, 0, 0, 0.35);
+  --shadow-composer: 0 16px 42px rgba(0, 0, 0, 0.3);
+
+  /* Spacing */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-10: 40px;
+  --space-14: 56px;
+  --space-18: 72px;
+
+  /* Layout */
+  --sidebar-width: 286px;
+  --topbar-height: 56px;
+  --composer-max-width: 760px;
+
+  /* Transitions */
+  --transition-fast: 120ms ease;
+  --transition-normal: 200ms ease;
+}
+
+    </style>
+    <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4.3.1/dist/index.global.js"></script>
+    <script src="https://unpkg.com/lucide@1.8.0/dist/umd/lucide.min.js"></script>
+    <style type="text/tailwindcss">
+  @theme inline {
+    --color-primary: var(--color-primary);
+    --color-border: var(--color-border);
+  }
+  @layer base {
+    body { background: var(--color-background); color: var(--color-text-primary); }
+    td, th { @apply break-words; word-break: break-all; word-break: auto-phrase; }
+    th { @apply whitespace-nowrap; }
+  }
+    </style>
+    <style>
+      .no-scrollbar::-webkit-scrollbar { display: none; }
+      .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+      [data-icon] {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        -webkit-mask-size: contain;
+        mask-size: contain;
+        -webkit-mask-repeat: no-repeat;
+        mask-repeat: no-repeat;
+        -webkit-mask-position: center;
+        mask-position: center;
+        background-color: currentColor;
+      }
+    </style>
+</head>
+<body class="min-h-screen font-sans antialiased">
+    <main class="settings-shell">
+        <aside class="settings-sidebar">
+            <div class="sidebar-head">
+                <button class="back-button" type="button"><i data-lucide="arrow-left"></i><span>返回</span></button>
+                <div>
+                    <div class="settings-title">设置</div>
+                    <div class="settings-subtitle">桌面工作台配置</div>
+                </div>
+            </div>
+            <nav class="settings-nav" aria-label="设置导航">
+                <button class="nav-item" type="button"><span class="nav-dot"></span><span class="nav-main"><i data-lucide="server"></i><strong>连接</strong></span><span class="nav-tag">基础</span></button>
+                <button class="nav-item" type="button"><span class="nav-dot"></span><span class="nav-main"><i data-lucide="terminal"></i><strong>Codex 管理</strong></span><span class="nav-tag">CLI</span></button>
+                <button class="nav-item" type="button"><span class="nav-dot"></span><span class="nav-main"><i data-lucide="network"></i><strong>MCP 管理</strong></span><span class="nav-tag">全局</span></button>
+                <button class="nav-item" type="button"><span class="nav-dot"></span><span class="nav-main"><i data-lucide="shield"></i><strong>安全与历史</strong></span><span class="nav-tag">保护</span></button>
+                <button class="nav-item active" type="button" aria-current="page"><span class="nav-dot"></span><span class="nav-main"><i data-lucide="activity"></i><strong>AI 活跃记录</strong></span><span class="nav-tag primary">本地</span></button>
+                <button class="nav-item" type="button"><span class="nav-dot"></span><span class="nav-main"><i data-lucide="archive"></i><strong>已归档对话</strong></span><span class="nav-tag">历史</span></button>
+                <button class="nav-item" type="button"><span class="nav-dot"></span><span class="nav-main"><i data-lucide="bar-chart-3"></i><strong>用量统计</strong></span><span class="nav-tag">统计</span></button>
+                <button class="nav-item" type="button"><span class="nav-dot"></span><span class="nav-main"><i data-lucide="info"></i><strong>关于</strong></span><span class="nav-tag">信息</span></button>
+            </nav>
+            <div class="sidebar-card">
+                <div class="side-card-label">本地活动</div>
+                <div class="side-card-value">仅统计你发送的消息</div>
+            </div>
+        </aside>
+
+        <section class="content-scroll">
+            <div class="page-frame">
+                <header class="page-header">
+                    <div class="title-block">
+                        <div class="title-row">
+                            <h1>AI 活跃记录</h1>
+                        </div>
+                        <p>查看最近 12 个月的本地对话交互、连续活跃和使用节奏。</p>
+                    </div>
+                    <div class="toolbar" aria-label="页面操作">
+                        <div class="range-control" aria-label="时间范围">
+                            <span>时间范围</span>
+                            <button type="button" class="seg active">近 12 个月</button>
+                        </div>
+                        <button class="tool-button" type="button"><i data-lucide="refresh-cw"></i>刷新</button>
+                        <button class="tool-button solid" type="button"><i data-lucide="download"></i>导出</button>
+                    </div>
+                </header>
+
+                <section class="metrics-grid" aria-label="活跃概览">
+                    <article class="metric-card"><span>活跃天数</span><strong>186</strong><em>最近 365 天</em></article>
+                    <article class="metric-card"><span>当前连续</span><strong>9</strong><em>连续交互日</em></article>
+                    <article class="metric-card"><span>最长连续</span><strong>31</strong><em>历史最佳</em></article>
+                    <article class="metric-card"><span>总交互</span><strong>1,482</strong><em>你发送的消息</em></article>
+                    <article class="metric-card"><span>日均交互</span><strong>4.1</strong><em>活跃节奏</em></article>
+                </section>
+
+                <section class="main-grid">
+                    <article class="panel heatmap-panel">
+                        <div class="panel-head">
+                            <div>
+                                <h2>年度热力</h2>
+                                <p>最近 12 个月的每日本地对话交互强度。</p>
+                            </div>
+                            <div class="heat-legend"><span>少</span><i class="cell l0"></i><i class="cell l1"></i><i class="cell l2"></i><i class="cell l3"></i><i class="cell l4"></i><span>多</span></div>
+                        </div>
+                        <div class="heatmap-wrap" role="img" aria-label="365 天活跃热力图">
+                            <div class="month-labels"><span>8月</span><span>9月</span><span>10月</span><span>11月</span><span>12月</span><span>1月</span><span>2月</span><span>3月</span><span>4月</span><span>5月</span><span>6月</span><span>7月</span></div>
+                            <div class="heatmap-row">
+                                <div class="weekday-labels"><span>周一</span><span>周三</span><span>周五</span></div>
+                                <div class="heatmap-grid" aria-hidden="true">
+                                    <span class="cell l0"></span><span class="cell l1"></span><span class="cell l0"></span><span class="cell l2"></span><span class="cell l1"></span>
+                                    <span class="cell l0"></span><span class="cell l2"></span><span class="cell l3"></span><span class="cell l1"></span><span class="cell l0"></span>
+                                    <span class="cell l1"></span><span class="cell l3"></span><span class="cell l2"></span><span class="cell l0"></span><span class="cell l1"></span>
+                                    <span class="cell l2"></span><span class="cell l4"></span><span class="cell l3"></span><span class="cell l1"></span><span class="cell l0"></span>
+                                    <span class="cell l0"></span><span class="cell l2"></span><span class="cell l1"></span><span class="cell l3"></span><span class="cell l2"></span>
+                                    <span class="cell l1"></span><span class="cell l4"></span><span class="cell l3"></span><span class="cell l2"></span><span class="cell l0"></span>
+                                    <span class="cell l1"></span><span class="cell l2"></span><span class="cell l0"></span><span class="cell l1"></span><span class="cell l3"></span>
+                                    <span class="cell l2"></span><span class="cell l4"></span><span class="cell l2"></span><span class="cell l1"></span><span class="cell l0"></span>
+                                    <span class="cell l0"></span><span class="cell l1"></span><span class="cell l2"></span><span class="cell l3"></span><span class="cell l1"></span>
+                                    <span class="cell l2"></span><span class="cell l4"></span><span class="cell l3"></span><span class="cell l0"></span><span class="cell l1"></span>
+                                    <span class="cell l1"></span><span class="cell l0"></span><span class="cell l2"></span><span class="cell l4"></span><span class="cell l3"></span>
+                                    <span class="cell l2"></span><span class="cell l1"></span><span class="cell l3"></span><span class="cell l2"></span><span class="cell l0"></span>
+                                    <span class="cell l0"></span><span class="cell l2"></span><span class="cell l3"></span><span class="cell l4"></span><span class="cell l2"></span>
+                                    <span class="cell l1"></span><span class="cell l0"></span><span class="cell l1"></span><span class="cell l2"></span><span class="cell l3"></span>
+                                    <span class="cell l2"></span><span class="cell l4"></span><span class="cell l1"></span><span class="cell l0"></span><span class="cell l2"></span>
+                                    <span class="cell l3"></span><span class="cell l4"></span><span class="cell l2"></span><span class="cell l1"></span><span class="cell l0"></span>
+                                    <span class="cell l0"></span><span class="cell l1"></span><span class="cell l3"></span><span class="cell l2"></span><span class="cell l1"></span>
+                                    <span class="cell l2"></span><span class="cell l3"></span><span class="cell l4"></span><span class="cell l2"></span><span class="cell l0"></span>
+                                    <span class="cell l1"></span><span class="cell l2"></span><span class="cell l0"></span><span class="cell l3"></span><span class="cell l4"></span>
+                                    <span class="cell l3"></span><span class="cell l2"></span><span class="cell l1"></span><span class="cell l0"></span><span class="cell l2"></span>
+                                    <span class="cell l2"></span><span class="cell l4"></span><span class="cell l3"></span><span class="cell l1"></span><span class="cell l0"></span>
+                                    <span class="cell l1"></span><span class="cell l2"></span><span class="cell l3"></span><span class="cell l4"></span><span class="cell l2"></span>
+                                    <span class="cell l0"></span><span class="cell l1"></span><span class="cell l0"></span><span class="cell l2"></span><span class="cell l3"></span>
+                                    <span class="cell l4"></span><span class="cell l2"></span><span class="cell l1"></span><span class="cell l0"></span><span class="cell l1"></span>
+                                    <span class="cell l2"></span><span class="cell l3"></span><span class="cell l1"></span><span class="cell l4"></span><span class="cell l2"></span>
+                                    <span class="cell l1"></span><span class="cell l0"></span><span class="cell l2"></span><span class="cell l3"></span><span class="cell l4"></span>
+                                    <span class="cell l3"></span><span class="cell l1"></span><span class="cell l0"></span><span class="cell l2"></span><span class="cell l1"></span>
+                                    <span class="cell l0"></span><span class="cell l3"></span><span class="cell l4"></span><span class="cell l2"></span><span class="cell l1"></span>
+                                    <span class="cell l1"></span><span class="cell l2"></span><span class="cell l3"></span><span class="cell l0"></span><span class="cell l1"></span>
+                                    <span class="cell l2"></span><span class="cell l4"></span><span class="cell l3"></span><span class="cell l2"></span><span class="cell l0"></span>
+                                    <span class="cell l0"></span><span class="cell l1"></span><span class="cell l2"></span><span class="cell l4"></span><span class="cell l3"></span>
+                                    <span class="cell l2"></span><span class="cell l1"></span><span class="cell l0"></span><span class="cell l2"></span><span class="cell l3"></span>
+                                    <span class="cell l1"></span><span class="cell l4"></span><span class="cell l2"></span><span class="cell l0"></span><span class="cell l1"></span>
+                                    <span class="cell l2"></span><span class="cell l3"></span><span class="cell l4"></span><span class="cell l2"></span><span class="cell l1"></span>
+                                    <span class="cell l0"></span><span class="cell l1"></span><span class="cell l2"></span><span class="cell l0"></span><span class="cell l3"></span>
+                                    <span class="cell l4"></span><span class="cell l2"></span><span class="cell l1"></span><span class="cell l3"></span><span class="cell l0"></span>
+                                    <span class="cell l1"></span><span class="cell l2"></span><span class="cell l4"></span><span class="cell l3"></span><span class="cell l2"></span>
+                                    <span class="cell l1"></span><span class="cell l0"></span><span class="cell l2"></span><span class="cell l3"></span><span class="cell l1"></span>
+                                    <span class="cell l0"></span><span class="cell l2"></span><span class="cell l4"></span><span class="cell l3"></span><span class="cell l1"></span>
+                                    <span class="cell l2"></span><span class="cell l3"></span><span class="cell l2"></span><span class="cell l0"></span><span class="cell l1"></span>
+                                    <span class="cell l1"></span><span class="cell l4"></span><span class="cell l3"></span><span class="cell l2"></span><span class="cell l0"></span>
+                                    <span class="cell l0"></span><span class="cell l1"></span><span class="cell l3"></span><span class="cell l4"></span><span class="cell l2"></span>
+                                    <span class="cell l1"></span><span class="cell l0"></span><span class="cell l2"></span><span class="cell l3"></span><span class="cell l4"></span>
+                                    <span class="cell l2"></span><span class="cell l1"></span><span class="cell l0"></span><span class="cell l1"></span><span class="cell l2"></span>
+                                    <span class="cell l3"></span><span class="cell l4"></span><span class="cell l2"></span><span class="cell l1"></span><span class="cell l0"></span>
+                                    <span class="cell l1"></span><span class="cell l2"></span><span class="cell l3"></span><span class="cell l2"></span><span class="cell l4"></span>
+                                    <span class="cell l3"></span><span class="cell l1"></span><span class="cell l0"></span><span class="cell l2"></span><span class="cell l1"></span>
+                                    <span class="cell l0"></span><span class="cell l2"></span><span class="cell l3"></span><span class="cell l4"></span><span class="cell l2"></span>
+                                    <span class="cell l1"></span><span class="cell l0"></span><span class="cell l1"></span><span class="cell l2"></span><span class="cell l3"></span>
+                                    <span class="cell l4"></span><span class="cell l2"></span><span class="cell l0"></span><span class="cell l1"></span><span class="cell l2"></span>
+                                    <span class="cell l3"></span><span class="cell l1"></span><span class="cell l4"></span><span class="cell l2"></span><span class="cell l0"></span>
+                                    <span class="cell l1"></span><span class="cell l2"></span><span class="cell l3"></span><span class="cell l4"></span><span class="cell l2"></span>
+                                    <span class="cell l0"></span><span class="cell l1"></span><span class="cell l0"></span><span class="cell l2"></span><span class="cell l3"></span>
+                                    <span class="cell l2"></span><span class="cell l4"></span><span class="cell l3"></span><span class="cell l1"></span><span class="cell l0"></span>
+                                    <span class="cell l1"></span><span class="cell l3"></span><span class="cell l2"></span><span class="cell l0"></span><span class="cell l1"></span>
+                                    <span class="cell l2"></span><span class="cell l4"></span><span class="cell l3"></span><span class="cell l2"></span><span class="cell l0"></span>
+                                    <span class="cell l0"></span><span class="cell l1"></span><span class="cell l2"></span><span class="cell l3"></span><span class="cell l4"></span>
+                                    <span class="cell l2"></span><span class="cell l1"></span><span class="cell l0"></span><span class="cell l2"></span><span class="cell l1"></span>
+                                    <span class="cell l3"></span><span class="cell l4"></span><span class="cell l2"></span><span class="cell l1"></span><span class="cell l0"></span>
+                                    <span class="cell l1"></span><span class="cell l2"></span><span class="cell l0"></span><span class="cell l3"></span><span class="cell l4"></span>
+                                    <span class="cell l2"></span><span class="cell l1"></span><span class="cell l3"></span><span class="cell l2"></span><span class="cell l0"></span>
+                                    <span class="cell l0"></span><span class="cell l1"></span><span class="cell l2"></span><span class="cell l4"></span><span class="cell l3"></span>
+                                    <span class="cell l2"></span><span class="cell l1"></span><span class="cell l0"></span><span class="cell l1"></span><span class="cell l2"></span>
+                                    <span class="cell l3"></span><span class="cell l4"></span><span class="cell l2"></span><span class="cell l0"></span><span class="cell l1"></span>
+                                    <span class="cell l2"></span><span class="cell l3"></span><span class="cell l4"></span><span class="cell l3"></span><span class="cell l1"></span>
+                                    <span class="cell l0"></span><span class="cell l1"></span><span class="cell l2"></span><span class="cell l3"></span><span class="cell l4"></span>
+                                    <span class="cell l2"></span><span class="cell l1"></span><span class="cell l0"></span><span class="cell l2"></span><span class="cell l3"></span>
+                                    <span class="cell l4"></span><span class="cell l2"></span><span class="cell l1"></span><span class="cell l0"></span><span class="cell l1"></span>
+                                    <span class="cell l2"></span><span class="cell l3"></span><span class="cell l4"></span><span class="cell l2"></span><span class="cell l1"></span>
+                                    <span class="cell l0"></span><span class="cell l1"></span><span class="cell l2"></span><span class="cell l3"></span><span class="cell l4"></span>
+                                    <span class="cell l3"></span><span class="cell l2"></span><span class="cell l1"></span><span class="cell l0"></span><span class="cell l2"></span>
+                                    <span class="cell l1"></span><span class="cell l3"></span><span class="cell l4"></span><span class="cell l2"></span><span class="cell l1"></span>
+                                    <span class="cell l0"></span><span class="cell l2"></span><span class="cell l3"></span><span class="cell l4"></span><span class="cell l2"></span>
+                                </div>
+                            </div>
+                        </div>
+                        <p class="heat-note">每个方格代表一天，仅统计你发送的消息。</p>
+                    </article>
+
+                </section>
+
+                <section class="panel recent-panel">
+                    <div class="panel-head compact"><h2>活跃日</h2><span>最近记录</span></div>
+                    <div class="table-wrap">
+                        <table>
+                            <thead><tr><th>日期</th><th>交互</th><th>主要工具</th><th>备注</th></tr></thead>
+                            <tbody>
+                                <tr><td>2026-07-11</td><td><strong>18</strong></td><td>Codex</td><td>集中处理桌面端设置页面与活动记录</td></tr>
+                                <tr><td>2026-07-10</td><td><strong>24</strong></td><td>MCP</td><td>多轮工具配置与安全策略确认</td></tr>
+                                <tr><td>2026-07-09</td><td><strong>11</strong></td><td>AI Chat</td><td>整理归档对话并追踪上下文</td></tr>
+                                <tr><td>2026-07-08</td><td><strong>16</strong></td><td>Codex</td><td>项目文件检查与实现建议</td></tr>
+                                <tr><td>2026-07-07</td><td><strong>9</strong></td><td>AI Chat</td><td>日常问答与任务拆解</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </section>
+
+                <footer class="page-footer">AI 活跃记录为本地行为分析，不包含 Token 成本统计。</footer>
+            </div>
+        </section>
+
+        <style>
+            .settings-shell{height:100vh;display:flex;background:var(--color-bg-body);color:var(--color-text-primary);font-family:var(--font-sans);overflow:hidden}.settings-sidebar{width:286px;flex-shrink:0;border-right:1px solid var(--color-border);background:var(--color-bg-sidebar);padding:18px 12px 14px;display:flex;flex-direction:column}.sidebar-head{display:flex;flex-direction:column;gap:18px;padding-bottom:18px}.back-button,.tool-button{font-family:var(--font-sans);cursor:pointer;transition:background var(--transition-fast),border-color var(--transition-fast),transform var(--transition-fast),color var(--transition-fast)}.back-button{min-height:32px;border:0;background:none;color:var(--color-text-secondary);display:inline-flex;align-items:center;justify-content:center;gap:6px;width:max-content;border-radius:var(--radius-md);font-size:13px;font-weight:760}.back-button:hover{background:var(--color-bg-hover);color:var(--color-text-body)}.back-button i,.tool-button i,.status-badge i{width:14px;height:14px}.settings-title{font-size:22px;font-weight:860;color:var(--color-text-body);line-height:1.2}.settings-subtitle{font-size:12px;color:var(--color-text-secondary);font-weight:700;margin-top:2px}.settings-nav{display:grid;gap:3px}.nav-item{display:grid;grid-template-columns:10px minmax(0,1fr) auto;align-items:center;gap:10px;min-height:54px;border:1px solid transparent;border-radius:var(--radius-lg);padding:10px;background:transparent;color:var(--color-text-secondary);font-family:var(--font-sans);cursor:pointer;text-align:left;transition:background var(--transition-fast),border-color var(--transition-fast),transform var(--transition-fast)}.nav-item:hover{background:var(--color-bg-hover);transform:translateX(2px)}.nav-item.active{background:var(--color-bg-elevated);border-color:var(--color-primary-muted);box-shadow:var(--shadow-sm);color:var(--color-text-body)}.nav-dot{width:8px;height:8px;border-radius:var(--radius-full);background:var(--color-border)}.active .nav-dot{background:var(--color-primary);box-shadow:0 0 0 4px var(--color-primary-muted)}.nav-main{min-width:0;display:flex;align-items:center;gap:8px}.nav-main i{width:17px;height:17px;flex-shrink:0}.nav-main strong{font-size:14px;font-weight:820;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.nav-tag,.status-badge{display:inline-flex;align-items:center;justify-content:center;white-space:nowrap;border-radius:var(--radius-md);border:1px solid var(--color-border);background:var(--color-bg-input);color:var(--color-text-muted);font-size:11px;font-weight:820;height:22px;padding:0 8px}.nav-tag.primary,.status-badge{border-color:var(--color-border-active);background:var(--color-primary-muted);color:var(--color-text-body)}.sidebar-card{margin-top:auto;border:1px solid var(--color-border);border-radius:var(--radius-lg);background:var(--color-bg-elevated);padding:12px}.side-card-label{font-size:11px;font-weight:850;color:var(--color-text-muted)}.side-card-value{font-size:12px;font-weight:760;color:var(--color-text-secondary);margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.content-scroll{flex:1;min-width:0;overflow-y:auto;padding:28px 0;background:var(--color-bg-body)}.page-frame{max-width:1120px;margin:0 auto;padding:0 28px}.page-header{display:flex;align-items:flex-start;justify-content:space-between;gap:18px;margin-bottom:16px}.title-block{min-width:0;flex:1}.title-row{display:flex;align-items:center;gap:10px;margin-bottom:6px}.title-row h1{font-size:28px;font-weight:880;line-height:1.2;color:var(--color-text-primary);text-wrap:balance;word-break:keep-all;overflow-wrap:break-word}.title-block p{font-size:13px;color:var(--color-text-secondary);line-height:var(--leading-normal);max-width:720px}.toolbar{display:flex;align-items:center;gap:8px;flex-shrink:0}.range-control{height:34px;border:1px solid var(--color-border);background:var(--color-bg-input);border-radius:var(--radius-lg);padding:3px;display:flex;align-items:center;gap:4px}.range-control span{font-size:12px;color:var(--color-text-muted);font-weight:760;padding:0 7px;white-space:nowrap}.seg{height:26px;border:0;border-radius:var(--radius-md);background:var(--color-bg-elevated);color:var(--color-text-body);font-size:12px;font-weight:800;padding:0 10px;white-space:nowrap}.tool-button{min-height:34px;border-radius:var(--radius-lg);border:1px solid var(--color-border);background:transparent;color:var(--color-text-secondary);font-size:13px;font-weight:760;padding:0 12px;display:inline-flex;align-items:center;justify-content:center;gap:8px;white-space:nowrap}.tool-button:hover{background:var(--color-bg-hover);color:var(--color-text-body)}.tool-button.solid{background:var(--color-bg-elevated);color:var(--color-text-body)}.metrics-grid{display:grid;grid-template-columns:repeat(5,minmax(120px,1fr));gap:10px;margin-bottom:12px}.metric-card,.panel{border:1px solid var(--color-border);background:var(--color-bg-content);border-radius:var(--radius-lg)}.metric-card{min-width:120px;padding:14px 14px 12px}.metric-card span{display:block;font-size:12px;font-weight:800;color:var(--color-text-secondary);white-space:nowrap}.metric-card strong{display:block;margin-top:8px;font-family:var(--font-mono);font-size:28px;line-height:1;font-weight:850;color:var(--color-text-primary);font-variant-numeric:tabular-nums;white-space:nowrap}.metric-card em{display:block;margin-top:8px;font-style:normal;font-size:11px;color:var(--color-text-muted);white-space:nowrap}.main-grid{display:grid;grid-template-columns:minmax(0,1fr);gap:12px;align-items:start}.panel{padding:16px}.panel-head{display:flex;align-items:flex-start;justify-content:space-between;gap:14px;margin-bottom:14px}.panel-head.compact{align-items:center;margin-bottom:12px}.panel-head h2{font-size:16px;font-weight:850;color:var(--color-text-primary);line-height:1.25}.panel-head p{font-size:12px;color:var(--color-text-secondary);margin-top:4px;line-height:1.5}.panel-head span{font-size:12px;color:var(--color-text-muted);font-weight:760;white-space:nowrap}.heatmap-panel .panel-head{align-items:center;margin-bottom:16px}.heat-legend{display:flex;align-items:center;gap:5px;color:var(--color-text-muted);font-size:11px;font-weight:760;white-space:nowrap;padding-top:2px}.heat-legend .cell{flex:0 0 auto}.heatmap-wrap{display:grid;grid-template-columns:32px minmax(0,1fr);column-gap:10px;overflow-x:hidden;padding:4px 0 2px}.month-labels{grid-column:2;display:grid;grid-template-columns:repeat(12,1fr);width:100%;margin:0 0 9px;color:var(--color-text-muted);font-size:11px;font-weight:760}.month-labels span{min-width:0}.heatmap-row{grid-column:1/-1;display:grid;grid-template-columns:32px minmax(0,1fr);column-gap:10px;align-items:start}.weekday-labels{width:32px;display:grid;grid-template-rows:repeat(7,minmax(12px,1fr));gap:4px;color:var(--color-text-muted);font-size:10px;line-height:1}.weekday-labels span:nth-child(1){grid-row:2}.weekday-labels span:nth-child(2){grid-row:4}.weekday-labels span:nth-child(3){grid-row:6}.heatmap-grid{width:100%;display:grid;grid-auto-flow:column;grid-template-columns:repeat(53,minmax(9px,1fr));grid-template-rows:repeat(7,minmax(12px,1fr));gap:4px;min-width:0}.cell{display:inline-block;width:10px;height:10px;border-radius:3px;border:1px solid var(--color-border-subtle);background:var(--color-bg-elevated)}.cell.l0{background:var(--color-bg-elevated)}.cell.l1{background:var(--color-primary-soft)}.cell.l2{background:var(--color-primary-muted)}.cell.l3{background:var(--color-primary-ring)}.cell.l4{background:var(--color-primary);border-color:var(--color-border-active)}.heatmap-grid .cell{width:100%;height:100%;min-height:12px;transition:transform var(--transition-fast),border-color var(--transition-fast)}.heatmap-grid .cell:hover{transform:scale(1.18);border-color:var(--color-text-secondary)}.heat-note{margin-top:14px;font-size:12px;color:var(--color-text-muted);line-height:1.5}.recent-panel{margin-top:12px}.table-wrap{overflow-x:auto}table{width:100%;border-collapse:collapse;table-layout:fixed}th,td{border-top:1px solid var(--color-border-subtle);padding:10px 8px;text-align:left;font-size:12px;color:var(--color-text-secondary);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}th{color:var(--color-text-muted);font-weight:850}td strong{font-family:var(--font-mono);font-size:13px;color:var(--color-text-body);font-variant-numeric:tabular-nums}.page-footer{padding:14px 0 0;color:var(--color-text-muted);font-size:11px;text-align:right}@media (max-width:1180px){.page-header{flex-direction:column}.toolbar{width:100%;overflow-x:auto}.metrics-grid{display:flex;overflow-x:auto}.main-grid{grid-template-columns:1fr}}@media (max-width:760px){.settings-shell{display:block;overflow:auto}.settings-sidebar{width:100%;height:auto}.content-scroll{overflow:visible}.page-frame{padding:0 16px}.toolbar{flex-wrap:wrap}.metrics-grid{grid-template-columns:1fr}.page-header{gap:12px}}@media (prefers-reduced-motion:reduce){.back-button,.tool-button,.nav-item,.heatmap-grid .cell{transition-duration:0.01ms}.nav-item:hover,.heatmap-grid .cell:hover{transform:none}}
+        </style>
+    </main>
+    <script>lucide.createIcons();</script>
+</body>
+</html>
