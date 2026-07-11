@@ -111,6 +111,10 @@ function extractGoal(params: unknown): {
   };
 }
 
+export function isCodexReconnectMessage(message: string): boolean {
+  return /^Reconnecting(?:\.\.\.)?\s+\d+\/\d+$/i.test(message.trim());
+}
+
 function fileChangeEntries(value: unknown): Array<{ path: string; value: unknown }> {
   if (Array.isArray(value)) {
     return value.flatMap((entry) => {
@@ -592,6 +596,7 @@ export function reduceCodexTraceSnapshot(
     }
     case "error": {
       const message = extractErrorMessage(event.params);
+      if (isCodexReconnectMessage(message)) break;
       snapshot = {
         ...snapshot,
         status: "failed",

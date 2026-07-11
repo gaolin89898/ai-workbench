@@ -165,6 +165,15 @@ function visualStudioExecutable(): string {
   return "devenv.exe";
 }
 
+function visualStudioCodeExecutable(): string {
+  const candidates = [
+    process.env.LOCALAPPDATA && path.join(process.env.LOCALAPPDATA, "Programs", "Microsoft VS Code", "Code.exe"),
+    process.env.ProgramFiles && path.join(process.env.ProgramFiles, "Microsoft VS Code", "Code.exe"),
+    process.env["ProgramFiles(x86)"] && path.join(process.env["ProgramFiles(x86)"], "Microsoft VS Code", "Code.exe"),
+  ].filter((candidate): candidate is string => Boolean(candidate));
+  return candidates.find((candidate) => fs.existsSync(candidate)) ?? "code";
+}
+
 function gitBashExecutable(): string {
   const candidates = [
     process.env.ProgramFiles && path.join(process.env.ProgramFiles, "Git", "git-bash.exe"),
@@ -183,6 +192,10 @@ export async function openProjectWith(projectPath: string, target: ProjectOpenTa
     throw new Error("该打开方式目前仅支持 Windows");
   }
   try {
+    if (target === "vscode") {
+      await spawnDetached(visualStudioCodeExecutable(), [projectPath], projectPath);
+      return;
+    }
     if (target === "visualStudio") {
       await spawnDetached(visualStudioExecutable(), [projectPath], projectPath);
       return;
@@ -210,6 +223,7 @@ export async function openProjectWith(projectPath: string, target: ProjectOpenTa
     throw new Error("不支持的打开方式");
   } catch {
     const labels: Record<ProjectOpenTarget, string> = {
+      vscode: "VS Code",
       visualStudio: "Visual Studio",
       fileManager: "文件资源管理器",
       terminal: "Terminal",

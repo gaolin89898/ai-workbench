@@ -78,7 +78,7 @@ export type WorkspaceProject = {
   gitDirty: boolean;
 };
 
-export type ProjectOpenTarget = "visualStudio" | "fileManager" | "terminal" | "gitBash" | "wsl";
+export type ProjectOpenTarget = "vscode" | "visualStudio" | "fileManager" | "terminal" | "gitBash" | "wsl";
 
 export type ProjectEnvironmentInfo = {
   projectPath: string;

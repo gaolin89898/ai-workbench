@@ -66,7 +66,35 @@ const trashIcon = new URL("../assets/icons/trash.svg", import.meta.url).href;
 const imageRemoveIcon = new URL("../assets/icons/image-remove.svg", import.meta.url).href;
 const folderOpenIcon = new URL("../assets/icons/folder-open.svg", import.meta.url).href;
 const terminalIcon = new URL("../assets/icons/terminal.svg", import.meta.url).href;
+const vscodeIcon = new URL("../assets/icons/vscode.svg", import.meta.url).href;
+const visualStudioIcon = new URL("../assets/icons/visual-studio.svg", import.meta.url).href;
+const gitIcon = new URL("../assets/icons/git.svg", import.meta.url).href;
+const linuxIcon = new URL("../assets/icons/linux.svg", import.meta.url).href;
 const ws = useWorkspace();
+
+type ProjectOpenOption = {
+  id: ProjectOpenTarget;
+  label: string;
+  iconSrc: string;
+  iconClass?: string;
+};
+
+const projectOpenTargetStorageKey = "ai-workbench.projectOpenTarget.v1";
+const projectOpenOptions: ProjectOpenOption[] = [
+  { id: "vscode", label: "VS Code", iconSrc: vscodeIcon, iconClass: "brand-vscode" },
+  { id: "visualStudio", label: "Visual Studio", iconSrc: visualStudioIcon, iconClass: "brand-visual-studio" },
+  { id: "fileManager", label: "File Explorer", iconSrc: folderOpenIcon },
+  { id: "terminal", label: "Terminal", iconSrc: terminalIcon, iconClass: "terminal" },
+  { id: "gitBash", label: "Git Bash", iconSrc: gitIcon, iconClass: "brand-git" },
+  { id: "wsl", label: "WSL", iconSrc: linuxIcon, iconClass: "brand-wsl" },
+];
+
+function readProjectOpenTarget(): ProjectOpenTarget {
+  const stored = window.localStorage.getItem(projectOpenTargetStorageKey);
+  return projectOpenOptions.some((option) => option.id === stored)
+    ? stored as ProjectOpenTarget
+    : "vscode";
+}
 
 const prompt = ref("");
 const editingQueuedMessageId = ref<string | null>(null);
@@ -90,6 +118,7 @@ const composerToolsOpen = ref(false);
 const environmentPanelOpen = ref(false);
 const locationMenuOpen = ref(false);
 const locationMenuError = ref("");
+const selectedProjectOpenTarget = ref<ProjectOpenTarget>(readProjectOpenTarget());
 const environmentInfo = ref<ProjectEnvironmentInfo | null>(null);
 const environmentLoading = ref(false);
 const environmentError = ref("");
@@ -141,6 +170,7 @@ const floatingMenuTargetSelector = [
   ".codex-model-menu",
   ".codex-model-submenu",
   ".chat-topbar-action",
+  ".chat-location-split-button",
   ".chat-location-menu",
   ".chat-topbar-icon-action",
   ".environment-popover",
@@ -210,6 +240,10 @@ const selectedProvider = computed(() => {
     ?? providerChoices.value.find((provider) => provider.id === "codex")
     ?? providerChoices.value[0];
 });
+const selectedProjectOpenOption = computed(() => (
+  projectOpenOptions.find((option) => option.id === selectedProjectOpenTarget.value)
+  ?? projectOpenOptions[0]
+));
 const showCodexRunControls = computed(() => {
   const providerId = ws.activeAiSession.value?.providerId ?? selectedProvider.value?.id ?? ws.selectedProviderId.value;
   return providerId === "codex";
@@ -779,6 +813,12 @@ async function openCurrentProjectWith(target: ProjectOpenTarget) {
   } catch (error) {
     locationMenuError.value = error instanceof Error ? error.message : "打开失败";
   }
+}
+
+function selectProjectOpenTarget(target: ProjectOpenTarget) {
+  selectedProjectOpenTarget.value = target;
+  window.localStorage.setItem(projectOpenTargetStorageKey, target);
+  void openCurrentProjectWith(target);
 }
 
 async function refreshEnvironmentInfo() {
@@ -2107,44 +2147,52 @@ function onPromptKeydown(event: KeyboardEvent) {
       <div class="chat-topbar-meta">
         <span>{{ chatHeaderMeta }}</span>
         <div class="chat-location-menu-wrap">
-          <button
-            type="button"
-            class="chat-topbar-action location"
-            :class="{ open: locationMenuOpen }"
-            :disabled="!currentProject"
-            title="打开项目位置"
-            :aria-expanded="locationMenuOpen"
-            @click="toggleLocationMenu"
-          >
-            <svg viewBox="0 0 16 16" fill="none" aria-hidden="true">
-              <path d="M3 5.6 8 2l5 3.6v7.1a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V5.6Z" stroke="currentColor" stroke-width="1.35" stroke-linejoin="round" />
-              <path d="M6.2 13.7V9.2h3.6v4.5" stroke="currentColor" stroke-width="1.35" stroke-linejoin="round" />
-            </svg>
-            <span>打开位置</span>
-            <svg class="chat-topbar-action-chevron" viewBox="0 0 16 16" fill="none" aria-hidden="true">
-              <path d="m4.5 6.5 3.5 3 3.5-3" stroke="currentColor" stroke-width="1.45" stroke-linecap="round" stroke-linejoin="round" />
-            </svg>
-          </button>
+          <div class="chat-location-split-button" :class="{ open: locationMenuOpen }">
+            <button
+              type="button"
+              class="chat-topbar-action location-primary"
+              :disabled="!currentProject"
+              :title="`使用 ${selectedProjectOpenOption.label} 打开项目`"
+              :aria-label="`使用 ${selectedProjectOpenOption.label} 打开项目`"
+              @click="openCurrentProjectWith(selectedProjectOpenTarget)"
+            >
+              <span
+                class="chat-location-app-icon chat-location-trigger-icon"
+                :class="selectedProjectOpenOption.iconClass"
+                aria-hidden="true"
+              >
+                <img :src="selectedProjectOpenOption.iconSrc" alt="" />
+              </span>
+            </button>
+            <button
+              type="button"
+              class="chat-location-menu-toggle"
+              :disabled="!currentProject"
+              title="选择打开方式"
+              aria-label="选择打开方式"
+              aria-haspopup="menu"
+              :aria-expanded="locationMenuOpen"
+              @click="toggleLocationMenu"
+            >
+              <svg class="chat-topbar-action-chevron" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+                <path d="m4.5 6.5 3.5 3 3.5-3" stroke="currentColor" stroke-width="1.45" stroke-linecap="round" stroke-linejoin="round" />
+              </svg>
+            </button>
+          </div>
           <div v-if="locationMenuOpen" class="chat-location-menu" role="menu">
-            <button type="button" role="menuitem" @click="openCurrentProjectWith('visualStudio')">
-              <span class="chat-location-app-icon brand-visual-studio" aria-hidden="true">VS</span>
-              <span>Visual Studio</span>
-            </button>
-            <button type="button" role="menuitem" @click="openCurrentProjectWith('fileManager')">
-              <span class="chat-location-app-icon" aria-hidden="true"><img :src="folderOpenIcon" alt="" /></span>
-              <span>File Explorer</span>
-            </button>
-            <button type="button" role="menuitem" @click="openCurrentProjectWith('terminal')">
-              <span class="chat-location-app-icon terminal" aria-hidden="true"><img :src="terminalIcon" alt="" /></span>
-              <span>Terminal</span>
-            </button>
-            <button type="button" role="menuitem" @click="openCurrentProjectWith('gitBash')">
-              <span class="chat-location-app-icon brand-git" aria-hidden="true">◇</span>
-              <span>Git Bash</span>
-            </button>
-            <button type="button" role="menuitem" @click="openCurrentProjectWith('wsl')">
-              <span class="chat-location-app-icon brand-wsl" aria-hidden="true">&gt;_</span>
-              <span>WSL</span>
+            <button
+              v-for="option in projectOpenOptions"
+              :key="option.id"
+              type="button"
+              role="menuitemradio"
+              :class="{ active: option.id === selectedProjectOpenTarget }"
+              :aria-checked="option.id === selectedProjectOpenTarget"
+              @click="selectProjectOpenTarget(option.id)"
+            >
+              <span class="chat-location-app-icon" :class="option.iconClass" aria-hidden="true">
+                <img :src="option.iconSrc" alt="" />
+              </span>
+              <span>{{ option.label }}</span>
             </button>
             <p v-if="locationMenuError" class="chat-location-menu-error">{{ locationMenuError }}</p>
           </div>

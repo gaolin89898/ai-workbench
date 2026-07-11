@@ -12,7 +12,7 @@ import * as path from "node:path";
 import type { RunCodexChatRequest, SteerCodexChatRequest, ChatFileAttachment, ChatImageAttachment, ChatSegment, CodexApprovalDecision, CodexApprovalMode, CodexTraceSnapshot, CodexModelOption, CodexReasoningEffort, CodexReasoningEffortOption, CodexServiceTierOption } from "../services/desktop";
 import { reportTokenUsage } from "./sync";
 import { getLocalAiSession, resetLocalAiTrace, upsertLocalAiTrace } from "./db";
-import { codexTraceSnapshotToSegments, reduceCodexTraceSnapshot, type CodexRawTraceEvent } from "./codex_trace";
+import { codexTraceSnapshotToSegments, isCodexReconnectMessage, reduceCodexTraceSnapshot, type CodexRawTraceEvent } from "./codex_trace";
 
 // Structural sender — WebContents / BrowserWindow satisfy this, and test
 // stubs can be passed too.
@@ -317,8 +317,7 @@ function flushTrace(session: CodexSession, rawEvent?: CodexRawTraceEvent): void 
 
 function scheduleTraceFlush(session: CodexSession, rawEvent: CodexRawTraceEvent): void {
   session.traceDirty = true;
-  const status = session.traceSnapshot?.status;
-  if (status === "completed" || status === "failed" || status === "canceled") {
+  if (rawEvent.method === "turn/completed" || rawEvent.method === "error") {
     flushTrace(session, rawEvent);
     return;
   }
@@ -385,10 +384,6 @@ function finishCodexSessionTrace(
 function errorMessage(err: unknown): string {
   if (err instanceof Error) return err.message;
   return String(err);
-}
-
-function isCodexReconnectMessage(message: string): boolean {
-  return /^Reconnecting(?:\.\.\.)?\s+\d+\/\d+$/i.test(message.trim());
 }
 
 function delay(ms: number): Promise<void> {
@@ -1061,7 +1056,7 @@ function handleNotification(
     }
     case "error": {
       const msg = extractErrorMessage(params) ?? "未知错误";
-      if (!isCodexReconnectMessage(msg)) emitSessionError(session, msg);
+      if (!isCodexReconnectMessage(msg)) session.errorEmitted = true;
       break;
     }
     default:
@@ -1426,6 +1421,10 @@ export async function runCodexChat(
   sender: Sender
 ): Promise<string> {
   const { aiSessionId, projectPath, images = [], attachments = [], approvalMode = "custom" } = req;
+  const existingSession = activeCodexSessions.get(aiSessionId);
+  if (existingSession && !existingSession.closed && !existingSession.cancelled) {
+    throw new Error("当前 Codex 会话仍在执行，请等待完成或先停止当前任务。");
+  }
   const session = createSession(aiSessionId, projectPath, sender, true, approvalMode);
   const initialTrace = resetLocalAiTrace({
     aiSessionId,

@@ -1015,16 +1015,41 @@ function dedupeAdjacentChatMessages(messages: ChatMessage[]) {
     }
     deduped.push(message);
   }
-  return deduped;
+  return dedupeCompletedTraceMessages(deduped);
+}
+
+function dedupeCompletedTraceMessages(messages: ChatMessage[]) {
+  const bestMessageByTrace = new Map<string, { index: number; score: number }>();
+  messages.forEach((message, index) => {
+    if (message.role !== "assistant" || message.pending) return;
+    const traceStartedAt = assistantTraceStartedAt(message);
+    if (!traceStartedAt) return;
+    const score = chatMessageScore(message);
+    const current = bestMessageByTrace.get(traceStartedAt);
+    if (!current || score >= current.score) bestMessageByTrace.set(traceStartedAt, { index, score });
+  });
+  return messages.filter((message, index) => {
+    if (message.role !== "assistant" || message.pending) return true;
+    const traceStartedAt = assistantTraceStartedAt(message);
+    return !traceStartedAt || bestMessageByTrace.get(traceStartedAt)?.index === index;
+  });
 }
 
 function areDuplicateChatMessages(left: ChatMessage, right: ChatMessage) {
   if (left.role !== right.role) return false;
   if (left.role !== "assistant") return chatMessageFingerprint(left) === chatMessageFingerprint(right);
+  const leftTraceStartedAt = assistantTraceStartedAt(left);
+  const rightTraceStartedAt = assistantTraceStartedAt(right);
+  if (leftTraceStartedAt && leftTraceStartedAt === rightTraceStartedAt) return true;
   return areDuplicateAssistantDisplays(
     assistantVisibleText(left),
     assistantVisibleText(right),
   );
+}
+
+function assistantTraceStartedAt(message: ChatMessage) {
+  const runtimeStatus = message.segments?.find((segment) => segment.stepId === "runtime-status");
+  return runtimeStatus?.type === "status" ? runtimeStatus.startedAt : undefined;
 }
 
 function assistantVisibleText(message: ChatMessage) {
