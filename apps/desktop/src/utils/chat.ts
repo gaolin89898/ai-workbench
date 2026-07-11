@@ -1,4 +1,4 @@
-import type { ChatImageAttachment, ChatSegment } from "../services/desktop";
+import type { ChatFileAttachment, ChatImageAttachment, ChatSegment } from "../services/desktop";
 
 const STRUCTURED_MESSAGE_PREFIX = "__AI_WORKBENCH_MESSAGE_V1__";
 
@@ -6,6 +6,7 @@ export type StoredAssistantMessage = {
   text: string;
   segments?: ChatSegment[];
   images?: ChatImageAttachment[];
+  attachments?: ChatFileAttachment[];
 };
 
 export function encodeAssistantMessageForStorage(message: StoredAssistantMessage) {
@@ -13,6 +14,7 @@ export function encodeAssistantMessageForStorage(message: StoredAssistantMessage
     text: message.text,
     segments: message.segments,
     images: message.images,
+    attachments: message.attachments,
   })}`;
 }
 
@@ -25,7 +27,8 @@ export function decodeAssistantMessageFromStorage(value: string): StoredAssistan
     const text = typeof record.text === "string" ? record.text : "";
     const segments = Array.isArray(record.segments) ? (record.segments as ChatSegment[]) : undefined;
     const images = Array.isArray(record.images) ? (record.images as ChatImageAttachment[]) : undefined;
-    return { text, segments, images };
+    const attachments = Array.isArray(record.attachments) ? (record.attachments as ChatFileAttachment[]) : undefined;
+    return { text, segments, images, attachments };
   } catch {
     return { text: value };
   }

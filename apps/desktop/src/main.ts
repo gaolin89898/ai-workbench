@@ -1,3 +1,4 @@
+import "@arco-design/web-vue/es/table/style/index.css";
 import "./style.css";
 
 const appRoot = document.querySelector("#app");

@@ -16,6 +16,9 @@ import type {
   CodexMcpResourceContent,
   CodexMcpResourceReadRequest,
   CodexMcpServer,
+  CodexThreadArchiveRequest,
+  CodexThreadGoal,
+  CodexThreadGoalSetRequest,
   CodexNativeThread,
   CodexNativeThreadItem,
   CodexNativeThreadStatus,
@@ -103,6 +106,7 @@ function textFromContent(value: unknown): string {
     const text = stringValue(item.text) ?? stringValue(item.value) ?? stringValue(item.content);
     if (text) return [text];
     if (item.type === "image" || item.type === "localImage") return ["[图片]"];
+    if (item.type === "mention") return [`[附件] ${stringValue(item.name) ?? stringValue(item.path) ?? "文件"}`];
     return [];
   }).join("\n");
 }
@@ -132,7 +136,7 @@ function threadItemTitle(item: Record<string, unknown>): string {
   const type = stringValue(item.type) ?? "unknown";
   if (type === "userMessage") return "用户消息";
   if (type === "agentMessage") return "Codex 回复";
-  if (type === "reasoning") return "思考过程";
+  if (type === "reasoning") return "推理";
   if (type === "commandExecution") return stringValue(item.command) ?? "命令执行";
   if (type === "fileChange") return "文件修改";
   if (type === "mcpToolCall") {
@@ -192,6 +196,29 @@ function mapThread(value: unknown, archived: boolean): CodexNativeThread {
     archived,
     status: statusFrom(thread.status),
     turns: Array.isArray(thread.turns) ? thread.turns.map(mapTurn) : [],
+  };
+}
+
+function goalStatus(value: unknown): CodexThreadGoal["status"] {
+  return value === "paused" || value === "blocked" || value === "usageLimited" || value === "budgetLimited" || value === "complete"
+    ? value
+    : "active";
+}
+
+function mapThreadGoal(value: unknown): CodexThreadGoal | null {
+  const goal = record(value);
+  const threadId = stringValue(goal.threadId);
+  const objective = stringValue(goal.objective);
+  if (!threadId || objective === null) return null;
+  return {
+    threadId,
+    objective,
+    status: goalStatus(goal.status),
+    tokenBudget: numberValue(goal.tokenBudget),
+    tokensUsed: numberValue(goal.tokensUsed) ?? 0,
+    timeUsedSeconds: numberValue(goal.timeUsedSeconds) ?? 0,
+    createdAt: numberValue(goal.createdAt) ?? 0,
+    updatedAt: numberValue(goal.updatedAt) ?? 0,
   };
 }
 
@@ -355,6 +382,21 @@ class CodexAdminClient {
     } else if (method === "thread/name/updated") {
       const threadId = stringValue(params.threadId);
       if (threadId) event = { type: "thread-name", threadId, name: stringValue(params.threadName) };
+    } else if (method === "thread/archived" || method === "thread/unarchived") {
+      const threadId = stringValue(params.threadId);
+      if (threadId) event = { type: "thread-archived", threadId, archived: method === "thread/archived" };
+    } else if (method === "thread/deleted") {
+      const threadId = stringValue(params.threadId);
+      if (threadId) event = { type: "thread-deleted", threadId };
+    } else if (method === "thread/goal/updated") {
+      const goal = mapThreadGoal(params.goal);
+      if (goal) event = { type: "thread-goal", threadId: goal.threadId, goal };
+    } else if (method === "thread/goal/cleared") {
+      const threadId = stringValue(params.threadId);
+      if (threadId) event = { type: "thread-goal", threadId, goal: null };
+    } else if (method === "thread/compacted") {
+      const threadId = stringValue(params.threadId);
+      if (threadId) event = { type: "thread-compacted", threadId };
     } else if (method === "mcpServer/startupStatus/updated") {
       const name = stringValue(params.name);
       const rawStatus = stringValue(params.status);
@@ -477,6 +519,62 @@ export async function renameCodexThread(
   if (!request.threadId || !name) throw new Error("Thread ID 和名称不能为空");
   const client = await getAdminClient(sender);
   await client.request("thread/name/set", { threadId: request.threadId, name });
+  return true;
+}
+
+export async function archiveCodexThread(
+  request: CodexThreadArchiveRequest,
+  sender?: Sender,
+): Promise<boolean> {
+  if (!request.threadId) throw new Error("Thread ID 不能为空");
+  const client = await getAdminClient(sender);
+  await client.request(request.archived ? "thread/archive" : "thread/unarchive", { threadId: request.threadId });
+  return true;
+}
+
+export async function deleteCodexThread(threadId: string, sender?: Sender): Promise<boolean> {
+  if (!threadId) throw new Error("Thread ID 不能为空");
+  const client = await getAdminClient(sender);
+  await client.request("thread/delete", { threadId });
+  return true;
+}
+
+export async function getCodexThreadGoal(threadId: string, sender?: Sender): Promise<CodexThreadGoal | null> {
+  if (!threadId) throw new Error("Thread ID 不能为空");
+  const client = await getAdminClient(sender);
+  const response = record(await client.request("thread/goal/get", { threadId }));
+  return mapThreadGoal(response.goal);
+}
+
+export async function setCodexThreadGoal(
+  request: CodexThreadGoalSetRequest,
+  sender?: Sender,
+): Promise<CodexThreadGoal> {
+  if (!request.threadId) throw new Error("Thread ID 不能为空");
+  const client = await getAdminClient(sender);
+  const response = record(await client.request("thread/goal/set", {
+    threadId: request.threadId,
+    objective: request.objective ?? null,
+    status: request.status ?? null,
+    tokenBudget: request.tokenBudget ?? null,
+  }));
+  const goal = mapThreadGoal(response.goal);
+  if (!goal) throw new Error("Codex 未返回有效目标");
+  return goal;
+}
+
+export async function clearCodexThreadGoal(threadId: string, sender?: Sender): Promise<boolean> {
+  if (!threadId) throw new Error("Thread ID 不能为空");
+  const client = await getAdminClient(sender);
+  const response = record(await client.request("thread/goal/clear", { threadId }));
+  return response.cleared !== false;
+}
+
+export async function compactCodexThread(threadId: string, sender?: Sender): Promise<boolean> {
+  if (!threadId) throw new Error("Thread ID 不能为空");
+  const client = await getAdminClient(sender);
+  await client.request("thread/resume", { threadId });
+  await client.request("thread/compact/start", { threadId }, 90_000);
   return true;
 }
 

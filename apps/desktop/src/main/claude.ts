@@ -171,9 +171,10 @@ function reportClaudeTokenUsage(aiSessionId: string, message: SDKMessage): void 
   if (message.type !== "result") return;
   const usage = message.usage as Record<string, unknown> | undefined;
   if (!usage) return;
+  const cachedInputTokens = numOrZero(usage.cache_read_input_tokens);
   const inputTokens = numOrZero(usage.input_tokens)
     + numOrZero(usage.cache_creation_input_tokens)
-    + numOrZero(usage.cache_read_input_tokens);
+    + cachedInputTokens;
   const outputTokens = numOrZero(usage.output_tokens);
   const totalTokens = inputTokens + outputTokens;
   if (totalTokens <= 0) return;
@@ -181,6 +182,7 @@ function reportClaudeTokenUsage(aiSessionId: string, message: SDKMessage): void 
     aiSessionId,
     providerId: "claude",
     inputTokens,
+    cachedInputTokens,
     outputTokens,
     reasoningTokens: 0,
     totalTokens,

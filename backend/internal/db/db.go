@@ -348,8 +348,8 @@ func (d *DB) InsertActivityLog(ctx context.Context, item models.ActivityLogInser
 // InsertTokenUsage 写入一条 token 用量记录。
 func (d *DB) InsertTokenUsage(ctx context.Context, item models.TokenUsageInsert) error {
 	_, err := d.Pool.Exec(ctx,
-		"INSERT INTO token_usage (user_id, device_id, ai_session_id, provider_id, input_tokens, output_tokens, reasoning_tokens, total_tokens) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)",
-		item.UserId, item.DeviceId, item.AiSessionId, item.ProviderId, item.InputTokens, item.OutputTokens, item.ReasoningTokens, item.TotalTokens,
+		"INSERT INTO token_usage (user_id, device_id, ai_session_id, provider_id, input_tokens, cached_input_tokens, output_tokens, reasoning_tokens, total_tokens) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)",
+		item.UserId, item.DeviceId, item.AiSessionId, item.ProviderId, item.InputTokens, item.CachedInputTokens, item.OutputTokens, item.ReasoningTokens, item.TotalTokens,
 	)
 	return err
 }
@@ -359,6 +359,7 @@ func (d *DB) SumTokenUsageByProvider(ctx context.Context, userID string, since t
 	rows, err := d.Pool.Query(ctx,
 		`SELECT provider_id,
 		        COALESCE(SUM(input_tokens), 0),
+		        COALESCE(SUM(cached_input_tokens), 0),
 		        COALESCE(SUM(output_tokens), 0),
 		        COALESCE(SUM(reasoning_tokens), 0),
 		        COALESCE(SUM(total_tokens), 0),
@@ -376,7 +377,7 @@ func (d *DB) SumTokenUsageByProvider(ctx context.Context, userID string, since t
 	var out []models.TokenUsageSummary
 	for rows.Next() {
 		var s models.TokenUsageSummary
-		if err := rows.Scan(&s.ProviderId, &s.InputTokens, &s.OutputTokens, &s.ReasoningTokens, &s.TotalTokens, &s.TurnCount); err != nil {
+		if err := rows.Scan(&s.ProviderId, &s.InputTokens, &s.CachedInputTokens, &s.OutputTokens, &s.ReasoningTokens, &s.TotalTokens, &s.TurnCount); err != nil {
 			return nil, err
 		}
 		out = append(out, s)
@@ -388,6 +389,7 @@ func (d *DB) SumTokenUsageByDay(ctx context.Context, userID string, since time.T
 	rows, err := d.Pool.Query(ctx,
 		`SELECT TO_CHAR(created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD'),
 		        COALESCE(SUM(input_tokens), 0),
+		        COALESCE(SUM(cached_input_tokens), 0),
 		        COALESCE(SUM(output_tokens), 0),
 		        COALESCE(SUM(reasoning_tokens), 0),
 		        COALESCE(SUM(total_tokens), 0),
@@ -405,7 +407,7 @@ func (d *DB) SumTokenUsageByDay(ctx context.Context, userID string, since time.T
 	var out []models.TokenUsageDailySummary
 	for rows.Next() {
 		var item models.TokenUsageDailySummary
-		if err := rows.Scan(&item.Date, &item.InputTokens, &item.OutputTokens, &item.ReasoningTokens, &item.TotalTokens, &item.TurnCount); err != nil {
+		if err := rows.Scan(&item.Date, &item.InputTokens, &item.CachedInputTokens, &item.OutputTokens, &item.ReasoningTokens, &item.TotalTokens, &item.TurnCount); err != nil {
 			return nil, err
 		}
 		out = append(out, item)

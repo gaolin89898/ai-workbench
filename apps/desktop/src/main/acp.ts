@@ -264,16 +264,23 @@ function reportAcpUsage(session: AcpSession, response: unknown): void {
   const r = record(response);
   const usage = record(r.usage);
   const inputTokens = num(usage.inputTokens) ?? num(usage.input_tokens) ?? 0;
+  const cachedInputTokens = Math.min(inputTokens, Math.max(0,
+    num(usage.cachedInputTokens)
+      ?? num(usage.cached_input_tokens)
+      ?? num(usage.cacheReadInputTokens)
+      ?? num(usage.cache_read_input_tokens)
+      ?? 0));
   const outputTokens = num(usage.outputTokens) ?? num(usage.output_tokens) ?? 0;
   const totalTokens = num(usage.totalTokens) ?? num(usage.total_tokens) ?? (inputTokens + outputTokens);
   if (totalTokens <= 0) return;
-  const key = `${session.aiSessionId}:${totalTokens}:${inputTokens}:${outputTokens}`;
+  const key = `${session.aiSessionId}:${totalTokens}:${inputTokens}:${cachedInputTokens}:${outputTokens}`;
   if (session.reportedUsageKeys.has(key)) return;
   session.reportedUsageKeys.add(key);
   void reportTokenUsage({
     aiSessionId: session.aiSessionId,
     providerId: session.providerId,
     inputTokens,
+    cachedInputTokens,
     outputTokens,
     reasoningTokens: 0,
     totalTokens,

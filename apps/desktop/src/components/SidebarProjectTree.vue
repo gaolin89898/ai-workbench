@@ -50,6 +50,7 @@ const emit = defineEmits<{
   attachSession: [path: string, terminalSessionId: string, providerId: string];
   selectSession: [session: AiSession];
   archiveSession: [sessionId: string, archived: boolean];
+  deleteSession: [sessionId: string];
   switchView: [view: ViewName];
   renameProject: [project: WorkspaceProject, name: string];
   removeProject: [project: WorkspaceProject];
@@ -66,7 +67,7 @@ const openContextMenu = ref<{ session: AiSession; x: number; y: number } | null>
 const expandedProjectSessions = ref<Record<string, boolean>>({});
 const renameDialog = ref<{ target: AiSession | WorkspaceProject; kind: "session" | "project" } | null>(null);
 const renameDraft = ref("");
-const confirmDialog = ref<{ title: string; message: string; details?: string; action: () => void } | null>(null);
+const confirmDialog = ref<{ title: string; message: string; details?: string; confirmLabel?: string; action: () => void } | null>(null);
 const collapsedProjects = ref<Record<string, boolean>>({});
 const fileListProjectPath = ref<string | null>(null);
 const directoryFiles = ref<Record<string, WorkspaceFileEntry[]>>({});
@@ -127,6 +128,8 @@ function sessionsForProject(path: string) {
 
 function allSessionsForProject(path: string): AiSession[] {
   return sessionsForProject(path).sort((left, right) => {
+    const runningOrder = Number(isThinking(right)) - Number(isThinking(left));
+    if (runningOrder !== 0) return runningOrder;
     const rightTime = Date.parse(right.updatedAt ?? "");
     const leftTime = Date.parse(left.updatedAt ?? "");
     return (Number.isNaN(rightTime) ? 0 : rightTime) - (Number.isNaN(leftTime) ? 0 : leftTime);
@@ -215,6 +218,16 @@ async function openProjectFileEntry(project: WorkspaceProject, file: WorkspaceFi
   if (file.kind === "directory") {
     if (isKnownEmptyDirectory(file.path)) return;
     await toggleDirectoryNode(project, file.path);
+    return;
+  }
+  if (/\.html?$/i.test(file.path)) {
+    const key = directoryKey(file.path.replace(/[\\/][^\\/]+$/, ""));
+    directoryErrors.value = { ...directoryErrors.value, [key]: "" };
+    try {
+      await desktopApi.openProjectHtmlInBrowser(project.path, file.path);
+    } catch (error) {
+      directoryErrors.value = { ...directoryErrors.value, [key]: `无法打开 HTML：${String(error)}` };
+    }
     return;
   }
   emit("selectProject", project.path);
@@ -609,6 +622,19 @@ function openAccountSettings() {
   emit("switchView", "settings");
 }
 
+function deleteSessionAction(session: AiSession) {
+  openContextMenu.value = null;
+  confirmDialog.value = {
+    title: "永久删除对话",
+    message: `永久删除「${session.title}」？`,
+    details: session.providerId === "codex"
+      ? "会同时删除 Codex 原生 Thread、本地消息和执行记录，且无法恢复。"
+      : "会删除本地消息和执行记录，且无法恢复。",
+    confirmLabel: "永久删除",
+    action: () => emit("deleteSession", session.id),
+  };
+}
+
 function openUpdateSettings() {
   accountMenuOpen.value = false;
   window.localStorage.setItem("ai-workbench.settingsPanel", "about");
@@ -687,7 +713,7 @@ onBeforeUnmount(() => {
       <p v-if="confirmDialog.details" class="rename-dialog-hint">{{ confirmDialog.details }}</p>
       <footer class="rename-dialog-footer">
         <button class="button secondary" type="button" @click="closeConfirmDialog">取消</button>
-        <button class="button danger" type="button" autofocus @click="performConfirmAction">移除</button>
+        <button class="button danger" type="button" autofocus @click="performConfirmAction">{{ confirmDialog.confirmLabel || "移除" }}</button>
       </footer>
     </div>
   </div>
@@ -1001,6 +1027,10 @@ onBeforeUnmount(() => {
         <button type="button" @click="openInNewWindowAction(openContextMenu.session)">
           <img class="session-context-menu-icon" :src="windowIcon" alt="" aria-hidden="true" />
           在新窗口中打开
+        </button>
+        <button class="danger" type="button" @click="deleteSessionAction(openContextMenu.session)">
+          <img class="session-context-menu-icon" :src="trashIcon" alt="" aria-hidden="true" />
+          永久删除
         </button>
       </div>
     </div>

@@ -1570,6 +1570,7 @@ export interface TokenUsageReport {
   providerId: string;
   deviceId?: string;
   inputTokens: number;
+  cachedInputTokens: number;
   outputTokens: number;
   reasoningTokens: number;
   totalTokens: number;
@@ -1578,6 +1579,7 @@ export interface TokenUsageReport {
 export interface TokenUsageSummaryItem {
   providerId: string;
   inputTokens: number;
+  cachedInputTokens: number;
   outputTokens: number;
   reasoningTokens: number;
   totalTokens: number;
@@ -1590,6 +1592,7 @@ export interface TokenUsageSummary {
   daily: Array<{
     date: string;
     inputTokens: number;
+    cachedInputTokens: number;
     outputTokens: number;
     reasoningTokens: number;
     totalTokens: number;
@@ -1617,6 +1620,7 @@ export async function reportTokenUsage(report: TokenUsageReport): Promise<void> 
         deviceId: report.deviceId || config.deviceId || undefined,
         providerId: report.providerId,
         inputTokens: report.inputTokens,
+        cachedInputTokens: report.cachedInputTokens,
         outputTokens: report.outputTokens,
         reasoningTokens: report.reasoningTokens,
         totalTokens: report.totalTokens,

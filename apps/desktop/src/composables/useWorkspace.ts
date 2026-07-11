@@ -1,12 +1,13 @@
 import { computed, ref, watch } from "vue";
 import router from "../router";
-import { desktopApi, type AiChatOptions, type AiChatOutputEvent, type AiProvider, type AiProviderTrace, type AiSession, type AiTraceUpdateEvent, type AppUpdateDownloadProgress, type AppUpdateInfo, type ChatImageAttachment, type ChatMessage, type ChatSegment, type ProviderStatus, type TerminalSession, type ViewName, type WorkspaceProject } from "../services/desktop";
+import { desktopApi, type AiChatOptions, type AiChatOutputEvent, type AiProvider, type AiProviderTrace, type AiSession, type AiTraceUpdateEvent, type AppUpdateDownloadProgress, type AppUpdateInfo, type ChatFileAttachment, type ChatImageAttachment, type ChatMessage, type ChatSegment, type ProviderStatus, type TerminalSession, type ViewName, type WorkspaceProject } from "../services/desktop";
 import { decodeAssistantMessageFromStorage, encodeAssistantMessageForStorage, extractAssistantText } from "../utils/chat";
 
 export type QueuedAiMessage = {
   id: string;
   text: string;
   images: ChatImageAttachment[];
+  attachments: ChatFileAttachment[];
   options: AiChatOptions;
   createdAt: string;
 };
@@ -362,6 +363,10 @@ function plainChatImages(images: ChatImageAttachment[]): ChatImageAttachment[] {
   }));
 }
 
+function plainChatAttachments(attachments: ChatFileAttachment[]): ChatFileAttachment[] {
+  return attachments.map((attachment) => ({ ...attachment }));
+}
+
 function queuedMessagesForSession(sessionId: string): QueuedAiMessage[] {
   return queuedAiMessagesBySessionId.value[sessionId] ?? [];
 }
@@ -376,17 +381,20 @@ function setQueuedMessagesForSession(sessionId: string, messages: QueuedAiMessag
 function queuePrompt(
   prompt: string,
   images: ChatImageAttachment[] = [],
+  attachments: ChatFileAttachment[] = [],
   options: AiChatOptions = {},
   sessionId = activeAiSession.value?.id,
 ): string | null {
   if (!sessionId) return null;
   const text = prompt.trim();
   const plainImages = plainChatImages(images);
-  if (!text && plainImages.length === 0) return null;
+  const plainAttachments = plainChatAttachments(attachments);
+  if (!text && plainImages.length === 0 && plainAttachments.length === 0) return null;
   const item: QueuedAiMessage = {
     id: chatClientId("queue"),
     text,
     images: plainImages,
+    attachments: plainAttachments,
     options: { ...options },
     createdAt: new Date().toISOString(),
   };
@@ -401,7 +409,7 @@ function updateQueuedPrompt(itemId: string, text: string): boolean {
   const item = current.find((entry) => entry.id === itemId);
   if (!item) return false;
   const trimmed = text.trim();
-  if (!trimmed && item.images.length === 0) return false;
+  if (!trimmed && item.images.length === 0 && (item.attachments?.length ?? 0) === 0) return false;
   setQueuedMessagesForSession(sessionId, current.map((entry) => (
     entry.id === itemId ? { ...entry, text: trimmed } : entry
   )));
@@ -439,7 +447,7 @@ async function sendNextQueuedPrompt(sessionId = activeAiSession.value?.id): Prom
   queueDispatchingSessions.add(sessionId);
   setQueuedMessagesForSession(sessionId, queued.slice(1));
   try {
-    const started = await sendPrompt(next.text, next.images, next.options, sessionId);
+    const started = await sendPrompt(next.text, next.images, next.attachments ?? [], next.options, sessionId);
     if (!started) {
       setQueuedMessagesForSession(sessionId, [next, ...queuedMessagesForSession(sessionId)]);
     }
@@ -881,7 +889,7 @@ async function loadAiSessionHistorySnapshot(sessionId: string) {
   const messages = dedupeAdjacentChatMessages(history.map((message) => {
     if (message.role !== "assistant") {
       const decoded = decodeAssistantMessageFromStorage(message.content);
-      return { role: message.role, text: decoded.text, images: decoded.images, createdAt: message.createdAt };
+      return { role: message.role, text: decoded.text, images: decoded.images, attachments: decoded.attachments, createdAt: message.createdAt };
     }
     const decoded = decodeAssistantMessageFromStorage(message.content);
     return {
@@ -1058,6 +1066,11 @@ function chatMessageFingerprint(message: ChatMessage) {
       mimeType: image.mimeType,
       dataUrl: image.dataUrl,
     })),
+    attachments: (message.attachments ?? []).map((attachment) => ({
+      name: attachment.name,
+      path: attachment.path,
+      size: attachment.size,
+    })),
   });
 }
 
@@ -1138,6 +1151,7 @@ function isCodexExternalMirrorSession(session: AiSession | null) {
 async function steerActiveCodexChat(
   prompt: string,
   images: ChatImageAttachment[] = [],
+  attachments: ChatFileAttachment[] = [],
 ): Promise<boolean> {
   await initAiEventListeners();
   const session = activeAiSession.value;
@@ -1146,7 +1160,8 @@ async function steerActiveCodexChat(
   if (!pending || stoppedAiSessions.has(session.id)) return false;
   const text = prompt.trim();
   const plainImages = plainChatImages(images);
-  if (!text && plainImages.length === 0) return false;
+  const plainAttachments = plainChatAttachments(attachments);
+  if (!text && plainImages.length === 0 && plainAttachments.length === 0) return false;
 
   const clientId = chatClientId("steer-user");
   const userMessage: ChatMessage = {
@@ -1154,6 +1169,7 @@ async function steerActiveCodexChat(
     role: "user",
     text,
     images: plainImages,
+    attachments: plainAttachments,
     createdAt: new Date().toISOString(),
   };
   const messages = [...chatMessagesForSession(session.id)];
@@ -1166,6 +1182,7 @@ async function steerActiveCodexChat(
       aiSessionId: session.id,
       prompt: text,
       images: plainImages,
+      attachments: plainAttachments,
       clientUserMessageId: clientId,
     });
     if (!handled) throw new Error("当前 Codex Turn 尚未就绪");
@@ -1182,6 +1199,7 @@ async function steerActiveCodexChat(
   void desktopApi.appendLocalAiMessage(session.id, "user", encodeAssistantMessageForStorage({
     text: displayText,
     images: plainImages,
+    attachments: plainAttachments,
   })).catch((error) => {
     pushChatDebugEvent(`保存追加消息失败：${String(error)}`);
   });
@@ -1198,6 +1216,7 @@ async function steerActiveCodexChat(
 async function sendPrompt(
   prompt: string,
   images: ChatImageAttachment[] = [],
+  attachments: ChatFileAttachment[] = [],
   chatOptions: AiChatOptions = {},
   targetSessionId?: string,
 ): Promise<boolean> {
@@ -1205,7 +1224,8 @@ async function sendPrompt(
   await initAiEventListeners();
   const trimmed = prompt.trim();
   const plainImages = plainChatImages(images);
-  if (!trimmed && !plainImages.length) return false;
+  const plainAttachments = plainChatAttachments(attachments);
+  if (!trimmed && !plainImages.length && !plainAttachments.length) return false;
   const targetSession = targetSessionId
     ? (activeAiSession.value?.id === targetSessionId ? activeAiSession.value : aiSessions.value.find((session) => session.id === targetSessionId))
     : activeAiSession.value;
@@ -1222,6 +1242,10 @@ async function sendPrompt(
   const providerName = providerDisplayName(providerId);
   const runtimeName = providerRuntimeName(providerId);
   const projectPath = targetSession.summary || (activeAiSession.value?.id === sessionId ? selectedProjectPath.value : "");
+  if (plainAttachments.length && providerId !== "codex") {
+    appendChatMessageForSession(sessionId, { role: "error", text: "文件附件目前仅支持 Codex 会话。" });
+    return false;
+  }
   if (!supportedChatProviders.has(providerId)) {
     appendChatMessageForSession(sessionId, {
       role: "error",
@@ -1244,10 +1268,10 @@ async function sendPrompt(
     return false;
   }
   await saveAssistantDraft(sessionId);
-  const promptForSession = trimmed || `查看这 ${plainImages.length} 张图片`;
+  const promptForSession = trimmed || (plainAttachments.length ? "查看附件" : `查看这 ${plainImages.length} 张图片`);
   const displayText = trimmed;
   renameUntitledSession(sessionId, promptForSession);
-  appendChatMessageForSession(sessionId, { clientId: chatClientId("user"), role: "user", text: displayText, images: plainImages });
+  appendChatMessageForSession(sessionId, { clientId: chatClientId("user"), role: "user", text: displayText, images: plainImages, attachments: plainAttachments });
   const assistantClientId = chatClientId("assistant");
   const assistantMessage: ChatMessage = {
     clientId: assistantClientId,
@@ -1286,6 +1310,7 @@ async function sendPrompt(
     await desktopApi.appendLocalAiMessage(sessionId, "user", encodeAssistantMessageForStorage({
       text: displayText,
       images: plainImages,
+      attachments: plainAttachments,
     }));
     setChatRunState(sessionId, {
       active: true,
@@ -1301,6 +1326,7 @@ async function sendPrompt(
       projectPath,
       prompt: promptForSession,
       images: plainImages,
+      attachments: plainAttachments,
       ...chatOptions,
     };
     void runChat(runRequest).then((providerSessionId) => {
@@ -2185,6 +2211,10 @@ function sortSessionsByUpdatedAt(left: AiSession, right: AiSession) {
 
 async function archiveAiSession(sessionId: string, archived: boolean) {
   if (!sessionId) return;
+  if (thinkingSessionIds.value[sessionId]) {
+    if (activeAiSession.value?.id === sessionId) appendCurrentChatMessage({ role: "error", text: "会话运行中，请先停止当前任务再归档。" });
+    return;
+  }
   try {
     const session = await desktopApi.archiveLocalAiSession(sessionId, archived);
     aiSessions.value = [session, ...aiSessions.value.filter((item) => item.id !== session.id)];
@@ -2197,6 +2227,33 @@ async function archiveAiSession(sessionId: string, archived: boolean) {
   } catch (error) {
     if (activeAiSession.value?.id === sessionId) {
       appendCurrentChatMessage({ role: "error", text: `${archived ? "归档" : "恢复"}失败：${String(error)}` });
+    }
+  }
+}
+
+async function deleteAiSession(sessionId: string) {
+  if (!sessionId) return;
+  if (thinkingSessionIds.value[sessionId]) {
+    if (activeAiSession.value?.id === sessionId) appendCurrentChatMessage({ role: "error", text: "会话运行中，请先停止当前任务再删除。" });
+    return;
+  }
+  try {
+    const deleted = await desktopApi.deleteLocalAiSession(sessionId);
+    if (!deleted) return;
+    aiSessions.value = aiSessions.value.filter((session) => session.id !== sessionId);
+    const { [sessionId]: _messages, ...remainingMessages } = chatMessagesBySessionId.value;
+    chatMessagesBySessionId.value = remainingMessages;
+    const { [sessionId]: _queued, ...remainingQueued } = queuedAiMessagesBySessionId.value;
+    queuedAiMessagesBySessionId.value = remainingQueued;
+    pendingAssistants.delete(sessionId);
+    assistantDrafts.delete(sessionId);
+    if (activeAiSession.value?.id === sessionId) {
+      activeAiSession.value = null;
+      chatMessages.value = [{ role: "system", text: "会话已永久删除。" }];
+    }
+  } catch (error) {
+    if (activeAiSession.value?.id === sessionId) {
+      appendCurrentChatMessage({ role: "error", text: `删除失败：${String(error)}` });
     }
   }
 }
@@ -2480,6 +2537,7 @@ export function useWorkspace() {
     resizeShell,
     resizeProjectShell,
     archiveAiSession,
+    deleteAiSession,
     renameAiSession,
     isSessionPinned,
     toggleSessionPinned,

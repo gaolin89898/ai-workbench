@@ -64,7 +64,10 @@ const userMessageCopyText = computed(() => {
   const imageNames = (props.message.images ?? [])
     .map((image) => image.name.trim())
     .filter(Boolean);
-  return [text, imageNames.length ? `Images: ${imageNames.join(", ")}` : ""]
+  const attachmentNames = (props.message.attachments ?? [])
+    .map((attachment) => attachment.name.trim())
+    .filter(Boolean);
+  return [text, imageNames.length ? `Images: ${imageNames.join(", ")}` : "", attachmentNames.length ? `Files: ${attachmentNames.join(", ")}` : ""]
     .filter(Boolean)
     .join("\n");
 });
@@ -621,6 +624,10 @@ function isProcessConclusionSegment(segment: ChatSegmentType) {
   return segment.type === "text" && isProcessTextStepId(segment.stepId);
 }
 
+function isStandaloneProcessConclusion(segment: ChatSegmentType) {
+  return isProcessConclusionSegment(segment) || isExecutionConclusionSegment(segment);
+}
+
 function processStageTitle(segments: ChatSegmentType[]) {
   const errorSegment = segments.find((segment) => segment.type === "error");
   if (props.message.pending && errorSegment?.type === "error") return errorSegment.title || "执行失败";
@@ -1017,7 +1024,8 @@ function countCommandOutputSignals(text: string) {
               <span class="chat-shimmer">正在思考</span>
             </div>
             <template v-else v-for="(item, itemIndex) in processBodyItems(group)" :key="itemIndex">
-              <ChatSegment v-if="item.type === 'segment'" :segment="item.segment" :ai-session-id="aiSessionId" />
+              <ChatSegment v-if="item.type === 'segment' && !isStandaloneProcessConclusion(item.segment)" :segment="item.segment" :ai-session-id="aiSessionId" />
+              <div v-else-if="item.type === 'segment'" class="chat-process-stage-conclusion standalone">{{ conclusionText(item.segment) }}</div>
               <div v-else-if="isThinkingStage(item.segments)" class="chat-process-stage thinking-only">
                 <div class="chat-process-stage-header static" :class="{ danger: processStageStoppedByUser(item.segments) || processStageShowsError(item.segments) }">
                   <span class="chat-process-stage-dot" :class="{ running: processStageRunning(item.segments), danger: processStageStoppedByUser(item.segments) || processStageShowsError(item.segments) }" aria-hidden="true"></span>
@@ -1057,6 +1065,12 @@ function countCommandOutputSignals(text: string) {
           <img :src="image.dataUrl" :alt="image.name" />
         </button>
       </div>
+      <div v-if="message.attachments?.length" class="chat-message-files" :aria-label="`已附 ${message.attachments.length} 个文件`">
+        <div v-for="attachment in message.attachments" :key="attachment.id" class="chat-message-file" :title="attachment.path">
+          <svg viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M4 1.75h5l3 3V14.25H4V1.75Z" stroke="currentColor" stroke-width="1.2"/><path d="M9 1.75v3h3" stroke="currentColor" stroke-width="1.2"/></svg>
+          <span>{{ attachment.name }}</span>
+        </div>
+      </div>
       <div v-if="message.role === 'user'" class="chat-message-meta">
         <time v-if="userMessageTime" :datetime="message.createdAt || undefined">{{ userMessageTime }}</time>
         <button
@@ -1094,7 +1108,8 @@ function countCommandOutputSignals(text: string) {
           </header>
           <div class="chat-process-sheet-body">
             <template v-for="(item, itemIndex) in processBodyItems(activeMobileProcessGroup.group)" :key="itemIndex">
-              <ChatSegment v-if="item.type === 'segment'" :segment="item.segment" :ai-session-id="aiSessionId" />
+              <ChatSegment v-if="item.type === 'segment' && !isStandaloneProcessConclusion(item.segment)" :segment="item.segment" :ai-session-id="aiSessionId" />
+              <div v-else-if="item.type === 'segment'" class="chat-process-stage-conclusion standalone">{{ conclusionText(item.segment) }}</div>
               <div v-else-if="isThinkingStage(item.segments)" class="chat-process-stage thinking-only">
                 <div class="chat-process-stage-header static" :class="{ danger: processStageStoppedByUser(item.segments) || processStageShowsError(item.segments) }">
                   <span class="chat-process-stage-dot" :class="{ running: processStageRunning(item.segments), danger: processStageStoppedByUser(item.segments) || processStageShowsError(item.segments) }" aria-hidden="true"></span>

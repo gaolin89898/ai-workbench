@@ -1,0 +1,2 @@
+ALTER TABLE token_usage
+  ADD COLUMN IF NOT EXISTS cached_input_tokens INTEGER NOT NULL DEFAULT 0;

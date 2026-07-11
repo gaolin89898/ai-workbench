@@ -4,7 +4,7 @@ import ChatMessageRow from "./ChatMessageRow.vue";
 import ChatSegmentView from "./ChatSegment.vue";
 import TerminalView from "./TerminalView.vue";
 import { useWorkspace, type QueuedAiMessage } from "../composables/useWorkspace";
-import { desktopApi, type AiChatOptions, type AiProvider, type AiRunSettingsState, type ChatImageAttachment, type ChatMessage, type ChatSegment, type ClaudeReasoningEffort, type AcpConfigOption, type CodexApprovalMode, type CodexModelOption, type CodexReasoningEffort, type CodexRunMode, type ProjectEnvironmentInfo, type ProjectFilePreview, type ProjectOpenTarget } from "../services/desktop";
+import { desktopApi, type AiChatOptions, type AiProvider, type AiRunSettingsState, type ChatFileAttachment, type ChatImageAttachment, type ChatMessage, type ChatSegment, type ClaudeReasoningEffort, type AcpConfigOption, type CodexAdminEvent, type CodexApprovalMode, type CodexGoalStatus, type CodexModelOption, type CodexReasoningEffort, type CodexRunMode, type CodexThreadGoal, type ProjectEnvironmentInfo, type ProjectFilePreview, type ProjectOpenTarget } from "../services/desktop";
 import { isProjectFileViewerSupported } from "../shared/project_file_formats";
 
 const ProjectFileViewer = defineAsyncComponent(() => import("./ProjectFileViewer.vue"));
@@ -72,6 +72,7 @@ const prompt = ref("");
 const editingQueuedMessageId = ref<string | null>(null);
 const editingQueuedMessageText = ref("");
 const imageAttachments = ref<ChatImageAttachment[]>([]);
+const fileAttachments = ref<ChatFileAttachment[]>([]);
 const previewImage = ref<ChatImageAttachment | null>(null);
 const chatScroll = ref<HTMLDivElement | null>(null);
 const startPromptBox = ref<HTMLFormElement | null>(null);
@@ -106,6 +107,12 @@ const claudeSelectedModel = ref(runPreferences.claude?.model || "sonnet");
 const claudeReasoningLevel = ref<ClaudeReasoningEffort>(claudeEffortPreference(runPreferences.claude?.reasoningEffort));
 const codexGoalEnabled = ref(false);
 const codexGoal = ref("");
+const codexGoalStatus = ref<CodexGoalStatus>("active");
+const codexThreadGoal = ref<CodexThreadGoal | null>(null);
+const codexGoalBusy = ref(false);
+const codexGoalLoading = ref(false);
+const codexCompactBusy = ref(false);
+const codexCompactNotice = ref("");
 const codexModels = ref<CodexModelOption[]>([]);
 const codexModelsLoading = ref(false);
 const codexModelsLoaded = ref(false);
@@ -122,6 +129,7 @@ let acpModelsLoadId = 0;
 let acpModelsRequestedKey = "";
 let acpModelsLoadedKey = "";
 let removeAiRunSettingsUpdateListener: (() => void) | null = null;
+let removeCodexAdminEventListener: (() => void) | null = null;
 const floatingMenuTargetSelector = [
   ".codex-start-add",
   ".codex-start-menu",
@@ -274,7 +282,15 @@ const pendingApprovalSegment = computed<Extract<ChatSegment, { type: "approval" 
 });
 
 const approvalInputLocked = computed(() => Boolean(pendingApprovalSegment.value));
-const canSend = computed(() => Boolean(!approvalInputLocked.value && (prompt.value.trim() || imageAttachments.value.length)));
+const canSend = computed(() => Boolean(!approvalInputLocked.value && (prompt.value.trim() || imageAttachments.value.length || fileAttachments.value.length)));
+
+const activeCodexThreadId = computed(() => {
+  const session = ws.activeAiSession.value;
+  if (!session || session.providerId !== "codex" || !session.providerSessionId) return "";
+  return session.providerSessionId.startsWith("app-server:")
+    ? session.providerSessionId.slice("app-server:".length)
+    : session.providerSessionId;
+});
 const composerPlaceholder = computed(() => {
   if (approvalInputLocked.value) return "审批期间输入框已锁定";
   if (!ws.activeChatIsRunning.value) return "输入你的消息...";
@@ -349,6 +365,56 @@ const selectedCodexModelShortLabel = computed(() => {
 });
 const selectedCodexModelButtonLabel = computed(() => `${selectedCodexModelShortLabel.value} ${selectedReasoningLabel.value}`);
 const acpModelOptions = computed(() => acpModels.value.map((m) => ({ id: m.value, model: m.value, displayName: m.name })));
+type OpenCodeModelOption = {
+  id: string;
+  model: string;
+  displayName: string;
+  free: boolean;
+  providerId: string;
+  providerName: string;
+};
+type OpenCodeModelGroup = {
+  id: string;
+  name: string;
+  models: OpenCodeModelOption[];
+};
+
+function splitModelPath(value: string): [string, string] | null {
+  const separator = value.indexOf("/");
+  if (separator <= 0 || separator >= value.length - 1) return null;
+  return [value.slice(0, separator).trim(), value.slice(separator + 1).trim()];
+}
+
+function openCodeModelOption(option: AcpConfigOption): OpenCodeModelOption {
+  const valueParts = splitModelPath(option.value);
+  const nameParts = splitModelPath(option.name);
+  const displayName = nameParts?.[1] || valueParts?.[1] || option.name;
+  return {
+    id: option.value,
+    model: option.value,
+    providerId: valueParts?.[0] || nameParts?.[0] || "opencode",
+    providerName: nameParts?.[0] || valueParts?.[0] || "OpenCode",
+    displayName: displayName.replace(/\s+Free$/i, ""),
+    free: /\s+Free$/i.test(displayName),
+  };
+}
+
+const showOpenCodeModelGrouping = computed(() => showAcpRunControls.value && acpProviderId.value === "opencode");
+const openCodeModelGroups = computed<OpenCodeModelGroup[]>(() => {
+  const groups = new Map<string, OpenCodeModelGroup>();
+  for (const option of acpModels.value) {
+    const model = openCodeModelOption(option);
+    const group = groups.get(model.providerId) ?? { id: model.providerId, name: model.providerName, models: [] };
+    group.models.push(model);
+    groups.set(model.providerId, group);
+  }
+  return [...groups.values()];
+});
+const selectedOpenCodeModel = computed(() => {
+  const option = acpModels.value.find((model) => model.value === acpSelectedModel.value);
+  return option ? openCodeModelOption(option) : null;
+});
+const selectedOpenCodeModelLabel = computed(() => selectedOpenCodeModel.value?.displayName ?? "默认");
 const acpEffortOptions = computed(() => {
   if (acpEfforts.value.length) return acpEfforts.value.map((e) => ({ id: e.value, label: e.name }));
   return [{ id: "low", label: "低" }, { id: "medium", label: "中" }, { id: "high", label: "高" }, { id: "max", label: "最大" }];
@@ -372,6 +438,7 @@ const activeReasoningOptions = computed(() => {
   return codexReasoningOptions.value;
 });
 const selectedModelLabel = computed(() => {
+  if (showOpenCodeModelGrouping.value) return selectedOpenCodeModelLabel.value;
   if (showAcpRunControls.value) return selectedAcpModelLabel.value;
   if (showClaudeRunControls.value) return selectedClaudeModelLabel.value;
   return selectedCodexModelLabel.value;
@@ -392,6 +459,7 @@ const selectedReasoningMenuLabel = computed(() => {
   return selectedReasoningLabel.value;
 });
 const selectedModelButtonLabel = computed(() => {
+  if (showOpenCodeModelGrouping.value) return selectedOpenCodeModelLabel.value;
   if (showAcpRunControls.value) return `${selectedAcpModelLabel.value} ${selectedAcpReasoningLabel.value}`;
   if (showClaudeRunControls.value) return `${selectedClaudeModelLabel.value} ${selectedClaudeReasoningLabel.value}`;
   return selectedCodexModelButtonLabel.value;
@@ -572,11 +640,11 @@ function userAnchorText(text?: string) {
 
 function estimateMessageHeight(message?: ChatMessage) {
   if (!message) return VIRTUAL_MESSAGE_ESTIMATE;
-  if (message.role === "user") return message.images?.length ? 170 : 96;
+  if (message.role === "user") return message.images?.length ? 170 : message.attachments?.length ? 132 : 96;
   const textLength = message.text?.length ?? 0;
   const segmentCount = message.segments?.length ?? 0;
-  const imageHeight = message.images?.length ? 118 : 0;
-  return Math.min(520, Math.max(112, 72 + Math.ceil(textLength / 48) * 24 + segmentCount * 38 + imageHeight));
+  const attachmentHeight = message.images?.length ? 118 : message.attachments?.length ? 54 : 0;
+  return Math.min(520, Math.max(112, 72 + Math.ceil(textLength / 48) * 24 + segmentCount * 38 + attachmentHeight));
 }
 
 function updateVirtualViewport() {
@@ -874,9 +942,15 @@ function toggleComposerPlanMode() {
   composerToolsOpen.value = false;
 }
 
-function toggleComposerGoalMode() {
-  codexGoalEnabled.value = !codexGoalEnabled.value;
+async function toggleComposerGoalMode() {
+  if (codexGoalEnabled.value) {
+    await clearCodexGoal();
+    return;
+  }
+  codexGoalEnabled.value = true;
+  codexGoalStatus.value = "active";
   composerToolsOpen.value = false;
+  if (activeCodexThreadId.value) await loadCodexGoal(true);
 }
 
 function toggleModelMenu() {
@@ -1151,6 +1225,7 @@ function buildRunOptions(): AiChatOptions {
     codexReasoningEffort: codexReasoningLevel.value,
     codexServiceTier: null,
     codexGoal: goal || null,
+    codexGoalStatus: goal ? codexGoalStatus.value : null,
   };
 }
 
@@ -1261,8 +1336,165 @@ function closeImagePreview() {
   previewImage.value = null;
 }
 
+function fileAttachmentSizeLabel(size: number) {
+  if (size < 1024) return `${size} B`;
+  if (size < 1024 * 1024) return `${(size / 1024).toFixed(1)} KB`;
+  return `${(size / 1024 / 1024).toFixed(1)} MB`;
+}
+
+async function chooseFileAttachments() {
+  composerToolsOpen.value = false;
+  try {
+    const selected = await desktopApi.chooseChatFileAttachments();
+    const merged = [...fileAttachments.value];
+    for (const attachment of selected) {
+      if (!merged.some((item) => item.path.toLocaleLowerCase() === attachment.path.toLocaleLowerCase())) merged.push(attachment);
+    }
+    fileAttachments.value = merged.slice(0, 10);
+  } catch (error) {
+    ws.createAiResult.value = `选择附件失败：${String(error)}`;
+    ws.createAiError.value = true;
+  }
+}
+
+function removeFileAttachment(id: string) {
+  fileAttachments.value = fileAttachments.value.filter((attachment) => attachment.id !== id);
+}
+
+function goalStatusLabel(status: CodexGoalStatus) {
+  if (status === "paused") return "已暂停";
+  if (status === "blocked") return "受阻";
+  if (status === "usageLimited") return "用量受限";
+  if (status === "budgetLimited") return "预算受限";
+  if (status === "complete") return "已完成";
+  return "进行中";
+}
+
+async function loadCodexGoal(preserveEnabled = false) {
+  const threadId = activeCodexThreadId.value;
+  if (!threadId) {
+    codexThreadGoal.value = null;
+    codexGoalStatus.value = "active";
+    if (!preserveEnabled) codexGoalEnabled.value = false;
+    return;
+  }
+  codexGoalLoading.value = true;
+  try {
+    const goal = await desktopApi.getCodexThreadGoal(threadId);
+    if (threadId !== activeCodexThreadId.value) return;
+    codexThreadGoal.value = goal;
+    if (goal) {
+      codexGoalEnabled.value = true;
+      codexGoal.value = goal.objective;
+      codexGoalStatus.value = goal.status;
+    } else {
+      codexGoalStatus.value = "active";
+      if (!preserveEnabled) {
+        codexGoalEnabled.value = false;
+        codexGoal.value = "";
+      }
+    }
+  } catch (error) {
+    codexCompactNotice.value = `目标读取失败：${String(error)}`;
+  } finally {
+    if (threadId === activeCodexThreadId.value) codexGoalLoading.value = false;
+  }
+}
+
+async function saveCodexGoal() {
+  const threadId = activeCodexThreadId.value;
+  const objective = codexGoal.value.trim();
+  if (!threadId || !objective || codexGoalBusy.value) return;
+  codexGoalBusy.value = true;
+  try {
+    const goal = await desktopApi.setCodexThreadGoal({
+      threadId,
+      objective,
+      status: codexGoalStatus.value,
+      tokenBudget: codexThreadGoal.value?.tokenBudget ?? null,
+    });
+    codexThreadGoal.value = goal;
+    codexGoalStatus.value = goal.status;
+  } catch (error) {
+    codexCompactNotice.value = `目标更新失败：${String(error)}`;
+  } finally {
+    codexGoalBusy.value = false;
+  }
+}
+
+async function toggleCodexGoalPaused() {
+  const threadId = activeCodexThreadId.value;
+  if (!threadId || !codexThreadGoal.value || codexGoalBusy.value) return;
+  const status: CodexGoalStatus = codexGoalStatus.value === "paused" ? "active" : "paused";
+  codexGoalBusy.value = true;
+  try {
+    const goal = await desktopApi.setCodexThreadGoal({ threadId, status });
+    codexThreadGoal.value = goal;
+    codexGoalStatus.value = goal.status;
+  } catch (error) {
+    codexCompactNotice.value = `目标状态更新失败：${String(error)}`;
+  } finally {
+    codexGoalBusy.value = false;
+  }
+}
+
+async function clearCodexGoal() {
+  const threadId = activeCodexThreadId.value;
+  if (threadId && !codexGoalBusy.value) {
+    codexGoalBusy.value = true;
+    try {
+      await desktopApi.clearCodexThreadGoal(threadId);
+    } catch (error) {
+      codexCompactNotice.value = `清除目标失败：${String(error)}`;
+      codexGoalBusy.value = false;
+      return;
+    }
+    codexGoalBusy.value = false;
+  }
+  codexGoalEnabled.value = false;
+  codexGoal.value = "";
+  codexGoalStatus.value = "active";
+  codexThreadGoal.value = null;
+  composerToolsOpen.value = false;
+}
+
+async function compactCurrentCodexThread() {
+  const threadId = activeCodexThreadId.value;
+  composerToolsOpen.value = false;
+  if (!threadId || codexCompactBusy.value || ws.activeChatIsRunning.value) return;
+  codexCompactBusy.value = true;
+  codexCompactNotice.value = "正在压缩上下文...";
+  try {
+    await desktopApi.compactCodexThread(threadId);
+    codexCompactNotice.value = "上下文压缩已启动";
+    codexCompactBusy.value = false;
+  } catch (error) {
+    codexCompactNotice.value = `压缩失败：${String(error)}`;
+    codexCompactBusy.value = false;
+  }
+}
+
+function handleCodexAdminEvent(event: CodexAdminEvent) {
+  if (!("threadId" in event) || event.threadId !== activeCodexThreadId.value) return;
+  if (event.type === "thread-goal") {
+    codexThreadGoal.value = event.goal;
+    if (event.goal) {
+      codexGoalEnabled.value = true;
+      codexGoal.value = event.goal.objective;
+      codexGoalStatus.value = event.goal.status;
+    } else {
+      codexGoalEnabled.value = false;
+      codexGoal.value = "";
+      codexGoalStatus.value = "active";
+    }
+  } else if (event.type === "thread-compacted") {
+    codexCompactBusy.value = false;
+    codexCompactNotice.value = "上下文已压缩";
+  }
+}
+
 function queuedMessageLabel(item: QueuedAiMessage) {
-  return item.text || `查看这 ${item.images.length} 张图片`;
+  return item.text || (item.attachments?.length ? `查看 ${item.attachments.length} 个附件` : `查看这 ${item.images.length} 张图片`);
 }
 
 function startQueuedMessageEdit(item: QueuedAiMessage) {
@@ -1382,6 +1614,23 @@ watch(
 );
 
 watch(
+  activeCodexThreadId,
+  () => {
+    codexCompactBusy.value = false;
+    codexCompactNotice.value = "";
+    void loadCodexGoal();
+  },
+  { immediate: true },
+);
+
+watch(
+  () => ws.activeChatIsRunning.value,
+  (running, previous) => {
+    if (!running && previous && activeCodexThreadId.value) void loadCodexGoal(true);
+  },
+);
+
+watch(
   () => currentProject.value?.path,
   () => {
     environmentInfo.value = null;
@@ -1452,6 +1701,9 @@ onMounted(() => {
   void desktopApi.onAiRunSettingsUpdate(applyRunSettingsUpdate).then((remove) => {
     removeAiRunSettingsUpdateListener = remove;
   });
+  void desktopApi.onCodexAdminEvent(handleCodexAdminEvent).then((remove) => {
+    removeCodexAdminEventListener = remove;
+  });
 });
 
 onBeforeUnmount(() => {
@@ -1466,6 +1718,8 @@ onBeforeUnmount(() => {
   virtualRowElements.clear();
   removeAiRunSettingsUpdateListener?.();
   removeAiRunSettingsUpdateListener = null;
+  removeCodexAdminEventListener?.();
+  removeCodexAdminEventListener = null;
 });
 
 async function send() {
@@ -1477,13 +1731,15 @@ async function send() {
     mimeType: image.mimeType,
     dataUrl: image.dataUrl,
   }));
-  if (!value && !images.length) return;
+  const attachments = fileAttachments.value.map((attachment) => ({ ...attachment }));
+  if (!value && !images.length && !attachments.length) return;
   const runOptions = buildRunOptions();
   if (ws.activeChatIsRunning.value) {
-    const accepted = Boolean(ws.queuePrompt(value, images, runOptions));
+    const accepted = Boolean(ws.queuePrompt(value, images, attachments, runOptions));
     if (accepted) {
       prompt.value = "";
       imageAttachments.value = [];
+      fileAttachments.value = [];
     }
     return;
   }
@@ -1493,6 +1749,7 @@ async function send() {
       await ws.chooseProject();
       prompt.value = value;
       imageAttachments.value = images;
+      fileAttachments.value = attachments;
       return;
     }
     ws.selectedProviderId.value = selectedProvider.value?.id ?? "codex";
@@ -1500,17 +1757,20 @@ async function send() {
     if (!session) {
       prompt.value = value;
       imageAttachments.value = images;
+      fileAttachments.value = attachments;
       return;
     }
   }
   prompt.value = "";
   imageAttachments.value = [];
+  fileAttachments.value = [];
   pendingPromptAnchorKey = latestUserAnchor()?.key ?? "__empty__";
   try {
-    const sent = await ws.sendPrompt(value, images, runOptions);
+    const sent = await ws.sendPrompt(value, images, attachments, runOptions);
     if (!sent) {
       prompt.value = value;
       imageAttachments.value = images;
+      fileAttachments.value = attachments;
     }
   } finally {
     if (pendingPromptAnchorKey === (latestUserAnchor()?.key ?? "__empty__")) {
@@ -1577,6 +1837,13 @@ function onPromptKeydown(event: KeyboardEvent) {
               </button>
             </div>
           </div>
+          <div v-if="fileAttachments.length" class="chat-file-attachments start-attachments">
+            <div v-for="attachment in fileAttachments" :key="attachment.id" class="chat-file-attachment-chip" :title="attachment.path">
+              <svg viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M4 1.75h5l3 3V14.25H4V1.75Z" stroke="currentColor" stroke-width="1.2"/><path d="M9 1.75v3h3" stroke="currentColor" stroke-width="1.2"/></svg>
+              <span><strong>{{ attachment.name }}</strong><small>{{ fileAttachmentSizeLabel(attachment.size) }}</small></span>
+              <button type="button" title="移除附件" aria-label="移除附件" @click="removeFileAttachment(attachment.id)">×</button>
+            </div>
+          </div>
           <textarea
             v-model="prompt"
             rows="2"
@@ -1599,6 +1866,11 @@ function onPromptKeydown(event: KeyboardEvent) {
               </svg>
             </button>
             <div v-if="composerToolsOpen" class="codex-composer-add-menu">
+              <button v-if="showCodexRunControls" type="button" @click="chooseFileAttachments">
+                <svg viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M5.25 8.75 9.7 4.3a2.1 2.1 0 0 1 3 3l-5.4 5.4a3.25 3.25 0 0 1-4.6-4.6l5.05-5.05" stroke="currentColor" stroke-width="1.35" stroke-linecap="round"/></svg>
+                <span>添加文件</span>
+                <small>PDF、文档、代码</small>
+              </button>
               <button type="button" :class="{ active: codexMode === 'plan' }" @click="toggleComposerPlanMode">
                 <svg viewBox="0 0 16 16" fill="none" aria-hidden="true">
                   <path d="M4 4h3.5M8.5 4H12M4 8h8M4 12h3.5M8.5 12H12" stroke="currentColor" stroke-width="1.35" stroke-linecap="round" />
@@ -1615,6 +1887,11 @@ function onPromptKeydown(event: KeyboardEvent) {
                 </svg>
                 <span>目标</span>
                 <small>{{ codexGoalEnabled ? "已开启" : "未开启" }}</small>
+              </button>
+              <button v-if="activeCodexThreadId" type="button" :disabled="codexCompactBusy || ws.activeChatIsRunning.value" @click="compactCurrentCodexThread">
+                <svg viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M3 5h10M5 8h6M7 11h2" stroke="currentColor" stroke-width="1.35" stroke-linecap="round"/></svg>
+                <span>压缩上下文</span>
+                <small>{{ codexCompactBusy ? "压缩中" : "释放上下文空间" }}</small>
               </button>
             </div>
           </div>
@@ -1719,17 +1996,37 @@ function onPromptKeydown(event: KeyboardEvent) {
                     </svg>
                   </button>
                   <div v-if="modelSubmenuOpen && modelSubmenuKind === 'model'" class="codex-model-submenu">
-                    <div class="codex-model-menu-heading">模型</div>
-                    <button
-                      v-for="model in activeModelOptions"
-                      :key="model.id"
-                      type="button"
-                      :class="{ active: model.model === selectedModelValue }"
-                      @click="selectModel(model.model)"
-                    >
-                      <span>{{ model.displayName }}</span>
-                      <span class="codex-model-menu-check" aria-hidden="true">{{ model.model === selectedModelValue ? "✓" : "" }}</span>
-                    </button>
+                    <template v-if="showOpenCodeModelGrouping">
+                      <template v-for="group in openCodeModelGroups" :key="group.id">
+                        <div class="codex-model-menu-heading opencode-provider-heading">{{ group.name }}</div>
+                        <button
+                          v-for="model in group.models"
+                          :key="model.id"
+                          type="button"
+                          :class="{ active: model.model === selectedModelValue }"
+                          @click="selectModel(model.model)"
+                        >
+                          <span class="opencode-model-option-label">
+                            <span>{{ model.displayName }}</span>
+                            <small v-if="model.free">免费</small>
+                          </span>
+                          <span class="codex-model-menu-check" aria-hidden="true">{{ model.model === selectedModelValue ? "✓" : "" }}</span>
+                        </button>
+                      </template>
+                    </template>
+                    <template v-else>
+                      <div class="codex-model-menu-heading">模型</div>
+                      <button
+                        v-for="model in activeModelOptions"
+                        :key="model.id"
+                        type="button"
+                        :class="{ active: model.model === selectedModelValue }"
+                        @click="selectModel(model.model)"
+                      >
+                        <span>{{ model.displayName }}</span>
+                        <span class="codex-model-menu-check" aria-hidden="true">{{ model.model === selectedModelValue ? "✓" : "" }}</span>
+                      </button>
+                    </template>
                   </div>
                 </div>
                 <div class="codex-model-menu-section">
@@ -1787,7 +2084,7 @@ function onPromptKeydown(event: KeyboardEvent) {
               <span>{{ provider.name }}</span>
             </button>
           </div>
-          <button class="codex-send-button" :disabled="!prompt.trim() && !imageAttachments.length" title="发送" type="submit" aria-label="发送">
+          <button class="codex-send-button" :disabled="!prompt.trim() && !imageAttachments.length && !fileAttachments.length" title="发送" type="submit" aria-label="发送">
             <img :src="sendIcon" alt="" aria-hidden="true" />
           </button>
           </div>
@@ -2028,13 +2325,28 @@ function onPromptKeydown(event: KeyboardEvent) {
             type="text"
             placeholder="这轮工作的目标"
             aria-label="这轮工作的目标"
+            :disabled="codexGoalLoading || codexGoalBusy"
+            @change="saveCodexGoal"
           />
-          <button type="button" class="codex-goal-bar-action danger" title="关闭目标模式" @click="toggleComposerGoalMode">
+          <span
+            class="codex-goal-status"
+            :class="codexGoalStatus"
+            :title="codexThreadGoal ? `已用 ${codexThreadGoal.tokensUsed} tokens${codexThreadGoal.tokenBudget ? ` / ${codexThreadGoal.tokenBudget}` : ''}，${Math.round(codexThreadGoal.timeUsedSeconds)} 秒` : '发送后创建原生目标'"
+          >{{ goalStatusLabel(codexGoalStatus) }}</span>
+          <button v-if="activeCodexThreadId && codexGoal.trim()" type="button" class="codex-goal-bar-action" title="保存目标" :disabled="codexGoalBusy" @click="saveCodexGoal">
+            <svg viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="m3.5 8.2 2.8 2.7 6.2-6" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" /></svg>
+          </button>
+          <button v-if="codexThreadGoal" type="button" class="codex-goal-bar-action" :title="codexGoalStatus === 'paused' ? '恢复目标' : '暂停目标'" :disabled="codexGoalBusy" @click="toggleCodexGoalPaused">
+            <svg v-if="codexGoalStatus === 'paused'" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="m6 4 5 4-5 4V4Z" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round" /></svg>
+            <svg v-else viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M5.5 4v8M10.5 4v8" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" /></svg>
+          </button>
+          <button type="button" class="codex-goal-bar-action danger" title="清除目标" :disabled="codexGoalBusy" @click="clearCodexGoal">
             <svg viewBox="0 0 16 16" fill="none" aria-hidden="true">
               <path d="M4.5 4.5 11.5 11.5M11.5 4.5 4.5 11.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" />
             </svg>
           </button>
         </div>
+        <div v-if="activeTab === 'chat' && codexCompactNotice" class="chat-operation-notice">{{ codexCompactNotice }}</div>
         <div
           v-if="activeTab === 'chat'"
           ref="chatComposer"
@@ -2098,6 +2410,7 @@ function onPromptKeydown(event: KeyboardEvent) {
                   <div class="chat-followup-queue-copy" :title="queuedMessageLabel(item)">
                     <span>{{ queuedMessageLabel(item) }}</span>
                     <small v-if="item.images.length">{{ item.images.length }} 张图片</small>
+                    <small v-if="item.attachments?.length">{{ item.attachments.length }} 个文件</small>
                   </div>
                   <div v-if="item.images.length" class="chat-followup-queue-images" aria-hidden="true">
                     <img v-for="image in item.images.slice(0, 3)" :key="image.id" :src="image.dataUrl" alt="" />
@@ -2138,6 +2451,13 @@ function onPromptKeydown(event: KeyboardEvent) {
               </button>
             </div>
           </div>
+          <div v-if="fileAttachments.length" class="chat-file-attachments">
+            <div v-for="attachment in fileAttachments" :key="attachment.id" class="chat-file-attachment-chip" :title="attachment.path">
+              <svg viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M4 1.75h5l3 3V14.25H4V1.75Z" stroke="currentColor" stroke-width="1.2"/><path d="M9 1.75v3h3" stroke="currentColor" stroke-width="1.2"/></svg>
+              <span><strong>{{ attachment.name }}</strong><small>{{ fileAttachmentSizeLabel(attachment.size) }}</small></span>
+              <button type="button" title="移除附件" aria-label="移除附件" @click="removeFileAttachment(attachment.id)">×</button>
+            </div>
+          </div>
           <textarea
             v-model="prompt"
             rows="3"
@@ -2163,6 +2483,11 @@ function onPromptKeydown(event: KeyboardEvent) {
                   </svg>
                 </button>
                 <div v-if="composerToolsOpen" class="codex-composer-add-menu">
+                  <button v-if="showCodexRunControls" type="button" @click="chooseFileAttachments">
+                    <svg viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M5.25 8.75 9.7 4.3a2.1 2.1 0 0 1 3 3l-5.4 5.4a3.25 3.25 0 0 1-4.6-4.6l5.05-5.05" stroke="currentColor" stroke-width="1.35" stroke-linecap="round"/></svg>
+                    <span>添加文件</span>
+                    <small>PDF、文档、代码</small>
+                  </button>
                   <button type="button" :class="{ active: codexMode === 'plan' }" @click="toggleComposerPlanMode">
                     <svg viewBox="0 0 16 16" fill="none" aria-hidden="true">
                       <path d="M4 4h3.5M8.5 4H12M4 8h8M4 12h3.5M8.5 12H12" stroke="currentColor" stroke-width="1.35" stroke-linecap="round" />
@@ -2179,6 +2504,11 @@ function onPromptKeydown(event: KeyboardEvent) {
                     </svg>
                     <span>目标</span>
                     <small>{{ codexGoalEnabled ? "已开启" : "未开启" }}</small>
+                  </button>
+                  <button v-if="activeCodexThreadId" type="button" :disabled="codexCompactBusy || ws.activeChatIsRunning.value" @click="compactCurrentCodexThread">
+                    <svg viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M3 5h10M5 8h6M7 11h2" stroke="currentColor" stroke-width="1.35" stroke-linecap="round"/></svg>
+                    <span>压缩上下文</span>
+                    <small>{{ codexCompactBusy ? "压缩中" : "释放上下文空间" }}</small>
                   </button>
                 </div>
               </div>
@@ -2256,17 +2586,37 @@ function onPromptKeydown(event: KeyboardEvent) {
                       </svg>
                     </button>
                     <div v-if="modelSubmenuOpen && modelSubmenuKind === 'model'" class="codex-model-submenu">
-                      <div class="codex-model-menu-heading">模型</div>
-                      <button
-                        v-for="model in activeModelOptions"
-                        :key="model.id"
-                        type="button"
-                        :class="{ active: model.model === selectedModelValue }"
-                        @click="selectModel(model.model)"
-                      >
-                        <span>{{ model.displayName }}</span>
-                        <span class="codex-model-menu-check" aria-hidden="true">{{ model.model === selectedModelValue ? "✓" : "" }}</span>
-                      </button>
+                      <template v-if="showOpenCodeModelGrouping">
+                        <template v-for="group in openCodeModelGroups" :key="group.id">
+                          <div class="codex-model-menu-heading opencode-provider-heading">{{ group.name }}</div>
+                          <button
+                            v-for="model in group.models"
+                            :key="model.id"
+                            type="button"
+                            :class="{ active: model.model === selectedModelValue }"
+                            @click="selectModel(model.model)"
+                          >
+                            <span class="opencode-model-option-label">
+                              <span>{{ model.displayName }}</span>
+                              <small v-if="model.free">免费</small>
+                            </span>
+                            <span class="codex-model-menu-check" aria-hidden="true">{{ model.model === selectedModelValue ? "✓" : "" }}</span>
+                          </button>
+                        </template>
+                      </template>
+                      <template v-else>
+                        <div class="codex-model-menu-heading">模型</div>
+                        <button
+                          v-for="model in activeModelOptions"
+                          :key="model.id"
+                          type="button"
+                          :class="{ active: model.model === selectedModelValue }"
+                          @click="selectModel(model.model)"
+                        >
+                          <span>{{ model.displayName }}</span>
+                          <span class="codex-model-menu-check" aria-hidden="true">{{ model.model === selectedModelValue ? "✓" : "" }}</span>
+                        </button>
+                      </template>
                     </div>
                   </div>
                   <div class="codex-model-menu-section">

@@ -80,6 +80,7 @@ onUnmounted(() => {
       @attach-session="ws.attachAiSessionForProject"
       @select-session="ws.setActiveAiSession"
       @archive-session="ws.archiveAiSession"
+      @delete-session="ws.deleteAiSession"
       @rename-session="(session, title) => ws.renameAiSession(session, title)"
       @toggle-pin-session="(session) => ws.toggleSessionPinned(session.id)"
       @mark-session-unread="(session) => ws.markSessionUnread(session.id)"

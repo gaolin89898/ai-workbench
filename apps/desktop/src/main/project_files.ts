@@ -1,5 +1,6 @@
 import { readFile, readdir, stat } from "node:fs/promises";
 import path from "node:path";
+import { shell } from "electron";
 import type { ProjectFilePreview, ProjectFileViewerSource, WorkspaceFileEntry } from "../services/desktop";
 import { projectFileViewerFormat } from "../shared/project_file_formats";
 import { getWorkspaceProjectByPath } from "./db";
@@ -138,4 +139,19 @@ export async function readProjectFileForViewer(
     mimeType: format.mimeType,
     data: Uint8Array.from(buffer),
   };
+}
+
+export async function openProjectHtmlInBrowser(
+  projectPath: string,
+  filePath: string,
+): Promise<void> {
+  const target = assertProjectChildPath(projectPath, filePath);
+  const extension = path.extname(target).toLowerCase();
+  if (extension !== ".html" && extension !== ".htm") {
+    throw new Error("target is not an HTML file");
+  }
+  const info = await stat(target);
+  if (!info.isFile()) throw new Error("target is not a file");
+  const error = await shell.openPath(target);
+  if (error) throw new Error(error);
 }

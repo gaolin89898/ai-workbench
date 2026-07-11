@@ -296,7 +296,7 @@ function parseDiffLines(diff: string): DiffLine[] {
   return diff.replace(/\r\n/g, "\n").split("\n").filter((line) => !isPatchWrapperLine(line)).map((line) => {
     if (line.startsWith("+") && !line.startsWith("+++")) return { type: "add", text: line };
     if (line.startsWith("-") && !line.startsWith("---")) return { type: "delete", text: line };
-    if (line.startsWith("@@") || line.startsWith("diff ") || line.startsWith("index ") || line.startsWith("+++") || line.startsWith("---")) {
+    if (line.startsWith("@@") || line.startsWith("diff ") || line.startsWith("index ") || line.startsWith("+++") || line.startsWith("---") || /^\*\*\* (?:Add|Update|Delete) File: /.test(line)) {
       return { type: "meta", text: line };
     }
     return { type: "context", text: line };
@@ -305,8 +305,7 @@ function parseDiffLines(diff: string): DiffLine[] {
 
 function isPatchWrapperLine(line: string) {
   return line.startsWith("*** Begin Patch")
-    || line.startsWith("*** End Patch")
-    || /^\*\*\* (?:Add|Update|Delete) File: /.test(line);
+    || line.startsWith("*** End Patch");
 }
 
 function parseMarkdownBlocks(text: string): MarkdownBlock[] {
@@ -583,16 +582,20 @@ async function respondApproval(decision: "approved" | "denied") {
   </div>
 
   <details
-    v-else-if="segment.type === 'thought'"
+    v-else-if="segment.type === 'thought' && segment.title"
     class="chat-segment-thought"
     :open="!(segment.collapsed ?? true)"
   >
     <summary>
-      <span>{{ segment.title || "思考过程" }}</span>
+      <span>{{ segment.title }}</span>
       <small v-if="segment.durationMs">{{ formatDuration(segment.durationMs) }}</small>
     </summary>
     <div class="chat-segment-content">{{ segment.text }}</div>
   </details>
+
+  <div v-else-if="segment.type === 'thought'" class="chat-segment-thought untitled">
+    <div class="chat-segment-content">{{ segment.text }}</div>
+  </div>
 
   <div v-else-if="segment.type === 'goal'" class="chat-segment-goal">
     <svg viewBox="0 0 16 16" fill="none" aria-hidden="true">

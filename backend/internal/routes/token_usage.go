@@ -22,6 +22,7 @@ type tokenUsageReportRequest struct {
 	DeviceId        string `json:"deviceId"`
 	ProviderId      string `json:"providerId"`
 	InputTokens     int32  `json:"inputTokens"`
+	CachedInputTokens int32  `json:"cachedInputTokens"`
 	OutputTokens    int32  `json:"outputTokens"`
 	ReasoningTokens int32  `json:"reasoningTokens"`
 	TotalTokens     int32  `json:"totalTokens"`
@@ -72,12 +73,19 @@ func (h *Handler) reportTokenUsage(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	cachedInputTokens := req.CachedInputTokens
+	if cachedInputTokens < 0 || req.InputTokens <= 0 {
+		cachedInputTokens = 0
+	} else if cachedInputTokens > req.InputTokens {
+		cachedInputTokens = req.InputTokens
+	}
 	err := h.DB.InsertTokenUsage(r.Context(), models.TokenUsageInsert{
 		UserId:          userID,
 		DeviceId:        deviceID,
 		AiSessionId:     aiSessionID,
 		ProviderId:      req.ProviderId,
 		InputTokens:     req.InputTokens,
+		CachedInputTokens: cachedInputTokens,
 		OutputTokens:    req.OutputTokens,
 		ReasoningTokens: req.ReasoningTokens,
 		TotalTokens:     req.TotalTokens,
@@ -100,6 +108,7 @@ type tokenUsageSummaryResponse struct {
 type tokenUsageSummaryItem struct {
 	ProviderId      string `json:"providerId"`
 	InputTokens     int64  `json:"inputTokens"`
+	CachedInputTokens int64  `json:"cachedInputTokens"`
 	OutputTokens    int64  `json:"outputTokens"`
 	ReasoningTokens int64  `json:"reasoningTokens"`
 	TotalTokens     int64  `json:"totalTokens"`
@@ -143,6 +152,7 @@ func (h *Handler) getTokenUsageSummary(w http.ResponseWriter, r *http.Request) {
 		item := tokenUsageSummaryItem{
 			ProviderId:      row.ProviderId,
 			InputTokens:     row.InputTokens,
+			CachedInputTokens: row.CachedInputTokens,
 			OutputTokens:    row.OutputTokens,
 			ReasoningTokens: row.ReasoningTokens,
 			TotalTokens:     row.TotalTokens,
@@ -150,6 +160,7 @@ func (h *Handler) getTokenUsageSummary(w http.ResponseWriter, r *http.Request) {
 		}
 		resp.Providers = append(resp.Providers, item)
 		totals.InputTokens += item.InputTokens
+		totals.CachedInputTokens += item.CachedInputTokens
 		totals.OutputTokens += item.OutputTokens
 		totals.ReasoningTokens += item.ReasoningTokens
 		totals.TotalTokens += item.TotalTokens

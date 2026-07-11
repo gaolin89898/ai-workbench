@@ -286,17 +286,24 @@ function updateTextPart(session: MimoSession, part: Record<string, unknown>, tex
 function reportMimoUsage(session: MimoSession, part: Record<string, unknown>): void {
   const tokens = record(part["tokens"]);
   const inputTokens = num(tokens["input"]) ?? num(tokens["inputTokens"]) ?? 0;
+  const cachedInputTokens = Math.min(inputTokens, Math.max(0,
+    num(tokens["cachedInputTokens"])
+      ?? num(tokens["cached_input_tokens"])
+      ?? num(tokens["cacheReadInputTokens"])
+      ?? num(tokens["cache_read_input_tokens"])
+      ?? 0));
   const outputTokens = num(tokens["output"]) ?? num(tokens["outputTokens"]) ?? 0;
   const reasoningTokens = num(tokens["reasoning"]) ?? num(tokens["reasoningTokens"]) ?? 0;
   const totalTokens = num(tokens["total"]) ?? inputTokens + outputTokens + reasoningTokens;
   if (totalTokens <= 0) return;
-  const key = `${str(part["id"]) ?? "step"}:${inputTokens}:${outputTokens}:${reasoningTokens}:${totalTokens}`;
+  const key = `${str(part["id"]) ?? "step"}:${inputTokens}:${cachedInputTokens}:${outputTokens}:${reasoningTokens}:${totalTokens}`;
   if (session.reportedUsageKeys.has(key)) return;
   session.reportedUsageKeys.add(key);
   void reportTokenUsage({
     aiSessionId: session.aiSessionId,
     providerId: "mimo",
     inputTokens,
+    cachedInputTokens,
     outputTokens,
     reasoningTokens,
     totalTokens,

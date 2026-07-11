@@ -64,6 +64,7 @@ const selectedThreadId = ref("");
 const selectedThread = ref<CodexNativeThread | null>(null);
 const threadDetailLoading = ref(false);
 const threadRenameBusy = ref(false);
+const threadActionBusy = ref(false);
 const threadNameDraft = ref("");
 let threadSearchTimer: ReturnType<typeof setTimeout> | null = null;
 let threadRequestVersion = 0;
@@ -400,6 +401,41 @@ async function renameSelectedThread(): Promise<void> {
   }
 }
 
+async function setSelectedThreadArchived(archived: boolean): Promise<void> {
+  const thread = selectedThread.value;
+  if (!thread || threadActionBusy.value) return;
+  threadActionBusy.value = true;
+  try {
+    await desktopApi.archiveCodexThread({ threadId: thread.id, archived });
+    showNotice(archived ? "会话已归档" : "会话已恢复");
+    selectedThreadId.value = "";
+    selectedThread.value = null;
+    await loadThreads(true);
+  } catch (error) {
+    showNotice(`${archived ? "归档" : "恢复"}失败：${errorText(error)}`, true);
+  } finally {
+    threadActionBusy.value = false;
+  }
+}
+
+async function deleteSelectedThread(): Promise<void> {
+  const thread = selectedThread.value;
+  if (!thread || threadActionBusy.value) return;
+  if (!window.confirm(`永久删除「${threadTitle(thread)}」？此操作会同时删除派生会话，且无法恢复。`)) return;
+  threadActionBusy.value = true;
+  try {
+    await desktopApi.deleteCodexThread(thread.id);
+    showNotice("会话已永久删除");
+    selectedThreadId.value = "";
+    selectedThread.value = null;
+    await loadThreads(true);
+  } catch (error) {
+    showNotice(`删除失败：${errorText(error)}`, true);
+  } finally {
+    threadActionBusy.value = false;
+  }
+}
+
 function mcpStatusLabel(server: CodexMcpServer): string {
   if (server.startupStatus === "ready") return "就绪";
   if (server.startupStatus === "starting") return "启动中";
@@ -654,6 +690,26 @@ function handleAdminEvent(event: CodexAdminEvent): void {
     }
     return;
   }
+  if (event.type === "thread-archived") {
+    if (event.archived === threadArchived.value) {
+      void loadThreads(true);
+    } else {
+      threads.value = threads.value.filter((thread) => thread.id !== event.threadId);
+      if (selectedThread.value?.id === event.threadId) {
+        selectedThreadId.value = "";
+        selectedThread.value = null;
+      }
+    }
+    return;
+  }
+  if (event.type === "thread-deleted") {
+    threads.value = threads.value.filter((thread) => thread.id !== event.threadId);
+    if (selectedThread.value?.id === event.threadId) {
+      selectedThreadId.value = "";
+      selectedThread.value = null;
+    }
+    return;
+  }
   if (event.type === "mcp-status") {
     mcpServers.value = mcpServers.value.map((server) => server.name === event.name ? {
       ...server,
@@ -724,12 +780,17 @@ onBeforeUnmount(() => {
   if (threadSearchTimer) clearTimeout(threadSearchTimer);
   unsubscribeAdminEvent?.();
 });
+
+defineExpose({
+  refresh: () => loadMcpServers(true),
+  refreshing: mcpReloading,
+});
 </script>
 
 <template>
   <div class="codex-admin">
-    <div class="codex-admin-toolbar" :class="{ 'mcp-only': mode === 'mcp' }">
-      <div v-if="mode === 'codex'" class="codex-admin-tabs" role="tablist" aria-label="Codex 管理类别">
+    <div v-if="mode === 'codex'" class="codex-admin-toolbar">
+      <div class="codex-admin-tabs" role="tablist" aria-label="Codex 管理类别">
         <button :class="{ active: activeTab === 'threads' }" type="button" role="tab" :aria-selected="activeTab === 'threads'" @click="selectAdminTab('threads')">
           <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M7 8h10M7 12h7M5 19l-2 2v-4a8 8 0 1 1 4 2h-2Z" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" /></svg>
           <span>会话</span>
@@ -739,24 +800,16 @@ onBeforeUnmount(() => {
           <span>配置</span>
         </button>
       </div>
-      <div v-else class="codex-mcp-toolbar-title">
-        <span>
-          <span class="codex-mcp-title-line"><strong>MCP 管理</strong><em>全局 Server</em></span>
-          <small>{{ mcpLoading ? "正在同步服务状态" : "管理全局 MCP Server、工具、资源和认证状态。" }}</small>
-        </span>
-      </div>
       <div class="codex-admin-context">
-        <label v-if="mode === 'codex'" class="codex-advanced-toggle">
+        <label class="codex-advanced-toggle">
           <span>高级功能</span>
           <input class="settings-switch" type="checkbox" :checked="showAdvanced" @change="toggleAdvanced" />
         </label>
-        <template v-if="mode === 'codex'">
-          <span class="codex-admin-context-label">项目</span>
-          <code :title="cwd || '未选择项目'">{{ cwd ? compactPath(cwd) : "全部" }}</code>
-        </template>
-        <button class="codex-action-button" type="button" :disabled="mode === 'mcp' && mcpReloading" @click="refreshActiveTab">
+        <span class="codex-admin-context-label">项目</span>
+        <code :title="cwd || '未选择项目'">{{ cwd ? compactPath(cwd) : "全部" }}</code>
+        <button class="codex-action-button" type="button" @click="refreshActiveTab">
           <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M20 6v5h-5M4 18v-5h5M6.1 9a7 7 0 0 1 11.5-2.5L20 11M4 13l2.4 4.5A7 7 0 0 0 18 15" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" /></svg>
-          {{ mode === "mcp" ? (mcpReloading ? "刷新中" : "刷新状态") : "刷新" }}
+          刷新
         </button>
       </div>
     </div>
@@ -825,7 +878,13 @@ onBeforeUnmount(() => {
                   <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M5 4h12l2 2v14H5V4Zm3 0v6h8V4M8 20v-6h8v6" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" /></svg>
                 </button>
               </div>
-              <span class="codex-status large" :class="threadStatusTone(selectedThread)">{{ threadStatusLabel(selectedThread) }}</span>
+              <div class="codex-thread-detail-actions">
+                <span class="codex-status large" :class="threadStatusTone(selectedThread)">{{ threadStatusLabel(selectedThread) }}</span>
+                <button class="codex-action-button" type="button" :disabled="threadActionBusy || selectedThread.status.type === 'active'" :title="selectedThread.status.type === 'active' ? '请先停止当前 Turn' : ''" @click="setSelectedThreadArchived(!selectedThread.archived)">
+                  {{ selectedThread.archived ? "恢复" : "归档" }}
+                </button>
+                <button class="codex-action-button danger" type="button" :disabled="threadActionBusy || selectedThread.status.type === 'active'" :title="selectedThread.status.type === 'active' ? '请先停止当前 Turn' : ''" @click="deleteSelectedThread">删除</button>
+              </div>
             </header>
 
             <dl class="codex-thread-facts">
@@ -1085,59 +1144,6 @@ onBeforeUnmount(() => {
   border-bottom: 1px solid var(--color-border);
 }
 
-.codex-admin-toolbar.mcp-only {
-  min-height: 68px;
-  border: 0;
-  border-bottom: 1px solid var(--color-border-subtle);
-  border-radius: 0;
-  background: transparent;
-  padding: 4px 0 14px;
-}
-
-.codex-mcp-toolbar-title {
-  display: flex;
-  min-width: 0;
-  align-items: center;
-  gap: 9px;
-}
-
-.codex-mcp-toolbar-icon {
-  display: inline-grid;
-  width: 42px;
-  height: 42px;
-  flex: 0 0 auto;
-  place-items: center;
-  border-radius: 11px;
-  background: var(--color-primary-muted);
-  color: var(--color-primary);
-}
-
-.codex-mcp-toolbar-icon svg {
-  width: 18px;
-  height: 18px;
-}
-
-.codex-mcp-toolbar-title > span:last-child {
-  display: flex;
-  min-width: 0;
-  flex-direction: column;
-  gap: 2px;
-}
-
-.codex-mcp-toolbar-title strong {
-  color: var(--color-text-body);
-  font-size: 18px;
-  font-weight: 820;
-  line-height: 1.2;
-}
-
-.codex-mcp-toolbar-title small {
-  color: var(--color-text-muted);
-  font-size: 11px;
-  font-weight: 680;
-  line-height: 1.2;
-}
-
 .codex-admin-tabs,
 .codex-subtabs,
 .codex-segmented {
@@ -1216,28 +1222,6 @@ onBeforeUnmount(() => {
   display: block;
   flex: 0 0 auto;
   margin: 0;
-}
-
-.codex-admin-toolbar.mcp-only .codex-admin-context {
-  height: 34px;
-}
-
-.codex-admin-toolbar.mcp-only .codex-advanced-toggle {
-  height: 34px;
-  margin: 0;
-  line-height: 1;
-}
-
-.codex-admin-toolbar.mcp-only .codex-advanced-toggle > span {
-  display: inline-flex;
-  height: 22px;
-  align-items: center;
-}
-
-.codex-admin-toolbar.mcp-only .codex-icon-button {
-  width: 34px;
-  height: 34px;
-  flex-basis: 34px;
 }
 
 .codex-admin-context-label,
@@ -1884,6 +1868,24 @@ onBeforeUnmount(() => {
 .codex-action-button:hover:not(:disabled) {
   border-color: var(--color-border-active);
   color: var(--color-primary);
+}
+
+.codex-thread-detail-actions {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 7px;
+}
+
+.codex-action-button.danger {
+  border-color: var(--state-error);
+  color: var(--state-error);
+}
+
+.codex-action-button.danger:hover:not(:disabled) {
+  border-color: var(--state-error);
+  background: var(--state-error-bg);
+  color: var(--state-error);
 }
 
 .codex-action-button.primary {
@@ -2569,22 +2571,6 @@ onBeforeUnmount(() => {
   color: var(--color-text-muted);
   font-size: 9px;
   text-align: right;
-}
-
-.codex-mcp-title-line {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.codex-mcp-title-line em {
-  border-radius: var(--radius-full);
-  background: var(--color-primary-muted);
-  color: var(--color-primary);
-  padding: 3px 8px;
-  font-size: 10px;
-  font-style: normal;
-  font-weight: 800;
 }
 
 .codex-summary-strip {

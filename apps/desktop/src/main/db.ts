@@ -9,6 +9,7 @@ import * as path from "node:path";
 import * as os from "node:os";
 import { randomUUID } from "node:crypto";
 import { readGitStatus } from "./projects";
+import { replayCodexTraceEvents } from "./codex_trace";
 import type {
   AiSession,
   WorkspaceProject,
@@ -399,6 +400,20 @@ export function archiveLocalAiSession(
   return rowToSession(row);
 }
 
+export function deleteLocalAiSession(aiSessionId: string): boolean {
+  const remove = db.transaction(() => {
+    db.prepare("DELETE FROM local_ai_messages WHERE ai_session_id = ?").run(aiSessionId);
+    db.prepare("DELETE FROM local_ai_traces WHERE ai_session_id = ?").run(aiSessionId);
+    return db.prepare("DELETE FROM local_ai_sessions WHERE id = ?").run(aiSessionId).changes > 0;
+  });
+  const deleted = remove();
+  if (deleted) {
+    const logPath = path.join(app.getPath("logs"), "ai-sessions", `${aiSessionId}.md`);
+    try { fs.rmSync(logPath, { force: true }); } catch { /* ignore stale log cleanup errors */ }
+  }
+  return deleted;
+}
+
 // ---------- AI provider traces ----------
 
 export function resetLocalAiTrace(params: {
@@ -485,9 +500,30 @@ export function getLocalAiTrace(
   traceKind = "codex",
   includeRawEvents = false,
 ): AiProviderTrace | null {
-  const row = db.prepare(
+  let row = db.prepare(
     "SELECT * FROM local_ai_traces WHERE ai_session_id = ? AND trace_kind = ?"
   ).get(aiSessionId, traceKind) as TraceRow | undefined;
+  if (row?.provider_id === "codex") {
+    const snapshot = safeJsonParse<Record<string, unknown>>(row.snapshot, {});
+    const items = Array.isArray(snapshot.items) ? snapshot.items : [];
+    const needsDiffRepair = items.some((value) => {
+      if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+      const item = value as Record<string, unknown>;
+      const rawType = typeof item.rawItemType === "string" ? item.rawItemType : "";
+      const diff = typeof item.diff === "string" ? item.diff.trim() : "";
+      return /^(?:fileChange|file_change|fileEdit|file_edit)$/i.test(rawType) && !diff;
+    });
+    if (needsDiffRepair) {
+      const replayed = replayCodexTraceEvents(safeJsonParse<unknown[]>(row.raw_events, []));
+      if (replayed) {
+        const repairedSnapshot = JSON.stringify(replayed);
+        db.prepare(
+          "UPDATE local_ai_traces SET snapshot = ? WHERE ai_session_id = ? AND trace_kind = ?"
+        ).run(repairedSnapshot, aiSessionId, traceKind);
+        row = { ...row, snapshot: repairedSnapshot };
+      }
+    }
+  }
   return row ? rowToTrace(row, includeRawEvents) : null;
 }
 
@@ -495,22 +531,26 @@ function markdownEscape(value: string): string {
   return value.replace(/\\/g, "\\\\").replace(/`/g, "\\`");
 }
 
-function decodeStoredMessageContent(content: string): { text: string; imageNames: string[] } {
-  if (!content.startsWith(STRUCTURED_MESSAGE_PREFIX)) return { text: content, imageNames: [] };
+function decodeStoredMessageContent(content: string): { text: string; imageNames: string[]; fileNames: string[] } {
+  if (!content.startsWith(STRUCTURED_MESSAGE_PREFIX)) return { text: content, imageNames: [], fileNames: [] };
   try {
     const parsed = JSON.parse(content.slice(STRUCTURED_MESSAGE_PREFIX.length));
-    if (!parsed || typeof parsed !== "object") return { text: content, imageNames: [] };
+    if (!parsed || typeof parsed !== "object") return { text: content, imageNames: [], fileNames: [] };
     const record = parsed as Record<string, unknown>;
     const text = typeof record.text === "string" ? record.text : "";
     const images = Array.isArray(record.images) ? record.images : [];
     const imageNames = images
       .map((image) => image && typeof image === "object" ? (image as Record<string, unknown>).name : null)
       .filter((name): name is string => typeof name === "string" && name.trim().length > 0);
-    if (text || imageNames.length) return { text, imageNames };
+    const attachments = Array.isArray(record.attachments) ? record.attachments : [];
+    const fileNames = attachments
+      .map((attachment) => attachment && typeof attachment === "object" ? (attachment as Record<string, unknown>).name : null)
+      .filter((name): name is string => typeof name === "string" && name.trim().length > 0);
+    if (text || imageNames.length || fileNames.length) return { text, imageNames, fileNames };
   } catch {
-    return { text: content, imageNames: [] };
+    return { text: content, imageNames: [], fileNames: [] };
   }
-  return { text: content, imageNames: [] };
+  return { text: content, imageNames: [], fileNames: [] };
 }
 
 function roleLabel(role: string): string {
@@ -550,6 +590,9 @@ function writeLocalAiSessionLog(aiSessionId: string): void {
       if (decoded.imageNames.length) {
         lines.push(`Images: ${decoded.imageNames.join(", ")}`, "");
       }
+      if (decoded.fileNames.length) {
+        lines.push(`Files: ${decoded.fileNames.join(", ")}`, "");
+      }
     }
     fs.writeFileSync(filePath, `${lines.join("\n").trimEnd()}\n`, "utf-8");
   } catch (error) {
@@ -580,16 +623,26 @@ export function getAiActivitySummary(): AiActivitySummary {
   queryStart.setHours(0, 0, 0, 0);
   const rows = db
     .prepare(
-      `SELECT messages.created_at, sessions.provider_id
+      `SELECT messages.created_at, sessions.provider_id, sessions.summary AS project_path
        FROM local_ai_messages AS messages
        LEFT JOIN local_ai_sessions AS sessions ON sessions.id = messages.ai_session_id
        WHERE messages.role = 'user' AND datetime(messages.created_at) >= datetime(?)
        ORDER BY datetime(messages.created_at) ASC`,
     )
-    .all(queryStart.toISOString()) as Array<{ created_at: string; provider_id: string | null }>;
+    .all(queryStart.toISOString()) as Array<{ created_at: string; provider_id: string | null; project_path: string | null }>;
 
   const counts = new Map<string, number>();
   const providerCounts = new Map<string, Map<string, number>>();
+  const workspaceProjects = listWorkspaceProjects();
+  const projectsByPathSpecificity = [...workspaceProjects]
+    .sort((left, right) => normalizePathForCompare(right.path).length - normalizePathForCompare(left.path).length);
+  const projectActivity = new Map(workspaceProjects.map((project) => [project.id, {
+    count: 0,
+    lastActiveAt: "",
+    providerCounts: new Map<string, number>(),
+  }]));
+  const statisticsStartKey = localDateKey(statisticsStart);
+  const todayKey = localDateKey(today);
   for (const row of rows) {
     const date = new Date(row.created_at);
     if (Number.isNaN(date.getTime())) continue;
@@ -600,6 +653,19 @@ export function getAiActivitySummary(): AiActivitySummary {
       const dayProviders = providerCounts.get(key) ?? new Map<string, number>();
       dayProviders.set(row.provider_id, (dayProviders.get(row.provider_id) ?? 0) + 1);
       providerCounts.set(key, dayProviders);
+    }
+    if (key < statisticsStartKey || key > todayKey || !row.project_path) continue;
+    const projectPath = row.project_path;
+    const project = projectsByPathSpecificity.find((candidate) => isSameOrChildPath(projectPath, candidate.path));
+    if (!project) continue;
+    const activity = projectActivity.get(project.id);
+    if (!activity) continue;
+    activity.count += 1;
+    if (!activity.lastActiveAt || date.getTime() > new Date(activity.lastActiveAt).getTime()) {
+      activity.lastActiveAt = date.toISOString();
+    }
+    if (row.provider_id) {
+      activity.providerCounts.set(row.provider_id, (activity.providerCounts.get(row.provider_id) ?? 0) + 1);
     }
   }
 
@@ -634,9 +700,26 @@ export function getAiActivitySummary(): AiActivitySummary {
     })
     .sort((left, right) => left.date.localeCompare(right.date));
   const statisticDays = days.filter((day) => day.date >= localDateKey(statisticsStart) && day.date <= localDateKey(today));
+  const projects = workspaceProjects
+    .map((project) => {
+      const activity = projectActivity.get(project.id)!;
+      const providers = [...activity.providerCounts.entries()].sort((left, right) => right[1] - left[1]);
+      return {
+        id: project.id,
+        name: project.name,
+        path: project.path,
+        count: activity.count,
+        providerId: providers[0]?.[0],
+        lastActiveAt: activity.lastActiveAt || undefined,
+      };
+    })
+    .sort((left, right) => right.count - left.count
+      || (right.lastActiveAt ?? "").localeCompare(left.lastActiveAt ?? "")
+      || left.name.localeCompare(right.name));
 
   return {
     days,
+    projects,
     activeDays: statisticDays.length,
     currentStreak,
     longestStreak,

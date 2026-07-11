@@ -150,6 +150,7 @@ export type SavedCloudConfig = {
 export type TokenUsageSummaryItem = {
   providerId: string;
   inputTokens: number;
+  cachedInputTokens?: number;
   outputTokens: number;
   reasoningTokens: number;
   totalTokens: number;
@@ -166,6 +167,7 @@ export type TokenUsageSummary = {
 export type TokenUsageDailyItem = {
   date: string;
   inputTokens: number;
+  cachedInputTokens?: number;
   outputTokens: number;
   reasoningTokens: number;
   totalTokens: number;
@@ -178,8 +180,18 @@ export type AiActivityDay = {
   providerId?: string;
 };
 
+export type AiActivityProject = {
+  id: string;
+  name: string;
+  path: string;
+  count: number;
+  providerId?: string;
+  lastActiveAt?: string;
+};
+
 export type AiActivitySummary = {
   days: AiActivityDay[];
+  projects: AiActivityProject[];
   activeDays: number;
   currentStreak: number;
   longestStreak: number;
@@ -276,6 +288,7 @@ export type ChatMessage = {
   pending?: boolean;
   segments?: ChatSegment[];
   images?: ChatImageAttachment[];
+  attachments?: ChatFileAttachment[];
 };
 
 export type CodexTraceItem = {
@@ -329,6 +342,9 @@ export type CodexTracePlan = {
 export type CodexTraceGoal = {
   objective: string;
   status?: string | null;
+  tokenBudget?: number | null;
+  tokensUsed?: number;
+  timeUsedSeconds?: number;
   updatedAt: string;
 };
 
@@ -455,6 +471,7 @@ export type CodexChatOptions = {
   codexServiceTier?: string | null;
   codexGoal?: string | null;
   codexGoalTokenBudget?: number | null;
+  codexGoalStatus?: CodexGoalStatus | null;
 };
 
 export type AiChatOptions = CodexChatOptions & {
@@ -475,13 +492,40 @@ export type RunCodexChatRequest = {
   projectPath: string;
   prompt: string;
   images?: ChatImageAttachment[];
+  attachments?: ChatFileAttachment[];
 } & CodexChatOptions;
 
 export type SteerCodexChatRequest = {
   aiSessionId: string;
   prompt: string;
   images?: ChatImageAttachment[];
+  attachments?: ChatFileAttachment[];
   clientUserMessageId?: string | null;
+};
+
+export type CodexGoalStatus = "active" | "paused" | "blocked" | "usageLimited" | "budgetLimited" | "complete";
+
+export type CodexThreadGoal = {
+  threadId: string;
+  objective: string;
+  status: CodexGoalStatus;
+  tokenBudget: number | null;
+  tokensUsed: number;
+  timeUsedSeconds: number;
+  createdAt: number;
+  updatedAt: number;
+};
+
+export type CodexThreadArchiveRequest = {
+  threadId: string;
+  archived: boolean;
+};
+
+export type CodexThreadGoalSetRequest = {
+  threadId: string;
+  objective?: string | null;
+  status?: CodexGoalStatus | null;
+  tokenBudget?: number | null;
 };
 
 export type CodexNativeThreadStatus = {
@@ -679,6 +723,10 @@ export type CodexFeatureSetRequest = {
 export type CodexAdminEvent =
   | { type: "thread-status"; threadId: string; status: CodexNativeThreadStatus }
   | { type: "thread-name"; threadId: string; name: string | null }
+  | { type: "thread-archived"; threadId: string; archived: boolean }
+  | { type: "thread-deleted"; threadId: string }
+  | { type: "thread-goal"; threadId: string; goal: CodexThreadGoal | null }
+  | { type: "thread-compacted"; threadId: string }
   | { type: "mcp-status"; name: string; startupStatus: CodexMcpServer["startupStatus"]; error?: string | null; failureReason?: string | null }
   | { type: "mcp-oauth"; name: string; success: boolean; error?: string | null };
 
@@ -706,6 +754,14 @@ export type ChatImageAttachment = {
   name: string;
   mimeType: string;
   dataUrl: string;
+};
+
+export type ChatFileAttachment = {
+  id: string;
+  name: string;
+  path: string;
+  mimeType: string;
+  size: number;
 };
 
 export type ClipboardImage = Omit<ChatImageAttachment, "id">;
@@ -867,10 +923,14 @@ export const desktopApi = {
     ipc<ProjectEnvironmentInfo>("get_project_environment", path),
   listProjectFiles: (path: string, directoryPath?: string | null): Promise<WorkspaceFileEntry[]> =>
     ipc<WorkspaceFileEntry[]>("list_project_files", path, directoryPath ?? null),
+  chooseChatFileAttachments: (): Promise<ChatFileAttachment[]> =>
+    ipc<ChatFileAttachment[]>("choose_chat_file_attachments"),
   readProjectFilePreview: (projectPath: string, filePath: string): Promise<ProjectFilePreview> =>
     ipc<ProjectFilePreview>("read_project_file_preview", projectPath, filePath),
   readProjectFileForViewer: (projectPath: string, filePath: string): Promise<ProjectFileViewerSource> =>
     ipc<ProjectFileViewerSource>("read_project_file_for_viewer", projectPath, filePath),
+  openProjectHtmlInBrowser: (projectPath: string, filePath: string): Promise<void> =>
+    ipc<void>("open_project_html_in_browser", projectPath, filePath),
   createAiSession: (req: CreateAiSessionRequest): Promise<AiSession> =>
     ipc<AiSession>("create_ai_session", req),
   restartAiSession: (aiSessionId: string): Promise<AiSession> =>
@@ -897,6 +957,18 @@ export const desktopApi = {
     ipc<CodexNativeThread>("read_codex_thread", req),
   renameCodexThread: (req: CodexThreadRenameRequest): Promise<boolean> =>
     ipc<boolean>("rename_codex_thread", req),
+  archiveCodexThread: (req: CodexThreadArchiveRequest): Promise<boolean> =>
+    ipc<boolean>("archive_codex_thread", req),
+  deleteCodexThread: (threadId: string): Promise<boolean> =>
+    ipc<boolean>("delete_codex_thread", threadId),
+  getCodexThreadGoal: (threadId: string): Promise<CodexThreadGoal | null> =>
+    ipc<CodexThreadGoal | null>("get_codex_thread_goal", threadId),
+  setCodexThreadGoal: (req: CodexThreadGoalSetRequest): Promise<CodexThreadGoal> =>
+    ipc<CodexThreadGoal>("set_codex_thread_goal", req),
+  clearCodexThreadGoal: (threadId: string): Promise<boolean> =>
+    ipc<boolean>("clear_codex_thread_goal", threadId),
+  compactCodexThread: (threadId: string): Promise<boolean> =>
+    ipc<boolean>("compact_codex_thread", threadId),
   listCodexMcpServers: (): Promise<CodexMcpServer[]> =>
     ipc<CodexMcpServer[]>("list_codex_mcp_servers"),
   readCodexMcpResource: (req: CodexMcpResourceReadRequest): Promise<CodexMcpResourceContent[]> =>
@@ -951,6 +1023,8 @@ export const desktopApi = {
     ipc<AiSession[]>("list_local_ai_sessions"),
   archiveLocalAiSession: (aiSessionId: string, archived: boolean): Promise<AiSession> =>
     ipc<AiSession>("archive_local_ai_session", aiSessionId, archived),
+  deleteLocalAiSession: (aiSessionId: string): Promise<boolean> =>
+    ipc<boolean>("delete_local_ai_session", aiSessionId),
   renameLocalAiSession: (aiSessionId: string, title: string): Promise<AiSession> =>
     ipc<AiSession>("rename_local_ai_session", aiSessionId, title),
   renameAiSession: (aiSessionId: string, title: string): Promise<void> =>

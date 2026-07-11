@@ -9,7 +9,7 @@ import * as fsSync from "node:fs";
 import * as fs from "node:fs/promises";
 import * as os from "node:os";
 import * as path from "node:path";
-import type { RunCodexChatRequest, SteerCodexChatRequest, ChatImageAttachment, ChatSegment, CodexApprovalDecision, CodexApprovalMode, CodexTraceSnapshot, CodexModelOption, CodexReasoningEffort, CodexReasoningEffortOption, CodexServiceTierOption } from "../services/desktop";
+import type { RunCodexChatRequest, SteerCodexChatRequest, ChatFileAttachment, ChatImageAttachment, ChatSegment, CodexApprovalDecision, CodexApprovalMode, CodexTraceSnapshot, CodexModelOption, CodexReasoningEffort, CodexReasoningEffortOption, CodexServiceTierOption } from "../services/desktop";
 import { reportTokenUsage } from "./sync";
 import { getLocalAiSession, resetLocalAiTrace, upsertLocalAiTrace } from "./db";
 import { codexTraceSnapshotToSegments, reduceCodexTraceSnapshot, type CodexRawTraceEvent } from "./codex_trace";
@@ -454,13 +454,18 @@ function extractThreadInfo(value: unknown, fallbackThreadId?: string | null): Co
   return { threadId, model };
 }
 
-function buildUserInput(text: string, images: ChatImageAttachment[] = []): Array<Record<string, unknown>> {
+function buildUserInput(text: string, images: ChatImageAttachment[] = [], attachments: ChatFileAttachment[] = []): Array<Record<string, unknown>> {
   return [
     { type: "text", text, text_elements: [] },
     ...images.map((image) => ({
       type: "image",
       url: image.dataUrl,
       detail: "auto",
+    })),
+    ...attachments.map((attachment) => ({
+      type: "mention",
+      name: attachment.name,
+      path: attachment.path,
     })),
   ];
 }
@@ -812,7 +817,7 @@ async function sendRequestWithReconnectRetry(
 }
 
 // Codex app-server turn/completed 的 params 原生带 output_token_usage，
-// 形如 { input_tokens, output_tokens, reasoning_tokens }。提取并上报。
+// 形如 { input_tokens, cached_input_tokens, output_tokens, reasoning_output_tokens }。提取并上报。
 function reportCodexTokenUsage(session: CodexSession, params: unknown): void {
   try {
     const u = findTokenUsageRecord(params);
@@ -830,6 +835,11 @@ function reportCodexTokenUsageRecord(session: CodexSession, u: Record<string, un
       numOrUndef(u["inputTokens"]) ??
       numOrUndef(u["input"]) ??
       0;
+    const cachedInputTokens = Math.min(inputTokens, Math.max(0,
+      numOrUndef(u["cached_input_tokens"]) ??
+      numOrUndef(u["cachedInputTokens"]) ??
+      numOrUndef(u["cached_input"]) ??
+      0));
     const outputTokens =
       numOrUndef(u["output_tokens"]) ??
       numOrUndef(u["outputTokens"]) ??
@@ -844,15 +854,16 @@ function reportCodexTokenUsageRecord(session: CodexSession, u: Record<string, un
     const total = numOrUndef(u["total_tokens"]) ??
       numOrUndef(u["totalTokens"]) ??
       numOrUndef(u["total"]) ??
-      (inputTokens + outputTokens + reasoningTokens);
+      (inputTokens + outputTokens);
     if (total <= 0) return;
-    const dedupeKey = `${inputTokens}:${outputTokens}:${reasoningTokens}:${total}`;
+    const dedupeKey = `${inputTokens}:${cachedInputTokens}:${outputTokens}:${reasoningTokens}:${total}`;
     if (session.reportedTokenUsageKeys.has(dedupeKey)) return;
     session.reportedTokenUsageKeys.add(dedupeKey);
     void reportTokenUsage({
       aiSessionId: session.aiSessionId,
       providerId: "codex",
       inputTokens,
+      cachedInputTokens,
       outputTokens,
       reasoningTokens,
       totalTokens: total,
@@ -1363,14 +1374,15 @@ function buildCodexCollaborationMode(
 function buildCodexTurnParams(
   threadInfo: CodexThreadInfo,
   req: RunCodexChatRequest,
-  images: ChatImageAttachment[]
+  images: ChatImageAttachment[],
+  attachments: ChatFileAttachment[],
 ): Record<string, unknown> {
   const model = trimmedOrNull(req.codexModel);
   const reasoningEffort = codexReasoningEffort(req.codexReasoningEffort);
   const collaborationMode = buildCodexCollaborationMode(threadInfo, req, reasoningEffort);
   const turnParams: Record<string, unknown> = {
     threadId: threadInfo.threadId,
-    input: buildUserInput(req.prompt, images),
+    input: buildUserInput(req.prompt, images, attachments),
   };
   if (model) turnParams["model"] = model;
   if (reasoningEffort) turnParams["effort"] = reasoningEffort;
@@ -1394,7 +1406,7 @@ async function applyCodexGoal(
   const params: Record<string, unknown> = {
     threadId,
     objective,
-    status: "active",
+    status: req.codexGoalStatus ?? "active",
   };
   if (tokenBudget !== null) params["tokenBudget"] = tokenBudget;
   await sendRequestWithReconnectRetry(session, "thread/goal/set", params);
@@ -1413,7 +1425,7 @@ export async function runCodexChat(
   req: RunCodexChatRequest,
   sender: Sender
 ): Promise<string> {
-  const { aiSessionId, projectPath, images = [], approvalMode = "custom" } = req;
+  const { aiSessionId, projectPath, images = [], attachments = [], approvalMode = "custom" } = req;
   const session = createSession(aiSessionId, projectPath, sender, true, approvalMode);
   const initialTrace = resetLocalAiTrace({
     aiSessionId,
@@ -1462,7 +1474,7 @@ export async function runCodexChat(
 
     // 4. send turn/start.
     session.currentTurnStartedAtMs = Date.now();
-    const turnStartResponse = await sendRequestWithReconnectRetry(session, "turn/start", buildCodexTurnParams(threadInfo, req, images));
+    const turnStartResponse = await sendRequestWithReconnectRetry(session, "turn/start", buildCodexTurnParams(threadInfo, req, images, attachments));
     const responseTurnId = extractTurnId(turnStartResponse.result);
     if (session.turnResolver && responseTurnId) session.currentTurnId = responseTurnId;
     if (session.cancelled) await interruptCurrentCodexTurn(session);
@@ -1631,13 +1643,14 @@ export async function steerCodexChat(req: SteerCodexChatRequest): Promise<boolea
   const session = activeCodexSessions.get(req.aiSessionId);
   const prompt = req.prompt.trim();
   const images = req.images ?? [];
+  const attachments = req.attachments ?? [];
   if (!session || session.closed || session.cancelled || !session.threadId || !session.currentTurnId) return false;
-  if (!prompt && images.length === 0) return false;
+  if (!prompt && images.length === 0 && attachments.length === 0) return false;
   const response = await sendRequestWithReconnectRetry(session, "turn/steer", {
     threadId: session.threadId,
     expectedTurnId: session.currentTurnId,
     clientUserMessageId: req.clientUserMessageId ?? null,
-    input: buildUserInput(prompt || `查看这 ${images.length} 张图片`, images),
+    input: buildUserInput(prompt || "查看附件", images, attachments),
   });
   const responseTurnId = extractTurnId(response.result);
   if (responseTurnId) session.currentTurnId = responseTurnId;

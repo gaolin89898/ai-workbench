@@ -91,7 +91,13 @@ function extractPlanSteps(params: unknown): Array<{ step: string; status: "pendi
   });
 }
 
-function extractGoal(params: unknown): { objective: string; status?: string | null } | null {
+function extractGoal(params: unknown): {
+  objective: string;
+  status?: string | null;
+  tokenBudget?: number | null;
+  tokensUsed?: number;
+  timeUsedSeconds?: number;
+} | null {
   const p = record(params);
   const goal = record(p.goal);
   const objective = firstString(goal.objective, p.objective);
@@ -99,12 +105,30 @@ function extractGoal(params: unknown): { objective: string; status?: string | nu
   return {
     objective,
     status: firstString(goal.status, p.status) ?? null,
+    tokenBudget: num(goal.tokenBudget ?? p.tokenBudget) ?? null,
+    tokensUsed: num(goal.tokensUsed ?? p.tokensUsed) ?? 0,
+    timeUsedSeconds: num(goal.timeUsedSeconds ?? p.timeUsedSeconds) ?? 0,
   };
 }
 
-function fileChangesFrom(value: unknown): string[] {
+function fileChangeEntries(value: unknown): Array<{ path: string; value: unknown }> {
+  if (Array.isArray(value)) {
+    return value.flatMap((entry) => {
+      const change = record(entry);
+      const path = firstString(change.path, change.filePath, change.file_path, change.filename);
+      return path ? [{ path, value: change }] : [];
+    });
+  }
   const changes = record(value);
-  return Object.keys(changes).filter((path) => path.trim().length > 0);
+  const directPath = firstString(changes.path, changes.filePath, changes.file_path, changes.filename);
+  if (directPath) return [{ path: directPath, value: changes }];
+  return Object.entries(changes)
+    .filter(([path]) => path.trim().length > 0)
+    .map(([path, entry]) => ({ path, value: entry }));
+}
+
+function fileChangesFrom(value: unknown): string[] {
+  return fileChangeEntries(value).map((entry) => entry.path);
 }
 
 function extractFilePath(item: Record<string, unknown>, parent: Record<string, unknown>): string | null {
@@ -146,9 +170,9 @@ function extractDiff(item: Record<string, unknown>, parent: Record<string, unkno
     parent.change,
   );
   if (direct && /(^|\n)(diff --git|@@\s|---\s|\+\+\+\s|[+-][^\n]*)/.test(direct)) return direct;
-  const changes = record(item.fileChanges ?? parent.fileChanges ?? item.changes ?? parent.changes);
-  const diffs = Object.entries(changes)
-    .map(([path, value]) => diffFromFileChangeValue(path, value))
+  const changes = item.fileChanges ?? parent.fileChanges ?? item.changes ?? parent.changes;
+  const diffs = fileChangeEntries(changes)
+    .map(({ path, value }) => diffFromFileChangeValue(path, value))
     .filter(Boolean);
   return diffs.length ? diffs.join("\n") : null;
 }
@@ -476,9 +500,13 @@ export function reduceCodexTraceSnapshot(
         text: completed.text || current?.text || "",
         output: completed.output || current?.output || null,
         input: completed.input ?? current?.input ?? null,
+        command: completed.command ?? current?.command ?? null,
+        diff: completed.diff ?? current?.diff ?? null,
         toolName: completed.toolName ?? current?.toolName ?? null,
         error: completed.error ?? current?.error ?? null,
         durationMs: completed.durationMs ?? current?.durationMs ?? null,
+        additions: completed.additions ?? current?.additions ?? null,
+        deletions: completed.deletions ?? current?.deletions ?? null,
         phase: completed.phase ?? current?.phase ?? null,
         status: completed.status === "running" ? "completed" as const : completed.status,
         completedAt: now,
@@ -592,6 +620,22 @@ export function reduceCodexTraceSnapshot(
     }
   }
 
+  return snapshot;
+}
+
+export function replayCodexTraceEvents(events: unknown[]): CodexTraceSnapshot | null {
+  let snapshot: CodexTraceSnapshot | null = null;
+  for (const value of events) {
+    const event = record(value);
+    const method = firstString(event.method);
+    const receivedAt = firstString(event.receivedAt);
+    if (!method || !receivedAt) continue;
+    snapshot = reduceCodexTraceSnapshot(snapshot, {
+      method,
+      params: event.params,
+      receivedAt,
+    });
+  }
   return snapshot;
 }
 

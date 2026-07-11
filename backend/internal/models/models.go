@@ -179,6 +179,7 @@ type TokenUsage struct {
 	AiSessionId     *string   `json:"aiSessionId" db:"ai_session_id"`
 	ProviderId      string    `json:"providerId" db:"provider_id"`
 	InputTokens     int32     `json:"inputTokens" db:"input_tokens"`
+	CachedInputTokens int32     `json:"cachedInputTokens" db:"cached_input_tokens"`
 	OutputTokens    int32     `json:"outputTokens" db:"output_tokens"`
 	ReasoningTokens int32     `json:"reasoningTokens" db:"reasoning_tokens"`
 	TotalTokens     int32     `json:"totalTokens" db:"total_tokens"`
@@ -192,6 +193,7 @@ type TokenUsageInsert struct {
 	AiSessionId     *string
 	ProviderId      string
 	InputTokens     int32
+	CachedInputTokens int32
 	OutputTokens    int32
 	ReasoningTokens int32
 	TotalTokens     int32
@@ -201,6 +203,7 @@ type TokenUsageInsert struct {
 type TokenUsageSummary struct {
 	ProviderId      string `json:"providerId"`
 	InputTokens     int64  `json:"inputTokens"`
+	CachedInputTokens int64  `json:"cachedInputTokens"`
 	OutputTokens    int64  `json:"outputTokens"`
 	ReasoningTokens int64  `json:"reasoningTokens"`
 	TotalTokens     int64  `json:"totalTokens"`
@@ -210,6 +213,7 @@ type TokenUsageSummary struct {
 type TokenUsageDailySummary struct {
 	Date            string `json:"date"`
 	InputTokens     int64  `json:"inputTokens"`
+	CachedInputTokens int64  `json:"cachedInputTokens"`
 	OutputTokens    int64  `json:"outputTokens"`
 	ReasoningTokens int64  `json:"reasoningTokens"`
 	TotalTokens     int64  `json:"totalTokens"`

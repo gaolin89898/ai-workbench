@@ -10,8 +10,9 @@
 //   ipcMain.handle("login_desktop", (_event, args) => { const [server, email, password] = args; ... })
 
 import { app, ipcMain, BrowserWindow, clipboard, dialog, shell, type IpcMainInvokeEvent, type WebContents } from "electron";
-import { writeFile } from "node:fs/promises";
+import { stat, writeFile } from "node:fs/promises";
 import { randomUUID } from "node:crypto";
+import path from "node:path";
 import * as db from "./db";
 import * as pty from "./pty";
 import * as providers from "./providers";
@@ -27,7 +28,12 @@ import {
 import { saveCredentials, loadCredentials, clearCredentials } from "./credentials";
 import { getCodexApprovalMode, hasLiveCodexChat, listCodexModels, respondCodexApproval, runCodexChat, steerCodexChat, stopCodexChat } from "./codex";
 import {
+  archiveCodexThread,
   batchWriteCodexConfig,
+  clearCodexThreadGoal,
+  compactCodexThread,
+  deleteCodexThread,
+  getCodexThreadGoal,
   listCodexFeatures,
   listCodexMcpServers,
   listCodexThreads,
@@ -36,6 +42,7 @@ import {
   readCodexThread,
   reloadCodexMcpServers,
   renameCodexThread,
+  setCodexThreadGoal,
   setCodexFeature,
   startCodexMcpOauth,
   writeCodexConfigValue,
@@ -45,7 +52,7 @@ import { hasLiveAiChat, runAiChat, stopAiChat } from "./claude";
 import { hasLiveOpenCodeChat, listOpenCodeConfigOptions, runOpenCodeChat, stopOpenCodeChat } from "./acp";
 import { hasLiveMimoChat, listMimoConfigOptions, respondMimoApproval, runMimoChat, stopMimoChat } from "./mimo";
 import { checkAppUpdate, getUpdateDownloadSize, installAppUpdate, initUpdater } from "./updater";
-import { listProjectFiles, readProjectFileForViewer, readProjectFilePreview } from "./project_files";
+import { listProjectFiles, openProjectHtmlInBrowser, readProjectFileForViewer, readProjectFilePreview } from "./project_files";
 import type {
   CreateAiSessionRequest,
   StartShellPtyRequest,
@@ -63,11 +70,51 @@ import type {
   CodexThreadListRequest,
   CodexThreadReadRequest,
   CodexThreadRenameRequest,
+  CodexThreadArchiveRequest,
+  CodexThreadGoalSetRequest,
+  ChatFileAttachment,
   ChatMessage,
   ProjectOpenTarget,
 } from "../services/desktop";
 
 let mainWindow: BrowserWindow | null = null;
+
+function codexThreadId(providerSessionId?: string | null): string | null {
+  const value = providerSessionId?.trim();
+  if (!value) return null;
+  return value.startsWith("app-server:") ? value.slice("app-server:".length) : value;
+}
+
+function attachmentMimeType(filePath: string): string {
+  const extension = path.extname(filePath).toLowerCase();
+  const types: Record<string, string> = {
+    ".pdf": "application/pdf",
+    ".doc": "application/msword",
+    ".docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    ".xls": "application/vnd.ms-excel",
+    ".xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    ".ppt": "application/vnd.ms-powerpoint",
+    ".pptx": "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+    ".md": "text/markdown",
+    ".txt": "text/plain",
+    ".json": "application/json",
+    ".html": "text/html",
+    ".css": "text/css",
+    ".js": "text/javascript",
+    ".ts": "text/typescript",
+    ".tsx": "text/typescript",
+    ".jsx": "text/javascript",
+    ".py": "text/x-python",
+    ".java": "text/x-java-source",
+    ".go": "text/x-go",
+    ".rs": "text/x-rust",
+    ".vue": "text/x-vue",
+    ".yaml": "application/yaml",
+    ".yml": "application/yaml",
+    ".xml": "application/xml",
+  };
+  return types[extension] ?? "application/octet-stream";
+}
 
 type SafeIpcError = {
   __AI_WORKBENCH_IPC_ERROR__: true;
@@ -250,12 +297,43 @@ export function registerIpcHandlers(win?: BrowserWindow): void {
     listProjectFiles(args[0], args[1])
   );
 
+  handle("choose_chat_file_attachments", async () => {
+    const options = {
+      properties: ["openFile", "multiSelections"] as Array<"openFile" | "multiSelections">,
+      filters: [
+        { name: "文档与代码", extensions: ["pdf", "doc", "docx", "xls", "xlsx", "ppt", "pptx", "md", "mdx", "txt", "csv", "json", "jsonc", "js", "jsx", "ts", "tsx", "vue", "html", "css", "scss", "py", "java", "go", "rs", "rb", "php", "c", "cpp", "h", "hpp", "cs", "swift", "kt", "sql", "xml", "yaml", "yml", "toml", "ini", "sh"] },
+        { name: "所有文件", extensions: ["*"] },
+      ],
+    };
+    const result = mainWindow && !mainWindow.isDestroyed()
+      ? await dialog.showOpenDialog(mainWindow, options)
+      : await dialog.showOpenDialog(options);
+    if (result.canceled) return [];
+    const attachments: ChatFileAttachment[] = [];
+    for (const filePath of result.filePaths.slice(0, 10)) {
+      const info = await stat(filePath);
+      if (!info.isFile()) continue;
+      attachments.push({
+        id: randomUUID(),
+        name: path.basename(filePath),
+        path: filePath,
+        mimeType: attachmentMimeType(filePath),
+        size: info.size,
+      });
+    }
+    return attachments;
+  });
+
   handle("read_project_file_preview", async (_event, args: [string, string]) =>
     readProjectFilePreview(args[0], args[1])
   );
 
   handle("read_project_file_for_viewer", async (_event, args: [string, string]) =>
     readProjectFileForViewer(args[0], args[1])
+  );
+
+  handle("open_project_html_in_browser", async (_event, args: [string, string]) =>
+    openProjectHtmlInBrowser(args[0], args[1])
   );
 
   // ---------- AI sessions ----------
@@ -397,6 +475,30 @@ export function registerIpcHandlers(win?: BrowserWindow): void {
     renameCodexThread(args[0], event.sender)
   );
 
+  handle("archive_codex_thread", async (event, args: [CodexThreadArchiveRequest]) =>
+    archiveCodexThread(args[0], event.sender)
+  );
+
+  handle("delete_codex_thread", async (event, args: [string]) =>
+    deleteCodexThread(args[0], event.sender)
+  );
+
+  handle("get_codex_thread_goal", async (event, args: [string]) =>
+    getCodexThreadGoal(args[0], event.sender)
+  );
+
+  handle("set_codex_thread_goal", async (event, args: [CodexThreadGoalSetRequest]) =>
+    setCodexThreadGoal(args[0], event.sender)
+  );
+
+  handle("clear_codex_thread_goal", async (event, args: [string]) =>
+    clearCodexThreadGoal(args[0], event.sender)
+  );
+
+  handle("compact_codex_thread", async (event, args: [string]) =>
+    compactCodexThread(args[0], event.sender)
+  );
+
   handle("list_codex_mcp_servers", async (event) =>
     listCodexMcpServers(event.sender)
   );
@@ -504,9 +606,30 @@ export function registerIpcHandlers(win?: BrowserWindow): void {
 
   handle("list_local_ai_sessions", async () => db.listLocalAiSessions());
 
-  handle("archive_local_ai_session", async (_event, args: [string, boolean]) =>
-    db.archiveLocalAiSession(args[0], args[1])
-  );
+  handle("archive_local_ai_session", async (event, args: [string, boolean]) => {
+    const [aiSessionId, archived] = args;
+    const current = db.getLocalAiSession(aiSessionId);
+    const threadId = current?.providerId === "codex" ? codexThreadId(current.providerSessionId) : null;
+    if (threadId) await archiveCodexThread({ threadId, archived }, event.sender);
+    const session = db.archiveLocalAiSession(aiSessionId, archived);
+    getDesktopCloudSync()?.pushSessionSnapshot();
+    return session;
+  });
+
+  handle("delete_local_ai_session", async (event, args: [string]) => {
+    const aiSessionId = args[0];
+    const current = db.getLocalAiSession(aiSessionId);
+    if (!current) return false;
+    await stopCodexChat(aiSessionId);
+    const threadId = current.providerId === "codex" ? codexThreadId(current.providerSessionId) : null;
+    if (threadId) await deleteCodexThread(threadId, event.sender);
+    const deleted = db.deleteLocalAiSession(aiSessionId);
+    if (deleted) {
+      getDesktopCloudSync()?.pushSessionSnapshot();
+      getSender().send("ai-history-changed", { aiSessionId });
+    }
+    return deleted;
+  });
 
   handle("rename_local_ai_session", async (_event, args: [string, string]) =>
     db.updateLocalAiSession(args[0], { title: args[1] })
