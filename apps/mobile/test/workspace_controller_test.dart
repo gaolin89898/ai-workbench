@@ -49,6 +49,39 @@ void main() {
     expect(snapshot.forProvider('mimo')?.model, 'xiaomi/mimo-v2.5-pro');
   });
 
+  test('structured history restores chat contexts', () {
+    final history = AiHistoryMessage.fromJson({
+      'role': 'user',
+      'createdAt': '2026-07-12T00:00:00Z',
+      'content': {
+        'text': '检查登录逻辑',
+        'contexts': [
+          {
+            'id': 'path-1',
+            'kind': 'folder',
+            'name': 'auth',
+            'path': r'C:\repo\auth',
+          },
+          {
+            'id': 'code-1',
+            'kind': 'code',
+            'name': 'login.dart',
+            'path': r'C:\repo\auth\login.dart',
+            'content': 'Future<void> login() async {}',
+            'startLine': 10,
+            'endLine': 10,
+            'language': 'dart',
+          },
+        ],
+      },
+    });
+
+    expect(history.contexts, hasLength(2));
+    expect(history.contexts.first.kind, 'folder');
+    expect(history.contexts.last.content, contains('login'));
+    expect(history.contexts.last.startLine, 10);
+  });
+
   test('selected model survives a stale run settings snapshot', () async {
     final controller =
         WorkspaceController(api: ApiClient(baseUrl: 'http://127.0.0.1:3000'));
@@ -767,6 +800,43 @@ void main() {
     expect(messages[2].text, 'second');
     expect(messages[3].role, ChatRole.assistant);
     expect(messages[3].pending, isTrue);
+
+    await Future<void>.delayed(Duration.zero);
+    controller.dispose();
+  });
+
+  test('sendPrompt accepts project context without prompt text', () async {
+    final controller =
+        WorkspaceController(api: ApiClient(baseUrl: 'http://127.0.0.1:3000'));
+    controller.selectedDevice = const DesktopDevice(
+      id: 'device-1',
+      name: 'desktop',
+      os: 'windows',
+      online: true,
+    );
+    const session = AiSessionMeta(
+      id: 'session-1',
+      deviceId: 'device-1',
+      providerId: 'codex',
+      title: 'Existing session',
+      status: 'completed',
+      updatedAt: '2026-07-03T00:00:00Z',
+    );
+    const context = ChatContextAttachment(
+      id: 'path-1',
+      kind: 'folder',
+      name: 'auth',
+      path: r'C:\repo\auth',
+    );
+
+    controller.sendPrompt(session, '', contexts: const [context]);
+
+    final messages = controller.messagesBySession['session-1']!;
+    expect(messages, hasLength(2));
+    expect(messages.first.role, ChatRole.user);
+    expect(messages.first.text, isEmpty);
+    expect(messages.first.contexts.single.path, r'C:\repo\auth');
+    expect(messages.last.pending, isTrue);
 
     await Future<void>.delayed(Duration.zero);
     controller.dispose();

@@ -4,7 +4,7 @@ import ChatMessageRow from "./ChatMessageRow.vue";
 import ChatSegmentView from "./ChatSegment.vue";
 import TerminalView from "./TerminalView.vue";
 import { useWorkspace, type QueuedAiMessage } from "../composables/useWorkspace";
-import { desktopApi, type AiChatOptions, type AiProvider, type AiRunSettingsState, type ChatFileAttachment, type ChatImageAttachment, type ChatMessage, type ChatSegment, type ClaudeReasoningEffort, type AcpConfigOption, type CodexAdminEvent, type CodexApprovalMode, type CodexGoalStatus, type CodexModelOption, type CodexReasoningEffort, type CodexRunMode, type CodexThreadGoal, type ProjectEnvironmentInfo, type ProjectFilePreview, type ProjectOpenTarget } from "../services/desktop";
+import { desktopApi, type AiChatOptions, type AiProvider, type AiRunSettingsState, type ChatContextAttachment, type ChatFileAttachment, type ChatImageAttachment, type ChatMessage, type ChatSegment, type ClaudeReasoningEffort, type AcpConfigOption, type CodexAdminEvent, type CodexApprovalMode, type CodexGoalStatus, type CodexModelOption, type CodexReasoningEffort, type CodexRunMode, type CodexThreadGoal, type ProjectEnvironmentInfo, type ProjectFilePreview, type ProjectOpenTarget } from "../services/desktop";
 import { isProjectFileViewerSupported } from "../shared/project_file_formats";
 
 const ProjectFileViewer = defineAsyncComponent(() => import("./ProjectFileViewer.vue"));
@@ -21,6 +21,7 @@ type ProcessPanelSelection = {
 };
 
 const runPreferencesStorageKey = "ai-workbench.aiRunPreferences.v1";
+const CHAT_CONTEXT_MIME = "application/x-codehub-chat-context";
 
 function readRunPreferences(): RunPreferences {
   try {
@@ -106,7 +107,10 @@ const editingQueuedMessageId = ref<string | null>(null);
 const editingQueuedMessageText = ref("");
 const imageAttachments = ref<ChatImageAttachment[]>([]);
 const fileAttachments = ref<ChatFileAttachment[]>([]);
+const contextAttachments = ref<ChatContextAttachment[]>([]);
 const previewImage = ref<ChatImageAttachment | null>(null);
+const promptInput = ref<HTMLTextAreaElement | null>(null);
+const composerDropActive = ref(false);
 const chatScroll = ref<HTMLDivElement | null>(null);
 const startPromptBox = ref<HTMLFormElement | null>(null);
 const chatComposer = ref<HTMLDivElement | null>(null);
@@ -323,7 +327,7 @@ const pendingApprovalSegment = computed<Extract<ChatSegment, { type: "approval" 
 });
 
 const approvalInputLocked = computed(() => Boolean(pendingApprovalSegment.value));
-const canSend = computed(() => Boolean(!approvalInputLocked.value && (prompt.value.trim() || imageAttachments.value.length || fileAttachments.value.length)));
+const canSend = computed(() => Boolean(!approvalInputLocked.value && (prompt.value.trim() || imageAttachments.value.length || fileAttachments.value.length || contextAttachments.value.length)));
 
 const activeCodexThreadId = computed(() => {
   const session = ws.activeAiSession.value;
@@ -682,10 +686,10 @@ function userAnchorText(text?: string) {
 
 function estimateMessageHeight(message?: ChatMessage) {
   if (!message) return VIRTUAL_MESSAGE_ESTIMATE;
-  if (message.role === "user") return message.images?.length ? 170 : message.attachments?.length ? 132 : 96;
+  if (message.role === "user") return message.images?.length ? 170 : message.attachments?.length || message.contexts?.length ? 132 : 96;
   const textLength = message.text?.length ?? 0;
   const segmentCount = message.segments?.length ?? 0;
-  const attachmentHeight = message.images?.length ? 118 : message.attachments?.length ? 54 : 0;
+  const attachmentHeight = message.images?.length ? 118 : message.attachments?.length || message.contexts?.length ? 54 : 0;
   return Math.min(520, Math.max(112, 72 + Math.ceil(textLength / 48) * 24 + segmentCount * 38 + attachmentHeight));
 }
 
@@ -764,6 +768,111 @@ function resetVirtualMeasurements() {
 
 function createAttachmentId() {
   return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+}
+
+function contextAttachmentKey(context: ChatContextAttachment) {
+  if (context.kind === "file" || context.kind === "folder") return `${context.kind}:${context.path.toLocaleLowerCase()}`;
+  if (context.kind === "code") return `${context.kind}:${context.path.toLocaleLowerCase()}:${context.startLine ?? 0}:${context.endLine ?? 0}:${context.content}`;
+  return `${context.kind}:${context.terminalId ?? context.name}:${context.content}`;
+}
+
+function focusPromptInput() {
+  void nextTick(() => promptInput.value?.focus());
+}
+
+function addContextAttachment(context: ChatContextAttachment) {
+  const key = contextAttachmentKey(context);
+  if (!contextAttachments.value.some((item) => contextAttachmentKey(item) === key)) {
+    contextAttachments.value = [...contextAttachments.value, context].slice(-12);
+  }
+  focusPromptInput();
+}
+
+function removeContextAttachment(id: string) {
+  contextAttachments.value = contextAttachments.value.filter((context) => context.id !== id);
+}
+
+function contextAttachmentDetail(context: ChatContextAttachment) {
+  if (context.kind === "file") return "文件路径";
+  if (context.kind === "folder") return "文件夹路径";
+  if (context.kind === "terminal") return `${context.content.split(/\r?\n/).length} 行终端内容`;
+  if (!context.startLine) return "代码选区";
+  return context.endLine && context.endLine !== context.startLine
+    ? `第 ${context.startLine}-${context.endLine} 行`
+    : `第 ${context.startLine} 行`;
+}
+
+function pathContextFrom(value: unknown): ChatContextAttachment | null {
+  if (!value || typeof value !== "object") return null;
+  const record = value as Record<string, unknown>;
+  if ((record.kind !== "file" && record.kind !== "folder") || typeof record.path !== "string" || !record.path.trim()) return null;
+  const path = record.path.trim();
+  const name = typeof record.name === "string" && record.name.trim()
+    ? record.name.trim()
+    : path.replaceAll("\\", "/").split("/").filter(Boolean).pop() ?? path;
+  return record.kind === "file"
+    ? { id: `path-context-${createAttachmentId()}`, kind: "file", name, path }
+    : { id: `path-context-${createAttachmentId()}`, kind: "folder", name, path };
+}
+
+function onDesktopAddChatContext(event: Event) {
+  const context = pathContextFrom((event as CustomEvent<unknown>).detail);
+  if (context) addContextAttachment(context);
+}
+
+function hasContextDrag(event: DragEvent) {
+  return [...(event.dataTransfer?.types ?? [])].includes(CHAT_CONTEXT_MIME);
+}
+
+function onContextDragOver(event: DragEvent) {
+  if (!hasContextDrag(event)) return;
+  event.preventDefault();
+  if (event.dataTransfer) event.dataTransfer.dropEffect = "copy";
+  composerDropActive.value = true;
+}
+
+function onContextDragLeave(event: DragEvent) {
+  const current = event.currentTarget;
+  if (current instanceof Node && event.relatedTarget instanceof Node && current.contains(event.relatedTarget)) return;
+  composerDropActive.value = false;
+}
+
+function onContextDrop(event: DragEvent) {
+  composerDropActive.value = false;
+  const raw = event.dataTransfer?.getData(CHAT_CONTEXT_MIME);
+  if (!raw) return;
+  event.preventDefault();
+  try {
+    const context = pathContextFrom(JSON.parse(raw));
+    if (context) addContextAttachment(context);
+  } catch {
+    // Ignore malformed drag data from sources outside the project tree.
+  }
+}
+
+function addPreviewSelectionToContext() {
+  const selection = window.getSelection();
+  const anchor = selection?.anchorNode;
+  const preview = document.querySelector(".chat-file-preview");
+  const content = selection?.toString() ?? "";
+  const file = previewFile.value;
+  if (!selection || !anchor || !preview?.contains(anchor) || !content.trim() || file?.previewKind !== "text") return false;
+  const source = file.content ?? "";
+  const sourceIndex = source.indexOf(content);
+  const startLine = sourceIndex >= 0 ? source.slice(0, sourceIndex).split(/\r?\n/).length : undefined;
+  const endLine = startLine ? startLine + content.split(/\r?\n/).length - 1 : undefined;
+  addContextAttachment({
+    id: `code-context-${createAttachmentId()}`,
+    kind: "code",
+    name: file.name,
+    path: file.path,
+    content: content.slice(0, 50_000),
+    startLine,
+    endLine,
+    language: file.language,
+  });
+  selection.removeAllRanges();
+  return true;
 }
 
 function providerIcon(providerId: string) {
@@ -1355,6 +1464,11 @@ function buildRunOptions(): AiChatOptions {
 }
 
 function onWindowKeydown(event: KeyboardEvent) {
+  if ((event.ctrlKey || event.metaKey) && !event.altKey && event.key.toLowerCase() === "l" && addPreviewSelectionToContext()) {
+    event.preventDefault();
+    event.stopPropagation();
+    return;
+  }
   if (event.key === "Escape" && previewImage.value) {
     event.preventDefault();
     previewImage.value = null;
@@ -1619,7 +1733,11 @@ function handleCodexAdminEvent(event: CodexAdminEvent) {
 }
 
 function queuedMessageLabel(item: QueuedAiMessage) {
-  return item.text || (item.attachments?.length ? `查看 ${item.attachments.length} 个附件` : `查看这 ${item.images.length} 张图片`);
+  return item.text || (item.contexts?.length
+    ? `查看 ${item.contexts.length} 个上下文`
+    : item.attachments?.length
+      ? `查看 ${item.attachments.length} 个附件`
+      : `查看这 ${item.images.length} 张图片`);
 }
 
 function startQueuedMessageEdit(item: QueuedAiMessage) {
@@ -1811,6 +1929,7 @@ watch(
 onMounted(() => {
   document.addEventListener("pointerdown", closeFloatingMenusOnOutsideClick);
   window.addEventListener("desktop-preview-file", onDesktopPreviewFile);
+  window.addEventListener("desktop-add-chat-context", onDesktopAddChatContext);
   window.addEventListener("keydown", onWindowKeydown);
   window.addEventListener("resize", updateVirtualViewport);
   observeChatScroll();
@@ -1828,6 +1947,7 @@ onBeforeUnmount(() => {
   stopTerminalResize();
   document.removeEventListener("pointerdown", closeFloatingMenusOnOutsideClick);
   window.removeEventListener("desktop-preview-file", onDesktopPreviewFile);
+  window.removeEventListener("desktop-add-chat-context", onDesktopAddChatContext);
   window.removeEventListener("keydown", onWindowKeydown);
   window.removeEventListener("resize", updateVirtualViewport);
   chatScrollResizeObserver?.disconnect();
@@ -1851,14 +1971,16 @@ async function send() {
     dataUrl: image.dataUrl,
   }));
   const attachments = fileAttachments.value.map((attachment) => ({ ...attachment }));
-  if (!value && !images.length && !attachments.length) return;
+  const contexts = contextAttachments.value.map((context) => ({ ...context }));
+  if (!value && !images.length && !attachments.length && !contexts.length) return;
   const runOptions = buildRunOptions();
   if (ws.activeChatIsRunning.value) {
-    const accepted = Boolean(ws.queuePrompt(value, images, attachments, runOptions));
+    const accepted = Boolean(ws.queuePrompt(value, images, attachments, contexts, runOptions));
     if (accepted) {
       prompt.value = "";
       imageAttachments.value = [];
       fileAttachments.value = [];
+      contextAttachments.value = [];
     }
     return;
   }
@@ -1869,6 +1991,7 @@ async function send() {
       prompt.value = value;
       imageAttachments.value = images;
       fileAttachments.value = attachments;
+      contextAttachments.value = contexts;
       return;
     }
     ws.selectedProviderId.value = selectedProvider.value?.id ?? "codex";
@@ -1877,19 +2000,22 @@ async function send() {
       prompt.value = value;
       imageAttachments.value = images;
       fileAttachments.value = attachments;
+      contextAttachments.value = contexts;
       return;
     }
   }
   prompt.value = "";
   imageAttachments.value = [];
   fileAttachments.value = [];
+  contextAttachments.value = [];
   pendingPromptAnchorKey = latestUserAnchor()?.key ?? "__empty__";
   try {
-    const sent = await ws.sendPrompt(value, images, attachments, runOptions);
+    const sent = await ws.sendPrompt(value, images, attachments, contexts, runOptions);
     if (!sent) {
       prompt.value = value;
       imageAttachments.value = images;
       fileAttachments.value = attachments;
+      contextAttachments.value = contexts;
     }
   } finally {
     if (pendingPromptAnchorKey === (latestUserAnchor()?.key ?? "__empty__")) {
@@ -1941,7 +2067,24 @@ function onPromptKeydown(event: KeyboardEvent) {
           <span class="codex-start-project">{{ currentProject?.name ?? "项目" }}</span>
           中做什么?
         </h1>
-        <form ref="startPromptBox" class="codex-prompt-box" @submit.prevent="send">
+        <form
+          ref="startPromptBox"
+          class="codex-prompt-box"
+          :class="{ 'context-drop-active': composerDropActive }"
+          @submit.prevent="send"
+          @dragover="onContextDragOver"
+          @dragleave="onContextDragLeave"
+          @drop="onContextDrop"
+        >
+          <div v-if="contextAttachments.length" class="chat-context-attachments start-attachments">
+            <div v-for="context in contextAttachments" :key="context.id" class="chat-context-attachment-chip" :title="'path' in context ? context.path : context.name">
+              <svg v-if="context.kind === 'folder'" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M2.5 4h4l1.25 1.5h5.75v7H2.5V4Z" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round"/></svg>
+              <svg v-else-if="context.kind === 'terminal'" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="m3.5 5 2.5 2.5L3.5 10M7.5 10h5" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></svg>
+              <svg v-else viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M4 1.75h5l3 3V14.25H4V1.75Z" stroke="currentColor" stroke-width="1.2"/><path d="M9 1.75v3h3" stroke="currentColor" stroke-width="1.2"/></svg>
+              <span><strong>{{ context.name }}</strong><small>{{ contextAttachmentDetail(context) }}</small></span>
+              <button type="button" title="移除上下文" aria-label="移除上下文" @click="removeContextAttachment(context.id)">×</button>
+            </div>
+          </div>
           <div v-if="imageAttachments.length" class="chat-image-attachments start-attachments">
             <div
               v-for="image in imageAttachments"
@@ -1964,6 +2107,7 @@ function onPromptKeydown(event: KeyboardEvent) {
             </div>
           </div>
           <textarea
+            ref="promptInput"
             v-model="prompt"
             rows="2"
             placeholder="输入你想做的事"
@@ -2203,7 +2347,7 @@ function onPromptKeydown(event: KeyboardEvent) {
               <span>{{ provider.name }}</span>
             </button>
           </div>
-          <button class="codex-send-button" :disabled="!prompt.trim() && !imageAttachments.length && !fileAttachments.length" title="发送" type="submit" aria-label="发送">
+          <button class="codex-send-button" :disabled="!prompt.trim() && !imageAttachments.length && !fileAttachments.length && !contextAttachments.length" title="发送" type="submit" aria-label="发送">
             <img :src="sendIcon" alt="" aria-hidden="true" />
           </button>
           </div>
@@ -2485,7 +2629,10 @@ function onPromptKeydown(event: KeyboardEvent) {
         <div
           ref="chatComposer"
           class="chat-composer"
-          :class="{ 'has-approval-cover': pendingApprovalSegment }"
+          :class="{ 'has-approval-cover': pendingApprovalSegment, 'context-drop-active': composerDropActive }"
+          @dragover="onContextDragOver"
+          @dragleave="onContextDragLeave"
+          @drop="onContextDrop"
         >
           <div v-if="pendingApprovalSegment" class="chat-composer-approval-cover">
             <ChatSegmentView
@@ -2545,6 +2692,7 @@ function onPromptKeydown(event: KeyboardEvent) {
                     <span>{{ queuedMessageLabel(item) }}</span>
                     <small v-if="item.images.length">{{ item.images.length }} 张图片</small>
                     <small v-if="item.attachments?.length">{{ item.attachments.length }} 个文件</small>
+                    <small v-if="item.contexts?.length">{{ item.contexts.length }} 个上下文</small>
                   </div>
                   <div v-if="item.images.length" class="chat-followup-queue-images" aria-hidden="true">
                     <img v-for="image in item.images.slice(0, 3)" :key="image.id" :src="image.dataUrl" alt="" />
@@ -2571,6 +2719,15 @@ function onPromptKeydown(event: KeyboardEvent) {
               </div>
             </div>
           </section>
+          <div v-if="contextAttachments.length" class="chat-context-attachments">
+            <div v-for="context in contextAttachments" :key="context.id" class="chat-context-attachment-chip" :title="'path' in context ? context.path : context.name">
+              <svg v-if="context.kind === 'folder'" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M2.5 4h4l1.25 1.5h5.75v7H2.5V4Z" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round"/></svg>
+              <svg v-else-if="context.kind === 'terminal'" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="m3.5 5 2.5 2.5L3.5 10M7.5 10h5" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></svg>
+              <svg v-else viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M4 1.75h5l3 3V14.25H4V1.75Z" stroke="currentColor" stroke-width="1.2"/><path d="M9 1.75v3h3" stroke="currentColor" stroke-width="1.2"/></svg>
+              <span><strong>{{ context.name }}</strong><small>{{ contextAttachmentDetail(context) }}</small></span>
+              <button type="button" title="移除上下文" aria-label="移除上下文" @click="removeContextAttachment(context.id)">×</button>
+            </div>
+          </div>
           <div v-if="imageAttachments.length" class="chat-image-attachments">
             <div
               v-for="image in imageAttachments"
@@ -2593,6 +2750,7 @@ function onPromptKeydown(event: KeyboardEvent) {
             </div>
           </div>
           <textarea
+            ref="promptInput"
             v-model="prompt"
             rows="3"
             :placeholder="composerPlaceholder"
@@ -2938,7 +3096,7 @@ function onPromptKeydown(event: KeyboardEvent) {
             @pointerdown="startTerminalResize"
           ></button>
           <div class="terminal-shell">
-            <TerminalView @close="closeTerminalPanel" />
+            <TerminalView @close="closeTerminalPanel" @add-context="addContextAttachment" />
           </div>
         </template>
       </section>

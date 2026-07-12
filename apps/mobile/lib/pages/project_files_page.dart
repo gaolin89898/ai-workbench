@@ -8,9 +8,14 @@ import '../state/workspace_scope.dart';
 import '../widgets/app_theme.dart';
 
 class ProjectFilesPage extends StatefulWidget {
-  const ProjectFilesPage({super.key, required this.project});
+  const ProjectFilesPage({
+    super.key,
+    required this.project,
+    this.selectContext = false,
+  });
 
   final WorkspaceProject project;
+  final bool selectContext;
 
   @override
   State<ProjectFilesPage> createState() => _ProjectFilesPageState();
@@ -69,19 +74,30 @@ class _ProjectFilesPageState extends State<ProjectFilesPage> {
     _load();
   }
 
-  void _openFile(WorkspaceFileEntry entry) {
+  Future<void> _openFile(WorkspaceFileEntry entry) async {
     final workspace = WorkspaceScope.of(context);
-    Navigator.of(context).push(
+    final selected = await Navigator.of(context).push<ChatContextAttachment>(
       MaterialPageRoute(
         builder: (_) => WorkspaceScope(
           controller: workspace,
           child: ProjectFilePreviewPage(
             project: widget.project,
             file: entry,
+            selectContext: widget.selectContext,
           ),
         ),
       ),
     );
+    if (mounted && selected != null) Navigator.of(context).pop(selected);
+  }
+
+  void _selectEntry(WorkspaceFileEntry entry) {
+    Navigator.of(context).pop(ChatContextAttachment(
+      id: 'mobile-path-${DateTime.now().microsecondsSinceEpoch}',
+      kind: entry.isDirectory ? 'folder' : 'file',
+      name: entry.name,
+      path: entry.path,
+    ));
   }
 
   @override
@@ -193,13 +209,27 @@ class _ProjectFilesPageState extends State<ProjectFilesPage> {
               entry.isDirectory ? '文件夹' : _fileSize(entry.size),
               style: const TextStyle(color: AppColors.muted, fontSize: 11),
             ),
-            trailing: const Icon(
-              Icons.chevron_right,
-              size: 18,
-              color: AppColors.muted,
+            trailing: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (widget.selectContext)
+                  IconButton(
+                    onPressed: () => _selectEntry(entry),
+                    icon: const Icon(Icons.add_link_rounded, size: 19),
+                    tooltip: '添加到输入框',
+                    visualDensity: VisualDensity.compact,
+                  ),
+                const Icon(
+                  Icons.chevron_right,
+                  size: 18,
+                  color: AppColors.muted,
+                ),
+              ],
             ),
             onTap: () =>
                 entry.isDirectory ? _openDirectory(entry) : _openFile(entry),
+            onLongPress:
+                widget.selectContext ? () => _selectEntry(entry) : null,
           );
         },
       ),
@@ -224,10 +254,12 @@ class ProjectFilePreviewPage extends StatefulWidget {
     super.key,
     required this.project,
     required this.file,
+    this.selectContext = false,
   });
 
   final WorkspaceProject project;
   final WorkspaceFileEntry file;
+  final bool selectContext;
 
   @override
   State<ProjectFilePreviewPage> createState() =>
@@ -238,6 +270,7 @@ class _ProjectFilePreviewPageState extends State<ProjectFilePreviewPage> {
   ProjectFilePreview? _preview;
   String? _error;
   bool _requested = false;
+  TextSelection _selection = const TextSelection.collapsed(offset: 0);
 
   @override
   void didChangeDependencies() {
@@ -252,6 +285,7 @@ class _ProjectFilePreviewPageState extends State<ProjectFilePreviewPage> {
     setState(() {
       _preview = null;
       _error = null;
+      _selection = const TextSelection.collapsed(offset: 0);
     });
     try {
       final preview = await WorkspaceScope.of(context)
@@ -260,6 +294,44 @@ class _ProjectFilePreviewPageState extends State<ProjectFilePreviewPage> {
     } catch (error) {
       if (mounted) setState(() => _error = _errorText(error));
     }
+  }
+
+  void _addContext() {
+    final preview = _preview;
+    if (preview == null) return;
+    final content = preview.content ?? '';
+    final hasCodeSelection = preview.previewKind == 'text' &&
+        !_selection.isCollapsed &&
+        _selection.start >= 0 &&
+        _selection.end <= content.length;
+    if (!hasCodeSelection) {
+      Navigator.of(context).pop(ChatContextAttachment(
+        id: 'mobile-path-${DateTime.now().microsecondsSinceEpoch}',
+        kind: 'file',
+        name: widget.file.name,
+        path: widget.file.path,
+      ));
+      return;
+    }
+    final selected = _selection.textInside(content);
+    final selectedContent = selected.length > 50000
+        ? selected.substring(0, 50000)
+        : selected;
+    final startLine =
+        '\n'.allMatches(content.substring(0, _selection.start)).length + 1;
+    final selectedEnd = _selection.start + selectedContent.length;
+    final endLine =
+        '\n'.allMatches(content.substring(0, selectedEnd)).length + 1;
+    Navigator.of(context).pop(ChatContextAttachment(
+      id: 'mobile-code-${DateTime.now().microsecondsSinceEpoch}',
+      kind: 'code',
+      name: widget.file.name,
+      path: widget.file.path,
+      content: selectedContent,
+      startLine: startLine,
+      endLine: endLine,
+      language: preview.language,
+    ));
   }
 
   @override
@@ -273,6 +345,12 @@ class _ProjectFilePreviewPageState extends State<ProjectFilePreviewPage> {
           overflow: TextOverflow.ellipsis,
         ),
         actions: [
+          if (widget.selectContext)
+            IconButton(
+              onPressed: _preview == null ? null : _addContext,
+              icon: const Icon(Icons.add_link_rounded),
+              tooltip: _selection.isCollapsed ? '引用文件路径' : '引用选中代码',
+            ),
           IconButton(
             onPressed: _preview == null && _error == null ? null : _load,
             icon: const Icon(Icons.refresh),
@@ -284,15 +362,25 @@ class _ProjectFilePreviewPageState extends State<ProjectFilePreviewPage> {
           ? _error == null
               ? const Center(child: CircularProgressIndicator())
               : _FilesError(message: _error!, onRetry: _load)
-          : _PreviewBody(preview: _preview!),
+          : _PreviewBody(
+              preview: _preview!,
+              onSelectionChanged: (selection) {
+                if (selection.isCollapsed || selection == _selection) return;
+                setState(() => _selection = selection);
+              },
+            ),
     );
   }
 }
 
 class _PreviewBody extends StatelessWidget {
-  const _PreviewBody({required this.preview});
+  const _PreviewBody({
+    required this.preview,
+    required this.onSelectionChanged,
+  });
 
   final ProjectFilePreview preview;
+  final ValueChanged<TextSelection> onSelectionChanged;
 
   @override
   Widget build(BuildContext context) {
@@ -327,6 +415,8 @@ class _PreviewBody extends StatelessWidget {
             scrollDirection: Axis.horizontal,
             child: SelectableText(
               preview.content ?? '',
+              onSelectionChanged: (selection, _) =>
+                  onSelectionChanged(selection),
               style: const TextStyle(
                 color: AppColors.ink,
                 fontSize: 12,

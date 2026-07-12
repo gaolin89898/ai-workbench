@@ -70,6 +70,7 @@ class RealtimeClient {
     String? reasoningEffort,
     String? mode,
     String? goal,
+    List<ChatContextAttachment> contexts = const [],
   }) {
     send({
       'type': 'ai.message.send',
@@ -82,6 +83,8 @@ class RealtimeClient {
         'reasoningEffort': reasoningEffort,
       if (mode != null && mode.isNotEmpty) 'mode': mode,
       if (goal != null && goal.isNotEmpty) 'goal': goal,
+      if (contexts.isNotEmpty)
+        'contexts': contexts.map((context) => context.toJson()).toList(),
     });
   }
 

@@ -4,7 +4,7 @@ import { Terminal } from "@xterm/xterm";
 import "@xterm/xterm/css/xterm.css";
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { useWorkspace } from "../composables/useWorkspace";
-import { desktopApi } from "../services/desktop";
+import { desktopApi, type ChatContextAttachment } from "../services/desktop";
 
 type ProjectTerminalTab = {
   id: string;
@@ -12,11 +12,15 @@ type ProjectTerminalTab = {
   primary: boolean;
 };
 
-const emit = defineEmits<{ close: [] }>();
+const emit = defineEmits<{
+  close: [];
+  addContext: [context: ChatContextAttachment];
+}>();
 const terminalIcon = new URL("../assets/icons/terminal.svg", import.meta.url).href;
 
 const ws = useWorkspace();
 const terminalHost = ref<HTMLDivElement | null>(null);
+const terminalFrame = ref<HTMLDivElement | null>(null);
 const activeProjectPath = computed(() => ws.activeAiSession.value?.summary?.trim() || ws.selectedProjectPath.value);
 const selectedProject = computed(() => ws.projects.value.find((project) => project.path === activeProjectPath.value) ?? null);
 const terminalTabs = ref<ProjectTerminalTab[]>([]);
@@ -93,6 +97,23 @@ function syncTerminalTheme() {
   if (terminal) terminal.options.theme = resolveTerminalTheme();
 }
 
+function addTerminalSelectionToContext(event: KeyboardEvent) {
+  if (!(event.ctrlKey || event.metaKey) || event.altKey || event.key.toLowerCase() !== "l") return;
+  if (!terminalFrame.value?.contains(document.activeElement)) return;
+  const content = terminal?.getSelection() ?? "";
+  if (!content.trim()) return;
+  event.preventDefault();
+  event.stopImmediatePropagation();
+  emit("addContext", {
+    id: `terminal-context-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`,
+    kind: "terminal",
+    name: activeTerminalTab.value?.label ?? "终端",
+    content,
+    terminalId: activeSessionId.value,
+  });
+  terminal?.clearSelection();
+}
+
 onMounted(() => {
   resetTerminalTabs();
   terminal = new Terminal({
@@ -123,6 +144,7 @@ onMounted(() => {
   syncTerminalBuffer(true);
   themeObserver = new MutationObserver(syncTerminalTheme);
   themeObserver.observe(document.documentElement, { attributes: true, attributeFilter: ["class"] });
+  window.addEventListener("keydown", addTerminalSelectionToContext);
 });
 
 onBeforeUnmount(() => {
@@ -130,6 +152,7 @@ onBeforeUnmount(() => {
   resizeObserver?.disconnect();
   themeObserver?.disconnect();
   themeObserver = null;
+  window.removeEventListener("keydown", addTerminalSelectionToContext);
   terminal?.dispose();
   terminal = null;
   fitAddon = null;
@@ -268,7 +291,7 @@ async function fitTerminal() {
 </script>
 
 <template>
-  <div class="terminal-frame" :class="{ 'no-session': terminalState === 'no-session' }">
+  <div ref="terminalFrame" class="terminal-frame" :class="{ 'no-session': terminalState === 'no-session' }">
     <header class="chat-bottom-terminal-header">
       <div class="terminal-header-main">
         <img :src="terminalIcon" alt="" aria-hidden="true" />

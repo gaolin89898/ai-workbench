@@ -67,7 +67,15 @@ const userMessageCopyText = computed(() => {
   const attachmentNames = (props.message.attachments ?? [])
     .map((attachment) => attachment.name.trim())
     .filter(Boolean);
-  return [text, imageNames.length ? `Images: ${imageNames.join(", ")}` : "", attachmentNames.length ? `Files: ${attachmentNames.join(", ")}` : ""]
+  const contextNames = (props.message.contexts ?? [])
+    .map((context) => context.kind === "file" || context.kind === "folder" ? context.path : context.name)
+    .filter(Boolean);
+  return [
+    text,
+    imageNames.length ? `Images: ${imageNames.join(", ")}` : "",
+    attachmentNames.length ? `Files: ${attachmentNames.join(", ")}` : "",
+    contextNames.length ? `Context: ${contextNames.join(", ")}` : "",
+  ]
     .filter(Boolean)
     .join("\n");
 });
@@ -1097,6 +1105,14 @@ function countCommandOutputSignals(text: string) {
         <div v-for="attachment in message.attachments" :key="attachment.id" class="chat-message-file" :title="attachment.path">
           <svg viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M4 1.75h5l3 3V14.25H4V1.75Z" stroke="currentColor" stroke-width="1.2"/><path d="M9 1.75v3h3" stroke="currentColor" stroke-width="1.2"/></svg>
           <span>{{ attachment.name }}</span>
+        </div>
+      </div>
+      <div v-if="message.contexts?.length" class="chat-message-files chat-message-contexts" :aria-label="`已附 ${message.contexts.length} 个上下文`">
+        <div v-for="context in message.contexts" :key="context.id" class="chat-message-file" :title="'path' in context ? context.path : context.name">
+          <svg v-if="context.kind === 'folder'" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M2.5 4h4l1.25 1.5h5.75v7H2.5V4Z" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round"/></svg>
+          <svg v-else-if="context.kind === 'terminal'" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="m3.5 5 2.5 2.5L3.5 10M7.5 10h5" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          <svg v-else viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M4 1.75h5l3 3V14.25H4V1.75Z" stroke="currentColor" stroke-width="1.2"/><path d="M9 1.75v3h3" stroke="currentColor" stroke-width="1.2"/></svg>
+          <span>{{ context.name }}</span>
         </div>
       </div>
       <div v-if="message.role === 'user'" class="chat-message-meta">

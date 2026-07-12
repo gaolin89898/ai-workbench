@@ -56,6 +56,10 @@ func TestParseAiMessageSendWithRunControls(t *testing.T) {
 	roundTrip(t, `{"type":"ai.message.send","deviceId":"11111111-1111-1111-1111-111111111111","aiSessionId":"22222222-2222-2222-2222-222222222222","content":"inspect","confirmedRisk":false,"model":"gpt-5.6","reasoningEffort":"high","mode":"plan","goal":"produce a migration plan"}`, "ai.message.send")
 }
 
+func TestParseAiMessageSendWithContexts(t *testing.T) {
+	roundTrip(t, `{"type":"ai.message.send","deviceId":"11111111-1111-1111-1111-111111111111","aiSessionId":"22222222-2222-2222-2222-222222222222","content":"inspect","confirmedRisk":false,"contexts":[{"id":"path-1","kind":"folder","name":"auth","path":"C:\\repo\\auth"},{"id":"code-1","kind":"code","name":"login.go","path":"C:\\repo\\auth\\login.go","content":"func login() {}","startLine":10,"endLine":10,"language":"go"}]}`, "ai.message.send")
+}
+
 func TestParseProjectFilesRequest(t *testing.T) {
 	roundTrip(t, `{"type":"project.files.request","deviceId":"11111111-1111-1111-1111-111111111111","projectId":"33333333-3333-3333-3333-333333333333","projectPath":"C:\\\\repo","directoryPath":null,"requestId":"44444444-4444-4444-4444-444444444444"}`, "project.files.request")
 }

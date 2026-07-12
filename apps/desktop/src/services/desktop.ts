@@ -289,6 +289,7 @@ export type ChatMessage = {
   segments?: ChatSegment[];
   images?: ChatImageAttachment[];
   attachments?: ChatFileAttachment[];
+  contexts?: ChatContextAttachment[];
 };
 
 export type CodexTraceItem = {
@@ -493,6 +494,7 @@ export type RunCodexChatRequest = {
   prompt: string;
   images?: ChatImageAttachment[];
   attachments?: ChatFileAttachment[];
+  contexts?: ChatContextAttachment[];
 } & CodexChatOptions;
 
 export type SteerCodexChatRequest = {
@@ -500,6 +502,7 @@ export type SteerCodexChatRequest = {
   prompt: string;
   images?: ChatImageAttachment[];
   attachments?: ChatFileAttachment[];
+  contexts?: ChatContextAttachment[];
   clientUserMessageId?: string | null;
 };
 
@@ -735,6 +738,8 @@ export type RunAiChatRequest = {
   projectPath: string;
   prompt: string;
   images?: ChatImageAttachment[];
+  attachments?: ChatFileAttachment[];
+  contexts?: ChatContextAttachment[];
 } & AiChatOptions;
 
 export type AcpConfigOption = {
@@ -763,6 +768,37 @@ export type ChatFileAttachment = {
   mimeType: string;
   size: number;
 };
+
+export type ChatContextAttachment =
+  | {
+      id: string;
+      kind: "file";
+      name: string;
+      path: string;
+    }
+  | {
+      id: string;
+      kind: "folder";
+      name: string;
+      path: string;
+    }
+  | {
+      id: string;
+      kind: "code";
+      name: string;
+      path: string;
+      content: string;
+      startLine?: number;
+      endLine?: number;
+      language?: string;
+    }
+  | {
+      id: string;
+      kind: "terminal";
+      name: string;
+      content: string;
+      terminalId?: string;
+    };
 
 export type ClipboardImage = Omit<ChatImageAttachment, "id">;
 

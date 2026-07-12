@@ -26,6 +26,7 @@ const providerMimoIcon = new URL("../assets/icons/provider-mimo.svg", import.met
 
 const chevronDownSvg = '<svg viewBox="0 0 20 20" aria-hidden="true"><path d="M5 7.5 10 12.5 15 7.5"/></svg>';
 const chevronRightSvg = '<svg viewBox="0 0 20 20" aria-hidden="true"><path d="M7.5 5 12.5 10 7.5 15"/></svg>';
+const CHAT_CONTEXT_MIME = "application/x-codehub-chat-context";
 
 const props = defineProps<{
   projects: WorkspaceProject[];
@@ -240,6 +241,32 @@ async function openProjectFileEntry(project: WorkspaceProject, file: WorkspaceFi
       },
     }));
   }, 80);
+}
+
+function projectFileContext(project: WorkspaceProject, file: WorkspaceFileEntry) {
+  return {
+    kind: file.kind === "directory" ? "folder" as const : "file" as const,
+    name: file.name,
+    path: file.path,
+    projectPath: project.path,
+  };
+}
+
+function startProjectFileDrag(event: DragEvent, project: WorkspaceProject, file: WorkspaceFileEntry) {
+  if (!event.dataTransfer) return;
+  const context = projectFileContext(project, file);
+  event.dataTransfer.effectAllowed = "copy";
+  event.dataTransfer.setData(CHAT_CONTEXT_MIME, JSON.stringify(context));
+  event.dataTransfer.setData("text/plain", context.path);
+}
+
+function addProjectFileContext(event: KeyboardEvent, project: WorkspaceProject, file: WorkspaceFileEntry) {
+  if (!(event.ctrlKey || event.metaKey) || event.altKey || event.key.toLowerCase() !== "l") return;
+  event.preventDefault();
+  event.stopPropagation();
+  window.dispatchEvent(new CustomEvent("desktop-add-chat-context", {
+    detail: projectFileContext(project, file),
+  }));
 }
 
 type VisibleFileNode = {
@@ -813,9 +840,12 @@ onBeforeUnmount(() => {
                   <button
                     class="tree-file-row"
                     type="button"
+                    draggable="true"
                     :class="{ directory: node.file.kind === 'directory', expanded: isDirectoryExpanded(node.file.path), empty: node.file.kind === 'directory' && isKnownEmptyDirectory(node.file.path) }"
-                    :title="node.file.path"
+                    :title="`${node.file.path}\n拖到输入框，或按 Ctrl+L 添加到上下文`"
                     @click.stop="openProjectFileEntry(project, node.file)"
+                    @dragstart.stop="startProjectFileDrag($event, project, node.file)"
+                    @keydown="addProjectFileContext($event, project, node.file)"
                   >
                     <span class="tree-file-indent" :style="{ width: `${node.depth * 16}px` }"></span>
                     <span class="tree-file-icon" :class="{ empty: node.file.kind === 'directory' && isKnownEmptyDirectory(node.file.path) }" v-html="fileTreeIcon(node.file)"></span>

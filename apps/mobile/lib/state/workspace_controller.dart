@@ -391,17 +391,18 @@ class WorkspaceController extends ChangeNotifier {
     String? reasoningEffort,
     String? mode,
     String? goal,
+    List<ChatContextAttachment> contexts = const [],
   }) {
     final device = selectedDevice;
     final trimmed = prompt.trim();
-    if (device == null || trimmed.isEmpty) return;
+    if (device == null || (trimmed.isEmpty && contexts.isEmpty)) return;
     if (session.archived) {
       _appendMessage(session.id,
           const ChatMessage(role: ChatRole.error, text: '这个会话已归档。请先恢复后再发送。'));
       return;
     }
     runStatusBySession[session.id] = '正在发送给 ${session.providerId}';
-    _beginLocalPromptTurn(session.id, trimmed);
+    _beginLocalPromptTurn(session.id, trimmed, contexts);
     _notifySafely();
     realtime.sendPrompt(
       device.id,
@@ -411,9 +412,13 @@ class WorkspaceController extends ChangeNotifier {
       reasoningEffort: reasoningEffort,
       mode: mode,
       goal: goal,
+      contexts: contexts,
     );
     // Best-effort: rename untitled sessions based on the first prompt.
-    _maybeRenameUntitledSession(session, trimmed);
+    _maybeRenameUntitledSession(
+      session,
+      trimmed.isEmpty ? '查看添加的上下文' : trimmed,
+    );
   }
 
   void stopPrompt(AiSessionMeta session) {
@@ -512,13 +517,21 @@ class WorkspaceController extends ChangeNotifier {
     ).whenComplete(() => _filePreviewRequests.remove(requestId));
   }
 
-  void _beginLocalPromptTurn(String sessionId, String prompt) {
+  void _beginLocalPromptTurn(
+    String sessionId,
+    String prompt,
+    List<ChatContextAttachment> contexts,
+  ) {
     final current = [
       ...(messagesBySession[sessionId] ?? const <ChatMessage>[])
     ];
     _currentAgentMessageStepIds.remove(sessionId);
     _lastCommittedAssistantTexts.remove(sessionId);
-    current.add(ChatMessage(role: ChatRole.user, text: prompt));
+    current.add(ChatMessage(
+      role: ChatRole.user,
+      text: prompt,
+      contexts: List<ChatContextAttachment>.from(contexts),
+    ));
     current.add(const ChatMessage(
       role: ChatRole.assistant,
       pending: true,
@@ -801,6 +814,7 @@ class WorkspaceController extends ChangeNotifier {
             text: history.content,
             pending: item['pending'] == true,
             segments: history.segments,
+            contexts: history.contexts,
           );
         }).toList();
         final traceJson = json['trace'];
@@ -1248,11 +1262,22 @@ class WorkspaceController extends ChangeNotifier {
     final text = message.role == ChatRole.assistant
         ? _assistantVisibleText(message)
         : (message.text ?? '').trim();
-    return '${message.role.name}\u0000$text';
+    final contexts = message.contexts
+        .map((context) => [
+              context.kind,
+              context.path ?? '',
+              context.startLine ?? '',
+              context.endLine ?? '',
+              context.content ?? '',
+            ].join(':'))
+        .join('\u0001');
+    return '${message.role.name}\u0000$text\u0000$contexts';
   }
 
   int _chatMessageScore(ChatMessage message) {
-    var score = (message.text ?? '').length + message.segments.length * 100;
+    var score = (message.text ?? '').length +
+        message.segments.length * 100 +
+        message.contexts.length * 25;
     if (message.segments.any((segment) => segment.stepId == 'final-summary')) {
       score += 10000;
     }

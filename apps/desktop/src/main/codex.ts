@@ -9,7 +9,8 @@ import * as fsSync from "node:fs";
 import * as fs from "node:fs/promises";
 import * as os from "node:os";
 import * as path from "node:path";
-import type { RunCodexChatRequest, SteerCodexChatRequest, ChatFileAttachment, ChatImageAttachment, ChatSegment, CodexApprovalDecision, CodexApprovalMode, CodexTraceSnapshot, CodexModelOption, CodexReasoningEffort, CodexReasoningEffortOption, CodexServiceTierOption } from "../services/desktop";
+import type { RunCodexChatRequest, SteerCodexChatRequest, ChatContextAttachment, ChatFileAttachment, ChatImageAttachment, ChatSegment, CodexApprovalDecision, CodexApprovalMode, CodexTraceSnapshot, CodexModelOption, CodexReasoningEffort, CodexReasoningEffortOption, CodexServiceTierOption } from "../services/desktop";
+import { formatChatContext } from "../shared/chat_context";
 import { reportTokenUsage } from "./sync";
 import { getLocalAiSession, resetLocalAiTrace, upsertLocalAiTrace } from "./db";
 import { codexTraceSnapshotToSegments, isCodexReconnectMessage, reduceCodexTraceSnapshot, type CodexRawTraceEvent } from "./codex_trace";
@@ -449,7 +450,12 @@ function extractThreadInfo(value: unknown, fallbackThreadId?: string | null): Co
   return { threadId, model };
 }
 
-function buildUserInput(text: string, images: ChatImageAttachment[] = [], attachments: ChatFileAttachment[] = []): Array<Record<string, unknown>> {
+function buildUserInput(
+  text: string,
+  images: ChatImageAttachment[] = [],
+  attachments: ChatFileAttachment[] = [],
+  contexts: ChatContextAttachment[] = [],
+): Array<Record<string, unknown>> {
   return [
     { type: "text", text, text_elements: [] },
     ...images.map((image) => ({
@@ -462,6 +468,17 @@ function buildUserInput(text: string, images: ChatImageAttachment[] = [], attach
       name: attachment.name,
       path: attachment.path,
     })),
+    ...contexts.map((context) => context.kind === "file" || context.kind === "folder"
+      ? {
+          type: "mention",
+          name: context.name,
+          path: context.path,
+        }
+      : {
+          type: "text",
+          text: formatChatContext(context),
+          text_elements: [],
+        }),
   ];
 }
 
@@ -1377,7 +1394,7 @@ function buildCodexTurnParams(
   const collaborationMode = buildCodexCollaborationMode(threadInfo, req, reasoningEffort);
   const turnParams: Record<string, unknown> = {
     threadId: threadInfo.threadId,
-    input: buildUserInput(req.prompt, images, attachments),
+    input: buildUserInput(req.prompt, images, attachments, req.contexts ?? []),
   };
   if (model) turnParams["model"] = model;
   if (reasoningEffort) turnParams["effort"] = reasoningEffort;
@@ -1643,13 +1660,14 @@ export async function steerCodexChat(req: SteerCodexChatRequest): Promise<boolea
   const prompt = req.prompt.trim();
   const images = req.images ?? [];
   const attachments = req.attachments ?? [];
+  const contexts = req.contexts ?? [];
   if (!session || session.closed || session.cancelled || !session.threadId || !session.currentTurnId) return false;
-  if (!prompt && images.length === 0 && attachments.length === 0) return false;
+  if (!prompt && images.length === 0 && attachments.length === 0 && contexts.length === 0) return false;
   const response = await sendRequestWithReconnectRetry(session, "turn/steer", {
     threadId: session.threadId,
     expectedTurnId: session.currentTurnId,
     clientUserMessageId: req.clientUserMessageId ?? null,
-    input: buildUserInput(prompt || "查看附件", images, attachments),
+    input: buildUserInput(prompt || "查看添加的上下文", images, attachments, contexts),
   });
   const responseTurnId = extractTurnId(response.result);
   if (responseTurnId) session.currentTurnId = responseTurnId;

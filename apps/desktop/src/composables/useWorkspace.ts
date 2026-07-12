@@ -1,6 +1,6 @@
 import { computed, ref, watch } from "vue";
 import router from "../router";
-import { desktopApi, type AiChatOptions, type AiChatOutputEvent, type AiProvider, type AiProviderTrace, type AiSession, type AiTraceUpdateEvent, type AppUpdateDownloadProgress, type AppUpdateInfo, type ChatFileAttachment, type ChatImageAttachment, type ChatMessage, type ChatSegment, type ProviderStatus, type TerminalSession, type ViewName, type WorkspaceProject } from "../services/desktop";
+import { desktopApi, type AiChatOptions, type AiChatOutputEvent, type AiProvider, type AiProviderTrace, type AiSession, type AiTraceUpdateEvent, type AppUpdateDownloadProgress, type AppUpdateInfo, type ChatContextAttachment, type ChatFileAttachment, type ChatImageAttachment, type ChatMessage, type ChatSegment, type ProviderStatus, type TerminalSession, type ViewName, type WorkspaceProject } from "../services/desktop";
 import { decodeAssistantMessageFromStorage, encodeAssistantMessageForStorage, extractAssistantText } from "../utils/chat";
 
 export type QueuedAiMessage = {
@@ -8,6 +8,7 @@ export type QueuedAiMessage = {
   text: string;
   images: ChatImageAttachment[];
   attachments: ChatFileAttachment[];
+  contexts: ChatContextAttachment[];
   options: AiChatOptions;
   createdAt: string;
 };
@@ -367,6 +368,10 @@ function plainChatAttachments(attachments: ChatFileAttachment[]): ChatFileAttach
   return attachments.map((attachment) => ({ ...attachment }));
 }
 
+function plainChatContexts(contexts: ChatContextAttachment[]): ChatContextAttachment[] {
+  return contexts.map((context) => ({ ...context }));
+}
+
 function queuedMessagesForSession(sessionId: string): QueuedAiMessage[] {
   return queuedAiMessagesBySessionId.value[sessionId] ?? [];
 }
@@ -382,6 +387,7 @@ function queuePrompt(
   prompt: string,
   images: ChatImageAttachment[] = [],
   attachments: ChatFileAttachment[] = [],
+  contexts: ChatContextAttachment[] = [],
   options: AiChatOptions = {},
   sessionId = activeAiSession.value?.id,
 ): string | null {
@@ -389,12 +395,14 @@ function queuePrompt(
   const text = prompt.trim();
   const plainImages = plainChatImages(images);
   const plainAttachments = plainChatAttachments(attachments);
-  if (!text && plainImages.length === 0 && plainAttachments.length === 0) return null;
+  const plainContexts = plainChatContexts(contexts);
+  if (!text && plainImages.length === 0 && plainAttachments.length === 0 && plainContexts.length === 0) return null;
   const item: QueuedAiMessage = {
     id: chatClientId("queue"),
     text,
     images: plainImages,
     attachments: plainAttachments,
+    contexts: plainContexts,
     options: { ...options },
     createdAt: new Date().toISOString(),
   };
@@ -409,7 +417,7 @@ function updateQueuedPrompt(itemId: string, text: string): boolean {
   const item = current.find((entry) => entry.id === itemId);
   if (!item) return false;
   const trimmed = text.trim();
-  if (!trimmed && item.images.length === 0 && (item.attachments?.length ?? 0) === 0) return false;
+  if (!trimmed && item.images.length === 0 && (item.attachments?.length ?? 0) === 0 && (item.contexts?.length ?? 0) === 0) return false;
   setQueuedMessagesForSession(sessionId, current.map((entry) => (
     entry.id === itemId ? { ...entry, text: trimmed } : entry
   )));
@@ -447,7 +455,7 @@ async function sendNextQueuedPrompt(sessionId = activeAiSession.value?.id): Prom
   queueDispatchingSessions.add(sessionId);
   setQueuedMessagesForSession(sessionId, queued.slice(1));
   try {
-    const started = await sendPrompt(next.text, next.images, next.attachments ?? [], next.options, sessionId);
+    const started = await sendPrompt(next.text, next.images, next.attachments ?? [], next.contexts ?? [], next.options, sessionId);
     if (!started) {
       setQueuedMessagesForSession(sessionId, [next, ...queuedMessagesForSession(sessionId)]);
     }
@@ -889,7 +897,7 @@ async function loadAiSessionHistorySnapshot(sessionId: string) {
   const messages = dedupeAdjacentChatMessages(history.map((message) => {
     if (message.role !== "assistant") {
       const decoded = decodeAssistantMessageFromStorage(message.content);
-      return { role: message.role, text: decoded.text, images: decoded.images, attachments: decoded.attachments, createdAt: message.createdAt };
+      return { role: message.role, text: decoded.text, images: decoded.images, attachments: decoded.attachments, contexts: decoded.contexts, createdAt: message.createdAt };
     }
     const decoded = decodeAssistantMessageFromStorage(message.content);
     return {
@@ -1096,6 +1104,12 @@ function chatMessageFingerprint(message: ChatMessage) {
       path: attachment.path,
       size: attachment.size,
     })),
+    contexts: (message.contexts ?? []).map((context) => ({
+      kind: context.kind,
+      name: context.name,
+      path: "path" in context ? context.path : undefined,
+      content: "content" in context ? context.content : undefined,
+    })),
   });
 }
 
@@ -1177,6 +1191,7 @@ async function steerActiveCodexChat(
   prompt: string,
   images: ChatImageAttachment[] = [],
   attachments: ChatFileAttachment[] = [],
+  contexts: ChatContextAttachment[] = [],
 ): Promise<boolean> {
   await initAiEventListeners();
   const session = activeAiSession.value;
@@ -1186,7 +1201,8 @@ async function steerActiveCodexChat(
   const text = prompt.trim();
   const plainImages = plainChatImages(images);
   const plainAttachments = plainChatAttachments(attachments);
-  if (!text && plainImages.length === 0 && plainAttachments.length === 0) return false;
+  const plainContexts = plainChatContexts(contexts);
+  if (!text && plainImages.length === 0 && plainAttachments.length === 0 && plainContexts.length === 0) return false;
 
   const clientId = chatClientId("steer-user");
   const userMessage: ChatMessage = {
@@ -1195,6 +1211,7 @@ async function steerActiveCodexChat(
     text,
     images: plainImages,
     attachments: plainAttachments,
+    contexts: plainContexts,
     createdAt: new Date().toISOString(),
   };
   const messages = [...chatMessagesForSession(session.id)];
@@ -1208,6 +1225,7 @@ async function steerActiveCodexChat(
       prompt: text,
       images: plainImages,
       attachments: plainAttachments,
+      contexts: plainContexts,
       clientUserMessageId: clientId,
     });
     if (!handled) throw new Error("当前 Codex Turn 尚未就绪");
@@ -1225,6 +1243,7 @@ async function steerActiveCodexChat(
     text: displayText,
     images: plainImages,
     attachments: plainAttachments,
+    contexts: plainContexts,
   })).catch((error) => {
     pushChatDebugEvent(`保存追加消息失败：${String(error)}`);
   });
@@ -1242,6 +1261,7 @@ async function sendPrompt(
   prompt: string,
   images: ChatImageAttachment[] = [],
   attachments: ChatFileAttachment[] = [],
+  contexts: ChatContextAttachment[] = [],
   chatOptions: AiChatOptions = {},
   targetSessionId?: string,
 ): Promise<boolean> {
@@ -1250,7 +1270,8 @@ async function sendPrompt(
   const trimmed = prompt.trim();
   const plainImages = plainChatImages(images);
   const plainAttachments = plainChatAttachments(attachments);
-  if (!trimmed && !plainImages.length && !plainAttachments.length) return false;
+  const plainContexts = plainChatContexts(contexts);
+  if (!trimmed && !plainImages.length && !plainAttachments.length && !plainContexts.length) return false;
   const targetSession = targetSessionId
     ? (activeAiSession.value?.id === targetSessionId ? activeAiSession.value : aiSessions.value.find((session) => session.id === targetSessionId))
     : activeAiSession.value;
@@ -1293,10 +1314,10 @@ async function sendPrompt(
     return false;
   }
   await saveAssistantDraft(sessionId);
-  const promptForSession = trimmed || (plainAttachments.length ? "查看附件" : `查看这 ${plainImages.length} 张图片`);
+  const promptForSession = trimmed || (plainContexts.length ? "查看添加的上下文" : plainAttachments.length ? "查看附件" : `查看这 ${plainImages.length} 张图片`);
   const displayText = trimmed;
   renameUntitledSession(sessionId, promptForSession);
-  appendChatMessageForSession(sessionId, { clientId: chatClientId("user"), role: "user", text: displayText, images: plainImages, attachments: plainAttachments });
+  appendChatMessageForSession(sessionId, { clientId: chatClientId("user"), role: "user", text: displayText, images: plainImages, attachments: plainAttachments, contexts: plainContexts });
   const assistantClientId = chatClientId("assistant");
   const assistantMessage: ChatMessage = {
     clientId: assistantClientId,
@@ -1336,6 +1357,7 @@ async function sendPrompt(
       text: displayText,
       images: plainImages,
       attachments: plainAttachments,
+      contexts: plainContexts,
     }));
     setChatRunState(sessionId, {
       active: true,
@@ -1352,6 +1374,7 @@ async function sendPrompt(
       prompt: promptForSession,
       images: plainImages,
       attachments: plainAttachments,
+      contexts: plainContexts,
       ...chatOptions,
     };
     void runChat(runRequest).then((providerSessionId) => {

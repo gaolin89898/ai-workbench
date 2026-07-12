@@ -8,6 +8,7 @@ import * as os from "node:os";
 import * as path from "node:path";
 import { query, type Options, type PermissionMode, type SDKMessage } from "@anthropic-ai/claude-agent-sdk";
 import type { RunAiChatRequest, CodexTraceSnapshot } from "../services/desktop";
+import { appendChatContexts } from "../shared/chat_context";
 import { reportTokenUsage } from "./sync";
 import { upsertLocalAiTrace } from "./db";
 import { codexTraceSnapshotToSegments } from "./codex_trace";
@@ -93,8 +94,9 @@ function imagePromptNote(imageCount: number | undefined): string {
 function buildClaudePrompt(req: RunAiChatRequest): string {
   const goal = req.claudeGoal?.trim();
   const imageNote = imagePromptNote(req.images?.length);
-  if (!goal) return `${req.prompt}${imageNote}`;
-  return `本轮目标：${goal}\n\n用户请求：\n${req.prompt}${imageNote}`;
+  const prompt = appendChatContexts(req.prompt, req.contexts);
+  if (!goal) return `${prompt}${imageNote}`;
+  return `本轮目标：${goal}\n\n用户请求：\n${prompt}${imageNote}`;
 }
 
 function isUserStopError(error: unknown): boolean {

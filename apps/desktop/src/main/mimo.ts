@@ -8,6 +8,7 @@ import * as os from "node:os";
 import * as path from "node:path";
 import type { CodexApprovalDecision } from "../services/desktop";
 import type { AcpConfigOption, AcpConfigOptions, CodexTraceItem, CodexTraceSnapshot, RunAiChatRequest } from "../services/desktop";
+import { appendChatContexts } from "../shared/chat_context";
 import { resetLocalAiTrace, upsertLocalAiTrace } from "./db";
 import { reportTokenUsage } from "./sync";
 import { codexTraceSnapshotToSegments } from "./codex_trace";
@@ -608,7 +609,8 @@ function buildMimoPrompt(req: RunAiChatRequest): string {
   const imageNote = req.images?.length
     ? `\n\n[用户还粘贴了 ${req.images.length} 张图片，当前 MiMo 接入暂未传输图片，请根据文字请求继续。]`
     : "";
-  const request = goal ? `本轮目标：${goal}\n\n用户请求：\n${req.prompt}` : req.prompt;
+  const prompt = appendChatContexts(req.prompt, req.contexts);
+  const request = goal ? `本轮目标：${goal}\n\n用户请求：\n${prompt}` : prompt;
   return `${mimoDesktopPrompt()}\n\n${request}${imageNote}`;
 }
 

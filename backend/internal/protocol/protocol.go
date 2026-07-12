@@ -206,16 +206,29 @@ type AiSessionCreate struct {
 }
 
 // AiMessageSend: "ai.message.send".
+type ChatContextAttachment struct {
+	Id         string  `json:"id"`
+	Kind       string  `json:"kind"`
+	Name       string  `json:"name"`
+	Path       *string `json:"path,omitempty"`
+	Content    *string `json:"content,omitempty"`
+	StartLine  *int    `json:"startLine,omitempty"`
+	EndLine    *int    `json:"endLine,omitempty"`
+	Language   *string `json:"language,omitempty"`
+	TerminalId *string `json:"terminalId,omitempty"`
+}
+
 type AiMessageSend struct {
 	BaseMessage
-	DeviceId        string `json:"deviceId"`
-	AiSessionId     string `json:"aiSessionId"`
-	Content         string `json:"content"`
-	ConfirmedRisk   bool   `json:"confirmedRisk"`
-	Model           string `json:"model,omitempty"`
-	ReasoningEffort string `json:"reasoningEffort,omitempty"`
-	Mode            string `json:"mode,omitempty"`
-	Goal            string `json:"goal,omitempty"`
+	DeviceId        string                  `json:"deviceId"`
+	AiSessionId     string                  `json:"aiSessionId"`
+	Content         string                  `json:"content"`
+	ConfirmedRisk   bool                    `json:"confirmedRisk"`
+	Model           string                  `json:"model,omitempty"`
+	ReasoningEffort string                  `json:"reasoningEffort,omitempty"`
+	Mode            string                  `json:"mode,omitempty"`
+	Goal            string                  `json:"goal,omitempty"`
+	Contexts        []ChatContextAttachment `json:"contexts,omitempty"`
 }
 
 type ProjectFilesRequest struct {

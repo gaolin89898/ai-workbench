@@ -13,6 +13,7 @@ import type {
   ClaudeReasoningEffort,
   CodexModelOption,
   CodexReasoningEffort,
+  ChatContextAttachment,
 } from "../services/desktop";
 import {
   listWorkspaceProjects,
@@ -199,11 +200,58 @@ function decodeHistoryContent(content: string): unknown {
   }
 }
 
-function encodeStructuredHistoryContent(content: string, segments: unknown[]): string {
+function encodeStructuredHistoryContent(
+  content: string,
+  segments: unknown[],
+  contexts: ChatContextAttachment[] = [],
+): string {
   return `${STRUCTURED_MESSAGE_PREFIX}${JSON.stringify({
     text: content,
     segments,
+    contexts,
   })}`;
+}
+
+function normalizeMobileChatContexts(value: unknown): ChatContextAttachment[] {
+  if (!Array.isArray(value)) return [];
+  const contexts: ChatContextAttachment[] = [];
+  for (const item of value.slice(0, 12)) {
+    if (!item || typeof item !== "object") continue;
+    const record = item as Record<string, unknown>;
+    const id = typeof record.id === "string" && record.id.trim() ? record.id.trim() : randomUUID();
+    const name = typeof record.name === "string" ? record.name.trim() : "";
+    const pathValue = typeof record.path === "string" ? record.path.trim() : "";
+    if ((record.kind === "file" || record.kind === "folder") && name && pathValue) {
+      contexts.push({ id, kind: record.kind, name, path: pathValue });
+      continue;
+    }
+    const contentValue = typeof record.content === "string" ? record.content.slice(0, 50_000) : "";
+    if (record.kind === "code" && name && pathValue && contentValue.trim()) {
+      contexts.push({
+        id,
+        kind: "code",
+        name,
+        path: pathValue,
+        content: contentValue,
+        startLine: typeof record.startLine === "number" ? Math.max(1, Math.trunc(record.startLine)) : undefined,
+        endLine: typeof record.endLine === "number" ? Math.max(1, Math.trunc(record.endLine)) : undefined,
+        language: typeof record.language === "string" ? record.language : undefined,
+      });
+    }
+  }
+  return contexts;
+}
+
+function chatContextIsInsideProject(context: ChatContextAttachment, projectPath: string): boolean {
+  if (!("path" in context)) return true;
+  try {
+    const projectRoot = fs.realpathSync(projectPath);
+    const contextPath = fs.realpathSync(context.path);
+    const relative = path.relative(projectRoot, contextPath);
+    return relative === "" || (!relative.startsWith(`..${path.sep}`) && relative !== ".." && !path.isAbsolute(relative));
+  } catch {
+    return false;
+  }
 }
 
 function listSyncableAiSessions() {
@@ -1248,6 +1296,7 @@ class DesktopCloudSync {
       const reasoningEffort = typeof msg.reasoningEffort === "string" ? msg.reasoningEffort.trim() : "";
       const runMode = msg.mode === "plan" ? "plan" : "default";
       const goal = typeof msg.goal === "string" && msg.goal.trim() ? msg.goal.trim() : null;
+      const incomingContexts = normalizeMobileChatContexts(msg.contexts);
 
       const risk = assessCommandRisk(content);
       if (risk.risky && !confirmedRisk) {
@@ -1266,11 +1315,6 @@ class DesktopCloudSync {
         return;
       }
 
-      this.beginAiTurn(aiSessionId);
-      appendLocalAiMessage(aiSessionId, "user", content);
-      this.notify("ai-history-changed", { aiSessionId });
-      await this.pushAiHistory(aiSessionId);
-
       const session = getLocalAiSession(aiSessionId);
       if (!session) {
         this.send({
@@ -1284,6 +1328,22 @@ class DesktopCloudSync {
       }
 
       const projectPath = this.sessionProjectPaths.get(aiSessionId) ?? session.summary ?? os.homedir();
+      const contexts = incomingContexts.filter((context) => chatContextIsInsideProject(context, projectPath));
+      const prompt = content.trim() || (contexts.length ? "查看添加的上下文" : "");
+      if (!prompt) {
+        this.send({
+          type: "ai.message.done",
+          deviceId,
+          aiSessionId,
+          status: "failed",
+          summary: "message has no valid content or project context",
+        });
+        return;
+      }
+      this.beginAiTurn(aiSessionId);
+      appendLocalAiMessage(aiSessionId, "user", encodeStructuredHistoryContent(content, [], contexts));
+      this.notify("ai-history-changed", { aiSessionId });
+      await this.pushAiHistory(aiSessionId);
       const aiChatSender = this.createAiChatSender(deviceId);
       if (!isTraceProvider(session.providerId)) {
         aiChatSender.send("ai-chat-output", {
@@ -1306,7 +1366,8 @@ class DesktopCloudSync {
             {
               aiSessionId,
               projectPath,
-              prompt: content,
+              prompt,
+              contexts,
               codexModel: selectedModel || null,
               codexReasoningEffort: codexReasoningEffort(reasoningEffort),
               codexMode: runMode,
@@ -1320,7 +1381,8 @@ class DesktopCloudSync {
             {
               aiSessionId,
               projectPath,
-              prompt: content,
+              prompt,
+              contexts,
               opencodeModel: selectedModel || null,
               opencodeEffort: reasoningEffort || null,
               opencodeMode: runMode === "plan" ? "plan" : "build",
@@ -1334,7 +1396,8 @@ class DesktopCloudSync {
             {
               aiSessionId,
               projectPath,
-              prompt: content,
+              prompt,
+              contexts,
               mimoModel: selectedModel || null,
               mimoVariant: reasoningEffort || null,
               mimoAgent: runMode === "plan" ? "plan" : "build",
@@ -1348,7 +1411,8 @@ class DesktopCloudSync {
             {
               aiSessionId,
               projectPath,
-              prompt: content,
+              prompt,
+              contexts,
               claudeModel: selectedModel || null,
               claudeReasoningEffort: claudeReasoningEffort(reasoningEffort),
               claudeMode: runMode,

@@ -2467,7 +2467,8 @@ h2 {
 }
 
 .codex-prompt-box .chat-image-attachments + textarea,
-.codex-prompt-box .chat-file-attachments + textarea {
+.codex-prompt-box .chat-file-attachments + textarea,
+.codex-prompt-box .chat-context-attachments + textarea {
   min-height: 68px;
 }
 
@@ -3180,7 +3181,8 @@ h2 {
   box-shadow: 0 10px 24px rgba(15, 23, 42, 0.12);
 }
 
-.chat-file-attachments {
+.chat-file-attachments,
+.chat-context-attachments {
   display: flex;
   flex-wrap: wrap;
   gap: 7px;
@@ -3188,12 +3190,14 @@ h2 {
   padding-right: 48px;
 }
 
-.chat-file-attachments.start-attachments {
+.chat-file-attachments.start-attachments,
+.chat-context-attachments.start-attachments {
   margin-right: 44px;
   padding-right: 0;
 }
 
-.chat-file-attachment-chip {
+.chat-file-attachment-chip,
+.chat-context-attachment-chip {
   display: grid;
   max-width: 260px;
   grid-template-columns: 24px minmax(0, 1fr) 22px;
@@ -3205,37 +3209,44 @@ h2 {
   padding: 6px 7px;
 }
 
-.chat-file-attachment-chip > svg {
+.chat-file-attachment-chip > svg,
+.chat-context-attachment-chip > svg {
   width: 20px;
   height: 20px;
   color: var(--color-primary);
 }
 
-.chat-file-attachment-chip > span {
+.chat-file-attachment-chip > span,
+.chat-context-attachment-chip > span {
   display: grid;
   min-width: 0;
   gap: 1px;
 }
 
 .chat-file-attachment-chip strong,
-.chat-file-attachment-chip small {
+.chat-file-attachment-chip small,
+.chat-context-attachment-chip strong,
+.chat-context-attachment-chip small {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.chat-file-attachment-chip strong {
+.chat-file-attachment-chip strong,
+.chat-context-attachment-chip strong {
   color: var(--color-text-body);
   font-size: 11px;
   font-weight: 650;
 }
 
-.chat-file-attachment-chip small {
+.chat-file-attachment-chip small,
+.chat-context-attachment-chip small {
   color: var(--color-text-muted);
   font-size: 9px;
 }
 
-.chat-file-attachment-chip > button {
+.chat-file-attachment-chip > button,
+.chat-context-attachment-chip > button {
   width: 22px;
   height: 22px;
   border: 0;
@@ -3246,7 +3257,8 @@ h2 {
   font-size: 16px;
 }
 
-.chat-file-attachment-chip > button:hover {
+.chat-file-attachment-chip > button:hover,
+.chat-context-attachment-chip > button:hover {
   background: var(--state-error-bg);
   color: var(--state-error);
 }
@@ -6687,6 +6699,13 @@ body.chat-terminal-resizing {
   box-shadow: 0 18px 48px rgb(15 23 42 / 11%);
 }
 
+.codex-prompt-box.context-drop-active,
+.chat-composer.context-drop-active {
+  border-color: var(--color-primary);
+  background: var(--color-primary-soft);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-primary) 16%, transparent), 0 18px 48px rgb(15 23 42 / 11%);
+}
+
 .chat-followup-queue {
   margin: -2px 0 10px;
   border-bottom: 1px solid var(--color-border-subtle);
@@ -6972,6 +6991,7 @@ body.chat-terminal-resizing {
 
 .chat-composer.has-approval-cover > .chat-image-attachments,
 .chat-composer.has-approval-cover > .chat-file-attachments,
+.chat-composer.has-approval-cover > .chat-context-attachments,
 .chat-composer.has-approval-cover > .chat-followup-queue,
 .chat-composer.has-approval-cover > .chat-composer-divider,
 .chat-composer.has-approval-cover > .chat-composer-toolbar,

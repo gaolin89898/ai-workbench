@@ -21,6 +21,7 @@ class _ChatPageState extends State<ChatPage> {
   static const _autoScrollBottomThreshold = 96.0;
   final _prompt = TextEditingController();
   final _scroll = ScrollController();
+  final List<ChatContextAttachment> _contexts = [];
   String? _historyRequestedFor;
   WorkspaceController? _workspace;
 
@@ -226,8 +227,15 @@ class _ChatPageState extends State<ChatPage> {
                     ws.selectedRunSettings?.forProvider(session.providerId),
                 isRunning: isRunning,
                 pendingApproval: pendingApproval,
+                contexts: _contexts,
                 onSend: _send,
                 onStop: () => _stop(session),
+                onOpenProjectFiles: project == null
+                    ? null
+                    : () => _openProjectFiles(context, ws, project),
+                onRemoveContext: (id) {
+                  setState(() => _contexts.removeWhere((item) => item.id == id));
+                },
                 onRunSettingsChanged: (model, reasoningEffort) {
                   ws.updateRunSettings(
                     session.providerId,
@@ -261,7 +269,8 @@ class _ChatPageState extends State<ChatPage> {
 
   String _messageRenderKey(ChatMessage message, int index) {
     final textHash = message.text?.hashCode ?? 0;
-    return '$index:${message.role.name}:${message.pending}:$textHash:${message.segments.length}';
+    return '$index:${message.role.name}:${message.pending}:$textHash:'
+        '${message.segments.length}:${message.contexts.length}';
   }
 
   bool _isRunningStatus(String status) {
@@ -286,27 +295,39 @@ class _ChatPageState extends State<ChatPage> {
       reasoningEffort: reasoningEffort,
       mode: mode,
       goal: goal,
+      contexts: List<ChatContextAttachment>.from(_contexts),
     );
     _prompt.clear();
+    setState(() => _contexts.clear());
   }
 
   void _stop(AiSessionMeta session) {
     WorkspaceScope.of(context).stopPrompt(session);
   }
 
-  void _openProjectFiles(
+  Future<void> _openProjectFiles(
     BuildContext context,
     WorkspaceController workspace,
     WorkspaceProject project,
-  ) {
-    Navigator.of(context).push(
+  ) async {
+    final selected = await Navigator.of(context).push<ChatContextAttachment>(
       MaterialPageRoute(
         builder: (_) => WorkspaceScope(
           controller: workspace,
-          child: ProjectFilesPage(project: project),
+          child: ProjectFilesPage(project: project, selectContext: true),
         ),
       ),
     );
+    if (!mounted || selected == null) return;
+    final duplicate = _contexts.any((item) {
+      if (item.kind != selected.kind) return false;
+      if (item.isPath) return item.path == selected.path;
+      return item.path == selected.path &&
+          item.startLine == selected.startLine &&
+          item.endLine == selected.endLine &&
+          item.content == selected.content;
+    });
+    if (!duplicate) setState(() => _contexts.add(selected));
   }
 
   void _showRename(
@@ -356,8 +377,11 @@ class _ChatComposer extends StatelessWidget {
     required this.runSettings,
     required this.isRunning,
     required this.pendingApproval,
+    required this.contexts,
     required this.onSend,
     required this.onStop,
+    required this.onOpenProjectFiles,
+    required this.onRemoveContext,
     required this.onRunSettingsChanged,
     required this.onApproval,
   });
@@ -368,6 +392,7 @@ class _ChatComposer extends StatelessWidget {
   final AiRunProviderSettings? runSettings;
   final bool isRunning;
   final ChatSegment? pendingApproval;
+  final List<ChatContextAttachment> contexts;
   final void Function({
     String? model,
     String? reasoningEffort,
@@ -375,6 +400,8 @@ class _ChatComposer extends StatelessWidget {
     String? goal,
   }) onSend;
   final VoidCallback onStop;
+  final VoidCallback? onOpenProjectFiles;
+  final ValueChanged<String> onRemoveContext;
   final void Function(String? model, String? reasoningEffort)
       onRunSettingsChanged;
   final void Function(ChatSegment segment, String decision) onApproval;
@@ -402,8 +429,11 @@ class _ChatComposer extends StatelessWidget {
                 providerId: providerId,
                 runSettings: runSettings,
                 isRunning: isRunning,
+                contexts: contexts,
                 onSend: onSend,
                 onStop: onStop,
+                onOpenProjectFiles: onOpenProjectFiles,
+                onRemoveContext: onRemoveContext,
                 onRunSettingsChanged: onRunSettingsChanged,
               )
             : Column(
@@ -429,8 +459,11 @@ class _ComposerInput extends StatefulWidget {
     required this.providerId,
     required this.runSettings,
     required this.isRunning,
+    required this.contexts,
     required this.onSend,
     required this.onStop,
+    required this.onOpenProjectFiles,
+    required this.onRemoveContext,
     required this.onRunSettingsChanged,
   });
 
@@ -439,6 +472,7 @@ class _ComposerInput extends StatefulWidget {
   final String providerId;
   final AiRunProviderSettings? runSettings;
   final bool isRunning;
+  final List<ChatContextAttachment> contexts;
   final void Function({
     String? model,
     String? reasoningEffort,
@@ -446,6 +480,8 @@ class _ComposerInput extends StatefulWidget {
     String? goal,
   }) onSend;
   final VoidCallback onStop;
+  final VoidCallback? onOpenProjectFiles;
+  final ValueChanged<String> onRemoveContext;
   final void Function(String? model, String? reasoningEffort)
       onRunSettingsChanged;
 
@@ -535,6 +571,23 @@ class _ComposerInputState extends State<_ComposerInput> {
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
+        if (widget.contexts.isNotEmpty) ...[
+          Align(
+            alignment: Alignment.centerLeft,
+            child: Wrap(
+              spacing: 6,
+              runSpacing: 6,
+              children: [
+                for (final context in widget.contexts)
+                  _ContextChip(
+                    context: context,
+                    onDeleted: () => widget.onRemoveContext(context.id),
+                  ),
+              ],
+            ),
+          ),
+          const SizedBox(height: AppSpacing.sm),
+        ],
         Container(
           decoration: BoxDecoration(
             color: AppColors.surfaceMuted,
@@ -579,6 +632,16 @@ class _ComposerInputState extends State<_ComposerInput> {
                 scrollDirection: Axis.horizontal,
                 child: Row(
                   children: [
+                    if (widget.onOpenProjectFiles != null) ...[
+                      _ComposerIconButton(
+                        icon: Icons.add_link_rounded,
+                        tooltip: '添加项目上下文',
+                        onPressed: widget.archived
+                            ? null
+                            : widget.onOpenProjectFiles,
+                      ),
+                      const SizedBox(width: 6),
+                    ],
                     _ComposerIconButton(
                       icon: _goal.isEmpty
                           ? Icons.tune_outlined
@@ -613,7 +676,9 @@ class _ComposerInputState extends State<_ComposerInput> {
               valueListenable: widget.controller,
               builder: (context, value, _) {
                 final canSend = !widget.archived &&
-                    (widget.isRunning || value.text.trim().isNotEmpty);
+                    (widget.isRunning ||
+                        value.text.trim().isNotEmpty ||
+                        widget.contexts.isNotEmpty);
                 return _ComposerSendButton(
                   enabled: canSend,
                   isRunning: widget.isRunning,
@@ -1017,6 +1082,51 @@ class _SheetTileShell extends StatelessWidget {
   }
 }
 
+class _ContextChip extends StatelessWidget {
+  const _ContextChip({required this.context, required this.onDeleted});
+
+  final ChatContextAttachment context;
+  final VoidCallback onDeleted;
+
+  @override
+  Widget build(BuildContext context) {
+    final icon = switch (this.context.kind) {
+      'folder' => Icons.folder_outlined,
+      'code' => Icons.code_rounded,
+      'terminal' => Icons.terminal_rounded,
+      _ => Icons.insert_drive_file_outlined,
+    };
+    return Tooltip(
+      message: this.context.path ?? this.context.name,
+      child: InputChip(
+        avatar: Icon(icon, size: 16, color: AppColors.primary),
+        label: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 148),
+          child: Text(
+            this.context.name,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+        ),
+        onDeleted: onDeleted,
+        deleteIcon: const Icon(Icons.close_rounded, size: 16),
+        visualDensity: VisualDensity.compact,
+        materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+        side: const BorderSide(color: AppColors.border),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(AppRadius.sm),
+        ),
+        backgroundColor: AppColors.surfaceMuted,
+        labelStyle: const TextStyle(
+          color: AppColors.ink,
+          fontSize: 11,
+          fontWeight: FontWeight.w600,
+        ),
+      ),
+    );
+  }
+}
+
 class _ComposerIconButton extends StatelessWidget {
   const _ComposerIconButton({
     required this.icon,
@@ -1396,14 +1506,73 @@ class _UserBubble extends StatelessWidget {
             ),
             boxShadow: AppShadows.card,
           ),
-          child: SelectableText(
-            message.text ?? '',
-            style: const TextStyle(
-              color: AppColors.inverse,
-              fontSize: 13,
-              fontWeight: FontWeight.w400,
-              height: 1.55,
-            ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if ((message.text ?? '').trim().isNotEmpty)
+                SelectableText(
+                  message.text!,
+                  style: const TextStyle(
+                    color: AppColors.inverse,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w400,
+                    height: 1.55,
+                  ),
+                ),
+              if ((message.text ?? '').trim().isNotEmpty &&
+                  message.contexts.isNotEmpty)
+                const SizedBox(height: 8),
+              if (message.contexts.isNotEmpty)
+                Wrap(
+                  spacing: 6,
+                  runSpacing: 6,
+                  children: [
+                    for (final context in message.contexts)
+                      Container(
+                        constraints: const BoxConstraints(maxWidth: 220),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 5,
+                        ),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withValues(alpha: 0.14),
+                          borderRadius: BorderRadius.circular(AppRadius.sm),
+                          border: Border.all(
+                            color: Colors.white.withValues(alpha: 0.24),
+                          ),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              context.kind == 'folder'
+                                  ? Icons.folder_outlined
+                                  : context.kind == 'code'
+                                      ? Icons.code_rounded
+                                      : Icons.insert_drive_file_outlined,
+                              size: 14,
+                              color: AppColors.inverse,
+                            ),
+                            const SizedBox(width: 5),
+                            Flexible(
+                              child: Text(
+                                context.name,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(
+                                  color: AppColors.inverse,
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                  ],
+                ),
+            ],
           ),
         ),
       ),

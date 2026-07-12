@@ -132,11 +132,29 @@
   "model": "gpt-5.6",
   "reasoningEffort": "high",
   "mode": "plan",
-  "goal": "给出可执行的登录流程改造方案"
+  "goal": "给出可执行的登录流程改造方案",
+  "contexts": [
+    {
+      "id": "mobile-path-1",
+      "kind": "folder",
+      "name": "auth",
+      "path": "C:/workspace/app/src/auth"
+    },
+    {
+      "id": "mobile-code-1",
+      "kind": "code",
+      "name": "login.ts",
+      "path": "C:/workspace/app/src/auth/login.ts",
+      "content": "export async function login() { ... }",
+      "startLine": 18,
+      "endLine": 26,
+      "language": "typescript"
+    }
+  ]
 }
 ```
 
-`model`、`reasoningEffort`、`mode` 和 `goal` 均为可选字段。`mode` 使用 `default` 或 `plan`，桌面端会映射到各 Provider 的构建/规划模式。
+`model`、`reasoningEffort`、`mode`、`goal` 和 `contexts` 均为可选字段。`mode` 使用 `default` 或 `plan`，桌面端会映射到各 Provider 的构建/规划模式。文件和文件夹上下文只发送路径；代码上下文发送路径、行号和用户选中的文本，单条消息最多接收 12 个上下文。
 
 桌面端收到后负责：
 

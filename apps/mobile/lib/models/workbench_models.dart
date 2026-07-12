@@ -352,6 +352,57 @@ class ProjectFilePreview {
       );
 }
 
+class ChatContextAttachment {
+  const ChatContextAttachment({
+    required this.id,
+    required this.kind,
+    required this.name,
+    this.path,
+    this.content,
+    this.startLine,
+    this.endLine,
+    this.language,
+    this.terminalId,
+  });
+
+  final String id;
+  final String kind;
+  final String name;
+  final String? path;
+  final String? content;
+  final int? startLine;
+  final int? endLine;
+  final String? language;
+  final String? terminalId;
+
+  bool get isPath => kind == 'file' || kind == 'folder';
+
+  factory ChatContextAttachment.fromJson(Map<String, dynamic> json) =>
+      ChatContextAttachment(
+        id: json['id'] as String? ?? '',
+        kind: json['kind'] as String? ?? 'file',
+        name: json['name'] as String? ?? '',
+        path: json['path'] as String?,
+        content: json['content'] as String?,
+        startLine: (json['startLine'] as num?)?.toInt(),
+        endLine: (json['endLine'] as num?)?.toInt(),
+        language: json['language'] as String?,
+        terminalId: json['terminalId'] as String?,
+      );
+
+  Map<String, dynamic> toJson() => {
+        'id': id,
+        'kind': kind,
+        'name': name,
+        if (path != null) 'path': path,
+        if (content != null) 'content': content,
+        if (startLine != null) 'startLine': startLine,
+        if (endLine != null) 'endLine': endLine,
+        if (language != null) 'language': language,
+        if (terminalId != null) 'terminalId': terminalId,
+      };
+}
+
 class AiSessionMeta {
   const AiSessionMeta({
     required this.id,
@@ -402,6 +453,7 @@ class AiHistoryMessage {
     required this.content,
     required this.createdAt,
     this.segments = const [],
+    this.contexts = const [],
   });
 
   static const _structuredMessagePrefix = '__AI_WORKBENCH_MESSAGE_V1__';
@@ -410,6 +462,7 @@ class AiHistoryMessage {
   final String content;
   final String createdAt;
   final List<ChatSegment> segments;
+  final List<ChatContextAttachment> contexts;
 
   factory AiHistoryMessage.fromJson(Map<String, dynamic> json) {
     final rawContent = json['content'];
@@ -420,6 +473,7 @@ class AiHistoryMessage {
         content: structuredContent.text,
         createdAt: json['createdAt'] as String,
         segments: structuredContent.segments,
+        contexts: structuredContent.contexts,
       );
     }
     return AiHistoryMessage(
@@ -445,6 +499,10 @@ class AiHistoryMessage {
             .whereType<Map<String, dynamic>>()
             .map(ChatSegment.fromJson)
             .toList(),
+        contexts: ((content['contexts'] as List<dynamic>?) ?? const [])
+            .whereType<Map<String, dynamic>>()
+            .map(ChatContextAttachment.fromJson)
+            .toList(),
       );
     } catch (_) {
       return null;
@@ -453,10 +511,15 @@ class AiHistoryMessage {
 }
 
 class _StructuredHistoryContent {
-  const _StructuredHistoryContent({required this.text, required this.segments});
+  const _StructuredHistoryContent({
+    required this.text,
+    required this.segments,
+    required this.contexts,
+  });
 
   final String text;
   final List<ChatSegment> segments;
+  final List<ChatContextAttachment> contexts;
 }
 
 class ChatSegment {
@@ -607,24 +670,28 @@ class ChatMessage {
     this.text,
     this.pending = false,
     this.segments = const [],
+    this.contexts = const [],
   });
 
   final ChatRole role;
   final String? text;
   final bool pending;
   final List<ChatSegment> segments;
+  final List<ChatContextAttachment> contexts;
 
   ChatMessage copyWith({
     ChatRole? role,
     String? text,
     bool? pending,
     List<ChatSegment>? segments,
+    List<ChatContextAttachment>? contexts,
   }) =>
       ChatMessage(
         role: role ?? this.role,
         text: text ?? this.text,
         pending: pending ?? this.pending,
         segments: segments ?? this.segments,
+        contexts: contexts ?? this.contexts,
       );
 }
 

@@ -9,6 +9,7 @@ import * as fsSync from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import type { RunAiChatRequest, CodexTraceSnapshot, CodexTraceItem, AcpConfigOption, AcpConfigOptions } from "../services/desktop";
+import { appendChatContexts } from "../shared/chat_context";
 import { reportTokenUsage } from "./sync";
 import { upsertLocalAiTrace, resetLocalAiTrace } from "./db";
 import { codexTraceSnapshotToSegments } from "./codex_trace";
@@ -522,7 +523,8 @@ function buildAcpPrompt(req: RunAiChatRequest): string {
     ? `\n\n[用户还粘贴了 ${req.images.length} 张图片，请根据文字描述继续]`
     : "";
   const systemHint = acpDesktopPrompt();
-  const userGoal = goal ? `本轮目标：${goal}\n\n用户请求：\n${req.prompt}` : req.prompt;
+  const prompt = appendChatContexts(req.prompt, req.contexts);
+  const userGoal = goal ? `本轮目标：${goal}\n\n用户请求：\n${prompt}` : prompt;
   return `${systemHint}\n\n${userGoal}${imageNote}`;
 }
 
