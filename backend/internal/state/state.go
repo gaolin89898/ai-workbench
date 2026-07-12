@@ -99,26 +99,28 @@ func (s *AppState) AddMobile(userID, deviceID uuid.UUID, conn *websocket.Conn) *
 	return c
 }
 
-// RemoveMobile removes a mobile connection and signals its write goroutine to
-// exit. Mirrors AppState::remove_mobile in state.rs, including dropping the
-// per-user map when it becomes empty.
-func (s *AppState) RemoveMobile(userID, deviceID uuid.UUID) {
+// RemoveMobileIfCurrent removes a mobile connection only when conn is still
+// the connection registered for the device. A replacement connection may be
+// registered before the old read loop returns, so an unconditional removal
+// would otherwise disconnect the replacement.
+func (s *AppState) RemoveMobileIfCurrent(userID, deviceID uuid.UUID, conn *websocket.Conn) bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
 	userMobiles := s.Mobiles[userID]
 	if userMobiles == nil {
-		return
+		return false
 	}
 	c, ok := userMobiles[deviceID]
-	if !ok {
-		return
+	if !ok || c.Conn != conn {
+		return false
 	}
 	delete(userMobiles, deviceID)
 	if len(userMobiles) == 0 {
 		delete(s.Mobiles, userID)
 	}
 	c.close()
+	return true
 }
 
 // GetMobilesByUser returns a snapshot of all mobile connections for a user.
@@ -161,18 +163,20 @@ func (s *AppState) AddDesktop(userID, deviceID uuid.UUID, conn *websocket.Conn) 
 	return c
 }
 
-// RemoveDesktop removes a desktop connection and signals its write goroutine
-// to exit.
-func (s *AppState) RemoveDesktop(deviceID uuid.UUID) {
+// RemoveDesktopIfCurrent removes a desktop connection only when conn is still
+// the connection registered for the device. See RemoveMobileIfCurrent for why
+// this identity check is required.
+func (s *AppState) RemoveDesktopIfCurrent(deviceID uuid.UUID, conn *websocket.Conn) bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
 	c, ok := s.Desktops[deviceID]
-	if !ok {
-		return
+	if !ok || c.Conn != conn {
+		return false
 	}
 	delete(s.Desktops, deviceID)
 	c.close()
+	return true
 }
 
 // GetDesktop returns the desktop connection for deviceID, or nil.

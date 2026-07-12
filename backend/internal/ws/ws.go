@@ -118,9 +118,9 @@ func (h *Handler) readLoop(conn *websocket.Conn, userID, deviceID uuid.UUID, isD
 	activated := false
 	defer func() {
 		if isDesktop {
-			h.cleanupDesktop(userID, deviceID, activated)
+			h.cleanupDesktop(userID, deviceID, conn, activated)
 		} else {
-			h.State.RemoveMobile(userID, deviceID)
+			h.State.RemoveMobileIfCurrent(userID, deviceID, conn)
 		}
 	}()
 	for {

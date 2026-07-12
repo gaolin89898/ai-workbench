@@ -25,6 +25,7 @@ import (
 	"log"
 
 	"github.com/google/uuid"
+	"github.com/gorilla/websocket"
 
 	"github.com/gaolin89898/ai-workbench/backend/internal/models"
 	"github.com/gaolin89898/ai-workbench/backend/internal/protocol"
@@ -142,9 +143,8 @@ func (h *Handler) handleAiSessionsSnapshot(userID uuid.UUID, m protocol.AiSessio
 // fresh heartbeat. DB side effects only run if the connection was activated
 // (at least one inbound message handled), mirroring the Rust
 // connected_device_id guard in desktop_socket.
-func (h *Handler) cleanupDesktop(userID, deviceID uuid.UUID, activated bool) {
-	h.State.RemoveDesktop(deviceID)
-	if !activated {
+func (h *Handler) cleanupDesktop(userID, deviceID uuid.UUID, conn *websocket.Conn, activated bool) {
+	if !h.State.RemoveDesktopIfCurrent(deviceID, conn) || !activated {
 		return
 	}
 	ctx := context.Background()

@@ -409,7 +409,8 @@ class _HeroCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final project = ws.projects.isNotEmpty ? ws.projects.first : null;
-    final activeSessions = ws.dashboardRecentSessions.length;
+    final activeSessions =
+        project == null ? 0 : ws.activeSessionsForProject(project).length;
     final installedProviders =
         ws.providerStatuses.where((p) => p.installed).length;
     // 注意：背景用纯色 AppColors.primary，不要用 heroGradient
@@ -882,7 +883,7 @@ class _ProjectCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final sessions = ws.sessionsForProject(project.path);
+    final sessions = ws.sessionsForProject(project);
     return AppCard(
       borderRadius: AppRadius.xl,
       padding: EdgeInsets.zero,

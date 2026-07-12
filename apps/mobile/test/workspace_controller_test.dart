@@ -49,6 +49,87 @@ void main() {
     expect(snapshot.forProvider('mimo')?.model, 'xiaomi/mimo-v2.5-pro');
   });
 
+  test('project activity statistics use project ID before legacy path', () {
+    final controller =
+        WorkspaceController(api: ApiClient(baseUrl: 'http://127.0.0.1:3000'));
+    const currentProject = WorkspaceProject(
+      id: 'project-current',
+      deviceId: 'device-1',
+      name: 'Current',
+      path: '/workspace/current',
+      gitDirty: false,
+      updatedAt: '2026-07-12T00:00:00Z',
+    );
+    const otherProject = WorkspaceProject(
+      id: 'project-other',
+      deviceId: 'device-1',
+      name: 'Other',
+      path: '/workspace/other',
+      gitDirty: false,
+      updatedAt: '2026-07-12T00:00:00Z',
+    );
+    controller.projects = const [currentProject, otherProject];
+    controller.sessions = const [
+      AiSessionMeta(
+        id: 'linked-current',
+        deviceId: 'device-1',
+        providerId: 'claude',
+        title: 'Linked current',
+        status: 'idle',
+        updatedAt: '2026-07-12T01:00:00Z',
+        projectId: 'project-current',
+      ),
+      AiSessionMeta(
+        id: 'legacy-current',
+        deviceId: 'device-1',
+        providerId: 'claude',
+        title: 'Legacy current',
+        status: 'completed',
+        updatedAt: '2026-07-12T01:00:00Z',
+        summary: '/workspace/current',
+      ),
+      AiSessionMeta(
+        id: 'other-project',
+        deviceId: 'device-1',
+        providerId: 'claude',
+        title: 'Other project',
+        status: 'idle',
+        updatedAt: '2026-07-12T01:00:00Z',
+        projectId: 'project-other',
+      ),
+      AiSessionMeta(
+        id: 'stale-summary',
+        deviceId: 'device-1',
+        providerId: 'claude',
+        title: 'Stale summary',
+        status: 'idle',
+        updatedAt: '2026-07-12T01:00:00Z',
+        projectId: 'project-other',
+        summary: '/workspace/current',
+      ),
+      AiSessionMeta(
+        id: 'failed-current',
+        deviceId: 'device-1',
+        providerId: 'claude',
+        title: 'Failed current',
+        status: 'failed',
+        updatedAt: '2026-07-12T01:00:00Z',
+        projectId: 'project-current',
+      ),
+    ];
+
+    expect(
+      controller.sessionsForProject(currentProject).map((item) => item.id),
+      unorderedEquals(['linked-current', 'legacy-current', 'failed-current']),
+    );
+    expect(
+      controller.activeSessionsForProject(currentProject).map((item) => item.id),
+      unorderedEquals(['linked-current', 'legacy-current']),
+    );
+
+    controller.dispose();
+  });
+
   test('structured history restores chat contexts', () {
     final history = AiHistoryMessage.fromJson({
       'role': 'user',

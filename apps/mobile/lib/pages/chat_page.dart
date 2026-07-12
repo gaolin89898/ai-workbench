@@ -627,50 +627,12 @@ class _ComposerInputState extends State<_ComposerInput> {
         const SizedBox(height: AppSpacing.sm),
         Row(
           children: [
-            Expanded(
-              child: SingleChildScrollView(
-                scrollDirection: Axis.horizontal,
-                child: Row(
-                  children: [
-                    if (widget.onOpenProjectFiles != null) ...[
-                      _ComposerIconButton(
-                        icon: Icons.add_link_rounded,
-                        tooltip: '添加项目上下文',
-                        onPressed: widget.archived
-                            ? null
-                            : widget.onOpenProjectFiles,
-                      ),
-                      const SizedBox(width: 6),
-                    ],
-                    _ComposerIconButton(
-                      icon: _goal.isEmpty
-                          ? Icons.tune_outlined
-                          : Icons.flag_outlined,
-                      tooltip: '任务设置',
-                      onPressed: widget.archived ? null : _showAddSheet,
-                    ),
-                    const SizedBox(width: 6),
-                    _ComposerPillButton(
-                      label: _selectedMode == 'plan' ? '规划' : '构建',
-                      maxWidth: 72,
-                      onPressed: widget.archived ? null : _showModeSheet,
-                    ),
-                    const SizedBox(width: 6),
-                    _ComposerPillButton(
-                      label: _selectedModelLabel,
-                      maxWidth: 122,
-                      onPressed: widget.archived ? null : _showModelSheet,
-                    ),
-                    const SizedBox(width: 6),
-                    _ComposerPillButton(
-                      label: '推理 $_selectedReasoningLabel',
-                      maxWidth: 94,
-                      onPressed: widget.archived ? null : _showReasoningSheet,
-                    ),
-                  ],
-                ),
-              ),
+            _ComposerIconButton(
+              icon: Icons.add_rounded,
+              tooltip: '更多输入选项',
+              onPressed: widget.archived ? null : _showMoreSheet,
             ),
+            const Spacer(),
             const SizedBox(width: AppSpacing.sm),
             ValueListenableBuilder<TextEditingValue>(
               valueListenable: widget.controller,
@@ -699,21 +661,55 @@ class _ComposerInputState extends State<_ComposerInput> {
     );
   }
 
-  void _showAddSheet() {
+  void _showMoreSheet() {
     _showComposerSheet(
       context: context,
-      title: '任务设置',
-      subtitle: _goal.isEmpty ? '设置运行方式和本轮目标' : '当前目标：$_goal',
+      title: '更多输入选项',
+      subtitle: '添加上下文或调整本轮任务设置',
       children: [
+        if (widget.onOpenProjectFiles != null)
+          _SheetActionTile(
+            icon: Icons.add_link_rounded,
+            title: '添加项目上下文',
+            subtitle: '从当前项目选择文件或文件夹',
+            onTap: () {
+              Navigator.of(context).pop();
+              WidgetsBinding.instance.addPostFrameCallback((_) {
+                if (mounted) widget.onOpenProjectFiles?.call();
+              });
+            },
+          ),
         _SheetActionTile(
           icon: Icons.account_tree_outlined,
           title: _selectedMode == 'plan' ? '当前：规划模式' : '当前：构建模式',
-          subtitle: _selectedMode == 'plan' ? '点击切换到构建模式' : '点击切换到规划模式',
+          subtitle: '规划优先分析，构建可直接执行修改',
           onTap: () {
-            setState(() {
-              _selectedMode = _selectedMode == 'plan' ? 'default' : 'plan';
-            });
             Navigator.of(context).pop();
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              if (mounted) _showModeSheet();
+            });
+          },
+        ),
+        _SheetActionTile(
+          icon: Icons.model_training_outlined,
+          title: _selectedModelLabel,
+          subtitle: '选择本轮使用的模型',
+          onTap: () {
+            Navigator.of(context).pop();
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              if (mounted) _showModelSheet();
+            });
+          },
+        ),
+        _SheetActionTile(
+          icon: Icons.psychology_outlined,
+          title: '推理强度：$_selectedReasoningLabel',
+          subtitle: '更高强度通常更慢，适合复杂任务',
+          onTap: () {
+            Navigator.of(context).pop();
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              if (mounted) _showReasoningSheet();
+            });
           },
         ),
         _SheetActionTile(
@@ -1158,60 +1154,6 @@ class _ComposerIconButton extends StatelessWidget {
           ),
         ),
         icon: Icon(icon, size: 16),
-      ),
-    );
-  }
-}
-
-class _ComposerPillButton extends StatelessWidget {
-  const _ComposerPillButton({
-    required this.label,
-    required this.onPressed,
-    this.maxWidth,
-  });
-
-  final String label;
-  final VoidCallback? onPressed;
-  final double? maxWidth;
-
-  @override
-  Widget build(BuildContext context) {
-    return ConstrainedBox(
-      constraints: BoxConstraints(
-        minHeight: 32,
-        maxWidth: maxWidth ?? double.infinity,
-      ),
-      child: OutlinedButton(
-        onPressed: onPressed,
-        style: OutlinedButton.styleFrom(
-          minimumSize: const Size(0, 32),
-          padding: const EdgeInsets.symmetric(horizontal: 10),
-          foregroundColor: AppColors.secondary,
-          disabledForegroundColor: AppColors.muted,
-          backgroundColor: Colors.transparent,
-          side: const BorderSide(color: AppColors.border),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(AppRadius.full),
-          ),
-          textStyle: const TextStyle(
-            fontSize: 11,
-            fontWeight: FontWeight.w700,
-          ),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Flexible(
-              child: Text(
-                label,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-              ),
-            ),
-            const SizedBox(width: 4),
-            const Icon(Icons.keyboard_arrow_down, size: 14),
-          ],
-        ),
       ),
     );
   }

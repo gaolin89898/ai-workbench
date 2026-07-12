@@ -108,11 +108,23 @@ class WorkspaceController extends ChangeNotifier {
     return filtered;
   }
 
-  List<AiSessionMeta> sessionsForProject(String path) => sessions
+  List<AiSessionMeta> sessionsForProject(WorkspaceProject project) => sessions
       .where((session) =>
-          session.summary == path &&
+          _belongsToProject(session, project) &&
           (showArchived ? session.archived : !session.archived))
       .toList();
+
+  List<AiSessionMeta> activeSessionsForProject(WorkspaceProject project) {
+    final filtered = sessions
+        .where((session) =>
+            !session.archived &&
+            _isVisibleAiSession(session) &&
+            _belongsToProject(session, project) &&
+            _isNormalSessionStatus(session.status))
+        .toList();
+    _sortSessions(filtered);
+    return filtered;
+  }
 
   bool isCreatingSession(WorkspaceProject project, {String? providerId}) {
     final device = selectedDevice;
@@ -1915,9 +1927,15 @@ class WorkspaceController extends ChangeNotifier {
     Set<String> projectPaths,
   ) {
     final projectId = session.projectId;
-    if (projectId != null && projectIds.contains(projectId)) return true;
+    if (projectId != null) return projectIds.contains(projectId);
     final summary = session.summary;
     return summary != null && projectPaths.contains(summary);
+  }
+
+  bool _belongsToProject(AiSessionMeta session, WorkspaceProject project) {
+    final projectId = session.projectId;
+    if (projectId != null) return projectId == project.id;
+    return session.summary == project.path;
   }
 
   bool _isNormalSessionStatus(String status) {
