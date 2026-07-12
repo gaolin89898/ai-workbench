@@ -89,6 +89,10 @@ const projectOpenOptions: ProjectOpenOption[] = [
   { id: "wsl", label: "WSL", iconSrc: linuxIcon, iconClass: "brand-wsl" },
 ];
 
+function defaultTerminalPanelHeight() {
+  return Math.min(360, Math.max(220, Math.round(window.innerHeight * 0.32)));
+}
+
 function readProjectOpenTarget(): ProjectOpenTarget {
   const stored = window.localStorage.getItem(projectOpenTargetStorageKey);
   if (stored === "visualStudio") return "traeCn";
@@ -106,6 +110,7 @@ const previewImage = ref<ChatImageAttachment | null>(null);
 const chatScroll = ref<HTMLDivElement | null>(null);
 const startPromptBox = ref<HTMLFormElement | null>(null);
 const chatComposer = ref<HTMLDivElement | null>(null);
+const chatComposerHeight = ref(0);
 const splitWorkspace = ref<HTMLElement | null>(null);
 const previewFile = ref<ProjectFilePreview | null>(null);
 const previewViewerFile = shallowRef<File | null>(null);
@@ -113,7 +118,7 @@ const previewLoading = ref(false);
 const previewError = ref("");
 const processPanelSelection = ref<ProcessPanelSelection | null>(null);
 const terminalPanelOpen = ref(false);
-const terminalPanelHeight = ref(Math.min(360, Math.max(220, Math.round(window.innerHeight * 0.32))));
+const terminalPanelHeight = ref(defaultTerminalPanelHeight());
 const startMenuOpen = ref(false);
 const approvalMenuOpen = ref(false);
 const composerToolsOpen = ref(false);
@@ -211,7 +216,8 @@ const USER_ANCHOR_MIN_VISIBLE = 4;
 const USER_ANCHOR_LIMIT = 18;
 const SPLIT_PANEL_MIN_WIDTH = 320;
 const SPLIT_MAIN_MIN_WIDTH = 420;
-const TERMINAL_PANEL_MIN_HEIGHT = 160;
+const TERMINAL_PANEL_MIN_HEIGHT = 0;
+const TERMINAL_PANEL_COLLAPSE_THRESHOLD = 48;
 const TERMINAL_MAIN_MIN_HEIGHT = 260;
 let splitResizeCleanup: (() => void) | null = null;
 let terminalResizeCleanup: (() => void) | null = null;
@@ -516,6 +522,7 @@ const virtualMessageHeights = ref<number[]>([]);
 const virtualRowElements = new Map<number, Element>();
 const virtualRowObservers = new Map<number, ResizeObserver>();
 let chatScrollResizeObserver: ResizeObserver | null = null;
+let chatComposerResizeObserver: ResizeObserver | null = null;
 let pendingPromptAnchorKey: string | null = null;
 let anchorScrollVersion = 0;
 let sessionBottomScrollVersion = 0;
@@ -688,7 +695,7 @@ function updateVirtualViewport() {
   const el = chatScroll.value;
   if (!el) return;
   virtualScrollTop.value = el.scrollTop;
-  virtualViewportHeight.value = el.clientHeight;
+  virtualViewportHeight.value = Math.max(0, el.clientHeight - chatComposerHeight.value - 32);
 }
 
 function observeChatScroll() {
@@ -703,6 +710,26 @@ function observeChatScroll() {
 function handleChatScroll() {
   updateVirtualViewport();
 }
+
+watch(
+  chatComposer,
+  (element) => {
+    chatComposerResizeObserver?.disconnect();
+    chatComposerResizeObserver = null;
+    if (!element) {
+      chatComposerHeight.value = 0;
+      return;
+    }
+    const updateComposerHeight = () => {
+      chatComposerHeight.value = Math.ceil(element.getBoundingClientRect().height);
+      updateVirtualViewport();
+    };
+    chatComposerResizeObserver = new ResizeObserver(updateComposerHeight);
+    chatComposerResizeObserver.observe(element);
+    updateComposerHeight();
+  },
+  { flush: "post" },
+);
 
 function setVirtualMessageRef(index: number, el: Element | null) {
   const current = virtualRowElements.get(index);
@@ -1002,7 +1029,13 @@ function startTerminalResize(event: PointerEvent) {
   const onPointerMove = (moveEvent: PointerEvent) => {
     terminalPanelHeight.value = clampTerminalPanelHeight(startHeight + startY - moveEvent.clientY);
   };
-  const onPointerUp = () => stopTerminalResize();
+  const onPointerUp = () => {
+    if (terminalPanelHeight.value <= TERMINAL_PANEL_COLLAPSE_THRESHOLD) {
+      terminalPanelOpen.value = false;
+      terminalPanelHeight.value = defaultTerminalPanelHeight();
+    }
+    stopTerminalResize();
+  };
 
   window.addEventListener("pointermove", onPointerMove);
   window.addEventListener("pointerup", onPointerUp);
@@ -1798,6 +1831,7 @@ onBeforeUnmount(() => {
   window.removeEventListener("keydown", onWindowKeydown);
   window.removeEventListener("resize", updateVirtualViewport);
   chatScrollResizeObserver?.disconnect();
+  chatComposerResizeObserver?.disconnect();
   for (const observer of virtualRowObservers.values()) observer.disconnect();
   virtualRowObservers.clear();
   virtualRowElements.clear();
@@ -2357,7 +2391,11 @@ function onPromptKeydown(event: KeyboardEvent) {
       :style="{ '--chat-split-panel-width': `${splitPanelWidth}px` }"
     >
       <div class="chat-workspace-main">
-        <article class="chat-main-panel" :class="{ 'terminal-open': terminalPanelOpen }">
+        <article
+          class="chat-main-panel"
+          :class="{ 'terminal-open': terminalPanelOpen }"
+          :style="{ '--chat-composer-height': `${chatComposerHeight}px` }"
+        >
           <div class="chat-conversation-view">
             <div ref="chatScroll" class="terminal-preview" @scroll.passive="handleChatScroll">
           <div v-if="!ws.activeAiSession.value && ws.chatMessages.value.length === 1 && ws.chatMessages.value[0]?.role === 'system'" class="chat-welcome">
@@ -2899,20 +2937,8 @@ function onPromptKeydown(event: KeyboardEvent) {
             aria-label="拖动调整终端高度"
             @pointerdown="startTerminalResize"
           ></button>
-          <header class="chat-bottom-terminal-header">
-            <div>
-              <img :src="terminalIcon" alt="" aria-hidden="true" />
-              <strong>终端</strong>
-              <span>{{ currentProject?.name ?? "项目 shell" }}</span>
-            </div>
-            <button type="button" title="关闭终端" aria-label="关闭终端" @click="closeTerminalPanel">
-              <svg viewBox="0 0 16 16" fill="none" aria-hidden="true">
-                <path d="M4.5 4.5 11.5 11.5M11.5 4.5 4.5 11.5" stroke="currentColor" stroke-width="1.55" stroke-linecap="round" />
-              </svg>
-            </button>
-          </header>
           <div class="terminal-shell">
-            <TerminalView />
+            <TerminalView @close="closeTerminalPanel" />
           </div>
         </template>
       </section>

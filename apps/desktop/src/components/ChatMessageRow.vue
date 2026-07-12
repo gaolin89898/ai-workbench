@@ -1075,7 +1075,7 @@ function countCommandOutputSignals(text: string) {
                   </svg>
                 </button>
               </div>
-              <div v-if="item.conclusion" class="chat-process-stage-conclusion">
+              <div v-if="item.conclusion" class="chat-process-stage-conclusion standalone">
                 {{ conclusionText(item.conclusion) }}
               </div>
             </template>
@@ -1161,7 +1161,7 @@ function countCommandOutputSignals(text: string) {
                   />
                 </div>
               </details>
-              <div v-if="item.conclusion" class="chat-process-stage-conclusion">
+              <div v-if="item.conclusion" class="chat-process-stage-conclusion standalone">
                 {{ conclusionText(item.conclusion) }}
               </div>
             </template>
