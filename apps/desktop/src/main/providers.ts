@@ -454,9 +454,13 @@ async function detectAiProvidersUncached(): Promise<ProviderStatus[]> {
   const npmRegistry = (await getNpmRegistry()).registry;
   return Promise.all(BUILTIN_PROVIDERS.map(async (provider) => {
     const metadata = PROVIDER_METADATA[provider.id] ?? {};
-    const commandVersion = await getCommandVersion(provider.command);
-    const packageVersion = commandVersion ? null : await getGlobalNpmPackageVersion(metadata.npmPackage);
-    const version = commandVersion ?? packageVersion;
+    const packageVersion = await getGlobalNpmPackageVersion(metadata.npmPackage);
+    const commandVersion = provider.id === "codex" && packageVersion
+      ? null
+      : await getCommandVersion(provider.command);
+    const version = provider.id === "codex"
+      ? packageVersion ?? commandVersion
+      : commandVersion ?? packageVersion;
     const installed = version !== null || await commandExists(provider.command);
     const authStatus = detectAuthStatus(provider.id);
     const { latestVersion, versionCheckError } = await detectLatestVersion(provider.id, npmRegistry);

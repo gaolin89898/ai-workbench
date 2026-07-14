@@ -36,6 +36,7 @@ import {
   getCodexThreadGoal,
   listCodexFeatures,
   listCodexMcpServers,
+  listCodexPermissionProfiles,
   listCodexThreads,
   readCodexConfig,
   readCodexMcpResource,
@@ -539,6 +540,10 @@ export function registerIpcHandlers(win?: BrowserWindow): void {
     getCodexApprovalMode(args[0] ?? "")
   );
 
+  handle("list_codex_permission_profiles", async (event, args: [string]) =>
+    listCodexPermissionProfiles(args[0] ?? "", event.sender)
+  );
+
   handle("list_opencode_config_options", async (_event, args: [string]) =>
     listOpenCodeConfigOptions(args[0] ?? "")
   );
@@ -564,7 +569,7 @@ export function registerIpcHandlers(win?: BrowserWindow): void {
   );
 
   const respondAiApproval = async (req: CodexApprovalResponseRequest) => {
-    const codexHandled = respondCodexApproval(req.aiSessionId, req.approvalId, req.decision);
+    const codexHandled = respondCodexApproval(req.aiSessionId, req.approvalId, req.decision, req.scope);
     return codexHandled || await respondMimoApproval(req.aiSessionId, req.approvalId, req.decision);
   };
 

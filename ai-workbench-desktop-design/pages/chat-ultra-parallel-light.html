@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html lang="zh-CN" class="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI 会话 - Ultra 并行轻量版</title>
+    <style id="theme-vars">
+/* AI Workbench Desktop — Dark Theme */
+/* Based on actual project style.css, inverted to dark */
+:root {
+  /* Brand */
+  --color-primary: #2563eb;
+  --color-primary-hover: #1d4ed8;
+  --color-primary-muted: rgba(37, 99, 235, 0.15);
+  --color-primary-soft: rgba(37, 99, 235, 0.08);
+  --color-primary-ring: rgba(37, 99, 235, 0.25);
+
+  /* Surface & Background */
+  --color-bg-app: #0f1117;
+  --color-bg-body: #111318;
+  --color-bg-sidebar: #161822;
+  --color-bg-main: #1a1d2e;
+  --color-bg-content: #1e2235;
+  --color-bg-surface: #1e2235;
+  --color-bg-elevated: #252a3a;
+  --color-bg-input: #1e2235;
+  --color-bg-hover: rgba(255, 255, 255, 0.06);
+  --color-bg-active: rgba(37, 99, 235, 0.12);
+
+  /* Text */
+  --color-text-primary: #e8eaed;
+  --color-text-body: #d1d5db;
+  --color-text-secondary: #9aa0b4;
+  --color-text-muted: #6b7280;
+  --color-text-placeholder: #6b7280;
+  --color-text-inverse: #ffffff;
+
+  /* Border */
+  --color-border: rgba(255, 255, 255, 0.1);
+  --color-border-subtle: rgba(255, 255, 255, 0.06);
+  --color-border-active: rgba(37, 99, 235, 0.5);
+
+  /* State Colors */
+  --state-success: #22c55e;
+  --state-success-bg: rgba(34, 197, 94, 0.12);
+  --state-success-ring: rgba(34, 197, 94, 0.25);
+  --state-warning: #f59e0b;
+  --state-warning-bg: rgba(245, 158, 11, 0.12);
+  --state-error: #ef4444;
+  --state-error-bg: rgba(239, 68, 68, 0.12);
+  --state-info: #3b82f6;
+  --state-info-bg: rgba(59, 130, 246, 0.12);
+
+  /* Radius */
+  --radius-sm: 4px;
+  --radius-md: 7px;
+  --radius-lg: 8px;
+  --radius-xl: 12px;
+  --radius-full: 999px;
+
+  /* Typography */
+  --font-sans: "Inter", ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+
+  --text-xs: 11px;
+  --text-sm: 12px;
+  --text-base: 13px;
+  --text-md: 14px;
+  --text-lg: 16px;
+  --text-xl: 20px;
+  --text-2xl: 28px;
+
+  --leading-tight: 1.25;
+  --leading-normal: 1.5;
+  --leading-relaxed: 1.625;
+  --leading-chat: 1.62;
+
+  /* Font Weights */
+  --fw-normal: 400;
+  --fw-medium: 500;
+  --fw-semibold: 620;
+  --fw-bold: 700;
+  --fw-extrabold: 800;
+  --fw-black: 850;
+
+  /* Shadows */
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.15);
+  --shadow-md: 0 10px 24px rgba(0, 0, 0, 0.25);
+  --shadow-lg: 0 24px 56px rgba(0, 0, 0, 0.35);
+  --shadow-composer: 0 16px 42px rgba(0, 0, 0, 0.3);
+
+  /* Spacing */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-10: 40px;
+  --space-14: 56px;
+  --space-18: 72px;
+
+  /* Layout */
+  --sidebar-width: 286px;
+  --topbar-height: 56px;
+  --composer-max-width: 760px;
+
+  /* Transitions */
+  --transition-fast: 120ms ease;
+  --transition-normal: 200ms ease;
+}
+
+    </style>
+    <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4.3.1/dist/index.global.js"></script>
+    <script src="https://unpkg.com/lucide@1.8.0/dist/umd/lucide.min.js"></script>
+    <style type="text/tailwindcss">
+  @theme inline {
+    --color-primary: var(--color-primary);
+    --color-border: var(--color-border);
+  }
+  @layer base {
+    body { background: var(--color-background); color: var(--color-text-primary); }
+    td, th { @apply break-words; word-break: break-all; word-break: auto-phrase; }
+    th { @apply whitespace-nowrap; }
+  }
+    </style>
+    <style>
+      .no-scrollbar::-webkit-scrollbar { display: none; }
+      .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+      [data-icon] {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        -webkit-mask-size: contain;
+        mask-size: contain;
+        -webkit-mask-repeat: no-repeat;
+        mask-repeat: no-repeat;
+        -webkit-mask-position: center;
+        mask-position: center;
+        background-color: currentColor;
+      }
+    </style>
+</head>
+<body class="min-h-screen font-sans antialiased">
+    <main class="h-screen overflow-hidden">
+      <div class="app-shell">
+        <aside class="sidebar">
+          <div class="side-heading"><span>项目</span><button class="icon-btn" aria-label="添加项目"><i data-lucide="plus"></i></button></div>
+          <div class="project-row"><i data-lucide="chevron-down"></i><i data-lucide="folder"></i><strong class="truncate">my-saas-app</strong><span class="branch">main</span></div>
+          <nav class="session-list" aria-label="AI 会话">
+            <div class="nav-label">AI 会话</div>
+            <button class="session active"><i data-lucide="messages-square"></i><span class="truncate">重构认证与权限模块</span><span class="live-dot"></span></button>
+            <button class="session"><i data-lucide="message-square"></i><span class="truncate">修复认证 bug</span></button>
+            <button class="session"><i data-lucide="message-square"></i><span class="truncate">优化 API 性能</span></button>
+            <button class="session"><i data-lucide="message-square"></i><span class="truncate">添加单元测试</span></button>
+          </nav>
+          <div class="project-row muted"><i data-lucide="chevron-right"></i><i data-lucide="folder"></i><strong class="truncate">ai-workbench</strong></div>
+          <div class="side-spacer"></div>
+          <button class="account"><span class="avatar">李</span><span class="account-copy"><b class="truncate">李明</b><small class="truncate">li@workbench.ai</small></span><i data-lucide="chevron-down"></i></button>
+        </aside>
+
+        <section class="main-area">
+          <header class="topbar">
+            <div class="title-cluster"><h1 class="truncate">重构认证与权限模块</h1><span class="badge brand">Ultra</span></div>
+            <div class="top-actions"><span class="running"><span class="pulse"></span>4 个代理</span><button class="icon-btn stop-icon" aria-label="停止代理"><i data-lucide="square"></i></button></div>
+          </header>
+
+          <div class="chat-column">
+            <div class="transcript">
+              <div class="conversation">
+                <div class="user-row"><div class="user-message">重构认证模块，补齐单元测试、迁移文档和安全审查，完成后给我汇总变更。</div></div>
+
+                <div class="assistant-row">
+                  <div class="ai-avatar"><i data-lucide="sparkles"></i></div>
+                  <div class="assistant-flow">
+                    <p class="assistant-text">已拆成 4 个任务并行处理。架构输出将作为安全审查的前置依赖，其余任务已开始执行。</p>
+
+                    <section class="activity" aria-label="Ultra 代理活动">
+                      <div class="activity-head">
+                        <div class="activity-title"><strong>Ultra · 4 个代理</strong><span class="overall">57%</span></div>
+                        <div class="activity-actions"><button class="quiet-btn"><i data-lucide="chevron-up"></i><span>收起</span></button><button class="quiet-btn danger"><i data-lucide="square"></i><span>停止</span></button></div>
+                      </div>
+                      <div class="overall-progress"><span style="width:57%"></span></div>
+                      <div class="agent-list">
+                        <button class="agent-row selected" aria-label="查看架构代理">
+                          <span class="role-icon"><i data-lucide="blocks"></i></span><span class="agent-name">架构代理</span><span class="agent-task truncate">梳理认证边界与重构方案</span><span class="agent-status running-text">68%</span><code class="event truncate">调整 auth/session.ts</code><i class="row-chevron" data-lucide="chevron-right"></i>
+                        </button>
+                        <button class="agent-row" aria-label="查看实现代理">
+                          <span class="role-icon done"><i data-lucide="code-2"></i></span><span class="agent-name">实现代理</span><span class="agent-task truncate">迁移认证与权限逻辑</span><span class="agent-status done-text">已完成</span><code class="event truncate">14 个文件</code><i class="row-chevron" data-lucide="chevron-right"></i>
+                        </button>
+                        <button class="agent-row" aria-label="查看测试代理">
+                          <span class="role-icon"><i data-lucide="flask-conical"></i></span><span class="agent-name">测试代理</span><span class="agent-task truncate">补齐单元与集成测试</span><span class="agent-status running-text">42%</span><code class="event truncate">27/64 tests</code><i class="row-chevron" data-lucide="chevron-right"></i>
+                        </button>
+                        <button class="agent-row" aria-label="查看安全审查">
+                          <span class="role-icon waiting"><i data-lucide="shield-check"></i></span><span class="agent-name">安全审查</span><span class="agent-task truncate">检查权限绕过与凭据泄露</span><span class="agent-status waiting-text">等待</span><span class="event truncate">依赖架构输出</span><i class="row-chevron" data-lucide="chevron-right"></i>
+                        </button>
+                      </div>
+                    </section>
+
+                    <div class="live-summary">
+                      <p>已完成权限迁移；测试与架构仍在进行，安全审查将在边界方案完成后启动。</p>
+                      <div class="chips"><span>14 文件</span><span>27 测试</span><span>2 待确认</span></div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div class="composer-wrap">
+              <div class="composer">
+                <textarea rows="2" aria-label="输入消息" placeholder="向 4 个代理追加指令…"></textarea>
+                <div class="composer-tools">
+                  <div class="tool-group"><button class="icon-btn bordered" aria-label="添加附件"><i data-lucide="paperclip"></i></button><button class="tool-pill active">Ultra</button><button class="tool-pill">极致</button></div>
+                  <div class="tool-group"><button class="model-control">GPT-5.4<i data-lucide="chevron-down"></i></button><button class="stop-control"><i data-lucide="square"></i>停止</button></div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+      </div>
+    </main>
+    <style>
+      *{box-sizing:border-box}body{margin:0;background:var(--color-bg-app)!important;color:var(--color-text-primary);font-family:var(--font-sans);overflow:hidden}button,textarea{font:inherit}.app-shell{display:grid;grid-template-columns:minmax(220px,var(--sidebar-width)) minmax(0,1fr);height:100vh}.sidebar{display:flex;flex-direction:column;gap:12px;min-width:0;padding:16px 10px 12px;background:var(--color-bg-sidebar);border-right:1px solid var(--color-border)}.side-heading,.project-row,.account,.session{display:flex;align-items:center;gap:8px}.side-heading{justify-content:space-between;padding:0 6px;color:var(--color-text-muted);font-size:var(--text-base);font-weight:var(--fw-semibold)}.icon-btn{display:inline-flex;align-items:center;justify-content:center;width:28px;height:28px;border:0;border-radius:var(--radius-md);background:transparent;color:var(--color-text-secondary);cursor:pointer;transition:background var(--transition-fast),color var(--transition-fast),transform var(--transition-fast)}.icon-btn svg{width:15px;height:15px}.icon-btn:hover,.quiet-btn:hover,.model-control:hover,.tool-pill:hover{background:var(--color-bg-hover);color:var(--color-text-primary)}.project-row{padding:5px 6px;font-size:var(--text-base)}.project-row svg{width:15px;height:15px;color:var(--color-text-muted);flex:none}.project-row strong{flex:1;font-weight:var(--fw-semibold)}.project-row.muted{color:var(--color-text-secondary)}.branch,.badge,.running,.chips span{display:inline-flex;align-items:center;justify-content:center;white-space:nowrap}.branch{padding:1px 7px;border-radius:var(--radius-full);background:var(--color-bg-elevated);color:var(--color-text-muted);font-size:var(--text-xs)}.session-list{display:flex;flex-direction:column;gap:3px}.nav-label{padding:10px 10px 4px;color:var(--color-text-muted);font-size:var(--text-xs);font-weight:var(--fw-bold)}.session{width:100%;min-height:32px;padding:0 9px;border:0;border-radius:var(--radius-md);background:transparent;color:var(--color-text-secondary);cursor:pointer;text-align:left;transition:background var(--transition-fast),color var(--transition-fast)}.session:hover{background:var(--color-bg-hover);color:var(--color-text-primary)}.session svg{width:14px;height:14px;flex:none}.session span:nth-child(2){flex:1}.session.active{background:var(--color-bg-active);color:var(--color-text-primary)}.live-dot,.pulse{width:7px;height:7px;border-radius:var(--radius-full);background:var(--color-primary);flex:none}.side-spacer{flex:1}.account{min-height:50px;padding:7px 8px;border:1px solid var(--color-border-subtle);border-radius:var(--radius-xl);background:transparent;color:var(--color-text-primary);cursor:pointer}.account-copy{min-width:0;flex:1;text-align:left}.account-copy b,.account-copy small{display:block}.account-copy small{color:var(--color-text-muted)}.account>svg{width:15px}.avatar{display:inline-flex;align-items:center;justify-content:center;width:32px;height:32px;border-radius:var(--radius-full);background:var(--color-primary);color:var(--color-text-inverse);font-weight:var(--fw-bold)}
+      .main-area{display:flex;flex-direction:column;min-width:0;height:100vh;background:var(--color-bg-content)}.topbar{display:flex;align-items:center;justify-content:space-between;gap:16px;min-height:56px;padding:0 22px;border-bottom:1px solid var(--color-border-subtle)}.title-cluster,.top-actions{display:flex;align-items:center;gap:8px;min-width:0}.title-cluster h1{max-width:420px;font-size:var(--text-md);line-height:1.25;font-weight:var(--fw-bold)}.badge{height:22px;padding:0 8px;border-radius:var(--radius-md);font-size:var(--text-xs);font-weight:var(--fw-bold)}.badge.brand{background:var(--color-primary-muted);color:var(--color-primary)}.running{gap:6px;color:var(--color-text-secondary);font-size:var(--text-sm)}.pulse{animation:pulse 1.8s ease-in-out infinite}.stop-icon{color:var(--state-error)}.chat-column{display:flex;flex:1;flex-direction:column;min-width:0;min-height:0}.transcript{flex:1;overflow-y:auto;padding:42px clamp(24px,6vw,88px) 28px}.conversation{width:100%;max-width:900px;margin:0 auto}.user-row{display:flex;justify-content:flex-end}.user-message{max-width:680px;padding:9px 12px;border:1px solid var(--color-border);border-radius:var(--radius-lg) var(--radius-lg) var(--radius-sm) var(--radius-lg);background:var(--color-bg-elevated);color:var(--color-text-body);font-size:var(--text-base);line-height:var(--leading-chat)}.assistant-row{display:flex;align-items:flex-start;gap:12px;margin-top:24px}.ai-avatar,.role-icon{display:inline-flex;align-items:center;justify-content:center;flex:none;border-radius:var(--radius-md);background:var(--color-primary-muted);color:var(--color-primary)}.ai-avatar{width:28px;height:28px;margin-top:1px}.ai-avatar svg,.role-icon svg{width:14px;height:14px}.assistant-flow{min-width:0;flex:1}.assistant-text{margin:0;color:var(--color-text-body);font-size:var(--text-base);line-height:var(--leading-chat)}
+      .activity{margin-top:14px;border-top:1px solid var(--color-border);border-bottom:1px solid var(--color-border)}.activity-head{display:flex;align-items:center;justify-content:space-between;gap:16px;min-height:42px}.activity-title,.activity-actions{display:flex;align-items:center;gap:10px;min-width:0}.activity-title strong{font-size:var(--text-base);font-weight:var(--fw-semibold)}.overall{font-family:var(--font-mono);color:var(--color-primary);font-size:var(--text-xs)}.quiet-btn{display:inline-flex;align-items:center;justify-content:center;gap:5px;height:28px;padding:0 7px;border:0;border-radius:var(--radius-md);background:transparent;color:var(--color-text-secondary);font-size:var(--text-xs);white-space:nowrap;cursor:pointer;transition:background var(--transition-fast),color var(--transition-fast)}.quiet-btn svg{width:13px;height:13px}.quiet-btn.danger{color:var(--state-error)}.overall-progress{height:2px;background:var(--color-bg-elevated);overflow:hidden}.overall-progress span{display:block;height:100%;background:var(--color-primary)}.agent-list{display:flex;flex-direction:column}.agent-row{display:grid;grid-template-columns:24px minmax(76px,.55fr) minmax(180px,1.4fr) 54px minmax(150px,1fr) 16px;align-items:center;gap:10px;width:100%;min-height:46px;padding:0 8px;border:0;border-bottom:1px solid var(--color-border-subtle);background:transparent;color:var(--color-text-body);text-align:left;cursor:pointer;transition:background var(--transition-fast),transform var(--transition-fast)}.agent-row:last-child{border-bottom:0}.agent-row:hover,.agent-row.selected{background:var(--color-bg-hover)}.agent-row:hover .row-chevron{transform:translateX(2px);color:var(--color-text-secondary)}.role-icon{width:24px;height:24px}.role-icon.done{background:var(--state-success-bg);color:var(--state-success)}.role-icon.waiting{background:var(--color-bg-elevated);color:var(--color-text-muted)}.agent-name{font-size:var(--text-sm);font-weight:var(--fw-semibold);white-space:nowrap}.agent-task,.event{min-width:0;color:var(--color-text-secondary);font-size:var(--text-xs)}.event{font-family:var(--font-mono)}.agent-status{font-family:var(--font-mono);font-size:var(--text-xs);white-space:nowrap}.running-text{color:var(--color-primary)}.done-text{color:var(--state-success)}.waiting-text{color:var(--color-text-muted)}.row-chevron{width:14px;height:14px;color:var(--color-text-muted);transition:transform var(--transition-fast),color var(--transition-fast)}.live-summary{padding-top:14px}.live-summary p{margin:0;color:var(--color-text-body);font-size:var(--text-base);line-height:var(--leading-chat)}.chips{display:flex;align-items:center;gap:8px;margin-top:10px;overflow-x:auto}.chips span{height:24px;padding:0 8px;border:1px solid var(--color-border-subtle);border-radius:var(--radius-md);color:var(--color-text-secondary);font-family:var(--font-mono);font-size:var(--text-xs);flex:none}
+      .composer-wrap{flex:none;padding:10px clamp(24px,6vw,88px) 18px;background:var(--color-bg-content)}.composer{width:100%;max-width:900px;margin:0 auto;padding:10px 12px;border:1px solid var(--color-border);border-radius:var(--radius-xl);background:var(--color-bg-main)}.composer:focus-within{border-color:var(--color-border-active)}.composer textarea{width:100%;min-height:42px;resize:none;border:0;outline:0;background:transparent;color:var(--color-text-body);font:var(--text-base)/1.5 var(--font-sans)}.composer textarea::placeholder{color:var(--color-text-placeholder)}.composer-tools,.tool-group{display:flex;align-items:center;justify-content:space-between;gap:8px}.composer-tools{padding-top:8px;border-top:1px solid var(--color-border-subtle)}.bordered,.tool-pill,.model-control,.stop-control{height:28px;border-radius:var(--radius-md);white-space:nowrap}.bordered,.tool-pill,.model-control{border:1px solid var(--color-border-subtle);background:transparent;color:var(--color-text-secondary)}.tool-pill,.model-control,.stop-control{display:inline-flex;align-items:center;justify-content:center;gap:5px;padding:0 9px;font-size:var(--text-xs);cursor:pointer;transition:background var(--transition-fast),color var(--transition-fast),transform var(--transition-fast)}.tool-pill.active{background:var(--color-primary-muted);border-color:var(--color-border-active);color:var(--color-primary);font-weight:var(--fw-bold)}.stop-control{border:1px solid var(--state-error);background:var(--state-error-bg);color:var(--state-error)}.model-control svg,.stop-control svg{width:13px;height:13px}.truncate{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}button:focus-visible,textarea:focus-visible{outline:2px solid var(--color-primary);outline-offset:2px}button:active{transform:translateY(1px)}button:disabled{opacity:.45;cursor:not-allowed}::-webkit-scrollbar{width:6px}::-webkit-scrollbar-track{background:transparent}::-webkit-scrollbar-thumb{background:var(--color-bg-elevated);border-radius:var(--radius-full)}@keyframes pulse{0%,100%{opacity:1}50%{opacity:.35}}@media(max-width:900px){.sidebar{display:none}.app-shell{grid-template-columns:1fr}.transcript,.composer-wrap{padding-left:18px;padding-right:18px}.agent-row{grid-template-columns:24px 80px minmax(0,1fr) 52px 16px}.event{display:none}}@media(max-width:640px){.topbar{padding:0 14px}.running{display:none}.transcript{padding-top:24px}.assistant-row{gap:8px}.activity-head{align-items:flex-start;padding:7px 0}.activity-actions span{display:none}.agent-row{grid-template-columns:24px minmax(68px,.7fr) minmax(0,1.3fr) 48px 14px;gap:7px;padding:0 2px}.user-message{max-width:92%}.composer-tools{align-items:flex-end}.model-control{display:none}}@media(prefers-reduced-motion:reduce){*,*::before,*::after{animation-duration:.01ms!important;transition-duration:.01ms!important}}
+    </style>
+    <script>lucide.createIcons();</script>
+</body>
+</html>

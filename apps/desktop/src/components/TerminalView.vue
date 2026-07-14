@@ -16,7 +16,6 @@ const emit = defineEmits<{
   close: [];
   addContext: [context: ChatContextAttachment];
 }>();
-const terminalIcon = new URL("../assets/icons/terminal.svg", import.meta.url).href;
 
 const ws = useWorkspace();
 const terminalHost = ref<HTMLDivElement | null>(null);
@@ -258,6 +257,22 @@ function selectTerminal(tab: ProjectTerminalTab) {
   });
 }
 
+async function closeTerminal(tab: ProjectTerminalTab) {
+  if (tab.primary) return;
+  await desktopApi.stopShellPty(tab.id).catch(() => undefined);
+  const index = terminalTabs.value.findIndex((entry) => entry.id === tab.id);
+  terminalTabs.value = terminalTabs.value.filter((entry) => entry.id !== tab.id);
+  delete ws.shellBuffers.value[tab.id];
+  delete ws.liveShellSessions.value[tab.id];
+  if (activeTerminalId.value === tab.id) {
+    const nextTab = terminalTabs.value[Math.min(index, terminalTabs.value.length - 1)];
+    activeTerminalId.value = nextTab?.id ?? primarySessionId.value;
+    await nextTick();
+    syncTerminalBuffer(true);
+    await fitTerminal();
+  }
+}
+
 async function sendActiveTerminalInput(data: string) {
   const tab = activeTerminalTab.value;
   if (!tab || !data) return;
@@ -294,22 +309,32 @@ async function fitTerminal() {
   <div ref="terminalFrame" class="terminal-frame" :class="{ 'no-session': terminalState === 'no-session' }">
     <header class="chat-bottom-terminal-header">
       <div class="terminal-header-main">
-        <img :src="terminalIcon" alt="" aria-hidden="true" />
-        <strong>终端</strong>
         <div class="terminal-tabs">
-          <button
+          <div
             v-for="tab in terminalTabs"
             :key="tab.id"
-            class="terminal-tab"
+            class="terminal-tab-item"
             :class="{ active: tab.id === activeSessionId }"
-            type="button"
-            @click="selectTerminal(tab)"
-          >{{ tab.label }}</button>
+          >
+            <button class="terminal-tab" type="button" @click="selectTerminal(tab)">{{ tab.label }}</button>
+            <button
+              v-if="!tab.primary"
+              class="terminal-tab-close"
+              type="button"
+              title="关闭终端"
+              aria-label="关闭终端"
+              @click.stop="closeTerminal(tab)"
+            >
+              <svg viewBox="0 0 16 16" fill="none" aria-hidden="true">
+                <path d="M5 5l6 6M11 5l-6 6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" />
+              </svg>
+            </button>
+          </div>
           <button
             class="terminal-add-button"
             type="button"
-            title="新建终端"
-            aria-label="新建终端"
+            title="新建 shell 终端"
+            aria-label="新建 shell 终端"
             @click="createTerminal"
           >
             <svg viewBox="0 0 16 16" fill="none" aria-hidden="true">

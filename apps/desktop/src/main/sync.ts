@@ -134,7 +134,11 @@ const fallbackCodexReasoningOptions: CodexReasoningEffort[] = ["low", "medium", 
 
 function normalizeCodexRunSettings(settings: AiRunSettingsState["codex"]): AiRunSettingsState["codex"] {
   const selectedModel = settings.models.find((model) => model.model === settings.model)
-    ?? (!settings.model ? settings.models.find((model) => model.isDefault) ?? settings.models[0] : undefined);
+    ?? (!settings.model
+      ? settings.models.find((model) => `${model.model} ${model.displayName}`.toLocaleLowerCase().includes("terra"))
+        ?? settings.models.find((model) => model.isDefault)
+        ?? settings.models[0]
+      : undefined);
   const model = settings.model || selectedModel?.model || "";
   const advertisedEfforts = selectedModel?.supportedReasoningEfforts?.map((option) => option.reasoningEffort) ?? [];
   const reasoningOptions = advertisedEfforts.length ? advertisedEfforts : fallbackCodexReasoningOptions;
@@ -142,10 +146,10 @@ function normalizeCodexRunSettings(settings: AiRunSettingsState["codex"]): AiRun
   const modelDefault = selectedModel?.defaultReasoningEffort;
   const reasoningEffort = requestedEffort && reasoningOptions.includes(requestedEffort)
     ? requestedEffort
-    : modelDefault && reasoningOptions.includes(modelDefault)
-      ? modelDefault
-      : reasoningOptions.includes("high")
-        ? "high"
+    : reasoningOptions.includes("high")
+      ? "high"
+      : modelDefault && reasoningOptions.includes(modelDefault)
+        ? modelDefault
         : reasoningOptions[0] ?? "";
   const serviceTier = settings.serviceTier
     && selectedModel?.serviceTiers?.some((tier) => tier.id === settings.serviceTier)
@@ -816,6 +820,7 @@ class DesktopCloudSync {
     if (providerId !== "codex" && providerId !== "claude" && providerId !== "opencode" && providerId !== "mimo") return;
     const model = typeof msg.model === "string" ? msg.model : "";
     const reasoningEffort = typeof msg.reasoningEffort === "string" ? msg.reasoningEffort : "";
+    const serviceTier = typeof msg.serviceTier === "string" && msg.serviceTier.trim() ? msg.serviceTier.trim() : null;
     let appliedModel = model;
     let appliedReasoningEffort = reasoningEffort;
     let appliedServiceTier: string | null | undefined;
@@ -825,7 +830,7 @@ class DesktopCloudSync {
         ...this.runSettings.codex,
         ...(model ? { model } : {}),
         ...(codexReasoningEffort(reasoningEffort) ? { reasoningEffort } : {}),
-        serviceTier: null,
+        serviceTier,
       };
       this.runSettings.codex = nextSettings.models.length > 0
         ? normalizeCodexRunSettings(nextSettings)
@@ -1372,7 +1377,7 @@ class DesktopCloudSync {
               codexReasoningEffort: codexReasoningEffort(reasoningEffort),
               codexMode: runMode,
               codexGoal: goal,
-              codexServiceTier: null,
+              codexServiceTier: this.runSettings.codex.serviceTier,
             },
             aiChatSender
           );
@@ -1464,8 +1469,9 @@ class DesktopCloudSync {
     const aiSessionId = typeof msg.aiSessionId === "string" ? msg.aiSessionId : "";
     const approvalId = typeof msg.approvalId === "string" ? msg.approvalId : "";
     const decision = msg.decision === "approved" || msg.decision === "denied" ? msg.decision : null;
+    const scope = msg.scope === "session" ? "session" : "turn";
     if (!aiSessionId || !approvalId || !decision) return;
-    const ok = respondCodexApproval(aiSessionId, approvalId, decision)
+    const ok = respondCodexApproval(aiSessionId, approvalId, decision, scope)
       || await respondMimoApproval(aiSessionId, approvalId, decision);
     if (!ok) {
       this.send({

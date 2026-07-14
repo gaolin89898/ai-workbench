@@ -1,0 +1,291 @@
+<!DOCTYPE html>
+<html lang="zh-CN" class="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Workbench — Ultra 代理详情侧边栏 - 轻量版</title>
+    <style id="theme-vars">
+/* AI Workbench Desktop — Dark Theme */
+/* Based on actual project style.css, inverted to dark */
+:root {
+  /* Brand */
+  --color-primary: #2563eb;
+  --color-primary-hover: #1d4ed8;
+  --color-primary-muted: rgba(37, 99, 235, 0.15);
+  --color-primary-soft: rgba(37, 99, 235, 0.08);
+  --color-primary-ring: rgba(37, 99, 235, 0.25);
+
+  /* Surface & Background */
+  --color-bg-app: #0f1117;
+  --color-bg-body: #111318;
+  --color-bg-sidebar: #161822;
+  --color-bg-main: #1a1d2e;
+  --color-bg-content: #1e2235;
+  --color-bg-surface: #1e2235;
+  --color-bg-elevated: #252a3a;
+  --color-bg-input: #1e2235;
+  --color-bg-hover: rgba(255, 255, 255, 0.06);
+  --color-bg-active: rgba(37, 99, 235, 0.12);
+
+  /* Text */
+  --color-text-primary: #e8eaed;
+  --color-text-body: #d1d5db;
+  --color-text-secondary: #9aa0b4;
+  --color-text-muted: #6b7280;
+  --color-text-placeholder: #6b7280;
+  --color-text-inverse: #ffffff;
+
+  /* Border */
+  --color-border: rgba(255, 255, 255, 0.1);
+  --color-border-subtle: rgba(255, 255, 255, 0.06);
+  --color-border-active: rgba(37, 99, 235, 0.5);
+
+  /* State Colors */
+  --state-success: #22c55e;
+  --state-success-bg: rgba(34, 197, 94, 0.12);
+  --state-success-ring: rgba(34, 197, 94, 0.25);
+  --state-warning: #f59e0b;
+  --state-warning-bg: rgba(245, 158, 11, 0.12);
+  --state-error: #ef4444;
+  --state-error-bg: rgba(239, 68, 68, 0.12);
+  --state-info: #3b82f6;
+  --state-info-bg: rgba(59, 130, 246, 0.12);
+
+  /* Radius */
+  --radius-sm: 4px;
+  --radius-md: 7px;
+  --radius-lg: 8px;
+  --radius-xl: 12px;
+  --radius-full: 999px;
+
+  /* Typography */
+  --font-sans: "Inter", ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+
+  --text-xs: 11px;
+  --text-sm: 12px;
+  --text-base: 13px;
+  --text-md: 14px;
+  --text-lg: 16px;
+  --text-xl: 20px;
+  --text-2xl: 28px;
+
+  --leading-tight: 1.25;
+  --leading-normal: 1.5;
+  --leading-relaxed: 1.625;
+  --leading-chat: 1.62;
+
+  /* Font Weights */
+  --fw-normal: 400;
+  --fw-medium: 500;
+  --fw-semibold: 620;
+  --fw-bold: 700;
+  --fw-extrabold: 800;
+  --fw-black: 850;
+
+  /* Shadows */
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.15);
+  --shadow-md: 0 10px 24px rgba(0, 0, 0, 0.25);
+  --shadow-lg: 0 24px 56px rgba(0, 0, 0, 0.35);
+  --shadow-composer: 0 16px 42px rgba(0, 0, 0, 0.3);
+
+  /* Spacing */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-10: 40px;
+  --space-14: 56px;
+  --space-18: 72px;
+
+  /* Layout */
+  --sidebar-width: 286px;
+  --topbar-height: 56px;
+  --composer-max-width: 760px;
+
+  /* Transitions */
+  --transition-fast: 120ms ease;
+  --transition-normal: 200ms ease;
+}
+
+    </style>
+    <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4.3.1/dist/index.global.js"></script>
+    <script src="https://unpkg.com/lucide@1.8.0/dist/umd/lucide.min.js"></script>
+    <style type="text/tailwindcss">
+  @theme inline {
+    --color-primary: var(--color-primary);
+    --color-border: var(--color-border);
+  }
+  @layer base {
+    body { background: var(--color-background); color: var(--color-text-primary); }
+    td, th { @apply break-words; word-break: break-all; word-break: auto-phrase; }
+    th { @apply whitespace-nowrap; }
+  }
+    </style>
+    <style>
+      .no-scrollbar::-webkit-scrollbar { display: none; }
+      .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+      [data-icon] {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        -webkit-mask-size: contain;
+        mask-size: contain;
+        -webkit-mask-repeat: no-repeat;
+        mask-repeat: no-repeat;
+        -webkit-mask-position: center;
+        mask-position: center;
+        background-color: currentColor;
+      }
+    </style>
+</head>
+<body class="min-h-screen font-sans antialiased">
+    <main class="review-canvas">
+      <section class="review-stage" aria-label="轻量代理详情侧边栏评审">
+        <p class="review-note">会话流优先 · 轻量详情</p>
+
+        <article class="inspector" aria-label="架构代理详情">
+          <header class="inspector-header">
+            <div class="header-row">
+              <button class="icon-button" aria-label="返回" title="返回"><i data-lucide="arrow-left"></i></button>
+              <div class="agent-name min-w-0">
+                <h1 class="truncate">架构代理</h1>
+                <span class="running-status"><i></i>运行中</span>
+              </div>
+              <strong class="progress-value">68%</strong>
+              <button class="icon-button" aria-label="更多操作" title="更多操作"><i data-lucide="ellipsis"></i></button>
+            </div>
+            <div class="progress-line" aria-label="当前进度 68%"><span></span></div>
+          </header>
+
+          <div class="content-flow">
+            <section class="flow-section task-section" aria-labelledby="task-heading">
+              <h2 id="task-heading">当前任务</h2>
+              <p class="task-title truncate">梳理认证边界与重构方案</p>
+              <div class="current-action min-w-0">
+                <i data-lucide="file-pen-line"></i>
+                <span class="truncate">编辑 <code>auth/session.ts</code></span>
+                <time>08:42</time>
+              </div>
+            </section>
+
+            <section class="flow-section" aria-labelledby="activity-heading">
+              <h2 id="activity-heading">最近活动</h2>
+              <ol class="activity-list">
+                <li class="done"><span class="event-dot"><i data-lucide="check"></i></span><p class="truncate">已分析调用链</p></li>
+                <li class="done"><span class="event-dot"><i data-lucide="check"></i></span><p class="truncate">已定义会话 / 策略边界</p></li>
+                <li class="active"><span class="event-dot"><i data-lucide="loader-circle"></i></span><p class="truncate">正在调整会话层</p></li>
+              </ol>
+              <button class="collapsed-step">还有 1 个步骤<i data-lucide="chevron-down"></i></button>
+            </section>
+
+            <section class="flow-section summary-row" aria-label="文件变更摘要">
+              <p class="truncate"><i data-lucide="files"></i><span>3 个文件变更</span><code class="add">+59</code><code class="remove">−22</code></p>
+              <button class="text-action">查看</button>
+            </section>
+
+            <section class="flow-section dependency-line" aria-label="依赖提醒">
+              <i data-lucide="shield-clock"></i>
+              <p class="truncate">安全审查等待此任务完成</p>
+            </section>
+
+            <section class="flow-section output-section" aria-labelledby="output-heading">
+              <div class="section-title-row">
+                <h2 id="output-heading">输出预览</h2>
+                <button class="text-action">展开</button>
+              </div>
+              <div class="output-copy">
+                <p>会话层仅维护生命周期与刷新流程。</p>
+                <p>凭据处理独立，避免密钥逻辑外溢。</p>
+                <p>权限判定统一收敛至策略层。</p>
+              </div>
+            </section>
+          </div>
+
+          <footer class="inspector-footer">
+            <p class="sync-note"><i data-lucide="refresh-cw"></i><span class="truncate">自动同步到实时汇总</span></p>
+            <div class="footer-actions">
+              <button class="pause-button" aria-label="暂停代理" title="暂停代理"><i data-lucide="pause"></i></button>
+              <button class="primary-button">追加指令<i data-lucide="arrow-up"></i></button>
+            </div>
+          </footer>
+        </article>
+      </section>
+    </main>
+    <style>
+      *{box-sizing:border-box}
+      html,body{margin:0;min-width:320px;background:var(--color-bg-app)!important;color:var(--color-text-primary);font-family:var(--font-sans)}
+      button{font:inherit}
+      .review-canvas{width:100%;height:100vh;min-height:700px;overflow:hidden;background:var(--color-bg-body)}
+      .review-stage{position:relative;display:flex;align-items:center;justify-content:center;width:100%;height:100%;padding:32px}
+      .review-note{position:absolute;top:28px;left:32px;margin:0;color:var(--color-text-muted);font-size:var(--text-xs);letter-spacing:.02em}
+      .inspector{display:grid;grid-template-rows:auto minmax(0,1fr) auto;width:clamp(360px,27vw,392px);height:660px;overflow:hidden;border:1px solid var(--color-border);border-radius:var(--radius-lg);background:var(--color-bg-sidebar)}
+      .inspector-header{padding:13px 14px 0}
+      .header-row{display:flex;align-items:center;gap:9px;min-width:0}
+      .icon-button,.pause-button{display:inline-flex;align-items:center;justify-content:center;width:30px;height:30px;flex:none;border:0;border-radius:var(--radius-md);background:transparent;color:var(--color-text-secondary);cursor:pointer;transition:background var(--transition-fast),color var(--transition-fast),transform var(--transition-fast)}
+      .icon-button svg,.pause-button svg{width:15px;height:15px}
+      .icon-button:hover,.pause-button:hover{background:var(--color-bg-hover);color:var(--color-text-primary)}
+      .icon-button:active,.pause-button:active,.primary-button:active{transform:translateY(1px)}
+      .agent-name{display:flex;align-items:center;gap:9px;flex:1}
+      .agent-name h1{margin:0;font-size:var(--text-md);line-height:1.25;font-weight:var(--fw-bold);text-wrap:balance;word-break:keep-all}
+      .running-status{display:inline-flex;align-items:center;gap:5px;color:var(--color-text-secondary);font-size:var(--text-xs);white-space:nowrap}
+      .running-status i{width:7px;height:7px;border-radius:var(--radius-full);background:var(--color-primary)}
+      .progress-value{font:var(--text-xs)/1 var(--font-mono);font-variant-numeric:tabular-nums;color:var(--color-text-secondary)}
+      .progress-line{height:2px;margin-top:12px;overflow:hidden;background:var(--color-border-subtle)}
+      .progress-line span{display:block;width:68%;height:100%;background:var(--color-primary)}
+      .content-flow{min-height:0;padding:0 18px}
+      .flow-section{padding:18px 0;border-bottom:1px solid var(--color-border-subtle)}
+      .flow-section h2{margin:0;color:var(--color-text-muted);font-size:var(--text-xs);line-height:1.4;font-weight:var(--fw-semibold);text-wrap:balance;word-break:keep-all}
+      .task-title{margin:7px 0 0;color:var(--color-text-primary);font-size:var(--text-lg);line-height:1.35;font-weight:var(--fw-semibold)}
+      .current-action{display:flex;align-items:center;gap:7px;margin-top:12px;color:var(--color-text-secondary);font-size:var(--text-xs)}
+      .current-action svg{width:14px;height:14px;flex:none;color:var(--color-primary)}
+      .current-action span{flex:1}
+      .current-action code,.current-action time,.summary-row code{font-family:var(--font-mono);font-variant-numeric:tabular-nums}
+      .current-action time{flex:none;color:var(--color-text-muted)}
+      .activity-list{display:flex;flex-direction:column;gap:0;margin:12px 0 0;padding:0;list-style:none}
+      .activity-list li{position:relative;display:grid;grid-template-columns:18px minmax(0,1fr);align-items:center;gap:9px;min-height:34px;color:var(--color-text-secondary)}
+      .activity-list li:not(:last-child):after{content:"";position:absolute;left:8px;top:24px;bottom:-10px;width:1px;background:var(--color-border-subtle)}
+      .activity-list p{margin:0;font-size:var(--text-base)}
+      .event-dot{z-index:1;display:inline-flex;align-items:center;justify-content:center;width:18px;height:18px;border:1px solid var(--color-border);border-radius:var(--radius-full);background:var(--color-bg-sidebar);color:var(--color-text-muted)}
+      .event-dot svg{width:10px;height:10px}
+      .activity-list .done .event-dot{color:var(--state-success);border-color:var(--state-success)}
+      .activity-list .active{color:var(--color-text-primary)}
+      .activity-list .active .event-dot{color:var(--color-primary);border-color:var(--color-primary);background:var(--color-primary-soft)}
+      .activity-list .active svg{animation:spin 1.5s linear infinite}
+      .collapsed-step{display:inline-flex;align-items:center;justify-content:center;gap:5px;height:28px;margin:7px 0 0 27px;padding:0;border:0;background:transparent;color:var(--color-text-muted);font-size:var(--text-xs);white-space:nowrap;cursor:pointer;transition:color var(--transition-fast)}
+      .collapsed-step:hover{color:var(--color-text-primary)}
+      .collapsed-step svg{width:12px;height:12px}
+      .summary-row{display:flex;align-items:center;justify-content:space-between;gap:12px}
+      .summary-row p{display:flex;align-items:center;gap:7px;min-width:0;margin:0;color:var(--color-text-secondary);font-size:var(--text-base)}
+      .summary-row p svg{width:14px;height:14px;flex:none}
+      .summary-row .add{color:var(--state-success)}
+      .summary-row .remove{color:var(--state-error)}
+      .text-action{display:inline-flex;align-items:center;justify-content:center;flex:none;min-height:28px;padding:0;border:0;background:transparent;color:var(--color-primary);font-size:var(--text-xs);font-weight:var(--fw-semibold);white-space:nowrap;cursor:pointer;transition:color var(--transition-fast),transform var(--transition-fast)}
+      .text-action:hover{color:var(--color-primary-hover);transform:translateX(1px)}
+      .dependency-line{display:flex;align-items:center;gap:9px;color:var(--state-warning)}
+      .dependency-line svg{width:15px;height:15px;flex:none}
+      .dependency-line p{margin:0;color:var(--color-text-secondary);font-size:var(--text-base)}
+      .section-title-row{display:flex;align-items:center;justify-content:space-between;gap:12px}
+      .output-copy{margin-top:8px}
+      .output-copy p{margin:0;color:var(--color-text-secondary);font-size:var(--text-xs);line-height:1.65}
+      .inspector-footer{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:11px 14px;border-top:1px solid var(--color-border-subtle)}
+      .sync-note{display:flex;align-items:center;gap:6px;min-width:0;margin:0;color:var(--color-text-muted);font-size:var(--text-xs)}
+      .sync-note svg{width:12px;height:12px;flex:none}
+      .footer-actions{display:flex;align-items:center;gap:8px;flex:none}
+      .pause-button{border:1px solid var(--color-border-subtle)}
+      .primary-button{display:inline-flex;align-items:center;justify-content:center;gap:6px;height:32px;padding:0 11px;border:1px solid var(--color-primary);border-radius:var(--radius-md);background:var(--color-primary);color:var(--color-text-inverse);font-size:var(--text-xs);font-weight:var(--fw-semibold);white-space:nowrap;cursor:pointer;transition:background var(--transition-fast),transform var(--transition-fast)}
+      .primary-button:hover{background:var(--color-primary-hover)}
+      .primary-button svg{width:13px;height:13px;transition:transform var(--transition-fast)}
+      .primary-button:hover svg{transform:translateY(-2px)}
+      button:focus-visible{outline:2px solid var(--color-primary);outline-offset:2px}
+      .truncate{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.min-w-0{min-width:0}
+      @keyframes spin{to{transform:rotate(360deg)}}
+      @media(max-width:640px){.review-stage{padding:0}.review-note{display:none}.inspector{width:100%;height:100vh;min-height:640px;border:0;border-radius:0}.content-flow{padding:0 16px}}
+      @media(prefers-reduced-motion:reduce){*,*::before,*::after{animation-duration:.01ms!important;transition-duration:.01ms!important}}
+    </style>
+    <script>lucide.createIcons();</script>
+</body>
+</html>

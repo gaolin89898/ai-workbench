@@ -261,7 +261,7 @@ export type ChatSegment =
       type: "approval";
       stepId: string;
       approvalId: string;
-      approvalKind: "command" | "fileChange";
+      approvalKind: "command" | "fileChange" | "permissions";
       providerId?: string;
       status: "pending" | "approved" | "denied" | "expired" | "failed";
       title: string;
@@ -270,6 +270,8 @@ export type ChatSegment =
       cwd?: string;
       grantRoot?: string;
       fileChanges?: string[];
+      requestedPermissions?: CodexRequestedPermissions;
+      permissionScope?: CodexPermissionGrantScope;
       detail?: string;
     }
   | {
@@ -315,12 +317,14 @@ export type CodexTraceItem = {
 
 export type CodexTraceApproval = {
   id: string;
-  kind: "command" | "fileChange";
+  kind: "command" | "fileChange" | "permissions";
   status: "pending" | "approved" | "denied" | "expired" | "failed";
   title: string;
   command?: string | null;
   cwd?: string | null;
   fileChanges?: string[];
+  requestedPermissions?: CodexRequestedPermissions;
+  permissionScope?: CodexPermissionGrantScope;
   detail?: string | null;
 };
 
@@ -405,6 +409,24 @@ export type ShellInputRequest = {
 
 export type CodexApprovalDecision = "approved" | "denied";
 export type CodexApprovalMode = "suggest" | "autoEdit" | "fullAccess" | "custom";
+export type CodexPermissionGrantScope = "turn" | "session";
+export type CodexFileSystemPermissionEntry = {
+  path: string;
+  access: "read" | "write" | "deny";
+};
+export type CodexRequestedPermissions = {
+  network?: { enabled: boolean | null };
+  fileSystem?: {
+    read?: string[] | null;
+    write?: string[] | null;
+    entries?: CodexFileSystemPermissionEntry[];
+  };
+};
+export type CodexPermissionProfile = {
+  id: string;
+  description: string;
+  allowed: boolean;
+};
 export type CodexRunMode = "default" | "plan";
 export type CodexReasoningEffort = "low" | "medium" | "high" | "xhigh" | "max" | "ultra";
 
@@ -412,6 +434,7 @@ export type CodexApprovalResponseRequest = {
   aiSessionId: string;
   approvalId: string;
   decision: CodexApprovalDecision;
+  scope?: CodexPermissionGrantScope;
 };
 
 export type CodexReasoningEffortOption = {
@@ -1029,6 +1052,8 @@ export const desktopApi = {
     ipc<CodexModelOption[]>("list_claude_models"),
   getCodexApprovalMode: (cwd: string): Promise<CodexApprovalMode> =>
     ipc<CodexApprovalMode>("get_codex_approval_mode", cwd),
+  listCodexPermissionProfiles: (cwd: string): Promise<CodexPermissionProfile[]> =>
+    ipc<CodexPermissionProfile[]>("list_codex_permission_profiles", cwd),
   listOpenCodeConfigOptions: (cwd: string): Promise<AcpConfigOptions> =>
     ipc<AcpConfigOptions>("list_opencode_config_options", cwd),
   listMimoConfigOptions: (cwd: string): Promise<AcpConfigOptions> =>

@@ -105,6 +105,10 @@ function formatDuration(durationMs?: number) {
   return `${(durationMs / 1000).toFixed(durationMs < 10_000 ? 1 : 0)}s`;
 }
 
+function planCompletedCount(segment: Extract<ChatSegmentType, { type: "plan" }>): number {
+  return segment.steps.filter((step) => step.status === "completed").length;
+}
+
 function toolLineTitle(segment: Extract<ChatSegmentType, { type: "tool" }>) {
   const patchFiles = patchFileList(toolDiffText(segment));
   const command = normalizeCommand(segment.command).replace(/\s+/g, " ").trim();
@@ -514,6 +518,11 @@ function approvalMeta(segment: Extract<ChatSegmentType, { type: "approval" }>) {
   if (segment.cwd) parts.push(`目录 ${segment.cwd}`);
   if (segment.grantRoot) parts.push(`授权目录 ${segment.grantRoot}`);
   if (segment.fileChanges?.length) parts.push(`${segment.fileChanges.length} 个文件`);
+  if (segment.requestedPermissions?.network?.enabled) parts.push("互联网访问");
+  const filePermissionCount = (segment.requestedPermissions?.fileSystem?.read?.length ?? 0)
+    + (segment.requestedPermissions?.fileSystem?.write?.length ?? 0)
+    + (segment.requestedPermissions?.fileSystem?.entries?.length ?? 0);
+  if (filePermissionCount) parts.push(`${filePermissionCount} 项文件权限`);
   return parts.join(" · ");
 }
 
@@ -526,6 +535,7 @@ function approvalStatusLabel(segment: Extract<ChatSegmentType, { type: "approval
 }
 
 function approvalKindLabel(segment: Extract<ChatSegmentType, { type: "approval" }>) {
+  if (segment.approvalKind === "permissions") return "权限申请";
   if (segment.approvalKind === "fileChange") return "文件修改";
   if (segment.approvalKind === "command") return "命令执行";
   return "工具操作";
@@ -538,13 +548,14 @@ function approvalProviderLabel(segment: Extract<ChatSegmentType, { type: "approv
   return "Codex";
 }
 
-async function respondApproval(decision: "approved" | "denied") {
+async function respondApproval(decision: "approved" | "denied", scope: "turn" | "session" = "turn") {
   if (props.segment.type !== "approval" || !props.aiSessionId || props.segment.status !== "pending") return;
   try {
     const handled = await desktopApi.respondAiApproval({
       aiSessionId: props.aiSessionId,
       approvalId: props.segment.approvalId,
       decision,
+      scope,
     });
     if (!handled) {
       ws.expirePendingApproval(props.aiSessionId, props.segment.approvalId);
@@ -674,20 +685,24 @@ async function respondApproval(decision: "approved" | "denied") {
           <path d="M4.25 2.75h5.5L12.5 5.5v7.75h-8.25V2.75Z" stroke="currentColor" stroke-width="1.35" stroke-linejoin="round" />
           <path d="M9.75 2.75V5.5h2.75M6.25 8h4M6.25 10.5h4" stroke="currentColor" stroke-width="1.35" stroke-linecap="round" stroke-linejoin="round" />
         </svg>
-        <span>计划</span>
+        <span>Plan</span>
       </div>
+      <span class="chat-segment-plan-count">{{ planCompletedCount(segment) }}/{{ segment.steps.length }}</span>
     </header>
     <div class="chat-segment-plan-body">
-      <h3>{{ segment.title }}</h3>
-      <section v-if="segment.summary">
-        <strong>SUMMARY</strong>
-        <p>{{ segment.summary }}</p>
-      </section>
+      <p v-if="segment.summary" class="chat-segment-plan-explanation">{{ segment.summary }}</p>
       <section>
-        <strong>KEY CHANGES</strong>
+        <strong>Key Changes</strong>
         <ul>
           <li v-for="(step, index) in segment.steps" :key="index" :class="`status-${step.status}`">
-            <span>{{ step.step }}</span>
+            <span class="chat-segment-plan-step-marker" aria-hidden="true">
+              <svg v-if="step.status === 'completed'" viewBox="0 0 16 16" fill="none">
+                <path d="M3.5 8.5l3 3 6-6.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" />
+              </svg>
+              <span v-else-if="step.status === 'in_progress'" class="chat-segment-plan-step-dot chat-segment-plan-step-dot-active"></span>
+              <span v-else class="chat-segment-plan-step-dot"></span>
+            </span>
+            <span class="chat-segment-plan-step-text">{{ step.step }}</span>
           </li>
         </ul>
       </section>
@@ -823,11 +838,23 @@ async function respondApproval(decision: "approved" | "denied") {
           <li v-for="file in segment.fileChanges.slice(0, 6)" :key="file">{{ file }}</li>
         </ul>
       </div>
+      <div v-if="segment.requestedPermissions" class="chat-segment-approval-panel files">
+        <div class="chat-segment-approval-panel-head">
+          <span>申请权限</span>
+        </div>
+        <ul>
+          <li v-if="segment.requestedPermissions.network?.enabled">访问互联网</li>
+          <li v-for="path in segment.requestedPermissions.fileSystem?.read ?? []" :key="`read-${path}`">读取 {{ path }}</li>
+          <li v-for="path in segment.requestedPermissions.fileSystem?.write ?? []" :key="`write-${path}`">写入 {{ path }}</li>
+          <li v-for="entry in segment.requestedPermissions.fileSystem?.entries ?? []" :key="`${entry.access}-${entry.path}`">{{ entry.access === 'write' ? '写入' : entry.access === 'read' ? '读取' : '拒绝' }} {{ entry.path }}</li>
+        </ul>
+      </div>
     </div>
     <p v-if="segment.detail" class="chat-segment-approval-detail">{{ segment.detail }}</p>
     <div class="chat-segment-approval-actions">
       <button type="button" class="button secondary" :disabled="approvalBusy || !aiSessionId" @click="respondApproval('denied')">拒绝</button>
-      <button type="button" class="button primary" :disabled="approvalBusy || !aiSessionId" @click="respondApproval('approved')">允许执行</button>
+      <button v-if="segment.approvalKind === 'permissions'" type="button" class="button secondary" :disabled="approvalBusy || !aiSessionId" @click="respondApproval('approved', 'turn')">允许本轮</button>
+      <button type="button" class="button primary" :disabled="approvalBusy || !aiSessionId" @click="respondApproval('approved', segment.approvalKind === 'permissions' ? 'session' : 'turn')">{{ segment.approvalKind === 'permissions' ? '允许本会话' : '允许执行' }}</button>
     </div>
   </article>
 </template>

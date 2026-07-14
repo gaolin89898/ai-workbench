@@ -524,8 +524,10 @@ export function reduceCodexTraceSnapshot(
     case "approval/requested": {
       const p = record(event.params);
       const id = firstString(p.approvalId, p.id) ?? `approval-${Date.now()}`;
-      const kind: "fileChange" | "command" = p.approvalKind === "fileChange" ? "fileChange" : "command";
-      const title = kind === "fileChange" ? "需要同意后修改文件" : "需要同意后执行命令";
+      const kind: "fileChange" | "command" | "permissions" = p.approvalKind === "permissions"
+        ? "permissions"
+        : p.approvalKind === "fileChange" ? "fileChange" : "command";
+      const title = kind === "permissions" ? "需要同意额外权限" : kind === "fileChange" ? "需要同意后修改文件" : "需要同意后执行命令";
       const approval = {
         id,
         kind,
@@ -534,6 +536,8 @@ export function reduceCodexTraceSnapshot(
         command: firstString(p.command) ?? null,
         cwd: firstString(p.cwd) ?? null,
         fileChanges: Array.isArray(p.fileChanges) ? p.fileChanges.filter((item): item is string => typeof item === "string") : [],
+        requestedPermissions: p.requestedPermissions && typeof p.requestedPermissions === "object" ? p.requestedPermissions : undefined,
+        permissionScope: p.permissionScope === "session" ? "session" as const : p.permissionScope === "turn" ? "turn" as const : undefined,
         detail: firstString(p.detail, p.reason) ?? null,
       };
       snapshot = {
@@ -703,11 +707,12 @@ export function codexTraceSnapshotToSegments(snapshot: CodexTraceSnapshot): Chat
   }
 
   if (snapshot.plan?.steps?.length) {
+    const explanation = snapshot.plan.explanation?.trim() || null;
     segments.push({
       type: "plan",
       stepId: `plan-${snapshot.plan.turnId ?? "current"}`,
-      title: "执行计划",
-      summary: snapshot.plan.explanation ?? undefined,
+      title: explanation ?? "执行计划",
+      summary: explanation ?? undefined,
       steps: snapshot.plan.steps,
     });
   }
@@ -791,6 +796,8 @@ export function codexTraceSnapshotToSegments(snapshot: CodexTraceSnapshot): Chat
         command: item.command ?? approval?.command ?? undefined,
         cwd: approval?.cwd ?? undefined,
         fileChanges: approval?.fileChanges ?? [],
+        requestedPermissions: approval?.requestedPermissions,
+        permissionScope: approval?.permissionScope,
         detail: approval?.detail ?? item.text,
       });
       continue;

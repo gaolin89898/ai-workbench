@@ -4,13 +4,13 @@ import ChatMessageRow from "./ChatMessageRow.vue";
 import ChatSegmentView from "./ChatSegment.vue";
 import TerminalView from "./TerminalView.vue";
 import { useWorkspace, type QueuedAiMessage } from "../composables/useWorkspace";
-import { desktopApi, type AiChatOptions, type AiProvider, type AiRunSettingsState, type ChatContextAttachment, type ChatFileAttachment, type ChatImageAttachment, type ChatMessage, type ChatSegment, type ClaudeReasoningEffort, type AcpConfigOption, type CodexAdminEvent, type CodexApprovalMode, type CodexGoalStatus, type CodexModelOption, type CodexReasoningEffort, type CodexRunMode, type CodexThreadGoal, type ProjectEnvironmentInfo, type ProjectFilePreview, type ProjectOpenTarget } from "../services/desktop";
+import { desktopApi, type AiChatOptions, type AiProvider, type AiRunSettingsState, type ChatContextAttachment, type ChatFileAttachment, type ChatImageAttachment, type ChatMessage, type ChatSegment, type ClaudeReasoningEffort, type AcpConfigOption, type CodexAdminEvent, type CodexApprovalMode, type CodexGoalStatus, type CodexModelOption, type CodexPermissionProfile, type CodexReasoningEffort, type CodexRunMode, type CodexThreadGoal, type ProjectEnvironmentInfo, type ProjectFilePreview, type ProjectOpenTarget } from "../services/desktop";
 import { isProjectFileViewerSupported } from "../shared/project_file_formats";
 
 const ProjectFileViewer = defineAsyncComponent(() => import("./ProjectFileViewer.vue"));
 
 type RunPreferenceProviderId = "codex" | "claude" | "opencode" | "mimo";
-type RunPreference = { model: string; reasoningEffort: string };
+type RunPreference = { model: string; reasoningEffort: string; serviceTier?: string | null };
 type RunPreferences = Partial<Record<RunPreferenceProviderId, RunPreference>>;
 type ProcessPanelSelection = {
   sessionId: string;
@@ -35,6 +35,7 @@ function readRunPreferences(): RunPreferences {
       preferences[providerId] = {
         model: typeof record.model === "string" ? record.model : "",
         reasoningEffort: typeof record.reasoningEffort === "string" ? record.reasoningEffort : "",
+        serviceTier: typeof record.serviceTier === "string" ? record.serviceTier : null,
       };
     }
     return preferences;
@@ -137,12 +138,14 @@ const splitPanelOpen = ref(false);
 const splitPanelWidth = ref(420);
 const modelMenuOpen = ref(false);
 const modelSubmenuOpen = ref(false);
-type ModelSubmenuKind = "model" | "reasoning";
+type ModelSubmenuKind = "model" | "reasoning" | "serviceTier";
 const modelSubmenuKind = ref<ModelSubmenuKind>("model");
 const codexApprovalMode = ref<CodexApprovalMode>("custom");
+const codexPermissionProfiles = ref<CodexPermissionProfile[]>([]);
 const codexMode = ref<CodexRunMode>("default");
 const codexSelectedModel = ref(runPreferences.codex?.model ?? "");
 const codexReasoningLevel = ref<CodexReasoningEffort | null>(codexEffortPreference(runPreferences.codex?.reasoningEffort));
+const codexServiceTier = ref<string | null>(runPreferences.codex?.serviceTier ?? null);
 const claudeSelectedModel = ref(runPreferences.claude?.model || "sonnet");
 const claudeReasoningLevel = ref<ClaudeReasoningEffort>(claudeEffortPreference(runPreferences.claude?.reasoningEffort));
 const codexGoalEnabled = ref(false);
@@ -379,6 +382,18 @@ const claudeReasoningOptions = [
   { id: "max", label: "最大" },
 ] as const;
 const selectedCodexModelOption = computed(() => codexModelOptions.value.find((model) => model.model === codexSelectedModel.value));
+const codexServiceTierOptions = computed(() => selectedCodexModelOption.value?.serviceTiers ?? []);
+function codexServiceTierLabel(id: string, name: string) {
+  const tier = `${id} ${name}`.toLocaleLowerCase();
+  if (tier.includes("flex")) return `${name} · 0.5×`;
+  if (tier.includes("fast") || tier.includes("priority")) return `${name} · 2×`;
+  return `${name} · 1×`;
+}
+const selectedCodexServiceTierLabel = computed(() => {
+  if (!codexServiceTier.value) return "默认 · 1×";
+  const option = codexServiceTierOptions.value.find((candidate) => candidate.id === codexServiceTier.value);
+  return option ? codexServiceTierLabel(option.id, option.name) : codexServiceTier.value;
+});
 const codexReasoningOptions = computed<CodexReasoningOption[]>(() => {
   const supported = selectedCodexModelOption.value?.supportedReasoningEfforts ?? [];
   if (!supported.length) return fallbackCodexReasoningOptions;
@@ -909,9 +924,19 @@ function toggleApprovalMenu() {
 }
 
 function selectApprovalMode(mode: CodexApprovalMode) {
+  if (!approvalModeAllowed(mode)) return;
   codexApprovalSelectionVersion += 1;
   codexApprovalMode.value = mode;
   approvalMenuOpen.value = false;
+}
+
+function approvalModeAllowed(mode: CodexApprovalMode) {
+  const profileId = mode === "fullAccess" ? ":danger-full-access"
+    : mode === "suggest" || mode === "autoEdit" ? ":workspace"
+    : null;
+  if (!profileId) return true;
+  const profile = codexPermissionProfiles.value.find((entry) => entry.id === profileId);
+  return profile?.allowed !== false;
 }
 
 function toggleComposerToolsMenu() {
@@ -1214,11 +1239,15 @@ function reconcileCodexModelSettings() {
   const supportedEfforts = codexReasoningOptions.value.map((option) => option.id);
   if (!codexReasoningLevel.value || !supportedEfforts.includes(codexReasoningLevel.value)) {
     const modelDefault = selectedCodexModelOption.value?.defaultReasoningEffort;
-    codexReasoningLevel.value = modelDefault && supportedEfforts.includes(modelDefault)
-      ? modelDefault
-      : supportedEfforts.includes("high")
-        ? "high"
+    codexReasoningLevel.value = supportedEfforts.includes("high")
+      ? "high"
+      : modelDefault && supportedEfforts.includes(modelDefault)
+        ? modelDefault
         : supportedEfforts[0] ?? null;
+  }
+  const supportedServiceTiers = codexServiceTierOptions.value.map((option) => option.id);
+  if (codexServiceTier.value && !supportedServiceTiers.includes(codexServiceTier.value)) {
+    codexServiceTier.value = null;
   }
 }
 
@@ -1251,6 +1280,13 @@ function selectReasoningLevel(level: string) {
   modelMenuOpen.value = false;
 }
 
+function selectServiceTier(tier: string | null) {
+  codexServiceTier.value = tier;
+  persistRunPreferences();
+  modelSubmenuOpen.value = false;
+  modelMenuOpen.value = false;
+}
+
 async function loadCodexModels() {
   if (codexModelsLoaded.value || codexModelsLoading.value) return;
   codexModelsLoading.value = true;
@@ -1258,7 +1294,9 @@ async function loadCodexModels() {
     const models = await desktopApi.listCodexModels();
     codexModels.value = models;
     codexModelsLoaded.value = true;
-    const defaultModel = models.find((model) => model.isDefault) ?? models[0];
+    const defaultModel = models.find((model) => `${model.model} ${model.displayName}`.toLocaleLowerCase().includes("terra"))
+      ?? models.find((model) => model.isDefault)
+      ?? models[0];
     if (!codexSelectedModel.value && defaultModel) codexSelectedModel.value = defaultModel.model;
     reconcileCodexModelSettings();
     publishRunSettings();
@@ -1276,9 +1314,13 @@ async function loadCodexApprovalMode() {
   const selectionVersion = codexApprovalSelectionVersion;
   codexApprovalModeRequestedPath = projectPath;
   try {
-    const mode = await desktopApi.getCodexApprovalMode(projectPath);
+    const [mode, profiles] = await Promise.all([
+      desktopApi.getCodexApprovalMode(projectPath),
+      desktopApi.listCodexPermissionProfiles(projectPath).catch(() => []),
+    ]);
     if (loadId !== codexApprovalModeLoadId) return;
     codexApprovalModeLoadedPath = projectPath;
+    codexPermissionProfiles.value = profiles;
     if (selectionVersion === codexApprovalSelectionVersion) codexApprovalMode.value = mode;
   } catch (error) {
     console.warn("Codex approval config read failed", error);
@@ -1339,6 +1381,7 @@ function persistRunPreferences() {
   runPreferences.codex = {
     model: codexSelectedModel.value,
     reasoningEffort: codexReasoningLevel.value ?? "",
+    serviceTier: codexServiceTier.value,
   };
   runPreferences.claude = {
     model: claudeSelectedModel.value,
@@ -1366,7 +1409,7 @@ function publishRunSettings() {
       reasoningEffort: codexReasoningLevel.value ?? "",
       models: codexModels.value,
       reasoningOptions: codexReasoningOptions.value.map((option) => option.id),
-      serviceTier: null,
+      serviceTier: codexServiceTier.value,
     },
     claude: {
       providerId: "claude",
@@ -1405,6 +1448,7 @@ function applyRunSettingsUpdate(event: { providerId?: string; model?: string; re
     if (event.reasoningEffort === "low" || event.reasoningEffort === "medium" || event.reasoningEffort === "high" || event.reasoningEffort === "xhigh" || event.reasoningEffort === "max" || event.reasoningEffort === "ultra") {
       codexReasoningLevel.value = event.reasoningEffort;
     }
+    codexServiceTier.value = typeof event.serviceTier === "string" ? event.serviceTier : null;
     if (codexModelsLoaded.value) reconcileCodexModelSettings();
     return;
   }
@@ -1457,7 +1501,7 @@ function buildRunOptions(): AiChatOptions {
     codexMode: codexMode.value,
     codexModel: codexSelectedModel.value || null,
     codexReasoningEffort: codexReasoningLevel.value,
-    codexServiceTier: null,
+    codexServiceTier: codexServiceTier.value,
     codexGoal: goal || null,
     codexGoalStatus: goal ? codexGoalStatus.value : null,
   };
@@ -1918,7 +1962,7 @@ watch(
 );
 
 watch(
-  [codexSelectedModel, codexReasoningLevel, claudeSelectedModel, claudeReasoningLevel, acpProviderId, acpSelectedModel, acpReasoningLevel, acpModels, acpEfforts],
+  [codexSelectedModel, codexReasoningLevel, codexServiceTier, claudeSelectedModel, claudeReasoningLevel, acpProviderId, acpSelectedModel, acpReasoningLevel, acpModels, acpEfforts],
   () => {
     persistRunPreferences();
     publishRunSettings();
@@ -2196,6 +2240,7 @@ function onPromptKeydown(event: KeyboardEvent) {
               v-for="mode in approvalModes"
               :key="mode.id"
               type="button"
+              :disabled="!approvalModeAllowed(mode.id)"
               :class="{ active: mode.id === codexApprovalMode }"
               @click="selectApprovalMode(mode.id)"
             >
@@ -2219,7 +2264,7 @@ function onPromptKeydown(event: KeyboardEvent) {
               </span>
               <span class="codex-approval-copy">
                 <strong>{{ mode.label }}</strong>
-                <small>{{ mode.description }}</small>
+                <small>{{ approvalModeAllowed(mode.id) ? mode.description : '管理员已禁用此权限模式。' }}</small>
               </span>
               <span v-if="mode.id === codexApprovalMode" class="codex-approval-check" aria-hidden="true">✓</span>
             </button>
@@ -2317,6 +2362,50 @@ function onPromptKeydown(event: KeyboardEvent) {
                     >
                       <span>{{ option.label }}</span>
                       <span class="codex-model-menu-check" aria-hidden="true">{{ option.id === selectedReasoningValue ? "✓" : "" }}</span>
+                    </button>
+                  </div>
+                </div>
+                <div v-if="showCodexRunControls && codexServiceTierOptions.length" class="codex-model-menu-section">
+                  <button
+                    type="button"
+                    class="codex-model-menu-row"
+                    :class="{ active: modelSubmenuOpen && modelSubmenuKind === 'serviceTier' }"
+                    :aria-expanded="modelSubmenuOpen && modelSubmenuKind === 'serviceTier'"
+                    @click.stop="toggleModelSubmenu('serviceTier')"
+                  >
+                    <span class="codex-model-menu-row-label">服务档位</span>
+                    <span class="codex-model-menu-row-value">{{ selectedCodexServiceTierLabel }}</span>
+                    <svg class="codex-model-submenu-chevron" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+                      <path d="M6 4.5 9.5 8 6 11.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" />
+                    </svg>
+                  </button>
+                  <div v-if="modelSubmenuOpen && modelSubmenuKind === 'serviceTier'" class="codex-model-submenu">
+                    <div class="codex-model-menu-heading">服务档位</div>
+                    <button
+                      v-for="option in codexServiceTierOptions.filter((candidate) => candidate.id.toLocaleLowerCase() === 'flex')"
+                      :key="option.id"
+                      type="button"
+                      :class="{ active: option.id === codexServiceTier }"
+                      :title="option.description || option.name"
+                      @click="selectServiceTier(option.id)"
+                    >
+                      <span>{{ codexServiceTierLabel(option.id, option.name) }}</span>
+                      <span class="codex-model-menu-check" aria-hidden="true">{{ option.id === codexServiceTier ? "✓" : "" }}</span>
+                    </button>
+                    <button type="button" :class="{ active: codexServiceTier === null }" @click="selectServiceTier(null)">
+                      <span>默认 · 1×</span>
+                      <span class="codex-model-menu-check" aria-hidden="true">{{ codexServiceTier === null ? "✓" : "" }}</span>
+                    </button>
+                    <button
+                      v-for="option in codexServiceTierOptions.filter((candidate) => candidate.id.toLocaleLowerCase() !== 'flex')"
+                      :key="option.id"
+                      type="button"
+                      :class="{ active: option.id === codexServiceTier }"
+                      :title="option.description || option.name"
+                      @click="selectServiceTier(option.id)"
+                    >
+                      <span>{{ codexServiceTierLabel(option.id, option.name) }}</span>
+                      <span class="codex-model-menu-check" aria-hidden="true">{{ option.id === codexServiceTier ? "✓" : "" }}</span>
                     </button>
                   </div>
                 </div>
@@ -2964,6 +3053,7 @@ function onPromptKeydown(event: KeyboardEvent) {
               v-for="mode in approvalModes"
               :key="mode.id"
               type="button"
+              :disabled="!approvalModeAllowed(mode.id)"
               :class="{ active: mode.id === codexApprovalMode }"
               @click="selectApprovalMode(mode.id)"
             >
@@ -2987,7 +3077,7 @@ function onPromptKeydown(event: KeyboardEvent) {
               </span>
               <span class="codex-approval-copy">
                 <strong>{{ mode.label }}</strong>
-                <small>{{ mode.description }}</small>
+                <small>{{ approvalModeAllowed(mode.id) ? mode.description : '管理员已禁用此权限模式。' }}</small>
               </span>
               <span v-if="mode.id === codexApprovalMode" class="codex-approval-check" aria-hidden="true">✓</span>
             </button>

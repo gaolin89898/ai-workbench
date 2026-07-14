@@ -973,25 +973,23 @@ class _SheetActionTile extends StatelessWidget {
     required this.icon,
     required this.title,
     required this.subtitle,
-    this.enabled = true,
     this.onTap,
   });
 
   final IconData icon;
   final String title;
   final String subtitle;
-  final bool enabled;
   final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
     return _SheetTileShell(
-      enabled: enabled,
+      enabled: true,
       onTap: onTap,
       leading: Icon(
         icon,
         size: 20,
-        color: enabled ? AppColors.primary : AppColors.muted,
+        color: AppColors.primary,
       ),
       title: title,
       subtitle: subtitle,

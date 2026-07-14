@@ -3320,7 +3320,7 @@ h2 {
   flex-direction: column;
   overflow-y: auto;
   overscroll-behavior: contain;
-  scrollbar-gutter: stable;
+  scrollbar-gutter: auto;
   border: 1px solid var(--color-border);
   border-radius: 8px;
   background: var(--color-bg-elevated);
@@ -4745,26 +4745,68 @@ body.chat-terminal-resizing {
   flex: 1 1 auto;
 }
 
+.terminal-tab-item {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  border-radius: 6px;
+  background: transparent;
+}
+
 .terminal-tab {
   flex: 0 0 auto;
   border: 0;
-  border-radius: 6px;
+  border-radius: 6px 0 0 6px;
   background: transparent;
   color: var(--color-text-secondary);
-  padding: 4px 12px;
+  padding: 4px 6px 4px 12px;
   font-size: 12px;
   font-weight: 600;
   white-space: nowrap;
 }
 
-.terminal-tab:hover {
+.terminal-tab-item:hover {
+  background: var(--color-bg-hover);
+}
+
+.terminal-tab-item:hover .terminal-tab {
+  color: var(--color-text-primary);
+}
+
+.terminal-tab-item.active {
+  background: var(--color-bg-elevated);
+}
+
+.terminal-tab-item.active .terminal-tab {
+  color: var(--color-text-primary);
+}
+
+.terminal-tab-item .terminal-tab:only-child {
+  padding-right: 12px;
+  border-radius: 6px;
+}
+
+.terminal-tab-close {
+  display: grid;
+  width: 22px;
+  height: 22px;
+  flex: 0 0 22px;
+  place-items: center;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--color-text-tertiary);
+  padding: 0;
+}
+
+.terminal-tab-close:hover {
   background: var(--color-bg-hover);
   color: var(--color-text-primary);
 }
 
-.terminal-tab.active {
-  background: var(--color-bg-elevated);
-  color: var(--color-text-primary);
+.terminal-tab-close svg {
+  width: 13px;
+  height: 13px;
 }
 
 .terminal-add-button {
@@ -5872,16 +5914,23 @@ body.chat-terminal-resizing {
   color: var(--color-primary);
 }
 
+.chat-segment-plan-count {
+  color: var(--color-text-muted);
+  font-size: 11px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.02em;
+}
+
 .chat-segment-plan-body {
   padding: 14px 16px 16px;
 }
 
-.chat-segment-plan-body h3 {
+.chat-segment-plan-explanation {
   margin: 0 0 14px;
-  color: var(--color-text-primary);
-  font-size: 18px;
-  font-weight: 700;
-  line-height: 1.35;
+  color: var(--color-text-body);
+  font-size: 13px;
+  line-height: 1.65;
 }
 
 .chat-segment-plan-body section + section {
@@ -5895,13 +5944,7 @@ body.chat-terminal-resizing {
   font-size: 11px;
   font-weight: 800;
   letter-spacing: 0.05em;
-}
-
-.chat-segment-plan-body p {
-  margin: 0;
-  color: var(--color-text-body);
-  font-size: 13px;
-  line-height: 1.65;
+  text-transform: uppercase;
 }
 
 .chat-segment-plan-body ul {
@@ -5909,22 +5952,78 @@ body.chat-terminal-resizing {
   flex-direction: column;
   gap: 6px;
   margin: 0;
-  padding-left: 18px;
+  padding-left: 0;
+  list-style: none;
 }
 
 .chat-segment-plan-body li {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
   color: var(--color-text-body);
   font-size: 13px;
-  line-height: 1.8;
+  line-height: 1.6;
+}
+
+.chat-segment-plan-step-marker {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 16px;
+  height: 16px;
+  margin-top: 2px;
+}
+
+.chat-segment-plan-step-marker svg {
+  width: 16px;
+  height: 16px;
+}
+
+.chat-segment-plan-step-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  border: 1.5px solid var(--color-border);
+  background: transparent;
+}
+
+.chat-segment-plan-step-dot-active {
+  border-color: var(--color-primary);
+  background: var(--color-primary);
+  box-shadow: 0 0 0 3px var(--color-primary-muted);
+  animation: chat-segment-plan-pulse 1.4s ease-in-out infinite;
+}
+
+@keyframes chat-segment-plan-pulse {
+  0%, 100% { box-shadow: 0 0 0 3px var(--color-primary-muted); }
+  50% { box-shadow: 0 0 0 5px var(--color-primary-muted); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .chat-segment-plan-step-dot-active { animation: none; }
+}
+
+.chat-segment-plan-step-text {
+  flex: 1;
+  min-width: 0;
 }
 
 .chat-segment-plan-body li.status-completed {
   color: var(--color-text-secondary);
 }
 
+.chat-segment-plan-body li.status-completed .chat-segment-plan-step-marker {
+  color: var(--color-primary);
+}
+
 .chat-segment-plan-body li.status-in_progress {
   color: var(--color-text-primary);
-  font-weight: 620;
+  font-weight: 600;
+}
+
+.chat-segment-plan-body li.status-pending {
+  color: var(--color-text-secondary);
 }
 
 .chat-segment-tool {

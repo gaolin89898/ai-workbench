@@ -1,0 +1,254 @@
+<!DOCTYPE html>
+<html lang="zh-CN" class="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Workbench — Ultra 代理详情侧边栏</title>
+    <style id="theme-vars">
+/* AI Workbench Desktop — Dark Theme */
+/* Based on actual project style.css, inverted to dark */
+:root {
+  /* Brand */
+  --color-primary: #2563eb;
+  --color-primary-hover: #1d4ed8;
+  --color-primary-muted: rgba(37, 99, 235, 0.15);
+  --color-primary-soft: rgba(37, 99, 235, 0.08);
+  --color-primary-ring: rgba(37, 99, 235, 0.25);
+
+  /* Surface & Background */
+  --color-bg-app: #0f1117;
+  --color-bg-body: #111318;
+  --color-bg-sidebar: #161822;
+  --color-bg-main: #1a1d2e;
+  --color-bg-content: #1e2235;
+  --color-bg-surface: #1e2235;
+  --color-bg-elevated: #252a3a;
+  --color-bg-input: #1e2235;
+  --color-bg-hover: rgba(255, 255, 255, 0.06);
+  --color-bg-active: rgba(37, 99, 235, 0.12);
+
+  /* Text */
+  --color-text-primary: #e8eaed;
+  --color-text-body: #d1d5db;
+  --color-text-secondary: #9aa0b4;
+  --color-text-muted: #6b7280;
+  --color-text-placeholder: #6b7280;
+  --color-text-inverse: #ffffff;
+
+  /* Border */
+  --color-border: rgba(255, 255, 255, 0.1);
+  --color-border-subtle: rgba(255, 255, 255, 0.06);
+  --color-border-active: rgba(37, 99, 235, 0.5);
+
+  /* State Colors */
+  --state-success: #22c55e;
+  --state-success-bg: rgba(34, 197, 94, 0.12);
+  --state-success-ring: rgba(34, 197, 94, 0.25);
+  --state-warning: #f59e0b;
+  --state-warning-bg: rgba(245, 158, 11, 0.12);
+  --state-error: #ef4444;
+  --state-error-bg: rgba(239, 68, 68, 0.12);
+  --state-info: #3b82f6;
+  --state-info-bg: rgba(59, 130, 246, 0.12);
+
+  /* Radius */
+  --radius-sm: 4px;
+  --radius-md: 7px;
+  --radius-lg: 8px;
+  --radius-xl: 12px;
+  --radius-full: 999px;
+
+  /* Typography */
+  --font-sans: "Inter", ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+
+  --text-xs: 11px;
+  --text-sm: 12px;
+  --text-base: 13px;
+  --text-md: 14px;
+  --text-lg: 16px;
+  --text-xl: 20px;
+  --text-2xl: 28px;
+
+  --leading-tight: 1.25;
+  --leading-normal: 1.5;
+  --leading-relaxed: 1.625;
+  --leading-chat: 1.62;
+
+  /* Font Weights */
+  --fw-normal: 400;
+  --fw-medium: 500;
+  --fw-semibold: 620;
+  --fw-bold: 700;
+  --fw-extrabold: 800;
+  --fw-black: 850;
+
+  /* Shadows */
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.15);
+  --shadow-md: 0 10px 24px rgba(0, 0, 0, 0.25);
+  --shadow-lg: 0 24px 56px rgba(0, 0, 0, 0.35);
+  --shadow-composer: 0 16px 42px rgba(0, 0, 0, 0.3);
+
+  /* Spacing */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-10: 40px;
+  --space-14: 56px;
+  --space-18: 72px;
+
+  /* Layout */
+  --sidebar-width: 286px;
+  --topbar-height: 56px;
+  --composer-max-width: 760px;
+
+  /* Transitions */
+  --transition-fast: 120ms ease;
+  --transition-normal: 200ms ease;
+}
+
+    </style>
+    <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4.3.1/dist/index.global.js"></script>
+    <script src="https://unpkg.com/lucide@1.8.0/dist/umd/lucide.min.js"></script>
+    <style type="text/tailwindcss">
+  @theme inline {
+    --color-primary: var(--color-primary);
+    --color-border: var(--color-border);
+  }
+  @layer base {
+    body { background: var(--color-background); color: var(--color-text-primary); }
+    td, th { @apply break-words; word-break: break-all; word-break: auto-phrase; }
+    th { @apply whitespace-nowrap; }
+  }
+    </style>
+    <style>
+      .no-scrollbar::-webkit-scrollbar { display: none; }
+      .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+      [data-icon] {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        -webkit-mask-size: contain;
+        mask-size: contain;
+        -webkit-mask-repeat: no-repeat;
+        mask-repeat: no-repeat;
+        -webkit-mask-position: center;
+        mask-position: center;
+        background-color: currentColor;
+      }
+    </style>
+</head>
+<body class="min-h-screen font-sans antialiased">
+    <main class="review-canvas">
+      <section class="review-stage" aria-label="代理详情侧边栏组件评审">
+        <aside class="annotation-gutter" aria-label="组件标注">
+          <div class="context-label"><i data-lucide="panel-right"></i><span>代理详情侧边栏</span></div>
+          <div class="measure-note"><span class="measure-line"></span><p>建议宽度 432px · 最小 360px</p></div>
+          <div class="state-reference">
+            <span><i class="state-dot running"></i>运行中</span>
+            <span><i class="state-dot completed"></i>已完成</span>
+            <span><i class="state-dot waiting"></i>等待中</span>
+          </div>
+        </aside>
+
+        <article class="inspector-specimen">
+          <header class="agent-header">
+            <div class="relationship-row">
+              <span>Ultra 编队 · Agent 1/4</span>
+              <div class="header-actions">
+                <button class="icon-button" aria-label="暂停代理" title="暂停"><i data-lucide="pause"></i></button>
+                <button class="icon-button" aria-label="更多操作" title="更多"><i data-lucide="ellipsis"></i></button>
+                <button class="icon-button" aria-label="关闭详情" title="关闭"><i data-lucide="x"></i></button>
+              </div>
+            </div>
+            <div class="identity-row">
+              <span class="role-mark"><i data-lucide="blocks"></i></span>
+              <div class="identity-copy">
+                <h1 class="truncate">架构代理</h1>
+                <p class="truncate">认证模块重构</p>
+              </div>
+              <span class="status-pill"><i class="state-dot running"></i>运行中</span>
+            </div>
+            <div class="runtime-row">
+              <div class="runtime-progress" aria-label="当前进度 68%"><span></span></div>
+              <b>68%</b><time>08:42</time>
+            </div>
+          </header>
+
+          <div class="scroll-region">
+            <section class="task-overview" aria-labelledby="task-title">
+              <div class="task-title-row">
+                <div class="min-w-0"><h2 id="task-title" class="truncate">梳理认证边界与重构方案</h2><p class="truncate">当前阶段 · 调整会话层</p></div>
+                <span class="file-chip"><i data-lucide="file-code-2"></i><code>auth/session.ts</code></span>
+              </div>
+              <div class="task-progress"><span></span></div>
+              <div class="task-counters">
+                <span><b>3</b> 个文件</span><span><b>6</b> 个事件</span><span><b>18.4k</b> 令牌</span>
+              </div>
+            </section>
+
+            <nav class="inspector-tabs" aria-label="代理详情分类">
+              <button class="inspector-tab active" aria-current="page">概览</button>
+              <button class="inspector-tab">事件</button>
+              <button class="inspector-tab">文件</button>
+              <button class="inspector-tab">输出</button>
+            </nav>
+
+            <div class="overview-panel">
+              <section class="content-section" aria-labelledby="timeline-title">
+                <div class="section-heading"><h2 id="timeline-title">执行时间线</h2><span>4 个阶段</span></div>
+                <ol class="timeline">
+                  <li class="done"><span class="timeline-dot"><i data-lucide="check"></i></span><div><div class="event-line"><b>分析入口</b><time>10:21:04</time></div><p class="truncate">扫描认证与权限调用链</p></div></li>
+                  <li class="done"><span class="timeline-dot"><i data-lucide="check"></i></span><div><div class="event-line"><b>定义边界</b><time>10:23:16</time></div><p class="truncate">提取 session 与 policy 职责</p></div></li>
+                  <li class="current"><span class="timeline-dot"><i data-lucide="loader-circle"></i></span><div><div class="event-line"><b>调整会话</b><time>现在</time></div><p class="truncate">收敛刷新流程与生命周期边界</p><span class="command-chip"><i data-lucide="file-pen-line"></i><code>auth/session.ts</code></span></div></li>
+                  <li class="pending"><span class="timeline-dot"></span><div><div class="event-line"><b>输出方案</b><time>待执行</time></div><p class="truncate">生成依赖说明与迁移建议</p></div></li>
+                </ol>
+              </section>
+
+              <section class="content-section" aria-labelledby="files-title">
+                <div class="section-heading"><h2 id="files-title">涉及文件</h2><button class="text-action">查看差异<i data-lucide="arrow-up-right"></i></button></div>
+                <div class="file-list">
+                  <button class="file-row current"><span class="file-icon"><i data-lucide="file-code-2"></i></span><span class="file-copy"><code class="truncate">auth/session.ts</code><small>当前编辑</small></span><span class="diff-count"><b>+28</b><em>−11</em></span><i data-lucide="chevron-right"></i></button>
+                  <button class="file-row"><span class="file-icon"><i data-lucide="file-type-2"></i></span><span class="file-copy"><code class="truncate">auth/types.ts</code><small>类型定义</small></span><span class="diff-count"><b>+12</b><em>−4</em></span><i data-lucide="chevron-right"></i></button>
+                  <button class="file-row"><span class="file-icon"><i data-lucide="shield-check"></i></span><span class="file-copy"><code class="truncate">policies/access.ts</code><small>访问策略</small></span><span class="diff-count"><b>+19</b><em>−7</em></span><i data-lucide="chevron-right"></i></button>
+                </div>
+              </section>
+
+              <section class="dependency-card" aria-labelledby="dependency-title">
+                <div class="dependency-head"><h2 id="dependency-title">依赖与阻塞</h2><span class="waiting-pill"><i class="state-dot waiting"></i>等待中</span></div>
+                <div class="dependency-body"><span class="dependency-icon"><i data-lucide="shield-clock"></i></span><div class="min-w-0"><b class="truncate">安全审查代理</b><p class="truncate">等待依赖 · 认证边界方案</p></div><span class="handoff">1 个交接</span></div>
+              </section>
+
+              <section class="output-card" aria-labelledby="output-title">
+                <div class="output-heading"><div class="min-w-0"><h2 id="output-title" class="truncate">认证边界方案 v0.3</h2><p>结构化输出预览</p></div><i data-lucide="file-text"></i></div>
+                <div class="chip-row"><span>session</span><span>credential</span><span>policy</span></div>
+                <p class="output-summary">权限判定集中到 policy 层；session 仅维护生命周期；credential 独立处理密钥。</p>
+                <button class="expand-button">展开完整输出<i data-lucide="arrow-right"></i></button>
+              </section>
+            </div>
+          </div>
+
+          <footer class="agent-footer">
+            <p><i data-lucide="refresh-cw"></i><span class="truncate">自动同步到实时汇总</span></p>
+            <div class="footer-actions"><button class="secondary-button">停止代理</button><button class="primary-button">追加指令<i data-lucide="arrow-up"></i></button></div>
+          </footer>
+        </article>
+      </section>
+    </main>
+    <style>
+      *{box-sizing:border-box}html,body{margin:0;min-width:320px;background:var(--color-bg-app)!important;color:var(--color-text-primary);font-family:var(--font-sans)}button{font:inherit}.review-canvas{height:100vh;min-height:720px;overflow:hidden;background:var(--color-bg-body)}.review-stage{display:grid;grid-template-columns:minmax(180px,250px) minmax(360px,432px);align-items:center;justify-content:center;gap:40px;width:100%;height:100%;padding:20px 32px}.annotation-gutter{align-self:stretch;display:flex;flex-direction:column;justify-content:center;gap:24px;color:var(--color-text-muted)}.context-label{display:flex;align-items:center;gap:8px;font-size:var(--text-sm);font-weight:var(--fw-semibold);color:var(--color-text-secondary)}.context-label svg{width:16px;height:16px}.measure-note{display:grid;grid-template-columns:1fr;gap:8px}.measure-line{position:relative;display:block;width:100%;height:1px;background:var(--color-border)}.measure-line:before,.measure-line:after{content:"";position:absolute;top:-3px;width:1px;height:7px;background:var(--color-border-active)}.measure-line:before{left:0}.measure-line:after{right:0}.measure-note p{margin:0;font:var(--text-xs)/1.5 var(--font-mono);white-space:nowrap}.state-reference{display:flex;flex-direction:column;gap:10px;font-size:var(--text-xs)}.state-reference span,.status-pill,.waiting-pill{display:inline-flex;align-items:center;gap:6px;white-space:nowrap}.state-dot{display:inline-block;width:7px;height:7px;border-radius:var(--radius-full);flex:none}.state-dot.running{background:var(--color-primary)}.state-dot.completed{background:var(--state-success)}.state-dot.waiting{background:var(--state-warning)}
+      .inspector-specimen{display:grid;grid-template-rows:auto minmax(0,1fr) auto;width:100%;height:min(94vh,848px);min-height:680px;overflow:hidden;border:1px solid var(--color-border);border-radius:var(--radius-xl);background:var(--color-bg-sidebar);box-shadow:var(--shadow-md)}.agent-header{z-index:2;padding:14px 16px 12px;border-bottom:1px solid var(--color-border);background:var(--color-bg-sidebar)}.relationship-row,.identity-row,.runtime-row,.task-title-row,.section-heading,.event-line,.dependency-head,.dependency-body,.output-heading,.agent-footer,.footer-actions{display:flex;align-items:center}.relationship-row{justify-content:space-between;gap:12px;color:var(--color-text-muted);font-size:var(--text-xs)}.header-actions{display:flex;gap:4px}.icon-button{display:inline-flex;align-items:center;justify-content:center;width:28px;height:28px;border:0;border-radius:var(--radius-md);background:transparent;color:var(--color-text-secondary);cursor:pointer;transition:background var(--transition-fast),color var(--transition-fast),transform var(--transition-fast)}.icon-button svg{width:15px;height:15px}.icon-button:hover{background:var(--color-bg-hover);color:var(--color-text-primary)}.icon-button:active{transform:translateY(1px)}.identity-row{gap:10px;margin-top:10px}.role-mark{display:inline-flex;align-items:center;justify-content:center;width:34px;height:34px;border-radius:var(--radius-lg);background:var(--color-primary-muted);color:var(--color-primary);flex:none}.role-mark svg{width:17px;height:17px}.identity-copy{flex:1;min-width:0}.identity-copy h1{margin:0;font-size:var(--text-lg);line-height:1.25;font-weight:var(--fw-bold);text-wrap:balance;word-break:keep-all}.identity-copy p{margin:2px 0 0;color:var(--color-text-secondary);font-size:var(--text-xs)}.status-pill,.waiting-pill{height:24px;padding:0 8px;border-radius:var(--radius-md);background:var(--color-primary-muted);color:var(--color-primary);font-size:var(--text-xs);font-weight:var(--fw-semibold)}.runtime-row{display:grid;grid-template-columns:minmax(0,1fr) 34px 44px;gap:8px;margin-top:12px}.runtime-progress,.task-progress{height:5px;overflow:hidden;border-radius:var(--radius-full);background:var(--color-bg-elevated)}.runtime-progress span,.task-progress span{display:block;width:68%;height:100%;border-radius:inherit;background:var(--color-primary)}.runtime-row b,.runtime-row time{font:var(--text-xs)/1 var(--font-mono);color:var(--color-text-secondary);font-variant-numeric:tabular-nums}
+      .scroll-region{min-height:0;overflow-y:auto;overscroll-behavior:contain}.task-overview{position:sticky;top:0;z-index:1;padding:12px 16px;border-bottom:1px solid var(--color-border);background:var(--color-bg-main)}.task-title-row{justify-content:space-between;gap:12px}.task-title-row h2,.section-heading h2,.dependency-head h2,.output-heading h2{margin:0;font-size:var(--text-base);line-height:1.3;font-weight:var(--fw-semibold);text-wrap:balance;word-break:keep-all}.task-title-row p{margin:3px 0 0;color:var(--color-text-secondary);font-size:var(--text-xs)}.file-chip,.command-chip{display:inline-flex;align-items:center;gap:5px;min-width:0;height:24px;padding:0 7px;border:1px solid var(--color-border-subtle);border-radius:var(--radius-sm);background:var(--color-bg-elevated);color:var(--color-text-secondary);white-space:nowrap}.file-chip{max-width:164px}.file-chip svg,.command-chip svg{width:12px;height:12px;flex:none}.file-chip code,.command-chip code{overflow:hidden;text-overflow:ellipsis;font:var(--text-xs)/1 var(--font-mono)}.task-progress{margin-top:10px}.task-counters{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:9px;color:var(--color-text-muted);font-size:var(--text-xs)}.task-counters span{white-space:nowrap}.task-counters b{font-family:var(--font-mono);font-weight:var(--fw-semibold);color:var(--color-text-body)}.inspector-tabs{display:grid;grid-template-columns:repeat(4,1fr);height:40px;padding:0 12px;border-bottom:1px solid var(--color-border-subtle);background:var(--color-bg-sidebar)}.inspector-tab{position:relative;display:inline-flex;align-items:center;justify-content:center;border:0;background:transparent;color:var(--color-text-muted);font-size:var(--text-sm);font-weight:var(--fw-semibold);white-space:nowrap;cursor:pointer;transition:color var(--transition-fast),background var(--transition-fast)}.inspector-tab:hover{color:var(--color-text-primary);background:var(--color-bg-hover)}.inspector-tab.active{color:var(--color-text-primary)}.inspector-tab.active:after{content:"";position:absolute;left:18px;right:18px;bottom:0;height:2px;border-radius:var(--radius-full);background:var(--color-primary)}.overview-panel{padding:0 16px 16px}.content-section{padding:14px 0;border-bottom:1px solid var(--color-border-subtle)}.section-heading{justify-content:space-between;gap:12px;margin-bottom:10px}.section-heading>span{color:var(--color-text-muted);font-size:var(--text-xs)}.text-action{display:inline-flex;align-items:center;justify-content:center;gap:4px;border:0;background:transparent;color:var(--color-primary);font-size:var(--text-xs);white-space:nowrap;cursor:pointer}.text-action svg{width:12px;height:12px;transition:transform var(--transition-fast)}.text-action:hover svg{transform:translate(1px,-1px)}
+      .timeline{display:flex;flex-direction:column;margin:0;padding:0;list-style:none}.timeline li{position:relative;display:grid;grid-template-columns:22px minmax(0,1fr);gap:8px;padding-bottom:12px;color:var(--color-text-muted)}.timeline li:last-child{padding-bottom:0}.timeline li:not(:last-child):before{content:"";position:absolute;left:10px;top:18px;bottom:0;width:1px;background:var(--color-border)}.timeline-dot{z-index:1;display:inline-flex;align-items:center;justify-content:center;width:20px;height:20px;border:1px solid var(--color-border);border-radius:var(--radius-full);background:var(--color-bg-sidebar);color:var(--color-text-muted)}.timeline-dot svg{width:11px;height:11px}.timeline .done .timeline-dot{border-color:var(--state-success);background:var(--state-success-bg);color:var(--state-success)}.timeline .current{margin:0 -8px 12px;padding:9px 8px;border-radius:var(--radius-lg);background:var(--color-primary-soft)}.timeline .current:before{top:27px;bottom:-12px;left:18px}.timeline .current .timeline-dot{border-color:var(--color-primary);background:var(--color-primary-muted);color:var(--color-primary)}.timeline .current .timeline-dot svg{animation:spin 1.4s linear infinite}.event-line{justify-content:space-between;gap:12px}.event-line b{font-size:var(--text-sm);font-weight:var(--fw-semibold);color:var(--color-text-body)}.event-line time{font:var(--text-xs)/1 var(--font-mono);font-variant-numeric:tabular-nums;color:var(--color-text-muted);white-space:nowrap}.timeline p{margin:2px 0 0;color:var(--color-text-muted);font-size:var(--text-xs)}.command-chip{margin-top:7px;color:var(--color-primary);border-color:var(--color-border-active);background:var(--color-primary-soft)}
+      .file-list{display:flex;flex-direction:column;gap:4px}.file-row{display:grid;grid-template-columns:28px minmax(0,1fr) auto 14px;align-items:center;gap:8px;width:100%;min-height:46px;padding:5px 8px;border:1px solid transparent;border-radius:var(--radius-md);background:transparent;color:var(--color-text-secondary);text-align:left;cursor:pointer;transition:background var(--transition-fast),border-color var(--transition-fast),transform var(--transition-fast)}.file-row:hover{background:var(--color-bg-hover)}.file-row.current{border-color:var(--color-border-active);background:var(--color-primary-soft)}.file-row:active{transform:translateY(1px)}.file-icon{display:inline-flex;align-items:center;justify-content:center;width:28px;height:28px;border-radius:var(--radius-md);background:var(--color-bg-elevated);color:var(--color-text-secondary)}.file-icon svg{width:14px;height:14px}.file-copy{display:flex;flex-direction:column;min-width:0;gap:2px}.file-copy code{font:var(--text-xs)/1.2 var(--font-mono);color:var(--color-text-body)}.file-copy small{font-size:var(--text-xs);color:var(--color-text-muted)}.diff-count{display:flex;gap:5px;font:var(--text-xs)/1 var(--font-mono);font-style:normal;white-space:nowrap}.diff-count b{color:var(--state-success);font-weight:var(--fw-medium)}.diff-count em{color:var(--state-error);font-style:normal}.file-row>svg{width:13px;height:13px;color:var(--color-text-muted)}
+      .dependency-card,.output-card{margin-top:12px;padding:12px;border:1px solid var(--color-border-subtle);border-radius:var(--radius-lg);background:var(--color-bg-main)}.dependency-head{justify-content:space-between;gap:12px}.waiting-pill{background:var(--state-warning-bg);color:var(--state-warning)}.dependency-body{gap:9px;margin-top:10px}.dependency-icon{display:inline-flex;align-items:center;justify-content:center;width:30px;height:30px;border-radius:var(--radius-md);background:var(--state-warning-bg);color:var(--state-warning);flex:none}.dependency-icon svg{width:15px;height:15px}.dependency-body>div{flex:1}.dependency-body b{display:block;font-size:var(--text-sm);color:var(--color-text-body)}.dependency-body p{margin:2px 0 0;color:var(--color-text-muted);font-size:var(--text-xs)}.handoff{color:var(--color-text-secondary);font-size:var(--text-xs);white-space:nowrap}.output-heading{justify-content:space-between;gap:12px}.output-heading p{margin:3px 0 0;color:var(--color-text-muted);font-size:var(--text-xs)}.output-heading>svg{width:17px;height:17px;color:var(--color-primary);flex:none}.chip-row{display:flex;flex-wrap:nowrap;gap:6px;overflow-x:auto;margin-top:10px}.chip-row span{display:inline-flex;align-items:center;justify-content:center;height:22px;padding:0 7px;border-radius:var(--radius-sm);background:var(--color-bg-elevated);color:var(--color-text-secondary);font:var(--text-xs)/1 var(--font-mono);white-space:nowrap;flex:none}.output-summary{margin:10px 0 0;color:var(--color-text-secondary);font-size:var(--text-xs);line-height:1.6}.expand-button{display:inline-flex;align-items:center;justify-content:center;gap:6px;width:100%;height:32px;margin-top:11px;border:1px solid var(--color-border);border-radius:var(--radius-md);background:transparent;color:var(--color-text-body);font-size:var(--text-xs);font-weight:var(--fw-semibold);white-space:nowrap;cursor:pointer;transition:background var(--transition-fast),border-color var(--transition-fast)}.expand-button:hover{border-color:var(--color-border-active);background:var(--color-bg-hover)}.expand-button svg{width:13px;height:13px;transition:transform var(--transition-fast)}.expand-button:hover svg{transform:translateX(2px)}
+      .agent-footer{z-index:2;justify-content:space-between;gap:12px;padding:11px 14px;border-top:1px solid var(--color-border);background:var(--color-bg-sidebar)}.agent-footer p{display:flex;align-items:center;gap:6px;min-width:0;margin:0;color:var(--color-text-muted);font-size:var(--text-xs)}.agent-footer p svg{width:12px;height:12px;flex:none}.footer-actions{gap:8px;flex:none}.secondary-button,.primary-button{display:inline-flex;align-items:center;justify-content:center;gap:5px;height:32px;padding:0 11px;border-radius:var(--radius-md);font-size:var(--text-xs);font-weight:var(--fw-semibold);white-space:nowrap;cursor:pointer;transition:background var(--transition-fast),border-color var(--transition-fast),transform var(--transition-fast)}.secondary-button{border:1px solid var(--state-error);background:var(--state-error-bg);color:var(--state-error)}.primary-button{border:1px solid var(--color-primary);background:var(--color-primary);color:var(--color-text-inverse)}.primary-button svg{width:13px;height:13px;transition:transform var(--transition-fast)}.primary-button:hover{background:var(--color-primary-hover)}.primary-button:hover svg{transform:translateY(-2px)}.secondary-button:hover{background:var(--color-bg-hover)}.secondary-button:active,.primary-button:active{transform:translateY(1px)}button:focus-visible{outline:2px solid var(--color-primary);outline-offset:2px}.truncate{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.min-w-0{min-width:0}.scroll-region::-webkit-scrollbar{width:6px}.scroll-region::-webkit-scrollbar-track{background:transparent}.scroll-region::-webkit-scrollbar-thumb{border-radius:var(--radius-full);background:var(--color-bg-elevated)}@keyframes spin{to{transform:rotate(360deg)}}
+      @media(max-width:800px){.review-stage{grid-template-columns:minmax(0,432px);padding:16px}.annotation-gutter{display:none}.inspector-specimen{height:calc(100vh - 32px)}}@media(max-width:430px){.review-stage{padding:0}.inspector-specimen{height:100vh;min-height:640px;border:0;border-radius:0}.file-chip{display:none}.agent-footer{align-items:flex-start;flex-direction:column}.footer-actions{width:100%}.secondary-button,.primary-button{flex:1}.task-counters{gap:4px}}@media(prefers-reduced-motion:reduce){*,*::before,*::after{animation-duration:.01ms!important;transition-duration:.01ms!important}}
+    </style>
+    <script>lucide.createIcons();</script>
+</body>
+</html>

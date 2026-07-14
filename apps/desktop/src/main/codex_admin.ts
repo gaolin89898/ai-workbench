@@ -499,6 +499,26 @@ export async function listCodexThreads(
   };
 }
 
+export async function listCodexPermissionProfiles(cwd?: string | null, sender?: Sender) {
+  const client = await getAdminClient(sender);
+  const response = record(await client.request("permissionProfile/list", {
+    cursor: null,
+    limit: null,
+    cwd: cwd?.trim() || null,
+  }));
+  const data = Array.isArray(response.data) ? response.data : [];
+  return data.flatMap((value) => {
+    const profile = record(value);
+    const id = stringValue(profile.id);
+    if (!id) return [];
+    return [{
+      id,
+      description: stringValue(profile.description) ?? "",
+      allowed: profile.allowed !== false,
+    }];
+  });
+}
+
 export async function readCodexThread(
   request: CodexThreadReadRequest,
   sender?: Sender,

@@ -9,7 +9,7 @@ import * as fsSync from "node:fs";
 import * as fs from "node:fs/promises";
 import * as os from "node:os";
 import * as path from "node:path";
-import type { RunCodexChatRequest, SteerCodexChatRequest, ChatContextAttachment, ChatFileAttachment, ChatImageAttachment, ChatSegment, CodexApprovalDecision, CodexApprovalMode, CodexTraceSnapshot, CodexModelOption, CodexReasoningEffort, CodexReasoningEffortOption, CodexServiceTierOption } from "../services/desktop";
+import type { RunCodexChatRequest, SteerCodexChatRequest, ChatContextAttachment, ChatFileAttachment, ChatImageAttachment, ChatSegment, CodexApprovalDecision, CodexApprovalMode, CodexTraceSnapshot, CodexModelOption, CodexReasoningEffort, CodexReasoningEffortOption, CodexServiceTierOption, CodexPermissionGrantScope, CodexRequestedPermissions } from "../services/desktop";
 import { formatChatContext } from "../shared/chat_context";
 import { reportTokenUsage } from "./sync";
 import { getLocalAiSession, resetLocalAiTrace, upsertLocalAiTrace } from "./db";
@@ -39,6 +39,8 @@ interface PendingApproval {
   method: string;
   stepId: string;
   segment: Extract<ChatSegment, { type: "approval" }>;
+  requestedPermissions?: CodexRequestedPermissions;
+  requestedPermissionsRaw?: Record<string, unknown>;
   resolved: boolean;
 }
 
@@ -184,8 +186,8 @@ function windowsCodexPathDirs(env: NodeJS.ProcessEnv = process.env): string[] {
     ...homes.map((home) => path.join(home, "AppData", "Roaming")),
   ]);
   return uniquePaths([
-    ...localAppDataDirs.map((dir) => path.join(dir, "Programs", "OpenAI", "Codex", "bin")),
     ...appDataDirs.map((dir) => path.join(dir, "npm")),
+    ...localAppDataDirs.map((dir) => path.join(dir, "Programs", "OpenAI", "Codex", "bin")),
     env["ProgramFiles"] ? path.join(env["ProgramFiles"], "OpenAI", "Codex", "bin") : null,
     env["ProgramFiles(x86)"] ? path.join(env["ProgramFiles(x86)"], "OpenAI", "Codex", "bin") : null,
   ]);
@@ -498,8 +500,8 @@ function extractErrorMessage(params: unknown): string | undefined {
   return typeof msg === "string" ? msg : undefined;
 }
 
-function approvalStatusTitle(status: Extract<ChatSegment, { type: "approval" }>["status"], kind: "command" | "fileChange") {
-  const noun = kind === "command" ? "命令" : "文件修改";
+function approvalStatusTitle(status: Extract<ChatSegment, { type: "approval" }>["status"], kind: "command" | "fileChange" | "permissions") {
+  const noun = kind === "command" ? "命令" : kind === "fileChange" ? "文件修改" : "权限申请";
   switch (status) {
     case "approved":
       return `已同意执行${noun}`;
@@ -510,7 +512,7 @@ function approvalStatusTitle(status: Extract<ChatSegment, { type: "approval" }>[
     case "failed":
       return `${noun}审批处理失败`;
     default:
-      return kind === "command" ? "需要同意后执行命令" : "需要同意后修改文件";
+      return kind === "command" ? "需要同意后执行命令" : kind === "fileChange" ? "需要同意后修改文件" : "需要同意额外权限";
   }
 }
 
@@ -544,9 +546,9 @@ function buildApprovalSegment(
 ): Extract<ChatSegment, { type: "approval" }> | null {
   if (!params || typeof params !== "object") return null;
   const p = params as Record<string, unknown>;
-  const approvalKind = method === "item/fileChange/requestApproval" || method === "applyPatchApproval"
-    ? "fileChange"
-    : "command";
+  const approvalKind = method === "item/permissions/requestApproval" || method === "permissions/requestApproval"
+    ? "permissions"
+    : method === "item/fileChange/requestApproval" || method === "applyPatchApproval" ? "fileChange" : "command";
   const approvalId = approvalIdFor(requestId, p);
   const stepId = approvalStepIdFor(approvalId);
   const grantRoot = strOrUndef(p["grantRoot"]);
@@ -554,6 +556,7 @@ function buildApprovalSegment(
   const fileChanges = fileChangesFromApproval(p);
   const reason = strOrUndef(p["reason"]);
   const cwd = strOrUndef(p["cwd"]);
+  const requestedPermissions = approvalKind === "permissions" ? requestedPermissionsFromApproval(p) : undefined;
   return {
     type: "approval",
     stepId,
@@ -566,12 +569,16 @@ function buildApprovalSegment(
     cwd,
     grantRoot,
     fileChanges,
+    requestedPermissions,
+    permissionScope: approvalKind === "permissions" ? "turn" : undefined,
   };
 }
 
 function isApprovalRequestMethod(method: string) {
   return method === "item/commandExecution/requestApproval"
     || method === "item/fileChange/requestApproval"
+    || method === "item/permissions/requestApproval"
+    || method === "permissions/requestApproval"
     || method === "execCommandApproval"
     || method === "applyPatchApproval";
 }
@@ -619,7 +626,10 @@ function sendErrorResponse(session: CodexSession, id: number, message: string): 
   }) + "\n");
 }
 
-function approvalResponseFor(method: string, decision: CodexApprovalDecision) {
+function approvalResponseFor(method: string, decision: CodexApprovalDecision, requestedPermissions?: Record<string, unknown>, scope: CodexPermissionGrantScope = "turn") {
+  if (method === "item/permissions/requestApproval" || method === "permissions/requestApproval") {
+    return { permissions: decision === "approved" ? requestedPermissions ?? {} : {}, scope };
+  }
   if (method === "item/commandExecution/requestApproval" || method === "item/fileChange/requestApproval") {
     return { decision: decision === "approved" ? "accept" : "decline" };
   }
@@ -662,6 +672,10 @@ function handleApprovalRequest(
     method,
     stepId: segment.stepId,
     segment,
+    requestedPermissions: segment.requestedPermissions,
+    requestedPermissionsRaw: params && typeof params === "object" && !Array.isArray(params)
+      ? recordOrNull((params as Record<string, unknown>)["permissions"]) ?? undefined
+      : undefined,
     resolved: false,
   };
   emitTraceMethod(session, "approval/requested", {
@@ -671,15 +685,52 @@ function handleApprovalRequest(
     cwd: segment.cwd,
     fileChanges: segment.fileChanges,
     reason: segment.reason,
+    requestedPermissions: segment.requestedPermissions,
+    permissionScope: segment.permissionScope,
   });
-  if (session.approvalMode === "autoEdit" || session.approvalMode === "fullAccess") {
+  if ((session.approvalMode === "autoEdit" && segment.approvalKind !== "permissions") || session.approvalMode === "fullAccess") {
     approval.resolved = true;
-    sendResponse(session, id, approvalResponseFor(method, "approved"));
+    sendResponse(session, id, approvalResponseFor(method, "approved", approval.requestedPermissionsRaw));
     updateApprovalSegment(session, approval, "approved", session.approvalMode === "fullAccess" ? "已根据完全访问权限自动批准。" : "已根据替我审批自动批准。");
     return;
   }
   session.pendingApprovals.set(segment.approvalId, approval);
   refreshCodexTurnTimeout(session);
+}
+
+function requestedPermissionsFromApproval(params: Record<string, unknown>): CodexRequestedPermissions | undefined {
+  const permissions = params["permissions"];
+  if (!permissions || typeof permissions !== "object" || Array.isArray(permissions)) return undefined;
+  const source = permissions as Record<string, unknown>;
+  const networkSource = source["network"];
+  const fileSystemSource = source["fileSystem"];
+  const requested: CodexRequestedPermissions = {};
+  if (networkSource && typeof networkSource === "object" && !Array.isArray(networkSource)) {
+    const enabled = (networkSource as Record<string, unknown>)["enabled"];
+    requested.network = { enabled: typeof enabled === "boolean" ? enabled : null };
+  }
+  if (fileSystemSource && typeof fileSystemSource === "object" && !Array.isArray(fileSystemSource)) {
+    const fileSystem = fileSystemSource as Record<string, unknown>;
+    const entries = Array.isArray(fileSystem["entries"])
+      ? fileSystem["entries"].flatMap((value) => {
+        if (!value || typeof value !== "object" || Array.isArray(value)) return [];
+        const entry = value as Record<string, unknown>;
+        const access = entry["access"];
+        const pathValue = entry["path"];
+        if (access !== "read" && access !== "write" && access !== "deny") return [];
+        if (!pathValue || typeof pathValue !== "object" || Array.isArray(pathValue)) return [];
+        const pathRecord = pathValue as Record<string, unknown>;
+        const displayPath = strOrUndef(pathRecord["path"]) ?? strOrUndef(pathRecord["pattern"]) ?? strOrUndef(pathRecord["value"]);
+        return displayPath ? [{ path: displayPath, access }] : [];
+      })
+      : undefined;
+    requested.fileSystem = {
+      read: Array.isArray(fileSystem["read"]) ? arrayOfStrings(fileSystem["read"]) : null,
+      write: Array.isArray(fileSystem["write"]) ? arrayOfStrings(fileSystem["write"]) : null,
+      entries,
+    };
+  }
+  return requested.network || requested.fileSystem ? requested : undefined;
 }
 
 function extractTurnId(value: unknown): string | null {
@@ -1541,24 +1592,39 @@ function extractCodexModelOptions(result: unknown): CodexModelOption[] {
       })
       : [];
     const serviceTiers = new Map<string, CodexServiceTierOption>();
+    const serviceTierKeys = new Set<string>();
+    serviceTiers.set("flex", {
+      id: "flex",
+      name: "Flex",
+      description: "低成本弹性处理，可能需要等待更长时间",
+    });
+    serviceTierKeys.add("flex");
     if (Array.isArray(row["serviceTiers"])) {
       for (const item of row["serviceTiers"]) {
         if (!item || typeof item !== "object") continue;
         const option = item as Record<string, unknown>;
         const tierId = trimmedOrNull(option["id"]);
         if (!tierId) continue;
+        const name = trimmedOrNull(option["name"]) ?? tierId;
+        const normalizedId = tierId.toLocaleLowerCase();
+        const normalizedName = name.toLocaleLowerCase();
+        if (serviceTierKeys.has(normalizedId) || serviceTierKeys.has(normalizedName)) continue;
         serviceTiers.set(tierId, {
           id: tierId,
-          name: trimmedOrNull(option["name"]) ?? tierId,
+          name,
           description: trimmedOrNull(option["description"]) ?? "",
         });
+        serviceTierKeys.add(normalizedId);
+        serviceTierKeys.add(normalizedName);
       }
     }
     if (Array.isArray(row["additionalSpeedTiers"])) {
       for (const value of row["additionalSpeedTiers"]) {
         const tierId = trimmedOrNull(value);
-        if (!tierId || serviceTiers.has(tierId)) continue;
+        const normalizedId = tierId?.toLocaleLowerCase();
+        if (!tierId || !normalizedId || serviceTierKeys.has(normalizedId)) continue;
         serviceTiers.set(tierId, { id: tierId, name: tierId, description: "" });
+        serviceTierKeys.add(normalizedId);
       }
     }
     return [{
@@ -1708,7 +1774,8 @@ export function hasLiveCodexChat(): boolean {
 export function respondCodexApproval(
   aiSessionId: string,
   approvalId: string,
-  decision: CodexApprovalDecision
+  decision: CodexApprovalDecision,
+  scope: CodexPermissionGrantScope = "turn"
 ): boolean {
   const session = activeCodexSessions.get(aiSessionId);
   if (!session) return false;
@@ -1716,7 +1783,7 @@ export function respondCodexApproval(
   if (!approval || approval.resolved) return false;
   approval.resolved = true;
   try {
-    sendResponse(session, approval.requestId, approvalResponseFor(approval.method, decision));
+    sendResponse(session, approval.requestId, approvalResponseFor(approval.method, decision, approval.requestedPermissionsRaw, scope));
     updateApprovalSegment(
       session,
       approval,

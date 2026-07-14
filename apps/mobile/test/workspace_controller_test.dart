@@ -49,7 +49,7 @@ void main() {
     expect(snapshot.forProvider('mimo')?.model, 'xiaomi/mimo-v2.5-pro');
   });
 
-  test('project activity statistics use project ID before legacy path', () {
+  test('project activity statistics use project ID before legacy path', () async {
     final controller =
         WorkspaceController(api: ApiClient(baseUrl: 'http://127.0.0.1:3000'));
     const currentProject = WorkspaceProject(
@@ -127,6 +127,7 @@ void main() {
       unorderedEquals(['linked-current', 'legacy-current']),
     );
 
+    await Future<void>.delayed(const Duration(milliseconds: 50));
     controller.dispose();
   });
 
