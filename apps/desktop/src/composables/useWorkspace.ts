@@ -1,6 +1,6 @@
 import { computed, ref, watch } from "vue";
 import router from "../router";
-import { desktopApi, type AiChatOptions, type AiChatOutputEvent, type AiProvider, type AiProviderTrace, type AiSession, type AiTraceUpdateEvent, type AppUpdateDownloadProgress, type AppUpdateInfo, type ChatContextAttachment, type ChatFileAttachment, type ChatImageAttachment, type ChatMessage, type ChatSegment, type ProviderStatus, type TerminalSession, type ViewName, type WorkspaceProject } from "../services/desktop";
+import { desktopApi, type AiChatOptions, type AiChatOutputEvent, type AiProvider, type AiProviderTrace, type AiSession, type AiTraceUpdateEvent, type AppUpdateDownloadProgress, type AppUpdateInfo, type ChatContextAttachment, type ChatFileAttachment, type ChatImageAttachment, type ChatMessage, type ChatSegment, type CodexUserInputRequestEvent, type ProviderStatus, type TerminalSession, type ViewName, type WorkspaceProject } from "../services/desktop";
 import { decodeAssistantMessageFromStorage, encodeAssistantMessageForStorage, extractAssistantText } from "../utils/chat";
 
 export type QueuedAiMessage = {
@@ -52,6 +52,7 @@ const thinkingSessionIds = ref<Record<string, boolean>>({});
 const chatDebugEvents = ref<string[]>([]);
 const chatRunStates = ref<Record<string, ChatRunState>>({});
 const queuedAiMessagesBySessionId = ref<Record<string, QueuedAiMessage[]>>({});
+const pendingCodexUserInputs = ref<Record<string, CodexUserInputRequestEvent>>({});
 
 const PIN_STORAGE_KEY = "ai-workbench.pinnedSessions";
 const UNREAD_STORAGE_KEY = "ai-workbench.unreadSessions";
@@ -117,6 +118,10 @@ const activeQueuedAiMessages = computed(() => {
   const sessionId = activeAiSession.value?.id;
   return sessionId ? queuedAiMessagesBySessionId.value[sessionId] ?? [] : [];
 });
+const activeCodexUserInputRequest = computed(() => {
+  const sessionId = activeAiSession.value?.id;
+  return sessionId ? pendingCodexUserInputs.value[sessionId] ?? null : null;
+});
 const hasRunningAiSession = computed(() => {
   if (Object.values(thinkingSessionIds.value).some(Boolean)) return true;
   if ([...pendingAssistants.keys()].length > 0) return true;
@@ -161,6 +166,9 @@ let updateEventsInitialized = false;
 let updateEventsInitPromise: Promise<void> | null = null;
 let updatePackageSizeLookupSeq = 0;
 let runningElapsedTimer: number | null = null;
+const traceSyncSessionIds = new Set<string>();
+const traceSyncInFlightSessionIds = new Set<string>();
+let traceSyncTimer: number | null = null;
 const supportedChatProviders = new Set(["codex", "claude", "opencode", "mimo"]);
 
 function updateProgressPercentFrom(progress: AppUpdateDownloadProgress | null) {
@@ -314,6 +322,45 @@ function stopRunningElapsedTimerIfIdle() {
   if (runningElapsedTimer === null || pendingAssistants.size > 0) return;
   window.clearInterval(runningElapsedTimer);
   runningElapsedTimer = null;
+}
+
+function stopTraceSync(sessionId: string) {
+  traceSyncSessionIds.delete(sessionId);
+  traceSyncInFlightSessionIds.delete(sessionId);
+  if (traceSyncSessionIds.size || traceSyncTimer === null) return;
+  window.clearInterval(traceSyncTimer);
+  traceSyncTimer = null;
+}
+
+async function syncProviderTrace(sessionId: string) {
+  if (!traceSyncSessionIds.has(sessionId) || traceSyncInFlightSessionIds.has(sessionId)) return;
+  const session = activeAiSession.value?.id === sessionId
+    ? activeAiSession.value
+    : aiSessions.value.find((item) => item.id === sessionId);
+  if (!session || !isTraceProvider(session.providerId)) {
+    stopTraceSync(sessionId);
+    return;
+  }
+  traceSyncInFlightSessionIds.add(sessionId);
+  try {
+    const trace = await desktopApi.getLocalAiTrace(sessionId, traceKindForProvider(session.providerId));
+    if (!trace) return;
+    await handleAiTraceUpdateEvent({ aiSessionId: sessionId, trace });
+    if (!providerTracePending(trace)) stopTraceSync(sessionId);
+  } catch {
+    // IPC trace updates remain the primary transport. A later poll can recover.
+  } finally {
+    traceSyncInFlightSessionIds.delete(sessionId);
+  }
+}
+
+function startTraceSync(sessionId: string) {
+  traceSyncSessionIds.add(sessionId);
+  void syncProviderTrace(sessionId);
+  if (traceSyncTimer !== null) return;
+  traceSyncTimer = window.setInterval(() => {
+    for (const id of traceSyncSessionIds) void syncProviderTrace(id);
+  }, 750);
 }
 
 function updateRunningElapsedLabels() {
@@ -535,6 +582,7 @@ const routePaths: Record<ViewName, string> = {
   projects: "/projects",
   aiSessions: "/chat",
   providers: "/providers",
+  resources: "/resources",
   settings: "/settings",
   tokenUsage: "/token-usage",
 };
@@ -1023,7 +1071,21 @@ function dedupeAdjacentChatMessages(messages: ChatMessage[]) {
     }
     deduped.push(message);
   }
-  return dedupeCompletedTraceMessages(deduped);
+  return dedupeCompletedTraceMessages(suppressPlanExecutionEchoes(deduped));
+}
+
+function suppressPlanExecutionEchoes(messages: ChatMessage[]) {
+  return messages.filter((message, index) => {
+    if (message.role !== "assistant" || index < 2) return true;
+    const confirmation = messages[index - 1];
+    const plannedResponse = messages[index - 2];
+    if (confirmation?.role !== "user" || plannedResponse?.role !== "assistant") return true;
+    if (!/^计划已审核[，,。]?/.test((confirmation.text ?? "").trim())) return true;
+    const plan = plannedResponse.segments?.find((segment) => segment.type === "plan");
+    const planText = plan?.type === "plan" ? plan.content?.trim() : "";
+    const echoedText = extractAssistantText(message.text ?? "").trim();
+    return !planText || planText !== echoedText;
+  });
 }
 
 function dedupeCompletedTraceMessages(messages: ChatMessage[]) {
@@ -1377,6 +1439,7 @@ async function sendPrompt(
       contexts: plainContexts,
       ...chatOptions,
     };
+    if (isTraceProvider(providerId)) startTraceSync(sessionId);
     void runChat(runRequest).then((providerSessionId) => {
       const pending = pendingAssistants.get(sessionId);
       const startedAt = pending?.startedAt ?? chatRunStates.value[sessionId]?.startedAt ?? performance.now();
@@ -1435,6 +1498,7 @@ async function sendPrompt(
       });
       scheduleNextQueuedPrompt(sessionId);
     }).catch((error) => {
+      stopTraceSync(sessionId);
       if (stoppedAiSessions.delete(sessionId)) {
         pushChatDebugEvent(`${providerName} 执行已由用户主动停止`);
         return;
@@ -1734,6 +1798,11 @@ async function stopActiveAiChat() {
   } catch (error) {
     pushChatDebugEvent(`中断请求失败：${String(error)}`);
   }
+  if (pendingCodexUserInputs.value[sessionId]) {
+    const next = { ...pendingCodexUserInputs.value };
+    delete next[sessionId];
+    pendingCodexUserInputs.value = next;
+  }
   if (pending) {
     if (pending.finalText.trim()) {
       replacePendingAssistantText(sessionId, pending.finalText, true);
@@ -1883,6 +1952,20 @@ async function resizeProjectShell(projectPath: string, cols: number, rows: numbe
   await desktopApi.resizeShell({ aiSessionId: sessionId, cols, rows });
 }
 
+async function respondCodexUserInput(requestId: string, answers: Record<string, string[]>) {
+  const sessionId = activeAiSession.value?.id;
+  if (!sessionId) return false;
+  const pending = pendingCodexUserInputs.value[sessionId];
+  if (!pending || pending.requestId !== requestId) return false;
+  const handled = await desktopApi.respondCodexUserInput({ aiSessionId: sessionId, requestId, answers });
+  if (handled) {
+    const next = { ...pendingCodexUserInputs.value };
+    delete next[sessionId];
+    pendingCodexUserInputs.value = next;
+  }
+  return handled;
+}
+
 async function initAiEventListeners() {
   if (aiEventsInitialized) return;
   if (aiEventsInitPromise) return aiEventsInitPromise;
@@ -1902,6 +1985,23 @@ async function initAiEventListeners() {
     }),
     desktopApi.onAiTraceUpdate((event) => {
       void handleAiTraceUpdateEvent(event);
+    }),
+    desktopApi.onCodexUserInputRequest((event) => {
+      pendingCodexUserInputs.value = { ...pendingCodexUserInputs.value, [event.aiSessionId]: event };
+      thinkingSessionIds.value = { ...thinkingSessionIds.value, [event.aiSessionId]: true };
+      setChatRunState(event.aiSessionId, {
+        active: true,
+        phase: "running",
+        title: "Codex 正在等待你的选择",
+        detail: "请在输入框中选择后继续。",
+      });
+    }),
+    desktopApi.onCodexUserInputResolved((event) => {
+      const pending = pendingCodexUserInputs.value[event.aiSessionId];
+      if (!pending || pending.requestId !== event.requestId) return;
+      const next = { ...pendingCodexUserInputs.value };
+      delete next[event.aiSessionId];
+      pendingCodexUserInputs.value = next;
     }),
   ]).then(() => {
     aiEventsInitialized = true;
@@ -1991,6 +2091,7 @@ async function handleAiTraceUpdateEvent(event: AiTraceUpdateEvent) {
     }
     pendingAssistants.delete(event.aiSessionId);
     assistantDrafts.delete(event.aiSessionId);
+    stopTraceSync(event.aiSessionId);
     stopRunningElapsedTimerIfIdle();
     window.setTimeout(() => {
       void loadAiSessionHistory(event.aiSessionId, { force: !pendingAssistants.has(event.aiSessionId) });
@@ -2538,6 +2639,7 @@ export function useWorkspace() {
     activeChatRunState,
     activeChatIsRunning,
     activeQueuedAiMessages,
+    activeCodexUserInputRequest,
     hasRunningAiSession,
     hasBlockingAiRun,
     pinnedSessionIds,
@@ -2579,6 +2681,7 @@ export function useWorkspace() {
     removeQueuedPrompt,
     sendNextQueuedPrompt,
     expirePendingApproval,
+    respondCodexUserInput,
     stopActiveAiChat,
     sendShellInput,
     sendProjectShellInput,

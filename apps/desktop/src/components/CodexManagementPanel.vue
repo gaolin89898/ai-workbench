@@ -930,12 +930,13 @@ defineExpose({
     </section>
 
     <section v-else-if="activeTab === 'mcp'" class="codex-admin-page" aria-label="MCP 管理中心">
-      <div class="codex-summary-strip">
-        <div class="codex-summary-card"><small>Server 总数</small><strong>{{ mcpSummary.servers }}</strong></div>
-        <div class="codex-summary-card success"><small>就绪</small><strong>{{ mcpSummary.ready }}</strong></div>
-        <div class="codex-summary-card primary"><small>工具</small><strong>{{ mcpSummary.tools }}</strong></div>
-        <div class="codex-summary-card"><small>资源</small><strong>{{ mcpSummary.resources }}</strong></div>
-        <div class="codex-summary-card warning"><small>需要认证</small><strong>{{ mcpSummary.authRequired }}</strong></div>
+      <div class="codex-extension-status">
+        <strong>已配置 {{ mcpSummary.servers }} 个 MCP 服务器</strong>
+        <div>
+          <span class="codex-client-chip">Codex: {{ mcpSummary.servers }}</span>
+          <span v-if="mcpSummary.ready !== mcpSummary.servers" class="codex-client-chip muted">就绪: {{ mcpSummary.ready }}</span>
+          <span v-if="mcpSummary.authRequired" class="codex-client-chip warning">需认证: {{ mcpSummary.authRequired }}</span>
+        </div>
       </div>
       <p v-if="mcpError" class="codex-inline-error">{{ mcpError }}</p>
 
@@ -1848,6 +1849,24 @@ defineExpose({
   min-height: 100%;
   padding: 0 16px;
 }
+
+.codex-extension-status {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  min-height: 62px;
+  padding: 12px 16px;
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  background: var(--color-surface);
+}
+
+.codex-extension-status > strong { color: var(--color-text-primary); font-size: 14px; }
+.codex-extension-status > div { display: flex; flex-wrap: wrap; gap: 8px; }
+.codex-client-chip { border-radius: 999px; padding: 4px 9px; background: var(--state-success-bg); color: var(--state-success); font-size: 12px; font-weight: 750; }
+.codex-client-chip.muted { background: var(--color-surface-secondary); color: var(--color-text-secondary); }
+.codex-client-chip.warning { background: var(--state-warning-bg); color: var(--state-warning); }
 
 .codex-action-button {
   display: inline-flex;

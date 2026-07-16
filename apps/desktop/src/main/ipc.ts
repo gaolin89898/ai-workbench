@@ -26,7 +26,7 @@ import {
   fetchDesktopAppRelease,
 } from "./sync";
 import { saveCredentials, loadCredentials, clearCredentials } from "./credentials";
-import { getCodexApprovalMode, hasLiveCodexChat, listCodexModels, respondCodexApproval, runCodexChat, steerCodexChat, stopCodexChat } from "./codex";
+import { getCodexApprovalMode, hasLiveCodexChat, listCodexModels, respondCodexApproval, respondCodexUserInput, runCodexChat, steerCodexChat, stopCodexChat } from "./codex";
 import {
   archiveCodexThread,
   batchWriteCodexConfig,
@@ -35,6 +35,7 @@ import {
   deleteCodexThread,
   getCodexThreadGoal,
   listCodexFeatures,
+  listCodexSkills,
   listCodexMcpServers,
   listCodexPermissionProfiles,
   listCodexThreads,
@@ -45,6 +46,8 @@ import {
   renameCodexThread,
   setCodexThreadGoal,
   setCodexFeature,
+  setCodexSkillEnabled,
+  setCodexSkillsExtraRoots,
   startCodexMcpOauth,
   writeCodexConfigValue,
 } from "./codex_admin";
@@ -63,8 +66,11 @@ import type {
   RunCodexChatRequest,
   SteerCodexChatRequest,
   CodexApprovalResponseRequest,
+  CodexUserInputResponseRequest,
   CodexConfigBatchWriteRequest,
   CodexConfigWriteRequest,
+  CodexSkillEnabledRequest,
+  CodexSkillsListRequest,
   CodexFeatureSetRequest,
   CodexMcpOauthRequest,
   CodexMcpResourceReadRequest,
@@ -536,6 +542,18 @@ export function registerIpcHandlers(win?: BrowserWindow): void {
     setCodexFeature(args[0], event.sender)
   );
 
+  handle("list_codex_skills", async (event, args: [CodexSkillsListRequest | undefined]) =>
+    listCodexSkills(args[0] ?? {}, event.sender)
+  );
+
+  handle("set_codex_skill_enabled", async (event, args: [CodexSkillEnabledRequest]) =>
+    setCodexSkillEnabled(args[0], event.sender)
+  );
+
+  handle("set_codex_skills_extra_roots", async (event, args: [string[]]) =>
+    setCodexSkillsExtraRoots(Array.isArray(args[0]) ? args[0] : [], event.sender)
+  );
+
   handle("get_codex_approval_mode", async (_event, args: [string]) =>
     getCodexApprovalMode(args[0] ?? "")
   );
@@ -583,6 +601,10 @@ export function registerIpcHandlers(win?: BrowserWindow): void {
     const req = args[0];
     return respondAiApproval(req);
   });
+
+  handle("respond_codex_user_input", async (_event, args: [CodexUserInputResponseRequest]) =>
+    respondCodexUserInput(args[0])
+  );
 
   // Simplified warmup: return the current session record. (Full pre-warm of
   // the provider subprocess is handled lazily on the first chat turn.)

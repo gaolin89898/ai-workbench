@@ -186,6 +186,7 @@ function traceItemType(rawType: string): CodexTraceItem["type"] {
     case "reasoning":
       return "thinking";
     case "agentMessage":
+    case "plan":
       return "agent_message";
     case "commandExecution":
       return "command";
@@ -337,7 +338,9 @@ function itemFromParams(params: unknown, receivedAt: string): CodexTraceItem {
   const output = toolCall
     ? toolResultText(item.result ?? item.contentItems ?? p.result ?? p.contentItems) ?? null
     : firstString(item.output, item.result, p.output, p.result) ?? null;
-  const phase = extractAgentMessagePhase(item, p);
+  // Plan items are assistant-facing output. Treat them as a final message so
+  // plan-only turns remain visible even when no agentMessage item is emitted.
+  const phase = rawType === "plan" ? "final" : extractAgentMessagePhase(item, p);
   const diff = extractDiff(item, p);
   return {
     id,
@@ -451,6 +454,39 @@ export function reduceCodexTraceSnapshot(
       snapshot = upsertItem(snapshot, item);
       break;
     }
+    case "item/plan/delta": {
+      const id = extractItemId(event.params);
+      const delta = extractDelta(event.params);
+      const current = snapshot.items.find((item) => item.id === id);
+      const content = `${snapshot.plan?.content ?? current?.text ?? ""}${delta}`;
+      const item: CodexTraceItem = {
+        ...(current ?? {
+          id,
+          type: "agent_message" as const,
+          title: "执行计划",
+          status: "running" as const,
+          text: "",
+          startedAt: now,
+          completedAt: null,
+          rawItemType: "plan",
+          phase: "final",
+        }),
+        phase: "final",
+        text: content,
+      };
+      snapshot = upsertItem(snapshot, item);
+      snapshot = {
+        ...snapshot,
+        plan: {
+          turnId: extractTurnId(event.params) ?? snapshot.turnId,
+          explanation: "执行计划",
+          content,
+          steps: snapshot.plan?.steps ?? [],
+          updatedAt: now,
+        },
+      };
+      break;
+    }
     case "item/commandExecution/outputDelta": {
       const id = extractItemId(event.params);
       const delta = extractDelta(event.params);
@@ -518,6 +554,18 @@ export function reduceCodexTraceSnapshot(
       snapshot = upsertItem(snapshot, completedItem);
       if (completedItem.type === "agent_message" && isFinalAnswerPhase(completedItem.phase) && completedItem.text.trim()) {
         snapshot = { ...snapshot, finalText: completedItem.text.trim() };
+      }
+      if (completedItem.rawItemType === "plan" && completedItem.text.trim()) {
+        snapshot = {
+          ...snapshot,
+          plan: {
+            turnId: extractTurnId(event.params) ?? snapshot.turnId,
+            explanation: "执行计划",
+            content: completedItem.text.trim(),
+            steps: snapshot.plan?.steps ?? [],
+            updatedAt: now,
+          },
+        };
       }
       break;
     }
@@ -595,6 +643,14 @@ export function reduceCodexTraceSnapshot(
           completedAt: item.completedAt ?? now,
         } : item),
       };
+      // Some app-server versions complete a plan-only turn without emitting
+      // item/completed. Keep the accumulated plan deltas as the response.
+      if (!snapshot.finalText.trim()) {
+        const planText = snapshot.items
+          .find((item) => item.rawItemType === "plan" && item.text.trim())
+          ?.text.trim();
+        if (planText) snapshot = { ...snapshot, finalText: planText };
+      }
       snapshot = expirePendingApprovals(snapshot, now);
       break;
     }
@@ -706,13 +762,15 @@ export function codexTraceSnapshotToSegments(snapshot: CodexTraceSnapshot): Chat
     });
   }
 
-  if (snapshot.plan?.steps?.length) {
+  if (snapshot.plan?.steps?.length || snapshot.plan?.content?.trim()) {
     const explanation = snapshot.plan.explanation?.trim() || null;
+    const content = snapshot.plan.content?.trim() || undefined;
     segments.push({
       type: "plan",
       stepId: `plan-${snapshot.plan.turnId ?? "current"}`,
       title: explanation ?? "执行计划",
       summary: explanation ?? undefined,
+      content,
       steps: snapshot.plan.steps,
     });
   }

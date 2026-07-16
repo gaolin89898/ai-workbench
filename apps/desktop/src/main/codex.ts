@@ -5,11 +5,12 @@
 
 import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
 import { createInterface, type Interface } from "node:readline";
+import { getCodexSkillsExtraRoots } from "./codex_skills";
 import * as fsSync from "node:fs";
 import * as fs from "node:fs/promises";
 import * as os from "node:os";
 import * as path from "node:path";
-import type { RunCodexChatRequest, SteerCodexChatRequest, ChatContextAttachment, ChatFileAttachment, ChatImageAttachment, ChatSegment, CodexApprovalDecision, CodexApprovalMode, CodexTraceSnapshot, CodexModelOption, CodexReasoningEffort, CodexReasoningEffortOption, CodexServiceTierOption, CodexPermissionGrantScope, CodexRequestedPermissions } from "../services/desktop";
+import type { RunCodexChatRequest, SteerCodexChatRequest, ChatContextAttachment, ChatFileAttachment, ChatImageAttachment, ChatSegment, CodexApprovalDecision, CodexApprovalMode, CodexTraceSnapshot, CodexModelOption, CodexReasoningEffort, CodexReasoningEffortOption, CodexServiceTierOption, CodexPermissionGrantScope, CodexRequestedPermissions, CodexUserInputQuestion } from "../services/desktop";
 import { formatChatContext } from "../shared/chat_context";
 import { reportTokenUsage } from "./sync";
 import { getLocalAiSession, resetLocalAiTrace, upsertLocalAiTrace } from "./db";
@@ -63,6 +64,7 @@ interface CodexSession {
   closed: boolean;
   stderrBuffer: string;
   pendingApprovals: Map<string, PendingApproval>;
+  pendingUserInputs: Map<string, PendingUserInput>;
   traceEnabled: boolean;
   traceSnapshot: CodexTraceSnapshot | null;
   traceDirty: boolean;
@@ -422,6 +424,22 @@ function arrayOfStrings(v: unknown): string[] {
   return v.filter((item): item is string => typeof item === "string" && item.trim().length > 0);
 }
 
+interface PendingUserInput {
+  requestId: number;
+  questions: CodexUserInputQuestion[];
+  resolved: boolean;
+}
+
+async function applyCodexSkillsExtraRoots(session: CodexSession): Promise<void> {
+  const extraRoots = await getCodexSkillsExtraRoots();
+  if (!extraRoots.length) return;
+  try {
+    await sendRequestWithReconnectRetry(session, "skills/extraRoots/set", { extraRoots });
+  } catch (error) {
+    console.warn("Unable to apply configured Codex Skills roots:", errorMessage(error));
+  }
+}
+
 // ---------- Field extraction (defensive — codex API shapes may vary) ----------
 
 function extractThreadId(value: unknown): string | null {
@@ -698,6 +716,64 @@ function handleApprovalRequest(
   refreshCodexTurnTimeout(session);
 }
 
+function userInputQuestionsFromParams(params: unknown): CodexUserInputQuestion[] | null {
+  const record = recordOrNull(params);
+  if (!record || !Array.isArray(record["questions"])) return null;
+  const questions = record["questions"].flatMap((value) => {
+    const question = recordOrNull(value);
+    const id = question ? strOrUndef(question["id"])?.trim() : undefined;
+    const prompt = question ? strOrUndef(question["question"])?.trim() : undefined;
+    if (!id || !prompt) return [];
+    const options = Array.isArray(question["options"])
+      ? question["options"].flatMap((option) => {
+        const entry = recordOrNull(option);
+        const label = entry ? strOrUndef(entry["label"])?.trim() : undefined;
+        if (!label) return [];
+        return [{ label, description: strOrUndef(entry["description"])?.trim() ?? "" }];
+      })
+      : [];
+    return [{
+      id,
+      question: prompt,
+      header: strOrUndef(question["header"])?.trim() ?? "",
+      options,
+      isOther: question["isOther"] === true,
+      isSecret: question["isSecret"] === true,
+    }];
+  });
+  return questions.length ? questions : null;
+}
+
+function clearPendingUserInput(session: CodexSession, requestId: string): void {
+  session.pendingUserInputs.delete(requestId);
+  session.sender.send("codex-user-input-resolved", { aiSessionId: session.aiSessionId, requestId });
+}
+
+function resolvePendingUserInputs(session: CodexSession): void {
+  for (const [requestId, request] of session.pendingUserInputs) {
+    if (request.resolved) continue;
+    request.resolved = true;
+    try {
+      sendResponse(session, request.requestId, { answers: {} });
+    } catch {
+      // The process may already be gone; the renderer still needs to unlock.
+    }
+    clearPendingUserInput(session, requestId);
+  }
+}
+
+function handleUserInputRequest(session: CodexSession, id: number, params: unknown): void {
+  const questions = userInputQuestionsFromParams(params);
+  if (!questions) {
+    sendResponse(session, id, { answers: {} });
+    return;
+  }
+  const requestId = String(id);
+  session.pendingUserInputs.set(requestId, { requestId: id, questions, resolved: false });
+  session.sender.send("codex-user-input-request", { aiSessionId: session.aiSessionId, requestId, questions });
+  refreshCodexTurnTimeout(session);
+}
+
 function requestedPermissionsFromApproval(params: Record<string, unknown>): CodexRequestedPermissions | undefined {
   const permissions = params["permissions"];
   if (!permissions || typeof permissions !== "object" || Array.isArray(permissions)) return undefined;
@@ -775,7 +851,7 @@ function clearCodexTurnTimeout(session: CodexSession): void {
 
 function expireCodexTurnForInactivity(session: CodexSession): void {
   session.turnTimeoutTimer = null;
-  if (session.closed || session.cancelled || session.pendingApprovals.size > 0) return;
+  if (session.closed || session.cancelled || session.pendingApprovals.size > 0 || session.pendingUserInputs.size > 0) return;
 
   const timeoutMessage = "Codex 连续 30 分钟没有新活动，本轮已自动结束。";
   emitSessionError(session, timeoutMessage);
@@ -788,13 +864,14 @@ function expireCodexTurnForInactivity(session: CodexSession): void {
   }
   session.pendingRequests.clear();
   resolvePendingApprovals(session, "expired", "Codex 会话空闲超时，审批请求已失效。");
+  resolvePendingUserInputs(session);
   finishCodexSessionTrace(session, "failed", timeoutMessage);
   killSession(session);
 }
 
 function refreshCodexTurnTimeout(session: CodexSession): void {
   clearCodexTurnTimeout(session);
-  if (!session.traceEnabled || session.closed || session.cancelled || session.pendingApprovals.size > 0) return;
+  if (!session.traceEnabled || session.closed || session.cancelled || session.pendingApprovals.size > 0 || session.pendingUserInputs.size > 0) return;
   session.turnTimeoutTimer = setTimeout(() => {
     expireCodexTurnForInactivity(session);
   }, CODEX_TURN_TIMEOUT_MS);
@@ -825,6 +902,10 @@ function handleLine(session: CodexSession, line: string): void {
     const method = msg["method"] as string;
     if (isApprovalRequestMethod(method)) {
       handleApprovalRequest(session, method, msg["id"] as number, msg["params"]);
+      return;
+    }
+    if (method === "item/tool/requestUserInput") {
+      handleUserInputRequest(session, msg["id"] as number, msg["params"]);
       return;
     }
     sendErrorResponse(session, msg["id"] as number, `Unsupported server request: ${method}`);
@@ -1157,6 +1238,7 @@ function createSession(
     closed: false,
     stderrBuffer: "",
     pendingApprovals: new Map(),
+    pendingUserInputs: new Map(),
     traceEnabled,
     traceSnapshot: null,
     traceDirty: false,
@@ -1219,6 +1301,7 @@ function handleExit(
   }
   session.pendingRequests.clear();
   resolvePendingApprovals(session, "expired", "Codex session ended; approval requests expired.");
+  resolvePendingUserInputs(session);
   flushTrace(session);
   if (session.turnResolver) {
     session.turnResolver.reject(err);
@@ -1251,6 +1334,7 @@ function handleSpawnError(session: CodexSession, err: Error): void {
   }
   session.pendingRequests.clear();
   resolvePendingApprovals(session, "failed", message);
+  resolvePendingUserInputs(session);
   flushTrace(session);
   if (session.turnResolver) {
     session.turnResolver.reject(err);
@@ -1264,6 +1348,7 @@ function killSession(session: CodexSession): void {
   if (session.closed) return;
   flushTrace(session);
   resolvePendingApprovals(session, "expired", "Codex session ended; approval requests expired.");
+  resolvePendingUserInputs(session);
   session.closed = true;
   try {
     session.rl.close();
@@ -1287,6 +1372,7 @@ function interruptSession(session: CodexSession): void {
   if (session.closed) return;
   flushTrace(session);
   resolvePendingApprovals(session, "expired", "用户主动停止当前 AI 会话。");
+  resolvePendingUserInputs(session);
   session.closed = true;
   try {
     session.rl.close();
@@ -1528,6 +1614,7 @@ export async function runCodexChat(
   try {
     // 1. initialize
     await sendRequestWithReconnectRetry(session, "initialize", CODEX_INITIALIZE_PARAMS);
+    await applyCodexSkillsExtraRoots(session);
 
     // 2. start or resume thread
     const threadInfo = await ensureThread(session, aiSessionId);
@@ -1748,6 +1835,7 @@ export async function stopCodexChat(aiSessionId: string): Promise<boolean> {
   session.cancelled = true;
   clearCodexTurnTimeout(session);
   declinePendingApprovalsForInterrupt(session);
+  resolvePendingUserInputs(session);
   finishCodexSessionTrace(session, "canceled");
   if (session.threadId && session.currentTurnId) {
     try {
@@ -1801,6 +1889,39 @@ export function respondCodexApproval(
   }
 }
 
+export function respondCodexUserInput(
+  aiSessionId: string,
+  requestId: string,
+  answers: Record<string, string[]>
+): boolean {
+  const session = activeCodexSessions.get(aiSessionId);
+  if (!session) return false;
+  const request = session.pendingUserInputs.get(requestId);
+  if (!request || request.resolved) return false;
+  request.resolved = true;
+  const validIds = new Set(request.questions.map((question) => question.id));
+  const normalizedAnswers: Record<string, { answers: string[] }> = {};
+  for (const [questionId, values] of Object.entries(answers ?? {})) {
+    if (!validIds.has(questionId) || !Array.isArray(values)) continue;
+    normalizedAnswers[questionId] = {
+      answers: values
+        .filter((value): value is string => typeof value === "string")
+        .map((value) => value.trim())
+        .filter(Boolean),
+    };
+  }
+  try {
+    sendResponse(session, request.requestId, { answers: normalizedAnswers });
+    clearPendingUserInput(session, requestId);
+    refreshCodexTurnTimeout(session);
+    return true;
+  } catch {
+    clearPendingUserInput(session, requestId);
+    refreshCodexTurnTimeout(session);
+    return false;
+  }
+}
+
 /**
  * Pre-warm a Codex session by performing initialize + thread/start without
  * sending a turn. Returns the app-server tagged threadId for later reuse via thread/resume.
@@ -1826,6 +1947,7 @@ export async function warmupCodexSession(
 
   try {
     await sendRequestWithReconnectRetry(session, "initialize", CODEX_INITIALIZE_PARAMS);
+    await applyCodexSkillsExtraRoots(session);
     const threadInfo = await ensureThread(session, aiSessionId);
     clearTimeout(timeout);
     killSession(session);

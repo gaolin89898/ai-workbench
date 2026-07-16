@@ -10,13 +10,12 @@ const settingsIcon = new URL("../assets/icons/settings.svg", import.meta.url).hr
 const riskGuardIcon = new URL("../assets/icons/risk-guard.svg", import.meta.url).href;
 const aiProvidersIcon = new URL("../assets/icons/ai-providers.svg", import.meta.url).href;
 const archiveBoxIcon = new URL("../assets/icons/archive-box.svg", import.meta.url).href;
-const clipboardIcon = new URL("../assets/icons/clipboard.svg", import.meta.url).href;
 const providerCodexIcon = new URL("../assets/icons/provider-codex.svg", import.meta.url).href;
 const providerClaudeIcon = new URL("../assets/icons/provider-claude.svg", import.meta.url).href;
 const providerOpencodeIcon = new URL("../assets/icons/provider-opencode.svg", import.meta.url).href;
 const providerMimoIcon = new URL("../assets/icons/provider-mimo.svg", import.meta.url).href;
 
-type SettingsPanel = "connection" | "codex" | "mcp" | "security" | "activity" | "about" | "archive" | "tokenUsage";
+type SettingsPanel = "connection" | "codex" | "security" | "activity" | "about" | "archive" | "tokenUsage";
 type ProviderRow = {
   provider: AiProvider;
   status?: ProviderStatus;
@@ -31,8 +30,6 @@ type SettingsPanelItem = {
 
 const ws = useWorkspace();
 const router = useRouter();
-const mcpManagementPanel = ref<InstanceType<typeof CodexManagementPanel> | null>(null);
-
 const settingsPanel = ref<SettingsPanel>("connection");
 const riskGuard = ref(true);
 const commandLog = ref(true);
@@ -90,13 +87,6 @@ const settingsPanels: SettingsPanelItem[] = [
     eyebrow: "原生",
     description: "管理 Codex 原生会话和本机配置",
     icon: providerCodexIcon,
-  },
-  {
-    id: "mcp",
-    label: "MCP 管理",
-    eyebrow: "全局",
-    description: "管理全局 MCP Server、工具和认证状态",
-    icon: aiProvidersIcon,
   },
   {
     id: "security",
@@ -855,6 +845,11 @@ watch(settingsPanel, (panel) => {
 
 onMounted(() => {
   const requestedPanel = window.localStorage.getItem("ai-workbench.settingsPanel");
+  if (requestedPanel === "mcp" || requestedPanel === "skills") {
+    window.localStorage.removeItem("ai-workbench.settingsPanel");
+    void router.replace({ name: "resources", query: { tab: requestedPanel } });
+    return;
+  }
   if (requestedPanel && settingsPanels.some((panel) => panel.id === requestedPanel)) {
     settingsPanel.value = requestedPanel as SettingsPanel;
     window.localStorage.removeItem("ai-workbench.settingsPanel");
@@ -924,7 +919,7 @@ async function restoreSession(sessionId: string) {
 
       <div class="settings-content">
         <div class="settings-scroll" :class="{ 'settings-scroll-analytics': settingsPanel === 'tokenUsage' || settingsPanel === 'activity' }">
-          <header class="settings-header" :class="{ 'mcp-header': settingsPanel === 'mcp' }">
+          <header class="settings-header">
             <div>
               <span class="settings-kicker">Desktop Settings</span>
               <h1>{{ activePanelMeta.label }}</h1>
@@ -956,16 +951,6 @@ async function restoreSession(sessionId: string) {
                 导出
               </button>
             </div>
-            <button
-              v-else-if="settingsPanel === 'mcp'"
-              class="settings-analytics-action"
-              type="button"
-              :disabled="mcpManagementPanel?.refreshing"
-              @click="mcpManagementPanel?.refresh()"
-            >
-              <svg viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M13 5.5A5.5 5.5 0 1 0 13.2 10" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/><path d="M10.5 3.5H13v2.6" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
-              {{ mcpManagementPanel?.refreshing ? "刷新中" : "刷新状态" }}
-            </button>
           </header>
 
           <div v-if="settingsPanel === 'connection'" class="settings-overview settings-overview-status" aria-label="连接概览">
@@ -1427,9 +1412,6 @@ async function restoreSession(sessionId: string) {
             <CodexManagementPanel :cwd="ws.selectedProjectPath.value" />
           </section>
 
-          <section v-else-if="settingsPanel === 'mcp'" class="settings-section">
-            <CodexManagementPanel ref="mcpManagementPanel" mode="mcp" />
-          </section>
         </div>
       </div>
     </section>

@@ -505,6 +505,7 @@ export function getLocalAiTrace(
   ).get(aiSessionId, traceKind) as TraceRow | undefined;
   if (row?.provider_id === "codex") {
     const snapshot = safeJsonParse<Record<string, unknown>>(row.snapshot, {});
+    const rawEvents = safeJsonParse<unknown[]>(row.raw_events, []);
     const items = Array.isArray(snapshot.items) ? snapshot.items : [];
     const needsDiffRepair = items.some((value) => {
       if (!value || typeof value !== "object" || Array.isArray(value)) return false;
@@ -513,14 +514,24 @@ export function getLocalAiTrace(
       const diff = typeof item.diff === "string" ? item.diff.trim() : "";
       return /^(?:fileChange|file_change|fileEdit|file_edit)$/i.test(rawType) && !diff;
     });
-    if (needsDiffRepair) {
-      const replayed = replayCodexTraceEvents(safeJsonParse<unknown[]>(row.raw_events, []));
+    const storedFinalText = typeof snapshot.finalText === "string" ? snapshot.finalText.trim() : "";
+    const needsPlanReplay = !storedFinalText && rawEvents.some((event) => (
+      event && typeof event === "object" && !Array.isArray(event)
+      && (event as Record<string, unknown>).method === "item/plan/delta"
+    ));
+    if (needsDiffRepair || needsPlanReplay) {
+      const replayed = replayCodexTraceEvents(rawEvents);
       if (replayed) {
         const repairedSnapshot = JSON.stringify(replayed);
+        const repairedFinalText = replayed.finalText.trim();
         db.prepare(
-          "UPDATE local_ai_traces SET snapshot = ? WHERE ai_session_id = ? AND trace_kind = ?"
-        ).run(repairedSnapshot, aiSessionId, traceKind);
-        row = { ...row, snapshot: repairedSnapshot };
+          "UPDATE local_ai_traces SET snapshot = ?, final_text = COALESCE(NULLIF(?, ''), final_text) WHERE ai_session_id = ? AND trace_kind = ?"
+        ).run(repairedSnapshot, repairedFinalText, aiSessionId, traceKind);
+        row = {
+          ...row,
+          snapshot: repairedSnapshot,
+          final_text: repairedFinalText || row.final_text,
+        };
       }
     }
   }

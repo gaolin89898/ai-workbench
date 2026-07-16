@@ -934,6 +934,15 @@ onBeforeUnmount(() => {
         </section>
       </div>
     </section>
+    <section class="sidebar-resource-section" aria-label="全局资源">
+      <button class="sidebar-resource-link" :class="{ active: activeView === 'resources' }" type="button" @click="emit('switchView', 'resources')">
+        <span class="sidebar-resource-icon" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none"><rect x="4" y="4" width="16" height="16" rx="3" /><path d="M8 9h8M8 13h5M8 17h8" /></svg>
+        </span>
+        <span><strong>资源中心</strong><small>MCP 与 Skills</small></span>
+        <svg class="sidebar-resource-arrow" viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="m7.5 4.5 5 5-5 5" /></svg>
+      </button>
+    </section>
     <div class="account-menu-wrap">
       <button
         v-if="hasUpdatePrompt"

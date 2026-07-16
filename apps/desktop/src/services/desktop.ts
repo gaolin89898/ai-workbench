@@ -1,4 +1,4 @@
-export type ViewName = "workspace" | "projects" | "aiSessions" | "providers" | "settings" | "tokenUsage";
+export type ViewName = "workspace" | "projects" | "aiSessions" | "providers" | "resources" | "settings" | "tokenUsage";
 
 export type TerminalSession = {
   sessionId: string;
@@ -238,6 +238,7 @@ export type ChatSegment =
       stepId?: string;
       title: string;
       summary?: string;
+      content?: string;
       steps: Array<{
         step: string;
         status: "pending" | "in_progress" | "completed";
@@ -337,6 +338,7 @@ export type CodexTraceError = {
 export type CodexTracePlan = {
   turnId?: string | null;
   explanation?: string | null;
+  content?: string | null;
   steps: Array<{
     step: string;
     status: "pending" | "in_progress" | "completed";
@@ -435,6 +437,37 @@ export type CodexApprovalResponseRequest = {
   approvalId: string;
   decision: CodexApprovalDecision;
   scope?: CodexPermissionGrantScope;
+};
+
+export type CodexUserInputOption = {
+  label: string;
+  description: string;
+};
+
+export type CodexUserInputQuestion = {
+  id: string;
+  header: string;
+  question: string;
+  options: CodexUserInputOption[];
+  isOther?: boolean;
+  isSecret?: boolean;
+};
+
+export type CodexUserInputRequestEvent = {
+  aiSessionId: string;
+  requestId: string;
+  questions: CodexUserInputQuestion[];
+};
+
+export type CodexUserInputResponseRequest = {
+  aiSessionId: string;
+  requestId: string;
+  answers: Record<string, string[]>;
+};
+
+export type CodexUserInputResolvedEvent = {
+  aiSessionId: string;
+  requestId: string;
 };
 
 export type CodexReasoningEffortOption = {
@@ -746,6 +779,62 @@ export type CodexFeatureSetRequest = {
   persist?: boolean;
 };
 
+export type CodexSkillScope = "user" | "repo" | "system" | "admin" | string;
+
+export type CodexSkillDependency = {
+  type: string;
+  value: string;
+  command?: string | null;
+  description?: string | null;
+  transport?: string | null;
+  url?: string | null;
+};
+
+export type CodexSkill = {
+  name: string;
+  description: string;
+  path: string;
+  scope: CodexSkillScope;
+  enabled: boolean;
+  shortDescription?: string | null;
+  interface?: {
+    brandColor?: string | null;
+    defaultPrompt?: string | null;
+    displayName?: string | null;
+    iconLarge?: string | null;
+    iconSmall?: string | null;
+    shortDescription?: string | null;
+  } | null;
+  dependencies?: CodexSkillDependency[] | null;
+};
+
+export type CodexSkillError = {
+  path: string;
+  message: string;
+};
+
+export type CodexSkillsListEntry = {
+  cwd: string;
+  skills: CodexSkill[];
+  errors: CodexSkillError[];
+};
+
+export type CodexSkillsListRequest = {
+  cwds?: string[];
+  forceReload?: boolean;
+};
+
+export type CodexSkillsSnapshot = {
+  entries: CodexSkillsListEntry[];
+  extraRoots: string[];
+};
+
+export type CodexSkillEnabledRequest = {
+  path: string;
+  name?: string | null;
+  enabled: boolean;
+};
+
 export type CodexAdminEvent =
   | { type: "thread-status"; threadId: string; status: CodexNativeThreadStatus }
   | { type: "thread-name"; threadId: string; name: string | null }
@@ -754,7 +843,8 @@ export type CodexAdminEvent =
   | { type: "thread-goal"; threadId: string; goal: CodexThreadGoal | null }
   | { type: "thread-compacted"; threadId: string }
   | { type: "mcp-status"; name: string; startupStatus: CodexMcpServer["startupStatus"]; error?: string | null; failureReason?: string | null }
-  | { type: "mcp-oauth"; name: string; success: boolean; error?: string | null };
+  | { type: "mcp-oauth"; name: string; success: boolean; error?: string | null }
+  | { type: "skills-changed" };
 
 export type RunAiChatRequest = {
   aiSessionId: string;
@@ -1046,6 +1136,12 @@ export const desktopApi = {
     ipc<CodexFeature[]>("list_codex_features"),
   setCodexFeature: (req: CodexFeatureSetRequest): Promise<boolean> =>
     ipc<boolean>("set_codex_feature", req),
+  listCodexSkills: (req?: CodexSkillsListRequest): Promise<CodexSkillsSnapshot> =>
+    ipc<CodexSkillsSnapshot>("list_codex_skills", req ?? {}),
+  setCodexSkillEnabled: (req: CodexSkillEnabledRequest): Promise<boolean> =>
+    ipc<boolean>("set_codex_skill_enabled", req),
+  setCodexSkillsExtraRoots: (extraRoots: string[]): Promise<CodexSkillsSnapshot> =>
+    ipc<CodexSkillsSnapshot>("set_codex_skills_extra_roots", extraRoots),
   listCodexModels: (): Promise<CodexModelOption[]> =>
     ipc<CodexModelOption[]>("list_codex_models"),
   listClaudeModels: (): Promise<CodexModelOption[]> =>
@@ -1068,6 +1164,8 @@ export const desktopApi = {
     ipc<boolean>("respond_codex_approval", req),
   respondAiApproval: (req: CodexApprovalResponseRequest): Promise<boolean> =>
     ipc<boolean>("respond_ai_approval", req),
+  respondCodexUserInput: (req: CodexUserInputResponseRequest): Promise<boolean> =>
+    ipc<boolean>("respond_codex_user_input", req),
   warmupAiSession: (aiSessionId: string): Promise<AiSession> =>
     ipc<AiSession>("warmup_ai_session", aiSessionId),
   warmupCodexSession: (aiSessionId: string): Promise<AiSession> =>
@@ -1120,6 +1218,10 @@ export const desktopApi = {
     Promise.resolve(on("ai-chat-output", handler as (event: unknown) => void)),
   onAiTraceUpdate: (handler: (event: AiTraceUpdateEvent) => void): Promise<() => void> =>
     Promise.resolve(on("ai-trace-update", handler as (event: unknown) => void)),
+  onCodexUserInputRequest: (handler: (event: CodexUserInputRequestEvent) => void): Promise<() => void> =>
+    Promise.resolve(on("codex-user-input-request", handler as (event: unknown) => void)),
+  onCodexUserInputResolved: (handler: (event: CodexUserInputResolvedEvent) => void): Promise<() => void> =>
+    Promise.resolve(on("codex-user-input-resolved", handler as (event: unknown) => void)),
   onWorkspaceChanged: (handler: () => void): Promise<() => void> =>
     Promise.resolve(on("workspace-changed", handler as (...args: unknown[]) => void)),
   onAiHistoryChanged: (handler: (event: AiHistoryChangedEvent) => void): Promise<() => void> =>

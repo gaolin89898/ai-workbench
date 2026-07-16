@@ -16,6 +16,11 @@ import type {
   CodexMcpResourceContent,
   CodexMcpResourceReadRequest,
   CodexMcpServer,
+  CodexSkill,
+  CodexSkillEnabledRequest,
+  CodexSkillsListEntry,
+  CodexSkillsListRequest,
+  CodexSkillsSnapshot,
   CodexThreadArchiveRequest,
   CodexThreadGoal,
   CodexThreadGoalSetRequest,
@@ -29,6 +34,7 @@ import type {
   CodexThreadRenameRequest,
 } from "../services/desktop";
 import { spawnCodexAppServerProcess } from "./codex";
+import { getCodexSkillsExtraRoots, listLocalCodexSkills, saveCodexSkillEnabledState, saveCodexSkillsExtraRoots } from "./codex_skills";
 
 type Sender = {
   send: (channel: string, ...args: unknown[]) => void;
@@ -65,6 +71,10 @@ function stringValue(value: unknown): string | null {
 
 function numberValue(value: unknown): number | null {
   return typeof value === "number" && Number.isFinite(value) ? value : null;
+}
+
+function booleanValue(value: unknown, fallback = false): boolean {
+  return typeof value === "boolean" ? value : fallback;
 }
 
 function stringArray(value: unknown): string[] {
@@ -419,6 +429,8 @@ class CodexAdminClient {
           error: stringValue(params.error),
         };
       }
+    } else if (method === "skills/changed") {
+      event = { type: "skills-changed" };
     }
     if (event) this.broadcast(event);
   }
@@ -706,6 +718,83 @@ export async function reloadCodexMcpServers(sender?: Sender): Promise<CodexMcpSe
   const client = await getAdminClient(sender);
   await client.request("config/mcpServer/reload", undefined, 90_000);
   return listCodexMcpServers(sender);
+}
+
+function mapCodexSkill(value: unknown): CodexSkill | null {
+  const skill = record(value);
+  const name = stringValue(skill.name);
+  const skillPath = stringValue(skill.path);
+  if (!name || !skillPath) return null;
+  const metadata = record(skill.interface);
+  const dependencies = record(skill.dependencies);
+  return {
+    name,
+    description: stringValue(skill.description) ?? "",
+    path: skillPath,
+    scope: stringValue(skill.scope) ?? "user",
+    enabled: booleanValue(skill.enabled),
+    shortDescription: stringValue(skill.shortDescription),
+    interface: skill.interface && Object.keys(metadata).length ? {
+      brandColor: stringValue(metadata.brandColor),
+      defaultPrompt: stringValue(metadata.defaultPrompt),
+      displayName: stringValue(metadata.displayName),
+      iconLarge: stringValue(metadata.iconLarge),
+      iconSmall: stringValue(metadata.iconSmall),
+      shortDescription: stringValue(metadata.shortDescription),
+    } : null,
+    dependencies: Array.isArray(dependencies.tools) ? dependencies.tools.flatMap((value) => {
+      const dependency = record(value);
+      const type = stringValue(dependency.type);
+      const dependencyValue = stringValue(dependency.value);
+      return type && dependencyValue ? [{
+        type,
+        value: dependencyValue,
+        command: stringValue(dependency.command),
+        description: stringValue(dependency.description),
+        transport: stringValue(dependency.transport),
+        url: stringValue(dependency.url),
+      }] : [];
+    }) : null,
+  };
+}
+
+async function applyCodexSkillsExtraRoots(client: CodexAdminClient, extraRoots?: string[]): Promise<string[]> {
+  const roots = extraRoots ?? await getCodexSkillsExtraRoots();
+  await client.request("skills/extraRoots/set", { extraRoots: roots });
+  return roots;
+}
+
+export async function listCodexSkills(
+  request: CodexSkillsListRequest = {},
+  sender?: Sender,
+): Promise<CodexSkillsSnapshot> {
+  return listLocalCodexSkills();
+}
+
+export async function setCodexSkillEnabled(
+  request: CodexSkillEnabledRequest,
+  sender?: Sender,
+): Promise<boolean> {
+  const skillPath = request.path.trim();
+  if (!skillPath) throw new Error("Skill 路径不能为空");
+  const client = await getAdminClient(sender);
+  await client.request("skills/config/write", {
+    path: skillPath,
+    name: request.name?.trim() || null,
+    enabled: request.enabled,
+  });
+  await saveCodexSkillEnabledState(skillPath, request.enabled);
+  return true;
+}
+
+export async function setCodexSkillsExtraRoots(
+  extraRoots: string[],
+  sender?: Sender,
+): Promise<CodexSkillsSnapshot> {
+  const roots = await saveCodexSkillsExtraRoots(extraRoots);
+  const client = await getAdminClient(sender);
+  await applyCodexSkillsExtraRoots(client, roots);
+  return { entries: [], extraRoots: roots };
 }
 
 export async function readCodexConfig(cwd?: string | null, sender?: Sender): Promise<CodexConfigSnapshot> {

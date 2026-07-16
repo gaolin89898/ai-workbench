@@ -1,13 +1,15 @@
 <script setup lang="ts">
 import { computed, defineAsyncComponent, nextTick, onBeforeUnmount, onMounted, ref, shallowRef, watch } from "vue";
+import { useRouter } from "vue-router";
 import ChatMessageRow from "./ChatMessageRow.vue";
 import ChatSegmentView from "./ChatSegment.vue";
 import TerminalView from "./TerminalView.vue";
 import { useWorkspace, type QueuedAiMessage } from "../composables/useWorkspace";
-import { desktopApi, type AiChatOptions, type AiProvider, type AiRunSettingsState, type ChatContextAttachment, type ChatFileAttachment, type ChatImageAttachment, type ChatMessage, type ChatSegment, type ClaudeReasoningEffort, type AcpConfigOption, type CodexAdminEvent, type CodexApprovalMode, type CodexGoalStatus, type CodexModelOption, type CodexPermissionProfile, type CodexReasoningEffort, type CodexRunMode, type CodexThreadGoal, type ProjectEnvironmentInfo, type ProjectFilePreview, type ProjectOpenTarget } from "../services/desktop";
+import { desktopApi, type AiChatOptions, type AiProvider, type AiRunSettingsState, type ChatContextAttachment, type ChatFileAttachment, type ChatImageAttachment, type ChatMessage, type ChatSegment, type ClaudeReasoningEffort, type AcpConfigOption, type CodexAdminEvent, type CodexApprovalMode, type CodexGoalStatus, type CodexModelOption, type CodexPermissionProfile, type CodexReasoningEffort, type CodexRunMode, type CodexThreadGoal, type CodexUserInputQuestion, type ProjectEnvironmentInfo, type ProjectFilePreview, type ProjectOpenTarget } from "../services/desktop";
 import { isProjectFileViewerSupported } from "../shared/project_file_formats";
 
 const ProjectFileViewer = defineAsyncComponent(() => import("./ProjectFileViewer.vue"));
+const router = useRouter();
 
 type RunPreferenceProviderId = "codex" | "claude" | "opencode" | "mimo";
 type RunPreference = { model: string; reasoningEffort: string; serviceTier?: string | null };
@@ -104,6 +106,18 @@ function readProjectOpenTarget(): ProjectOpenTarget {
 }
 
 const prompt = ref("");
+type SlashCommandId = "mcp" | "compact" | "reasoning" | "model";
+type SlashCommand = {
+  id: SlashCommandId;
+  label: string;
+  description: string;
+};
+type SlashCommandPanel = "model" | "reasoning";
+const slashMenuIndex = ref(0);
+const slashMenuDismissed = ref(false);
+const slashCommandPanel = ref<SlashCommandPanel | null>(null);
+const slashPanelSearch = ref("");
+const slashQuery = computed(() => prompt.value.startsWith("/") ? prompt.value.slice(1).trim().toLocaleLowerCase() : "");
 const editingQueuedMessageId = ref<string | null>(null);
 const editingQueuedMessageText = ref("");
 const imageAttachments = ref<ChatImageAttachment[]>([]);
@@ -117,6 +131,7 @@ const startPromptBox = ref<HTMLFormElement | null>(null);
 const chatComposer = ref<HTMLDivElement | null>(null);
 const chatComposerHeight = ref(0);
 const splitWorkspace = ref<HTMLElement | null>(null);
+const splitPanelBody = ref<HTMLDivElement | null>(null);
 const previewFile = ref<ProjectFilePreview | null>(null);
 const previewViewerFile = shallowRef<File | null>(null);
 const previewLoading = ref(false);
@@ -136,6 +151,7 @@ const environmentLoading = ref(false);
 const environmentError = ref("");
 const splitPanelOpen = ref(false);
 const splitPanelWidth = ref(420);
+const planPanelOpen = ref(false);
 const modelMenuOpen = ref(false);
 const modelSubmenuOpen = ref(false);
 type ModelSubmenuKind = "model" | "reasoning" | "serviceTier";
@@ -180,6 +196,7 @@ const floatingMenuTargetSelector = [
   ".codex-approval-menu",
   ".codex-composer-add",
   ".codex-composer-add-menu",
+  ".slash-command-input-wrap",
   ".codex-model-picker",
   ".codex-model-menu",
   ".codex-model-submenu",
@@ -308,6 +325,47 @@ const processPanelMessage = computed(() => {
   if (!selection || selection.sessionId !== ws.activeAiSession.value?.id) return null;
   return ws.chatMessages.value[selection.messageIndex] ?? null;
 });
+const activePlanSegment = computed<Extract<ChatSegment, { type: "plan" }> | null>(() => {
+  for (let messageIndex = ws.chatMessages.value.length - 1; messageIndex >= 0; messageIndex -= 1) {
+    const message = ws.chatMessages.value[messageIndex];
+    if (message.role !== "assistant") continue;
+    for (let segmentIndex = (message.segments?.length ?? 0) - 1; segmentIndex >= 0; segmentIndex -= 1) {
+      const segment = message.segments?.[segmentIndex];
+      if (segment?.type === "plan") return segment;
+    }
+  }
+  return null;
+});
+const activePlanReviewKey = computed(() => {
+  const plan = activePlanSegment.value;
+  return plan ? `${plan.stepId ?? plan.title}:${plan.content ?? plan.summary ?? plan.steps.map((step) => step.step).join("|")}` : "";
+});
+const planReviewStatus = ref<"pending" | "executing" | "approved" | "dismissed">("pending");
+const planReviewChoice = ref<"execute" | "adjust">("execute");
+const planReviewMarkdown = computed(() => {
+  const plan = activePlanSegment.value;
+  if (!plan) return "";
+  if (plan.content?.trim()) return plan.content.trim();
+  const sections = [`# ${plan.title}`];
+  if (plan.summary?.trim()) sections.push(plan.summary.trim());
+  if (plan.steps.length) {
+    sections.push("## 实施步骤");
+    sections.push(...plan.steps.map((step, index) => `${index + 1}. ${step.step}`));
+  }
+  return sections.join("\n\n");
+});
+
+watch(activePlanReviewKey, (key, previousKey) => {
+  if (!key || key === previousKey) return;
+  planReviewStatus.value = "pending";
+  planReviewChoice.value = "execute";
+  planPanelOpen.value = true;
+  processPanelSelection.value = null;
+  previewFile.value = null;
+  previewViewerFile.value = null;
+  openSplitPanel();
+  void nextTick(() => splitPanelBody.value?.scrollTo({ top: 0 }));
+});
 
 function turnStartedAt(messageIndex: number) {
   for (let index = messageIndex - 1; index >= 0; index -= 1) {
@@ -330,7 +388,17 @@ const pendingApprovalSegment = computed<Extract<ChatSegment, { type: "approval" 
 });
 
 const approvalInputLocked = computed(() => Boolean(pendingApprovalSegment.value));
-const canSend = computed(() => Boolean(!approvalInputLocked.value && (prompt.value.trim() || imageAttachments.value.length || fileAttachments.value.length || contextAttachments.value.length)));
+const pendingCodexUserInput = computed(() => ws.activeCodexUserInputRequest.value);
+const codexUserInputAnswers = ref<Record<string, string>>({});
+const codexUserInputOtherAnswers = ref<Record<string, string>>({});
+const codexUserInputSubmitting = ref(false);
+const pendingPlanReview = computed(() => Boolean(
+  activePlanSegment.value
+  && planReviewStatus.value === "pending"
+  && !ws.activeChatIsRunning.value,
+));
+const composerInputLocked = computed(() => approvalInputLocked.value || Boolean(pendingCodexUserInput.value) || pendingPlanReview.value);
+const canSend = computed(() => Boolean(!composerInputLocked.value && (prompt.value.trim() || imageAttachments.value.length || fileAttachments.value.length || contextAttachments.value.length)));
 
 const activeCodexThreadId = computed(() => {
   const session = ws.activeAiSession.value;
@@ -339,10 +407,90 @@ const activeCodexThreadId = computed(() => {
     ? session.providerSessionId.slice("app-server:".length)
     : session.providerSessionId;
 });
+const availableSlashCommands = computed<SlashCommand[]>(() => {
+  const commands: SlashCommand[] = [
+    { id: "mcp", label: "MCP", description: "查看已连接的 MCP 服务状态" },
+  ];
+  if (showCodexRunControls.value && activeCodexThreadId.value && !ws.activeChatIsRunning.value) {
+    commands.push({ id: "compact", label: "压缩", description: "压缩当前任务的上下文" });
+  }
+  if (showModelRunControls.value) {
+    commands.push(
+      { id: "model", label: "模型", description: "选择当前任务的模型" },
+      { id: "reasoning", label: "推理", description: "选择当前任务的推理强度" },
+    );
+  }
+  return commands;
+});
+const filteredSlashCommands = computed(() => {
+  const query = slashQuery.value;
+  if (!query) return availableSlashCommands.value;
+  return availableSlashCommands.value.filter((command) => (
+    `${command.label} ${command.description}`.toLocaleLowerCase().includes(query)
+  ));
+});
+const slashMenuVisible = computed(() => (
+  prompt.value.startsWith("/")
+  && !slashMenuDismissed.value
+  && !slashCommandPanel.value
+  && !composerInputLocked.value
+));
 const composerPlaceholder = computed(() => {
   if (approvalInputLocked.value) return "审批期间输入框已锁定";
+  if (pendingCodexUserInput.value) return "请先回答 Codex 的问题";
+  if (pendingPlanReview.value) return "请先审核计划";
   if (!ws.activeChatIsRunning.value) return "输入你的消息...";
   return "输入下一轮消息...";
+});
+
+watch(pendingCodexUserInput, (request) => {
+  const answers: Record<string, string> = {};
+  if (request) {
+    for (const question of request.questions) {
+      if (question.options.length) answers[question.id] = question.options[0].label;
+    }
+  }
+  codexUserInputAnswers.value = answers;
+  codexUserInputOtherAnswers.value = {};
+  codexUserInputSubmitting.value = false;
+}, { immediate: true });
+
+function selectCodexUserInputOption(question: CodexUserInputQuestion, label: string) {
+  codexUserInputAnswers.value = { ...codexUserInputAnswers.value, [question.id]: label };
+}
+
+async function submitCodexUserInput(skip = false) {
+  const request = pendingCodexUserInput.value;
+  if (!request || codexUserInputSubmitting.value) return;
+  const answers: Record<string, string[]> = {};
+  if (!skip) {
+    for (const question of request.questions) {
+      const selection = codexUserInputAnswers.value[question.id];
+      if (selection === "__other__" || !question.options.length) {
+        const text = codexUserInputOtherAnswers.value[question.id]?.trim();
+        answers[question.id] = text ? [text] : [];
+      } else if (selection) {
+        answers[question.id] = [selection];
+      } else {
+        answers[question.id] = [];
+      }
+    }
+  }
+  codexUserInputSubmitting.value = true;
+  try {
+    await ws.respondCodexUserInput(request.requestId, answers);
+  } finally {
+    codexUserInputSubmitting.value = false;
+  }
+}
+
+watch([slashQuery, filteredSlashCommands], () => {
+  slashMenuIndex.value = 0;
+});
+
+watch(prompt, () => {
+  slashMenuDismissed.value = false;
+  if (prompt.value) slashCommandPanel.value = null;
 });
 const sendButtonTitle = computed(() => {
   return ws.activeChatIsRunning.value ? "停止当前轮" : "发送";
@@ -517,6 +665,45 @@ const selectedReasoningMenuLabel = computed(() => {
   if (showAcpRunControls.value) return selectedAcpReasoningLabel.value;
   if (showClaudeRunControls.value) return selectedClaudeReasoningLabel.value;
   return selectedReasoningLabel.value;
+});
+
+function localizedModelDescription(model: { model: string; displayName: string; description?: string | null }) {
+  const identifier = `${model.model} ${model.displayName}`.toLocaleLowerCase();
+  if (identifier.includes("sol")) return "最新的前沿智能体编程模型";
+  if (identifier.includes("terra")) return "适合日常工作的均衡智能体编程模型";
+  if (identifier.includes("luna")) return "快速且高性价比的智能体编程模型";
+  if (identifier.includes("5.5")) return "适用于复杂编程、研究与真实任务的前沿模型";
+  if (identifier.includes("5.4 mini")) return "适合简单任务的小型、快速且高性价比模型";
+  if (identifier.includes("5.4")) return "适合日常编程的强大模型";
+  if (identifier.includes("5.2")) return "针对专业工作与长时任务优化";
+  if (model.description && /[\u4e00-\u9fff]/.test(model.description)) return model.description;
+  return "适用于当前开发任务";
+}
+
+function localizedReasoningDescription(option: { id: string; description?: string }) {
+  if (option.id === "low") return "更快响应，适合简单任务";
+  if (option.id === "medium") return "平衡速度与推理深度";
+  if (option.id === "high") return "更充分地推理，适合复杂任务";
+  if (option.id === "xhigh") return "深入推理，适合高难度任务";
+  if (option.id === "max") return "使用最大推理强度";
+  if (option.id === "ultra") return "使用极致推理强度";
+  if (option.description && /[\u4e00-\u9fff]/.test(option.description)) return option.description;
+  return "按当前模型能力进行推理";
+}
+
+const filteredSlashPanelModels = computed(() => {
+  const query = slashPanelSearch.value.trim().toLocaleLowerCase();
+  if (!query) return activeModelOptions.value;
+  return activeModelOptions.value.filter((model) => (
+    `${model.displayName} ${model.model} ${"description" in model ? model.description ?? "" : ""}`
+      .toLocaleLowerCase()
+      .includes(query)
+  ));
+});
+const filteredSlashPanelReasoningOptions = computed(() => {
+  const query = slashPanelSearch.value.trim().toLocaleLowerCase();
+  if (!query) return activeReasoningOptions.value;
+  return activeReasoningOptions.value.filter((option) => option.label.toLocaleLowerCase().includes(query));
 });
 const selectedModelButtonLabel = computed(() => {
   if (showOpenCodeModelGrouping.value) return selectedOpenCodeModelLabel.value;
@@ -899,7 +1086,7 @@ function isFloatingMenuTarget(target: EventTarget | null) {
 }
 
 function closeFloatingMenusOnOutsideClick(event: PointerEvent) {
-  if (!startMenuOpen.value && !approvalMenuOpen.value && !composerToolsOpen.value && !modelMenuOpen.value && !modelSubmenuOpen.value && !environmentPanelOpen.value && !locationMenuOpen.value) return;
+  if (!startMenuOpen.value && !approvalMenuOpen.value && !composerToolsOpen.value && !modelMenuOpen.value && !modelSubmenuOpen.value && !environmentPanelOpen.value && !locationMenuOpen.value && !slashMenuVisible.value && !slashCommandPanel.value) return;
   if (isFloatingMenuTarget(event.target)) return;
   startMenuOpen.value = false;
   approvalMenuOpen.value = false;
@@ -908,6 +1095,9 @@ function closeFloatingMenusOnOutsideClick(event: PointerEvent) {
   modelSubmenuOpen.value = false;
   environmentPanelOpen.value = false;
   locationMenuOpen.value = false;
+  slashMenuDismissed.value = true;
+  slashCommandPanel.value = null;
+  slashPanelSearch.value = "";
 }
 
 function toggleApprovalMenu() {
@@ -1058,6 +1248,7 @@ function fileFromViewerSource(data: Uint8Array, name: string, mimeType: string) 
 
 async function loadFilePreview(projectPath: string, filePath: string) {
   const requestId = ++previewRequestId;
+  planPanelOpen.value = false;
   processPanelSelection.value = null;
   openSplitPanel();
   previewLoading.value = true;
@@ -1099,6 +1290,7 @@ function onDesktopPreviewFile(event: Event) {
 function openProcessPanel(payload: Omit<ProcessPanelSelection, "sessionId">) {
   const sessionId = ws.activeAiSession.value?.id;
   if (!sessionId) return;
+  planPanelOpen.value = false;
   previewRequestId += 1;
   previewLoading.value = false;
   previewError.value = "";
@@ -2006,7 +2198,7 @@ onBeforeUnmount(() => {
 });
 
 async function send() {
-  if (approvalInputLocked.value) return;
+  if (composerInputLocked.value) return;
   const value = prompt.value.trim();
   const images = imageAttachments.value.map((image) => ({
     id: image.id,
@@ -2068,6 +2260,43 @@ async function send() {
   }
 }
 
+async function executeReviewedPlan() {
+  const plan = activePlanSegment.value;
+  if (!plan || !planReviewMarkdown.value || ws.activeChatIsRunning.value) return;
+  const previousMode = codexMode.value;
+  planReviewStatus.value = "executing";
+  codexMode.value = "default";
+  const accepted = await ws.sendPrompt(
+    "计划已审核，请开始执行刚才确认的计划；如需调整，请先说明原因。",
+    [],
+    [],
+    [],
+    buildRunOptions(),
+  );
+  if (accepted) {
+    planReviewStatus.value = "approved";
+    return;
+  }
+  codexMode.value = previousMode;
+  planReviewStatus.value = "pending";
+}
+
+function deferPlanReview() {
+  if (planReviewStatus.value !== "pending") return;
+  planReviewStatus.value = "dismissed";
+  planPanelOpen.value = true;
+  openSplitPanel();
+  void nextTick(() => promptInput.value?.focus());
+}
+
+function submitPlanReview() {
+  if (planReviewChoice.value === "execute") {
+    void executeReviewedPlan();
+    return;
+  }
+  deferPlanReview();
+}
+
 function handleComposerPrimaryAction() {
   if (ws.activeChatIsRunning.value) {
     void ws.stopActiveAiChat();
@@ -2094,12 +2323,95 @@ function selectStartProvider(providerId = "codex") {
 }
 
 function onPromptKeydown(event: KeyboardEvent) {
+  if (slashCommandPanel.value && event.key === "Escape") {
+    event.preventDefault();
+    closeSlashCommandPanel();
+    return;
+  }
+  if (slashMenuVisible.value) {
+    if (event.key === "ArrowDown") {
+      event.preventDefault();
+      slashMenuIndex.value = (slashMenuIndex.value + 1) % Math.max(filteredSlashCommands.value.length, 1);
+      return;
+    }
+    if (event.key === "ArrowUp") {
+      event.preventDefault();
+      slashMenuIndex.value = (slashMenuIndex.value - 1 + filteredSlashCommands.value.length) % Math.max(filteredSlashCommands.value.length, 1);
+      return;
+    }
+    if (event.key === "Escape") {
+      event.preventDefault();
+      slashMenuDismissed.value = true;
+      return;
+    }
+    if (event.key === "Enter" && !event.shiftKey && filteredSlashCommands.value.length) {
+      event.preventDefault();
+      selectSlashCommand(filteredSlashCommands.value[slashMenuIndex.value]);
+      return;
+    }
+  }
   if (event.key === "Enter" && event.shiftKey) return;
   if (event.key === "Enter" && !event.shiftKey) {
     event.preventDefault();
     void send();
   }
 }
+
+function selectSlashCommand(command: SlashCommand) {
+  slashMenuDismissed.value = true;
+  prompt.value = "";
+  switch (command.id) {
+    case "mcp":
+      void router.push({ name: "resources", query: { tab: "mcp" } });
+      return;
+    case "compact":
+      if (activeCodexThreadId.value && !ws.activeChatIsRunning.value && !codexCompactBusy.value) {
+        void compactCurrentCodexThread();
+      } else {
+        codexCompactNotice.value = activeCodexThreadId.value
+          ? "当前任务正在运行，完成后可压缩上下文。"
+          : "开始任务后即可压缩该任务的上下文。";
+      }
+      return;
+    case "model":
+      openSlashCommandPanel("model");
+      return;
+    case "reasoning":
+      openSlashCommandPanel("reasoning");
+      return;
+  }
+}
+
+function openSlashCommandPanel(panel: SlashCommandPanel) {
+  if (!showModelRunControls.value || (showCodexRunControls.value && codexModelsLoading.value)) return;
+  slashPanelSearch.value = "";
+  slashCommandPanel.value = panel;
+  modelMenuOpen.value = false;
+  modelSubmenuOpen.value = false;
+  startMenuOpen.value = false;
+  approvalMenuOpen.value = false;
+  composerToolsOpen.value = false;
+  environmentPanelOpen.value = false;
+  locationMenuOpen.value = false;
+  void nextTick(() => document.querySelector<HTMLInputElement>(".slash-command-panel-search")?.focus());
+}
+
+function closeSlashCommandPanel() {
+  slashCommandPanel.value = null;
+  slashPanelSearch.value = "";
+  void nextTick(() => promptInput.value?.focus());
+}
+
+function selectSlashPanelModel(model: string) {
+  selectModel(model);
+  closeSlashCommandPanel();
+}
+
+function selectSlashPanelReasoning(level: string) {
+  selectReasoningLevel(level);
+  closeSlashCommandPanel();
+}
+
 </script>
 
 <template>
@@ -2150,32 +2462,80 @@ function onPromptKeydown(event: KeyboardEvent) {
               <button type="button" title="移除附件" aria-label="移除附件" @click="removeFileAttachment(attachment.id)">×</button>
             </div>
           </div>
-          <textarea
-            ref="promptInput"
-            v-model="prompt"
-            rows="2"
-            placeholder="输入你想做的事"
-            @keydown="onPromptKeydown"
-            @paste="onPromptPaste"
-          ></textarea>
+          <div class="slash-command-input-wrap">
+            <div v-if="slashMenuVisible" class="slash-command-menu" role="listbox" aria-label="斜杠命令">
+              <button
+                v-for="(command, index) in filteredSlashCommands"
+                :key="command.id"
+                type="button"
+                class="slash-command-option"
+                :class="{ active: index === slashMenuIndex }"
+                role="option"
+                :aria-selected="index === slashMenuIndex"
+                @mouseenter="slashMenuIndex = index"
+                @click="selectSlashCommand(command)"
+              >
+                <svg class="slash-command-icon" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+                  <path d="M3.25 4.25h9.5v7.5h-9.5zM5.25 7h5.5M5.25 9.25h3.25" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round" />
+                </svg>
+                <span class="slash-command-copy"><strong>{{ command.label }}</strong><small>{{ command.description }}</small></span>
+              </button>
+              <p v-if="!filteredSlashCommands.length" class="slash-command-empty">没有匹配的命令</p>
+            </div>
+            <section v-if="slashCommandPanel" class="slash-command-panel" :aria-label="slashCommandPanel">
+              <header class="slash-command-panel-header">
+                <strong>{{ slashCommandPanel === "model" ? "模型" : "推理" }}</strong>
+                <button type="button" title="关闭" aria-label="关闭" @click="closeSlashCommandPanel">×</button>
+              </header>
+              <template v-if="slashCommandPanel === 'model'">
+                <input v-model="slashPanelSearch" class="slash-command-panel-search" type="search" placeholder="搜索模型" @keydown.esc.prevent="closeSlashCommandPanel" />
+                <div class="slash-command-panel-options">
+                  <button v-for="model in filteredSlashPanelModels" :key="model.id" type="button" :class="{ selected: model.model === selectedModelValue }" @click="selectSlashPanelModel(model.model)">
+                    <span><strong>{{ model.displayName }}</strong><small>{{ localizedModelDescription(model) }}</small></span>
+                    <i v-if="model.model === selectedModelValue" aria-hidden="true">✓</i>
+                  </button>
+                  <p v-if="!filteredSlashPanelModels.length" class="slash-command-panel-empty">没有匹配的模型。</p>
+                </div>
+              </template>
+              <template v-else>
+                <input v-model="slashPanelSearch" class="slash-command-panel-search" type="search" placeholder="搜索推理强度" @keydown.esc.prevent="closeSlashCommandPanel" />
+                <div class="slash-command-panel-options">
+                  <button v-for="option in filteredSlashPanelReasoningOptions" :key="option.id" type="button" :class="{ selected: option.id === selectedReasoningValue }" @click="selectSlashPanelReasoning(option.id)">
+                    <span><strong>{{ option.label }}</strong><small>{{ localizedReasoningDescription(option) }}</small></span>
+                    <i v-if="option.id === selectedReasoningValue" aria-hidden="true">✓</i>
+                  </button>
+                  <p v-if="!filteredSlashPanelReasoningOptions.length" class="slash-command-panel-empty">没有匹配的推理强度。</p>
+                </div>
+              </template>
+            </section>
+            <textarea
+              ref="promptInput"
+              v-model="prompt"
+              rows="2"
+              placeholder="输入你想做的事"
+              @keydown="onPromptKeydown"
+              @paste="onPromptPaste"
+            ></textarea>
+          </div>
           <div class="codex-start-toolbar">
           <div v-if="showModelRunControls" class="codex-composer-add-wrap codex-start-tools-wrap">
             <button
               class="codex-composer-add"
               :class="{ open: composerToolsOpen }"
-              title="添加工具"
+              title="添加文件等内容"
               type="button"
               @click="toggleComposerToolsMenu"
-              aria-label="添加工具"
+              aria-label="添加文件等内容"
             >
               <svg viewBox="0 0 16 16" fill="none" aria-hidden="true">
                 <path d="M8 3.5v9M3.5 8h9" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" />
               </svg>
             </button>
             <div v-if="composerToolsOpen" class="codex-composer-add-menu">
+              <p class="codex-composer-add-menu-heading">添加</p>
               <button v-if="showCodexRunControls" type="button" @click="chooseFileAttachments">
                 <svg viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M5.25 8.75 9.7 4.3a2.1 2.1 0 0 1 3 3l-5.4 5.4a3.25 3.25 0 0 1-4.6-4.6l5.05-5.05" stroke="currentColor" stroke-width="1.35" stroke-linecap="round"/></svg>
-                <span>添加文件</span>
+                <span>文件和文件夹</span>
                 <small>PDF、文档、代码</small>
               </button>
               <button type="button" :class="{ active: codexMode === 'plan' }" @click="toggleComposerPlanMode">
@@ -2194,11 +2554,6 @@ function onPromptKeydown(event: KeyboardEvent) {
                 </svg>
                 <span>目标</span>
                 <small>{{ codexGoalEnabled ? "已开启" : "未开启" }}</small>
-              </button>
-              <button v-if="activeCodexThreadId" type="button" :disabled="codexCompactBusy || ws.activeChatIsRunning.value" @click="compactCurrentCodexThread">
-                <svg viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M3 5h10M5 8h6M7 11h2" stroke="currentColor" stroke-width="1.35" stroke-linecap="round"/></svg>
-                <span>压缩上下文</span>
-                <small>{{ codexCompactBusy ? "压缩中" : "释放上下文空间" }}</small>
               </button>
             </div>
           </div>
@@ -2718,7 +3073,7 @@ function onPromptKeydown(event: KeyboardEvent) {
         <div
           ref="chatComposer"
           class="chat-composer"
-          :class="{ 'has-approval-cover': pendingApprovalSegment, 'context-drop-active': composerDropActive }"
+          :class="{ 'has-approval-cover': pendingApprovalSegment || pendingCodexUserInput || pendingPlanReview, 'context-drop-active': composerDropActive }"
           @dragover="onContextDragOver"
           @dragleave="onContextDragLeave"
           @drop="onContextDrop"
@@ -2729,6 +3084,72 @@ function onPromptKeydown(event: KeyboardEvent) {
               :ai-session-id="ws.activeAiSession.value?.id"
             />
           </div>
+          <section v-else-if="pendingCodexUserInput" class="chat-composer-user-input-cover" aria-label="Codex 问题">
+            <div
+              v-for="(question, questionIndex) in pendingCodexUserInput.questions"
+              :key="question.id"
+              class="chat-composer-user-input-question"
+            >
+              <small v-if="question.header" class="chat-composer-user-input-header">{{ question.header }}</small>
+              <strong class="chat-composer-user-input-title">{{ question.question }}</strong>
+              <div v-if="question.options.length || question.isOther" class="chat-composer-user-input-options" role="radiogroup" :aria-label="question.question">
+                <button
+                  v-for="(option, optionIndex) in question.options"
+                  :key="option.label"
+                  type="button"
+                  :class="{ selected: codexUserInputAnswers[question.id] === option.label }"
+                  :disabled="codexUserInputSubmitting"
+                  @click="selectCodexUserInputOption(question, option.label)"
+                >
+                  <span class="chat-composer-user-input-option-index">{{ optionIndex + 1 }}</span>
+                  <span class="chat-composer-user-input-option-copy">
+                    <strong>{{ option.label }}</strong>
+                    <small v-if="option.description">{{ option.description }}</small>
+                  </span>
+                </button>
+                <button
+                  v-if="question.isOther"
+                  type="button"
+                  :class="{ selected: codexUserInputAnswers[question.id] === '__other__' }"
+                  :disabled="codexUserInputSubmitting"
+                  @click="selectCodexUserInputOption(question, '__other__')"
+                >
+                  <span class="chat-composer-user-input-option-index">{{ question.options.length + 1 }}</span>
+                  <span class="chat-composer-user-input-option-copy"><strong>其他</strong></span>
+                </button>
+              </div>
+              <input
+                v-if="!question.options.length || codexUserInputAnswers[question.id] === '__other__'"
+                v-model="codexUserInputOtherAnswers[question.id]"
+                class="chat-composer-user-input-other"
+                :type="question.isSecret ? 'password' : 'text'"
+                :placeholder="question.isOther ? '请输入你的回答' : '请输入回答'"
+                :disabled="codexUserInputSubmitting"
+              />
+              <span v-if="questionIndex < pendingCodexUserInput.questions.length - 1" class="chat-composer-user-input-separator"></span>
+            </div>
+            <div class="chat-composer-user-input-actions">
+              <button type="button" class="chat-composer-user-input-skip" :disabled="codexUserInputSubmitting" @click="submitCodexUserInput(true)">跳过 <small>ESC</small></button>
+              <button type="button" class="chat-composer-user-input-submit" :disabled="codexUserInputSubmitting" @click="submitCodexUserInput()">提交 <span aria-hidden="true">↑</span></button>
+            </div>
+          </section>
+          <section v-else-if="pendingPlanReview" class="chat-composer-plan-review-cover" aria-label="计划审核">
+            <strong class="chat-composer-plan-review-title">实施此计划?</strong>
+            <div class="chat-composer-plan-review-options" role="radiogroup" aria-label="计划审核选择">
+              <label :class="{ selected: planReviewChoice === 'execute' }">
+                <input v-model="planReviewChoice" type="radio" value="execute" />
+                <span>是，实施此计划</span>
+              </label>
+              <label :class="{ selected: planReviewChoice === 'adjust' }">
+                <input v-model="planReviewChoice" type="radio" value="adjust" />
+                <span>否，请告知 Codex 如何调整</span>
+              </label>
+            </div>
+            <div class="chat-composer-plan-review-actions">
+              <button type="button" class="chat-composer-plan-review-defer" @click="deferPlanReview">忽略 <small>ESC</small></button>
+              <button type="button" class="chat-composer-plan-review-execute" @click="submitPlanReview">提交 <span aria-hidden="true">↑</span></button>
+            </div>
+          </section>
           <section v-if="ws.activeQueuedAiMessages.value.length" class="chat-followup-queue" aria-label="下一轮消息队列">
             <header class="chat-followup-queue-header">
               <div>
@@ -2838,15 +3259,62 @@ function onPromptKeydown(event: KeyboardEvent) {
               <button type="button" title="移除附件" aria-label="移除附件" @click="removeFileAttachment(attachment.id)">×</button>
             </div>
           </div>
-          <textarea
-            ref="promptInput"
-            v-model="prompt"
-            rows="3"
-            :placeholder="composerPlaceholder"
-            :disabled="approvalInputLocked"
-            @keydown="onPromptKeydown"
-            @paste="onPromptPaste"
-          ></textarea>
+          <div class="slash-command-input-wrap">
+            <div v-if="slashMenuVisible" class="slash-command-menu" role="listbox" aria-label="斜杠命令">
+              <button
+                v-for="(command, index) in filteredSlashCommands"
+                :key="command.id"
+                type="button"
+                class="slash-command-option"
+                :class="{ active: index === slashMenuIndex }"
+                role="option"
+                :aria-selected="index === slashMenuIndex"
+                @mouseenter="slashMenuIndex = index"
+                @click="selectSlashCommand(command)"
+              >
+                <svg class="slash-command-icon" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+                  <path d="M3.25 4.25h9.5v7.5h-9.5zM5.25 7h5.5M5.25 9.25h3.25" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round" />
+                </svg>
+                <span class="slash-command-copy"><strong>{{ command.label }}</strong><small>{{ command.description }}</small></span>
+              </button>
+              <p v-if="!filteredSlashCommands.length" class="slash-command-empty">没有匹配的命令</p>
+            </div>
+            <section v-if="slashCommandPanel" class="slash-command-panel" :aria-label="slashCommandPanel">
+              <header class="slash-command-panel-header">
+                <strong>{{ slashCommandPanel === 'model' ? '模型' : '推理' }}</strong>
+                <button type="button" title="关闭" aria-label="关闭" @click="closeSlashCommandPanel">×</button>
+              </header>
+              <template v-if="slashCommandPanel === 'model'">
+                <input v-model="slashPanelSearch" class="slash-command-panel-search" type="search" placeholder="搜索模型" @keydown.esc.prevent="closeSlashCommandPanel" />
+                <div class="slash-command-panel-options">
+                  <button v-for="model in filteredSlashPanelModels" :key="model.id" type="button" :class="{ selected: model.model === selectedModelValue }" @click="selectSlashPanelModel(model.model)">
+                    <span><strong>{{ model.displayName }}</strong><small>{{ localizedModelDescription(model) }}</small></span>
+                    <i v-if="model.model === selectedModelValue" aria-hidden="true">✓</i>
+                  </button>
+                  <p v-if="!filteredSlashPanelModels.length" class="slash-command-panel-empty">没有匹配的模型。</p>
+                </div>
+              </template>
+              <template v-else>
+                <input v-model="slashPanelSearch" class="slash-command-panel-search" type="search" placeholder="搜索推理强度" @keydown.esc.prevent="closeSlashCommandPanel" />
+                <div class="slash-command-panel-options">
+                  <button v-for="option in filteredSlashPanelReasoningOptions" :key="option.id" type="button" :class="{ selected: option.id === selectedReasoningValue }" @click="selectSlashPanelReasoning(option.id)">
+                    <span><strong>{{ option.label }}</strong><small>{{ localizedReasoningDescription(option) }}</small></span>
+                    <i v-if="option.id === selectedReasoningValue" aria-hidden="true">✓</i>
+                  </button>
+                  <p v-if="!filteredSlashPanelReasoningOptions.length" class="slash-command-panel-empty">没有匹配的推理强度。</p>
+                </div>
+              </template>
+            </section>
+            <textarea
+              ref="promptInput"
+              v-model="prompt"
+              rows="3"
+              :placeholder="composerPlaceholder"
+              :disabled="composerInputLocked"
+              @keydown="onPromptKeydown"
+              @paste="onPromptPaste"
+            ></textarea>
+          </div>
           <div class="chat-composer-divider"></div>
           <div class="chat-composer-toolbar">
             <div class="chat-composer-toolbar-left">
@@ -2854,19 +3322,20 @@ function onPromptKeydown(event: KeyboardEvent) {
                 <button
                   class="codex-composer-add"
                   :class="{ open: composerToolsOpen }"
-                  title="添加工具"
+                  title="添加文件等内容"
                   type="button"
                   @click="toggleComposerToolsMenu"
-                  aria-label="添加工具"
+                  aria-label="添加文件等内容"
                 >
                   <svg viewBox="0 0 16 16" fill="none" aria-hidden="true">
                     <path d="M8 3.5v9M3.5 8h9" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" />
                   </svg>
                 </button>
                 <div v-if="composerToolsOpen" class="codex-composer-add-menu">
+                  <p class="codex-composer-add-menu-heading">添加</p>
                   <button v-if="showCodexRunControls" type="button" @click="chooseFileAttachments">
                     <svg viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M5.25 8.75 9.7 4.3a2.1 2.1 0 0 1 3 3l-5.4 5.4a3.25 3.25 0 0 1-4.6-4.6l5.05-5.05" stroke="currentColor" stroke-width="1.35" stroke-linecap="round"/></svg>
-                    <span>添加文件</span>
+                    <span>文件和文件夹</span>
                     <small>PDF、文档、代码</small>
                   </button>
                   <button type="button" :class="{ active: codexMode === 'plan' }" @click="toggleComposerPlanMode">
@@ -2885,11 +3354,6 @@ function onPromptKeydown(event: KeyboardEvent) {
                     </svg>
                     <span>目标</span>
                     <small>{{ codexGoalEnabled ? "已开启" : "未开启" }}</small>
-                  </button>
-                  <button v-if="activeCodexThreadId" type="button" :disabled="codexCompactBusy || ws.activeChatIsRunning.value" @click="compactCurrentCodexThread">
-                    <svg viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M3 5h10M5 8h6M7 11h2" stroke="currentColor" stroke-width="1.35" stroke-linecap="round"/></svg>
-                    <span>压缩上下文</span>
-                    <small>{{ codexCompactBusy ? "压缩中" : "释放上下文空间" }}</small>
                   </button>
                 </div>
               </div>
@@ -3102,8 +3566,9 @@ function onPromptKeydown(event: KeyboardEvent) {
       >
         <header class="chat-split-panel-header">
           <div class="chat-split-panel-title">
-            <strong>{{ processPanelSelection ? "执行详情" : previewFile?.name ?? "文件预览" }}</strong>
-            <small v-if="processPanelSelection">{{ processPanelSelection.title }}</small>
+            <strong>{{ planPanelOpen && activePlanSegment ? "计划审核" : processPanelSelection ? "执行详情" : previewFile?.name ?? "文件预览" }}</strong>
+            <small v-if="planPanelOpen && activePlanSegment">确认后才会开始执行</small>
+            <small v-else-if="processPanelSelection">{{ processPanelSelection.title }}</small>
             <small v-else-if="previewFile">{{ previewFileExtension }} · {{ previewFileSizeLabel(previewFile.size) }}</small>
           </div>
           <button type="button" title="关闭分割面板" aria-label="关闭分割面板" @click="toggleSplitPanel">
@@ -3112,8 +3577,18 @@ function onPromptKeydown(event: KeyboardEvent) {
             </svg>
           </button>
         </header>
-        <div class="chat-split-panel-body" :class="{ 'viewer-active': previewViewerFile }">
-          <div v-if="processPanelSelection" class="chat-process-side-panel">
+        <div ref="splitPanelBody" class="chat-split-panel-body" :class="{ 'viewer-active': previewViewerFile }">
+          <section v-if="planPanelOpen && activePlanSegment" class="chat-plan-review-panel">
+            <div class="chat-plan-review-status" :class="planReviewStatus">
+              <span aria-hidden="true"></span>
+              <strong>{{ planReviewStatus === "approved" ? "已确认执行" : planReviewStatus === "executing" ? "正在启动执行" : planReviewStatus === "dismissed" ? "暂不执行" : "等待审核" }}</strong>
+            </div>
+            <ChatSegmentView
+              class="chat-plan-review-content"
+              :segment="{ type: 'text', text: planReviewMarkdown }"
+            />
+          </section>
+          <div v-else-if="processPanelSelection" class="chat-process-side-panel">
             <ChatMessageRow
               v-if="processPanelMessage"
               :message="processPanelMessage"

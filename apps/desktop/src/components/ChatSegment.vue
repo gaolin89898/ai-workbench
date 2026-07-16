@@ -687,11 +687,12 @@ async function respondApproval(decision: "approved" | "denied", scope: "turn" | 
         </svg>
         <span>Plan</span>
       </div>
-      <span class="chat-segment-plan-count">{{ planCompletedCount(segment) }}/{{ segment.steps.length }}</span>
+      <span v-if="segment.steps.length" class="chat-segment-plan-count">{{ planCompletedCount(segment) }}/{{ segment.steps.length }}</span>
     </header>
     <div class="chat-segment-plan-body">
       <p v-if="segment.summary" class="chat-segment-plan-explanation">{{ segment.summary }}</p>
-      <section>
+      <p v-if="segment.content && !segment.steps.length" class="chat-segment-plan-explanation">计划已生成，打开右侧计划审核后确认执行。</p>
+      <section v-if="segment.steps.length">
         <strong>Key Changes</strong>
         <ul>
           <li v-for="(step, index) in segment.steps" :key="index" :class="`status-${step.status}`">

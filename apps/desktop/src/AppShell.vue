@@ -14,7 +14,7 @@ let providerDetectTimer: ReturnType<typeof window.setInterval> | null = null;
 
 const activeView = computed<ViewName>(() => {
   const name = route.name;
-  if (name === "workspace" || name === "projects" || name === "providers" || name === "aiSessions") {
+  if (name === "workspace" || name === "projects" || name === "providers" || name === "resources" || name === "aiSessions") {
     return name;
   }
   return "aiSessions";

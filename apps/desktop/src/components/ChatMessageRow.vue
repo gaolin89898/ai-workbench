@@ -93,6 +93,9 @@ async function copyUserMessage() {
 }
 const rawSegments = computed<ChatSegmentType[]>(() => {
   const sourceSegments = props.message.segments ?? [];
+  if (props.message.role === "user" && isPlanExecutionRequest(props.message.text ?? "")) {
+    return [{ type: "text", text: "计划已审核，开始执行" }];
+  }
   const cleanedText = stripProcessTextFromFinalText(
     extractAssistantText(props.message.text ?? ""),
     sourceSegments,
@@ -119,7 +122,12 @@ const rawSegments = computed<ChatSegmentType[]>(() => {
     } else {
       result.push(...filteredSegments);
     }
-    result.push({ type: "text", stepId: "final-answer", text: messageText });
+    // Plan responses are reviewed in the dedicated side panel. The plan segment
+    // remains in the transcript as a compact marker, so do not repeat its full
+    // Markdown body as a second chat answer.
+    if (!props.message.segments.some((segment) => segment.type === "plan")) {
+      result.push({ type: "text", stepId: "final-answer", text: messageText });
+    }
     return result;
   }
   if (props.message.role === "assistant") {
@@ -292,6 +300,10 @@ const activeMobileProcessGroup = computed(() => {
   const group = contentGroups.value[index];
   return group?.type === "process" ? { group, index } : null;
 });
+
+function isPlanExecutionRequest(text: string) {
+  return /^计划已审核[，,。]?/.test(text.trim());
+}
 
 const panelProcessItem = computed(() => {
   const groupIndex = props.processPanelGroupIndex;
