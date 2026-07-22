@@ -7,6 +7,12 @@ import { registerIpcHandlers } from "./ipc";
 import { initDesktopCloudSync } from "./sync";
 import { startProviderAutoDetect } from "./providers";
 import { disposeCodexAdmin } from "./codex_admin";
+import { applyUtf8ProcessEnv } from "./windows-utf8-env";
+
+// Apply UTF-8 environment variables early so all child CLI processes
+// (Codex, Claude Code, OpenCode, MiMo) inherit a consistent encoding,
+// especially on Windows where the default code page may be GBK (936).
+applyUtf8ProcessEnv();
 
 let tray: Tray | null = null;
 

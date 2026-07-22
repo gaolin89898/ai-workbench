@@ -33,3 +33,11 @@ mobile-*.png
 
 # Electron release assets generated locally
 apps/desktop/release-assets/
+
+# Playwright E2E test artifacts
+apps/desktop/test-results/
+apps/desktop/playwright-report/
+apps/desktop/.playwright/
+
+# AI 工作记忆（本地）
+.workbuddy/
