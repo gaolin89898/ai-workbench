@@ -150,6 +150,33 @@ type DesktopPairingRequest struct {
 	CreatedAt      time.Time  `json:"createdAt" db:"created_at"`
 }
 
+// UserOauthIdentity maps the `user_oauth_identities` table (migration 0008).
+// One user may bind multiple providers; (provider, external_id) is unique.
+type UserOauthIdentity struct {
+	Id          string    `json:"id" db:"id"`
+	UserId      string    `json:"userId" db:"user_id"`
+	Provider    string    `json:"provider" db:"provider"`
+	ExternalId  string    `json:"externalId" db:"external_id"`
+	DisplayName string    `json:"displayName" db:"display_name"`
+	CreatedAt   time.Time `json:"createdAt" db:"created_at"`
+}
+
+// OauthState maps the `oauth_states` table (migration 0016). Used by the
+// GitHub "backend-relay + poll" flow: a state row is created when the client
+// starts OAuth, updated when GitHub calls back, and read by the polling client.
+type OauthState struct {
+	Id           string     `json:"id" db:"id"`
+	State        string     `json:"state" db:"state"`
+	Status       string     `json:"status" db:"status"` // pending / done / error
+	UserId       *string    `json:"userId" db:"user_id"`
+	AccessToken  *string    `json:"accessToken" db:"access_token"`
+	RefreshToken *string    `json:"refreshToken" db:"refresh_token"`
+	Error        *string    `json:"error" db:"error"`
+	CreatedAt    time.Time  `json:"createdAt" db:"created_at"`
+	CompletedAt *time.Time `json:"completedAt" db:"completed_at"`
+	ExpiresAt    time.Time  `json:"expiresAt" db:"expires_at"`
+}
+
 // UserSettingsResponse mirrors the Rust UserSettingsResponse DTO returned by
 // load_settings.
 type UserSettingsResponse struct {
