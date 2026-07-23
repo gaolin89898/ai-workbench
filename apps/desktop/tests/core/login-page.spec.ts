@@ -1,5 +1,5 @@
 import { test, expect } from "@playwright/test";
-import { launchTestApp, waitForAppReady, type TestApp } from "../helpers/electron-app";
+import { launchTestApp, waitForAppReady, stubLoginFailure, type TestApp } from "../helpers/electron-app";
 
 test.describe("login page", () => {
   let testApp: TestApp;
@@ -64,8 +64,12 @@ test.describe("login page", () => {
     await expect(emailInput).toHaveValue("test@example.com");
   });
 
-  test("login button is disabled while loading", async () => {
+  test("login button triggers loading then error on failure", async () => {
     const { window } = testApp;
+
+    // Stub the login IPC to reject after a short delay so the loading state
+    // is visible long enough to assert.
+    await stubLoginFailure(testApp.app, "连接服务器失败", 500);
 
     const serverInput = window.locator('input[placeholder="请输入服务器地址"]');
     const emailInput = window.locator('input[autocomplete="username"]');
@@ -77,12 +81,11 @@ test.describe("login page", () => {
     await passwordInput.fill("wrongpassword");
     await loginButton.click();
 
-    // Button text should change to "登录中..." while request is in flight.
-    // Since there's no real server, the request will fail quickly, but we
-    // can still catch the loading state or the resulting error message.
-    await expect(window.locator("text=登录中...")).toBeVisible({ timeout: 2000 }).catch(() => {
-      // If loading state passed too fast, check for error message instead.
-    });
+    // Loading state must appear — this is a hard assertion, not .catch().
+    await expect(window.locator("text=登录中...")).toBeVisible({ timeout: 2_000 });
+
+    // After the stub rejects, the error message must appear.
+    await expect(window.locator(".desktop-login-error")).toBeVisible({ timeout: 5_000 });
   });
 
   test("remember password checkbox toggles", async () => {

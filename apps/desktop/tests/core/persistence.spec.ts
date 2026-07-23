@@ -1,5 +1,8 @@
 import { test, expect } from "@playwright/test";
-import { launchTestApp, waitForAppReady, type TestApp } from "../helpers/electron-app";
+import { launchTestApp, waitForAppReady, stubLoginFailure, type TestApp } from "../helpers/electron-app";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
 
 test.describe("login form persistence", () => {
   let testApp: TestApp;
@@ -29,26 +32,25 @@ test.describe("login form persistence", () => {
   test("form submits on Enter key", async () => {
     const { window } = testApp;
 
+    // Stub login IPC so the loading state persists long enough to assert.
+    await stubLoginFailure(testApp.app, "连接服务器失败", 500);
+
     const serverInput = window.locator('input[placeholder="请输入服务器地址"]');
     const emailInput = window.locator('input[autocomplete="username"]');
     const passwordInput = window.locator('input[autocomplete="current-password"]');
-    const loginButton = window.locator("button.desktop-login-button");
 
     await serverInput.fill("http://127.0.0.1:3000");
     await emailInput.fill("user@test.com");
     await passwordInput.fill("pass123");
 
     // Pressing Enter in the password field should submit the form.
-    // The button text briefly changes to "登录中..." while the request is
-    // in flight. We catch this transient state with a short timeout — if it
-    // passes too fast (connection refused immediately), the test still passes
-    // because the form accepted the Enter submission without throwing.
     await passwordInput.press("Enter");
 
-    await expect(window.locator('text=登录中...')).toBeVisible({ timeout: 3_000 }).catch(() => {
-      // Loading state may have passed too quickly if the connection was
-      // refused immediately. That's acceptable — the form still submitted.
-    });
+    // Loading state must appear — hard assertion, not .catch().
+    await expect(window.locator("text=登录中...")).toBeVisible({ timeout: 2_000 });
+
+    // After the stub rejects, the error message must appear.
+    await expect(window.locator(".desktop-login-error")).toBeVisible({ timeout: 5_000 });
   });
 
   test("password toggle has correct aria-label", async () => {
@@ -59,5 +61,32 @@ test.describe("login form persistence", () => {
 
     await toggle.click();
     await expect(toggle).toHaveAttribute("aria-label", "隐藏密码");
+  });
+
+  test("server URL survives app relaunch", async () => {
+    // This test verifies persistence across a real relaunch, not just
+    // localStorage within the same window.
+    const { window, app, userDataDir } = testApp;
+
+    // Type a server URL in the first launch.
+    const serverInput = window.locator('input[placeholder="请输入服务器地址"]');
+    await serverInput.fill("http://10.0.0.5:3000");
+    await expect(serverInput).toHaveValue("http://10.0.0.5:3000");
+
+    // Close the app but keep the temp profile dir for relaunch.
+    await app.close();
+
+    // Relaunch with the same user-data dir.
+    const relaunched = await launchTestApp({ userDataDir });
+    await waitForAppReady(relaunched.window);
+
+    // The server URL should be restored from the persisted profile.
+    const restoredInput = relaunched.window.locator('input[placeholder="请输入服务器地址"]');
+    await expect(restoredInput).toHaveValue("http://10.0.0.5:3000", { timeout: 5_000 });
+
+    // Clean up the relaunched instance (won't delete dir since it was reused).
+    await relaunched.cleanup();
+    // afterEach's testApp.cleanup() will close (no-op, already closed) and
+    // delete the temp dir.
   });
 });

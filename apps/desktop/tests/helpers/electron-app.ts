@@ -16,6 +16,7 @@ import os from "node:os";
 export type TestApp = {
   app: ElectronApplication;
   window: Page;
+  userDataDir: string;
   cleanup: () => Promise<void>;
 };
 
@@ -23,8 +24,12 @@ export type TestApp = {
  * Launches the desktop app in an isolated test environment.
  *
  * @param options.env — extra env vars to pass to the Electron process
+ * @param options.userDataDir — reuse an existing temp dir (for relaunch tests)
  */
-export async function launchTestApp(options?: { env?: Record<string, string> }): Promise<TestApp> {
+export async function launchTestApp(options?: {
+  env?: Record<string, string>;
+  userDataDir?: string;
+}): Promise<TestApp> {
   const cwd = path.resolve(__dirname, "..", "..");
   const mainEntry = path.join(cwd, "out", "main", "index.js");
 
@@ -35,7 +40,7 @@ export async function launchTestApp(options?: { env?: Record<string, string> }):
     );
   }
 
-  const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), "ai-workbench-e2e-"));
+  const userDataDir = options?.userDataDir ?? fs.mkdtempSync(path.join(os.tmpdir(), "ai-workbench-e2e-"));
   const dbPath = path.join(userDataDir, "test-history.db");
 
   // Build the env for the Electron process. We must remove ELECTRON_RUN_AS_NODE
@@ -53,7 +58,8 @@ export async function launchTestApp(options?: { env?: Record<string, string> }):
     cwd,
     env: {
       ...childEnv,
-      // Signal to the app that it's running in test mode.
+      // Signal to the app that it's running in test mode. index.ts reads this
+      // to skip cloud sync and provider auto-detect.
       AI_WORKBENCH_TEST_MODE: "background",
       // Isolate the SQLite database to the temp user-data dir.
       AI_WORKBENCH_DB: dbPath,
@@ -65,19 +71,23 @@ export async function launchTestApp(options?: { env?: Record<string, string> }):
   const window = await app.firstWindow();
   await window.waitForLoadState("domcontentloaded");
 
+  const shouldCleanupDir = !options?.userDataDir;
   return {
     app,
     window,
+    userDataDir,
     cleanup: async () => {
       try {
         await app.close();
       } catch {
         // ignore close errors
       }
-      try {
-        fs.rmSync(userDataDir, { recursive: true, force: true });
-      } catch {
-        // ignore cleanup errors
+      if (shouldCleanupDir) {
+        try {
+          fs.rmSync(userDataDir, { recursive: true, force: true });
+        } catch {
+          // ignore cleanup errors
+        }
       }
     },
   };
@@ -91,4 +101,31 @@ export async function waitForAppReady(window: Page): Promise<void> {
   // The boot loading screen shows "正在启动 CodeHub AI..." — wait for it to
   // disappear (v-if="checkingAuth" becomes false).
   await window.waitForSelector("text=正在启动 CodeHub AI", { state: "detached", timeout: 15_000 });
+}
+
+/**
+ * Stubs the `login_desktop` IPC channel in the main process so that login
+ * attempts produce a deterministic failure instead of hitting the real network.
+ *
+ * The stub delays rejection by `delayMs` so the loading state ("登录中...")
+ * is visible long enough to assert. After the delay, the login error message
+ * appears in the `.desktop-login-error` element.
+ *
+ * Call this *before* clicking the login button or pressing Enter.
+ *
+ * Note: We intercept at the main-process `ipcMain` level because
+ * `contextBridge.exposeInMainWorld` freezes the renderer-side `window.desktop`
+ * object, making it impossible to override from the renderer.
+ */
+export async function stubLoginFailure(app: ElectronApplication, errorMessage = "连接服务器失败", delayMs = 300): Promise<void> {
+  await app.evaluate(
+    async ({ ipcMain }, params) => {
+      ipcMain.removeHandler("login_desktop");
+      ipcMain.handle("login_desktop", async () => {
+        await new Promise((r) => setTimeout(r, params.delayMs));
+        throw new Error(params.errorMessage);
+      });
+    },
+    { errorMessage, delayMs },
+  );
 }

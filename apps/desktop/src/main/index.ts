@@ -20,7 +20,9 @@ const APP_USER_MODEL_ID = "com.gaolin89898.aiworkbench";
 
 // Running `electron-vite dev` from an installed instance can otherwise make
 // both Chromium processes contend for the same disk and GPU cache directories.
-if (!app.isPackaged) {
+// Skip in test mode so that --user-data-dir controls session storage (needed
+// for cross-relaunch persistence tests).
+if (!app.isPackaged && process.env.AI_WORKBENCH_TEST_MODE !== "background") {
   app.setPath("sessionData", join(app.getPath("temp"), "codehub-ai-dev-session", String(process.pid)));
 }
 
@@ -141,16 +143,25 @@ app.whenReady().then(() => {
     app.setAppUserModelId(APP_USER_MODEL_ID);
   }
 
+  // In test mode, skip cloud sync and provider auto-detect to keep core tests
+  // deterministic and offline-friendly. These background tasks probe npm
+  // registries and read local provider state, which can make CI runs flaky.
+  const isTestMode = process.env.AI_WORKBENCH_TEST_MODE === "background";
+
   const mainWindow = createWindow();
   createTray(mainWindow);
   registerIpcHandlers(mainWindow);
-  initDesktopCloudSync(mainWindow);
-  startProviderAutoDetect();
+  if (!isTestMode) {
+    initDesktopCloudSync(mainWindow);
+    startProviderAutoDetect();
+  }
 
   app.on("activate", () => {
     if (BrowserWindow.getAllWindows().length === 0) {
       const win = createWindow();
-      initDesktopCloudSync(win);
+      if (!isTestMode) {
+        initDesktopCloudSync(win);
+      }
     }
   });
 });
