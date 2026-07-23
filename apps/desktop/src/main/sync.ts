@@ -486,6 +486,86 @@ function saveCloudConfig(
   syncInstance?.restart(serverUrl, accessToken, deviceId);
 }
 
+// githubLoginStart asks the backend to begin a GitHub OAuth flow: it creates a
+// state row server-side and returns the GitHub authorize URL + state. The
+// caller opens the URL in the system browser, then polls githubLoginPoll below.
+export async function githubLoginStart(
+  server: string,
+  desktop = true
+): Promise<{ authorizeUrl: string; state: string }> {
+  const normalizedServer = normalizeServerUrl(server);
+  const resp = await fetchJson(`${normalizedServer}/auth/github/state`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ desktop }),
+  });
+  return {
+    authorizeUrl: resp.authorizeUrl,
+    state: resp.state,
+  };
+}
+
+// githubLoginPoll checks whether the GitHub OAuth flow has completed. Call
+// every ~1.5s after githubLoginStart. Returns {status} while pending; on done
+// returns the access token (and deviceId for the desktop flow).
+export async function githubLoginPoll(
+  server: string,
+  state: string
+): Promise<{ status: string; accessToken?: string; deviceId?: string; error?: string }> {
+  const normalizedServer = normalizeServerUrl(server);
+  const resp = await fetchJson(
+    `${normalizedServer}/auth/github/poll?state=${encodeURIComponent(state)}`,
+    { method: "GET" }
+  );
+  return {
+    status: resp.status,
+    accessToken: resp.accessToken,
+    deviceId: resp.deviceId,
+    error: resp.error,
+  };
+}
+
+// googleLoginStart asks the backend to begin a Google OAuth flow: it creates a
+// state row server-side and returns the Google authorize URL + state. The
+// caller opens the URL in the system browser, then polls googleLoginPoll below.
+export async function googleLoginStart(
+  server: string,
+  desktop = true
+): Promise<{ authorizeUrl: string; state: string }> {
+  const normalizedServer = normalizeServerUrl(server);
+  const resp = await fetchJson(`${normalizedServer}/auth/google/state`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ desktop }),
+  });
+  return {
+    authorizeUrl: resp.authorizeUrl,
+    state: resp.state,
+  };
+}
+
+// googleLoginPoll checks whether the Google OAuth flow has completed. Call
+// every ~1.5s after googleLoginStart. Returns {status} while pending; on done
+// returns the access token (and deviceId for the desktop flow).
+export async function googleLoginPoll(
+  server: string,
+  state: string
+): Promise<{ status: string; accessToken?: string; deviceId?: string; error?: string }> {
+  const normalizedServer = normalizeServerUrl(server);
+  const resp = await fetchJson(
+    `${normalizedServer}/auth/google/poll?state=${encodeURIComponent(state)}`,
+    { method: "GET" }
+  );
+  return {
+    status: resp.status,
+    accessToken: resp.accessToken,
+    deviceId: resp.deviceId,
+    error: resp.error,
+  };
+}
+
+// loginDesktop authenticates against /desktop/login with email + password.
+// On success it persists the cloud config so the WebSocket sync can resume.
 export async function loginDesktop(
   server: string,
   email: string,

@@ -21,6 +21,7 @@ import (
 
 	"github.com/gaolin89898/ai-workbench/backend/internal/config"
 	"github.com/gaolin89898/ai-workbench/backend/internal/db"
+	"github.com/gaolin89898/ai-workbench/backend/internal/email"
 	"github.com/gaolin89898/ai-workbench/backend/internal/routes"
 	"github.com/gaolin89898/ai-workbench/backend/internal/state"
 	"github.com/gaolin89898/ai-workbench/backend/internal/ws"
@@ -46,7 +47,21 @@ func main() {
 	appState := state.NewAppState(database)
 
 	// 4. Build routes + WebSocket handlers.
-	routeHandler := routes.NewHandler(database, appState, cfg.JWTSecret)
+	// Construct the SMTP mailer only when fully configured; verification-code
+	// login is unavailable otherwise (handlers return a clear 500).
+	var mailer *email.Sender
+	if cfg.SMTPConfigured() {
+		mailer = email.NewSender(cfg.SMTPHost, cfg.SMTPPort, cfg.SMTPUsername, cfg.SMTPPassword, cfg.SMTPFrom, cfg.SMTPFromName)
+		log.Printf("smtp configured: %s:%s from=%s", cfg.SMTPHost, cfg.SMTPPort, cfg.SMTPFrom)
+	} else {
+		log.Printf("warning: smtp not configured (SMTP_HOST/SMTP_USERNAME/SMTP_PASSWORD/SMTP_FROM); verification-code login unavailable")
+	}
+	if cfg.GitHubConfigured() {
+		log.Printf("github oauth configured: client_id=%s redirect=%s", cfg.GitHubClientID, cfg.GitHubRedirectURL)
+	} else {
+		log.Printf("warning: github oauth not configured (GITHUB_CLIENT_ID/GITHUB_CLIENT_SECRET/GITHUB_REDIRECT_URL); github login unavailable")
+	}
+	routeHandler := routes.NewHandler(database, appState, cfg.JWTSecret, mailer, cfg.GitHubClientID, cfg.GitHubClientSecret, cfg.GitHubRedirectURL, cfg.GoogleClientID, cfg.GoogleClientSecret, cfg.GoogleRedirectURL)
 	wsHandler := ws.NewHandler(database, appState, cfg.JWTSecret)
 
 	mux := http.NewServeMux()

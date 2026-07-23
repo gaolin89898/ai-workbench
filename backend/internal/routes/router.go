@@ -11,6 +11,7 @@ import (
 
 	"github.com/gaolin89898/ai-workbench/backend/internal/auth"
 	"github.com/gaolin89898/ai-workbench/backend/internal/db"
+	"github.com/gaolin89898/ai-workbench/backend/internal/email"
 	"github.com/gaolin89898/ai-workbench/backend/internal/state"
 )
 
@@ -20,11 +21,30 @@ type Handler struct {
 	DB     *db.DB
 	State  *state.AppState
 	Secret string
+	// Mailer sends verification-code emails. nil when SMTP is not configured;
+	// the send-code handler surfaces a clear 500 in that case.
+	Mailer *email.Sender
+	// GitHub OAuth config. Empty when not configured; the github handlers
+	// return a clear 400 in that case.
+	GitHubClientID     string
+	GitHubClientSecret string
+	GitHubRedirectURL  string
+
+	// Google OAuth config. Empty when not configured; the google handlers
+	// return a clear 400 in that case.
+	GoogleClientID     string
+	GoogleClientSecret string
+	GoogleRedirectURL  string
 }
 
-// NewHandler constructs a Handler with the given dependencies.
-func NewHandler(d *db.DB, st *state.AppState, secret string) *Handler {
-	return &Handler{DB: d, State: st, Secret: secret}
+// NewHandler constructs a Handler with the given dependencies. mailer may be nil
+// when SMTP is not configured (verification-code login is then unavailable).
+func NewHandler(d *db.DB, st *state.AppState, secret string, mailer *email.Sender, ghClientID, ghClientSecret, ghRedirectURL, gClientID, gClientSecret, gRedirectURL string) *Handler {
+	return &Handler{
+		DB: d, State: st, Secret: secret, Mailer: mailer,
+		GitHubClientID: ghClientID, GitHubClientSecret: ghClientSecret, GitHubRedirectURL: ghRedirectURL,
+		GoogleClientID: gClientID, GoogleClientSecret: gClientSecret, GoogleRedirectURL: gRedirectURL,
+	}
 }
 
 // Router builds the top-level http.Handler, wiring every route from
@@ -38,6 +58,14 @@ func (h *Handler) Router() http.Handler {
 	mux.HandleFunc("GET /health", h.health)
 	mux.HandleFunc("POST /auth/register", h.register)
 	mux.HandleFunc("POST /auth/login", h.login)
+	// GitHub OAuth (backend-relay + poll; no deep-link required on clients).
+	mux.HandleFunc("POST /auth/github/state", h.githubStart)
+	mux.HandleFunc("GET /auth/github/callback", h.githubCallback)
+	mux.HandleFunc("GET /auth/github/poll", h.githubPoll)
+	// Google OAuth (backend-relay + poll; no deep-link required on clients).
+	mux.HandleFunc("POST /auth/google/state", h.googleStart)
+	mux.HandleFunc("GET /auth/google/callback", h.googleCallback)
+	mux.HandleFunc("GET /auth/google/poll", h.googlePoll)
 	mux.HandleFunc("POST /desktop/login", h.loginDesktop)
 	mux.HandleFunc("POST /desktop/pairing-requests", h.createDesktopPairingRequest)
 	mux.HandleFunc("GET /desktop/pairing-requests/{code}", h.getDesktopPairingRequestStatus)

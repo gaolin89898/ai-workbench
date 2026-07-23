@@ -116,7 +116,9 @@ class ApiClient {
     );
   }
 
-  Future<void> login(String email, String password) async {
+  /// Password login: verifies [email] + [password] against the server and
+  /// stores the access token on success. Throws on wrong credentials.
+  Future<void> passwordLogin(String email, String password) async {
     final loginUri = uri('/auth/login');
     final response = await _requestWithTimeout(
       http.post(
@@ -126,28 +128,87 @@ class ApiClient {
       ),
       loginUri,
     );
-    if (response.statusCode == 404) {
-      await register(email, password);
-      return;
-    }
     _throwIfBad(response);
     token = jsonDecode(response.body)['accessToken'] as String;
     await saveStoredToken(token!, baseUrl: baseUrl);
   }
 
-  Future<void> register(String email, String password) async {
-    final registerUri = uri('/auth/register');
+  /// Starts a GitHub OAuth flow: the server creates a state row and returns the
+  /// GitHub authorize URL. The caller opens it in the browser, then polls
+  /// [githubPoll] until the flow completes.
+  Future<({String authorizeUrl, String state})> githubStart() async {
+    final startUri = uri('/auth/github/state');
     final response = await _requestWithTimeout(
       http.post(
-        registerUri,
+        startUri,
         headers: headers,
-        body: jsonEncode({'email': email, 'password': password}),
+        body: jsonEncode({'desktop': false}),
       ),
-      registerUri,
+      startUri,
     );
     _throwIfBad(response);
-    token = jsonDecode(response.body)['accessToken'] as String;
-    await saveStoredToken(token!, baseUrl: baseUrl);
+    final data = jsonDecode(response.body) as Map<String, dynamic>;
+    return (
+      authorizeUrl: data['authorizeUrl'] as String,
+      state: data['state'] as String,
+    );
+  }
+
+  /// Polls the GitHub OAuth state. Returns {status} while pending; on done
+  /// returns the access token. The client should call this every ~1.5s.
+  Future<({String status, String? accessToken, String? error})> githubPoll(
+      String state) async {
+    final pollUri = uri('/auth/github/poll?state=${Uri.encodeQueryComponent(state)}');
+    final response = await _requestWithTimeout(
+      http.get(pollUri, headers: headers),
+      pollUri,
+    );
+    _throwIfBad(response);
+    final data = jsonDecode(response.body) as Map<String, dynamic>;
+    return (
+      status: data['status'] as String,
+      accessToken: data['accessToken'] as String?,
+      error: data['error'] as String?,
+    );
+  }
+
+  /// Starts a Google OAuth flow: the server creates a state row and returns the
+  /// Google authorize URL. The caller opens it in the browser, then polls
+  /// [googlePoll] until the flow completes.
+  Future<({String authorizeUrl, String state})> googleStart() async {
+    final startUri = uri('/auth/google/state');
+    final response = await _requestWithTimeout(
+      http.post(
+        startUri,
+        headers: headers,
+        body: jsonEncode({'desktop': false}),
+      ),
+      startUri,
+    );
+    _throwIfBad(response);
+    final data = jsonDecode(response.body) as Map<String, dynamic>;
+    return (
+      authorizeUrl: data['authorizeUrl'] as String,
+      state: data['state'] as String,
+    );
+  }
+
+  /// Polls the Google OAuth state. Returns {status} while pending; on done
+  /// returns the access token. The client should call this every ~1.5s.
+  Future<({String status, String? accessToken, String? error})> googlePoll(
+      String state) async {
+    final pollUri = uri('/auth/google/poll?state=${Uri.encodeQueryComponent(state)}');
+    final response = await _requestWithTimeout(
+      http.get(pollUri, headers: headers),
+      pollUri,
+    );
+    _throwIfBad(response);
+    final data = jsonDecode(response.body) as Map<String, dynamic>;
+    return (
+      status: data['status'] as String,
+      accessToken: data['accessToken'] as String?,
+      error: data['error'] as String?,
+    );
   }
 
   Future<http.Response> _requestWithTimeout(

@@ -1022,6 +1022,14 @@ export const desktopApi = {
     ipc<TerminalSession[]>("list_sessions"),
   loginDesktop: (server: string, email: string, password: string): Promise<PairResponse> =>
     ipc<PairResponse>("login_desktop", server, email, password),
+  githubLoginStart: (server: string, desktop = true): Promise<{ authorizeUrl: string; state: string }> =>
+    ipc<{ authorizeUrl: string; state: string }>("github_login_start", server, desktop),
+  githubLoginPoll: (server: string, state: string): Promise<{ status: string; accessToken?: string; deviceId?: string; error?: string }> =>
+    ipc<{ status: string; accessToken?: string; deviceId?: string; error?: string }>("github_login_poll", server, state),
+  googleLoginStart: (server: string, desktop = true): Promise<{ authorizeUrl: string; state: string }> =>
+    ipc<{ authorizeUrl: string; state: string }>("google_login_start", server, desktop),
+  googleLoginPoll: (server: string, state: string): Promise<{ status: string; accessToken?: string; deviceId?: string; error?: string }> =>
+    ipc<{ status: string; accessToken?: string; deviceId?: string; error?: string }>("google_login_poll", server, state),
   logoutDesktop: (): Promise<void> =>
     ipc<void>("logout_desktop"),
   saveCredentials: (email: string, password: string): Promise<void> =>

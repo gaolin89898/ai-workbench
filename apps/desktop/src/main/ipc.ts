@@ -19,6 +19,10 @@ import * as providers from "./providers";
 import * as projects from "./projects";
 import {
   loginDesktop,
+  githubLoginStart,
+  githubLoginPoll,
+  googleLoginStart,
+  googleLoginPoll,
   logoutDesktop,
   getCloudConfig,
   getDesktopCloudSync,
@@ -189,8 +193,31 @@ export function registerIpcHandlers(win?: BrowserWindow): void {
 
   // ---------- cloud pairing ----------
 
+  // login_desktop takes [server, email, password].
   handle("login_desktop", async (_event, args: [string, string, string]) =>
     loginDesktop(args[0], args[1], args[2])
+  );
+
+  // github_login_start begins a GitHub OAuth flow; returns {authorizeUrl,state}.
+  handle("github_login_start", async (_event, args: [string, boolean?]) =>
+    githubLoginStart(args[0], args[1] ?? true)
+  );
+
+  // github_login_poll checks whether the OAuth flow finished. Returns
+  // {status, accessToken?, deviceId?, error?}.
+  handle("github_login_poll", async (_event, args: [string, string]) =>
+    githubLoginPoll(args[0], args[1])
+  );
+
+  // google_login_start begins a Google OAuth flow; returns {authorizeUrl,state}.
+  handle("google_login_start", async (_event, args: [string, boolean?]) =>
+    googleLoginStart(args[0], args[1] ?? true)
+  );
+
+  // google_login_poll checks whether the Google OAuth flow finished. Returns
+  // {status, accessToken?, deviceId?, error?}.
+  handle("google_login_poll", async (_event, args: [string, string]) =>
+    googleLoginPoll(args[0], args[1])
   );
 
   handle("logout_desktop", async () => {

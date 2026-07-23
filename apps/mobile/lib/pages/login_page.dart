@@ -1,4 +1,7 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../services/api_client.dart';
 import '../state/workspace_controller.dart';
@@ -22,6 +25,17 @@ class _LoginPageState extends State<LoginPage> {
   bool _rememberPassword = false;
   String? _error;
 
+  // GitHub OAuth polling state.
+  bool _githubLoading = false;
+  Timer? _githubPollTimer;
+
+  // Google OAuth polling state.
+  bool _googleLoading = false;
+  Timer? _googlePollTimer;
+
+  /// Active login tab. 0 = password, 1 = github.
+  int _tabIndex = 0;
+
   @override
   void initState() {
     super.initState();
@@ -30,6 +44,8 @@ class _LoginPageState extends State<LoginPage> {
 
   @override
   void dispose() {
+    _githubPollTimer?.cancel();
+    _googlePollTimer?.cancel();
     _server.dispose();
     _email.dispose();
     _password.dispose();
@@ -45,14 +61,12 @@ class _LoginPageState extends State<LoginPage> {
       if (server != null) {
         _server.text = server;
       }
-    });
-    if (email != null && password != null) {
-      setState(() {
+      if (email != null && password != null) {
         _email.text = email;
         _password.text = password;
         _rememberPassword = true;
-      });
-    }
+      }
+    });
   }
 
   @override
@@ -62,7 +76,6 @@ class _LoginPageState extends State<LoginPage> {
       backgroundColor: AppColors.background,
       body: Stack(
         children: [
-          // 全屏背景：linear-gradient(180deg, primarySoft 0% → transparent 34%)
           Positioned.fill(
             child: DecoratedBox(
               decoration: BoxDecoration(
@@ -92,7 +105,7 @@ class _LoginPageState extends State<LoginPage> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                      // ---- brand-lockup：横向 Row，logo + 标题/副标题 ----
+                      // brand-lockup
                       Row(
                         crossAxisAlignment: CrossAxisAlignment.center,
                         children: [
@@ -126,7 +139,7 @@ class _LoginPageState extends State<LoginPage> {
                         ],
                       ),
                       const SizedBox(height: AppSpacing.lg),
-                      // ---- trust-row：状态圆点 + 文案 pill ----
+                      // trust-row
                       Align(
                         alignment: Alignment.centerLeft,
                         child: Container(
@@ -152,7 +165,7 @@ class _LoginPageState extends State<LoginPage> {
                         ),
                       ),
                       const SizedBox(height: AppSpacing.x2l),
-                      // ---- auth-card：表单卡 ----
+                      // auth-card
                       AppCard(
                         padding: const EdgeInsets.all(AppSpacing.xl),
                         borderRadius: AppRadius.xl,
@@ -161,108 +174,24 @@ class _LoginPageState extends State<LoginPage> {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.stretch,
                           children: [
-                            _IconPrefixTextField(
-                              controller: _server,
-                              icon: Icons.dns_outlined,
-                              hint: '服务器地址',
-                              keyboardType: TextInputType.url,
-                            ),
+                            _buildTabs(),
                             const SizedBox(height: AppSpacing.md),
-                            // 邮箱输入框（前缀图标 + TextField）
-                            _IconPrefixTextField(
-                              controller: _email,
-                              icon: Icons.mail_outline,
-                              hint: '邮箱',
-                              keyboardType: TextInputType.emailAddress,
-                            ),
-                            const SizedBox(height: AppSpacing.md),
-                            // 密码输入框（前缀图标 + TextField）
-                            _IconPrefixTextField(
-                              controller: _password,
-                              icon: Icons.lock_outline,
-                              hint: '密码',
-                              obscureText: !_showPassword,
-                              suffix: IconButton(
-                                tooltip: _showPassword ? '隐藏密码' : '显示密码',
-                                icon: Icon(
-                                  _showPassword
-                                      ? Icons.visibility_off_outlined
-                                      : Icons.visibility_outlined,
-                                  size: 18,
-                                ),
-                                color: AppColors.muted,
-                                onPressed: () {
-                                  setState(
-                                      () => _showPassword = !_showPassword);
-                                },
-                              ),
-                            ),
-                            const SizedBox(height: AppSpacing.sm),
-                            // 忘记密码链接
-                            Align(
-                              alignment: Alignment.centerRight,
-                              child: TextButton(
-                                onPressed: () {},
-                                style: TextButton.styleFrom(
-                                  foregroundColor: AppColors.primary,
-                                  padding: EdgeInsets.zero,
-                                  minimumSize: const Size(0, 24),
-                                  tapTargetSize:
-                                      MaterialTapTargetSize.shrinkWrap,
-                                ),
-                                child: const Text(
-                                  '忘记密码',
-                                  style: TextStyle(
-                                    fontSize: 12,
-                                    color: AppColors.primary,
-                                  ),
-                                ),
-                              ),
-                            ),
-                            const SizedBox(height: AppSpacing.sm),
-                            // 记住密码
-                            Row(
-                              children: [
-                                SizedBox(
-                                  width: 20,
-                                  height: 20,
-                                  child: Checkbox(
-                                    value: _rememberPassword,
-                                    onChanged: (v) => setState(
-                                        () => _rememberPassword = v ?? false),
-                                    activeColor: AppColors.primary,
-                                    materialTapTargetSize:
-                                        MaterialTapTargetSize.shrinkWrap,
-                                  ),
-                                ),
-                                const SizedBox(width: 8),
-                                const Text(
-                                  '记住密码',
-                                  style: TextStyle(
-                                    fontSize: 13,
-                                    color: AppColors.secondary,
-                                  ),
-                                ),
-                              ],
-                            ),
-                            const SizedBox(height: AppSpacing.md),
-                            // 主按钮"继续"：纯色 AppColors.primary + arrow_right 图标
-                            _PrimaryButton(
-                              loading: _loading,
-                              disabled: false,
-                              onPressed: _login,
-                            ),
+                            if (_tabIndex == 0)
+                              _buildPasswordForm()
+                            else
+                              _buildGithubForm(),
                           ],
                         ),
                       ),
                       const SizedBox(height: AppSpacing.lg),
-                      // ---- status-area：状态提示或错误 ----
                       _StatusArea(
                         error: _error,
-                        hint: '使用桌面端账号登录，将自动同步同账号设备。',
+                        hint: _tabIndex == 0
+                            ? '使用账号密码登录，首次将自动注册。'
+                            : '点击下方按钮在浏览器中完成 GitHub 授权。',
                       ),
                       const SizedBox(height: AppSpacing.lg),
-                      // ---- device-note：底部说明 ----
+                      // device-note
                       Row(
                         crossAxisAlignment: CrossAxisAlignment.center,
                         children: [
@@ -301,6 +230,153 @@ class _LoginPageState extends State<LoginPage> {
     );
   }
 
+  /// Tab switcher: 账号密码 / GitHub 登录.
+  Widget _buildTabs() {
+    return Container(
+      padding: const EdgeInsets.all(4),
+      decoration: BoxDecoration(
+        color: AppColors.surfaceMuted,
+        borderRadius: BorderRadius.circular(AppRadius.lg),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: _tabButton(0, '账号密码'),
+          ),
+          Expanded(
+            child: _tabButton(1, 'GitHub 登录'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _tabButton(int index, String label) {
+    final active = _tabIndex == index;
+    return GestureDetector(
+      onTap: () => setState(() {
+        _tabIndex = index;
+        _error = null;
+      }),
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 8),
+        decoration: BoxDecoration(
+          color: active ? AppColors.surface : Colors.transparent,
+          borderRadius: BorderRadius.circular(AppRadius.md),
+          boxShadow: active
+              ? [BoxShadow(color: Colors.black.withValues(alpha: 0.06), blurRadius: 2)]
+              : null,
+        ),
+        alignment: Alignment.center,
+        child: Text(
+          label,
+          style: TextStyle(
+            fontSize: 13,
+            fontWeight: active ? FontWeight.w600 : FontWeight.w400,
+            color: active ? AppColors.ink : AppColors.muted,
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// Password login form.
+  Widget _buildPasswordForm() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        _IconPrefixTextField(
+          controller: _server,
+          icon: Icons.dns_outlined,
+          hint: '服务器地址',
+          keyboardType: TextInputType.url,
+        ),
+        const SizedBox(height: AppSpacing.md),
+        _IconPrefixTextField(
+          controller: _email,
+          icon: Icons.mail_outline,
+          hint: '邮箱',
+          keyboardType: TextInputType.emailAddress,
+        ),
+        const SizedBox(height: AppSpacing.md),
+        _IconPrefixTextField(
+          controller: _password,
+          icon: Icons.lock_outline,
+          hint: '密码',
+          obscureText: !_showPassword,
+          suffix: IconButton(
+            tooltip: _showPassword ? '隐藏密码' : '显示密码',
+            icon: Icon(
+              _showPassword
+                  ? Icons.visibility_off_outlined
+                  : Icons.visibility_outlined,
+              size: 18,
+            ),
+            color: AppColors.muted,
+            onPressed: () {
+              setState(() => _showPassword = !_showPassword);
+            },
+          ),
+        ),
+        const SizedBox(height: AppSpacing.sm),
+        Row(
+          children: [
+            SizedBox(
+              width: 20,
+              height: 20,
+              child: Checkbox(
+                value: _rememberPassword,
+                onChanged: (v) =>
+                    setState(() => _rememberPassword = v ?? false),
+                activeColor: AppColors.primary,
+                materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              ),
+            ),
+            const SizedBox(width: 8),
+            const Text(
+              '记住密码',
+              style: TextStyle(fontSize: 13, color: AppColors.secondary),
+            ),
+          ],
+        ),
+        const SizedBox(height: AppSpacing.md),
+        _PrimaryButton(
+          loading: _loading,
+          disabled: false,
+          onPressed: _login,
+        ),
+      ],
+    );
+  }
+
+  /// GitHub login form: server address + a "login with github" button.
+  Widget _buildGithubForm() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        _IconPrefixTextField(
+          controller: _server,
+          icon: Icons.dns_outlined,
+          hint: '服务器地址',
+          keyboardType: TextInputType.url,
+        ),
+        const SizedBox(height: AppSpacing.md),
+        const Padding(
+          padding: EdgeInsets.symmetric(horizontal: 4, vertical: 8),
+          child: Text(
+            '点击下方按钮将在浏览器中打开 GitHub 授权页面，授权完成后自动返回应用。',
+            style: TextStyle(fontSize: 12, color: AppColors.muted, height: 1.5),
+            textAlign: TextAlign.center,
+          ),
+        ),
+        const SizedBox(height: AppSpacing.sm),
+        _GithubButton(loading: _githubLoading, onPressed: _loginWithGithub),
+        const SizedBox(height: AppSpacing.md),
+        _GoogleButton(loading: _googleLoading, onPressed: _loginWithGoogle),
+      ],
+    );
+  }
+
   Future<void> _login() async {
     setState(() {
       _loading = true;
@@ -313,7 +389,7 @@ class _LoginPageState extends State<LoginPage> {
       }
       await ApiClient.saveStoredBaseUrl(serverUrl);
       final api = ApiClient(baseUrl: serverUrl);
-      await api.login(_email.text.trim(), _password.text);
+      await api.passwordLogin(_email.text.trim(), _password.text);
       if (_rememberPassword) {
         await ApiClient.saveCredentials(_email.text.trim(), _password.text);
       } else {
@@ -327,6 +403,110 @@ class _LoginPageState extends State<LoginPage> {
       setState(() => _error = error.toString().replaceFirst('Exception: ', ''));
     } finally {
       if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  /// Starts the GitHub OAuth flow: fetches the authorize URL, launches it in
+  /// the system browser, then polls every 1.5s until the flow completes.
+  Future<void> _loginWithGithub() async {
+    final serverUrl = _server.text.trim();
+    if (serverUrl.isEmpty) {
+      setState(() => _error = '请输入服务器地址');
+      return;
+    }
+    setState(() {
+      _githubLoading = true;
+      _error = null;
+    });
+    try {
+      await ApiClient.saveStoredBaseUrl(serverUrl);
+      final api = ApiClient(baseUrl: serverUrl);
+      final result = await api.githubStart();
+      await launchUrl(Uri.parse(result.authorizeUrl), mode: LaunchMode.externalApplication);
+
+      _githubPollTimer = Timer.periodic(const Duration(milliseconds: 1500), (t) async {
+        try {
+          final poll = await api.githubPoll(result.state);
+          if (poll.status == 'done' && poll.accessToken != null) {
+            t.cancel();
+            _githubPollTimer = null;
+            if (!mounted) return;
+            setState(() => _githubLoading = false);
+            final controller = WorkspaceController(api: api);
+            await controller.loadDevices();
+            if (!mounted) return;
+            await _openWorkspace(controller);
+          } else if (poll.status == 'error') {
+            t.cancel();
+            _githubPollTimer = null;
+            if (!mounted) return;
+            setState(() {
+              _githubLoading = false;
+              _error = poll.error ?? 'GitHub 登录失败';
+            });
+          }
+        } catch (_) {
+          // transient network error — keep polling
+        }
+      });
+    } catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _githubLoading = false;
+        _error = error.toString().replaceFirst('Exception: ', '');
+      });
+    }
+  }
+
+  /// Starts the Google OAuth flow: fetches the authorize URL, launches it in
+  /// the system browser, then polls every 1.5s until the flow completes.
+  Future<void> _loginWithGoogle() async {
+    final serverUrl = _server.text.trim();
+    if (serverUrl.isEmpty) {
+      setState(() => _error = '请输入服务器地址');
+      return;
+    }
+    setState(() {
+      _googleLoading = true;
+      _error = null;
+    });
+    try {
+      await ApiClient.saveStoredBaseUrl(serverUrl);
+      final api = ApiClient(baseUrl: serverUrl);
+      final result = await api.googleStart();
+      await launchUrl(Uri.parse(result.authorizeUrl), mode: LaunchMode.externalApplication);
+
+      _googlePollTimer = Timer.periodic(const Duration(milliseconds: 1500), (t) async {
+        try {
+          final poll = await api.googlePoll(result.state);
+          if (poll.status == 'done' && poll.accessToken != null) {
+            t.cancel();
+            _googlePollTimer = null;
+            if (!mounted) return;
+            setState(() => _googleLoading = false);
+            final controller = WorkspaceController(api: api);
+            await controller.loadDevices();
+            if (!mounted) return;
+            await _openWorkspace(controller);
+          } else if (poll.status == 'error') {
+            t.cancel();
+            _googlePollTimer = null;
+            if (!mounted) return;
+            setState(() {
+              _googleLoading = false;
+              _error = poll.error ?? 'Google 登录失败';
+            });
+          }
+        } catch (_) {
+          // transient network error - keep polling
+        }
+      });
+    } catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _googleLoading = false;
+        _error = error.toString().replaceFirst('Exception: ', '');
+      });
     }
   }
 
@@ -345,7 +525,7 @@ class _LoginPageState extends State<LoginPage> {
   }
 }
 
-/// 带前缀图标的输入框：Container(surfaceMuted + border) + Row[Icon + TextField]
+/// 带前缀图标的输入框
 class _IconPrefixTextField extends StatelessWidget {
   const _IconPrefixTextField({
     required this.controller,
@@ -382,16 +562,10 @@ class _IconPrefixTextField extends StatelessWidget {
               controller: controller,
               obscureText: obscureText,
               keyboardType: keyboardType,
-              style: const TextStyle(
-                fontSize: 14,
-                color: AppColors.ink,
-              ),
+              style: const TextStyle(fontSize: 14, color: AppColors.ink),
               decoration: InputDecoration(
                 hintText: hint,
-                hintStyle: const TextStyle(
-                  color: AppColors.muted,
-                  fontSize: 14,
-                ),
+                hintStyle: const TextStyle(color: AppColors.muted, fontSize: 14),
                 border: InputBorder.none,
                 enabledBorder: InputBorder.none,
                 focusedBorder: InputBorder.none,
@@ -412,7 +586,101 @@ class _IconPrefixTextField extends StatelessWidget {
   }
 }
 
-/// 状态提示区：默认 primarySoft 背景 + primary 文案；错误时 danger 风格。
+/// GitHub 登录按钮（深色背景 + GitHub 图标）
+class _GithubButton extends StatelessWidget {
+  const _GithubButton({required this.loading, required this.onPressed});
+
+  final bool loading;
+  final Future<void> Function() onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    final isDisabled = loading;
+    return Opacity(
+      opacity: isDisabled ? 0.6 : 1.0,
+      child: Container(
+        height: 48,
+        decoration: BoxDecoration(
+          color: const Color(0xFF24292F),
+          borderRadius: BorderRadius.circular(AppRadius.lg),
+        ),
+        child: Material(
+          color: Colors.transparent,
+          child: InkWell(
+            onTap: isDisabled ? null : () => onPressed(),
+            borderRadius: BorderRadius.circular(AppRadius.lg),
+            child: Center(
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(Icons.code, size: 20, color: Colors.white),
+                  const SizedBox(width: 8),
+                  Text(
+                    loading ? '等待授权完成...' : '使用 GitHub 登录',
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Google 登录按钮（Google 蓝色背景 + Google 图标）
+class _GoogleButton extends StatelessWidget {
+  const _GoogleButton({required this.loading, required this.onPressed});
+
+  final bool loading;
+  final Future<void> Function() onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    final isDisabled = loading;
+    return Opacity(
+      opacity: isDisabled ? 0.6 : 1.0,
+      child: Container(
+        height: 48,
+        decoration: BoxDecoration(
+          color: const Color(0xFF4285F4),
+          borderRadius: BorderRadius.circular(AppRadius.lg),
+        ),
+        child: Material(
+          color: Colors.transparent,
+          child: InkWell(
+            onTap: isDisabled ? null : () => onPressed(),
+            borderRadius: BorderRadius.circular(AppRadius.lg),
+            child: Center(
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(Icons.g_mobiledata, size: 20, color: Colors.white),
+                  const SizedBox(width: 8),
+                  Text(
+                    loading ? '等待授权完成...' : '使用 Google 登录',
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// 状态提示区
 class _StatusArea extends StatelessWidget {
   const _StatusArea({required this.error, required this.hint});
 
@@ -457,7 +725,7 @@ class _StatusArea extends StatelessWidget {
   }
 }
 
-/// 主按钮：高 48 圆角 12，纯色 AppColors.primary 背景 + arrow_right 图标（不使用渐变）
+/// 主按钮
 class _PrimaryButton extends StatelessWidget {
   const _PrimaryButton({
     required this.loading,
