@@ -88,6 +88,17 @@ test.describe("login page", () => {
     await expect(window.locator(".desktop-login-error")).toBeVisible({ timeout: 5_000 });
   });
 
+  test("github tab shows github login button", async () => {
+    const { window } = testApp;
+
+    // Switch to the GitHub tab.
+    await window.locator("button.desktop-login-tab", { hasText: "GitHub 登录" }).click();
+
+    // The GitHub login button must appear.
+    await expect(window.locator(".desktop-login-github-button")).toBeVisible();
+    await expect(window.locator(".desktop-login-github-button")).toContainText("使用 GitHub 登录");
+  });
+
   test("remember password checkbox toggles", async () => {
     const { window } = testApp;
 

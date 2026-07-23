@@ -383,6 +383,22 @@
         "htmlSrc": "pages/login.html",
         "interactions": []
       }
+    },
+    {
+      "id": "page-login-redesign",
+      "title": "登录 - 重设计",
+      "type": "page",
+      "version": 1,
+      "createdAt": 1784779066000,
+      "canvasData": {
+        "x": 14880,
+        "y": 0,
+        "group": 0
+      },
+      "devMetadata": {
+        "htmlSrc": "pages/login-redesign.html",
+        "interactions": []
+      }
     }
   ],
   "config": {

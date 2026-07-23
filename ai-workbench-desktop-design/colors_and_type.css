@@ -102,4 +102,13 @@
   /* Transitions */
   --transition-fast: 120ms ease;
   --transition-normal: 200ms ease;
+
+  /* Semantic aliases for Tailwind @theme inline bridge */
+  --color-background: var(--color-bg-app);
+  --color-foreground: var(--color-text-primary);
+  --color-card: var(--color-bg-elevated);
+  --color-muted: var(--color-text-muted);
+  --color-radius-sm: var(--radius-sm);
+  --color-radius-md: var(--radius-lg);
+  --color-radius-lg: var(--radius-xl);
 }
