@@ -200,6 +200,7 @@ function mapThread(value: unknown, archived: boolean): CodexNativeThread {
     modelProvider: stringValue(thread.modelProvider) ?? "unknown",
     cliVersion: stringValue(thread.cliVersion) ?? "",
     source: sourceLabel(thread.source),
+    originator: stringValue(thread.originator),
     createdAt: numberValue(thread.createdAt) ?? 0,
     updatedAt: numberValue(thread.updatedAt) ?? 0,
     recencyAt: numberValue(thread.recencyAt),

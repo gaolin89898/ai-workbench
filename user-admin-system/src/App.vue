@@ -5,11 +5,14 @@ import {
   IconClockCircle,
   IconDesktop,
   IconEdit,
+  IconFile,
   IconLock,
   IconMobile,
   IconRefresh,
   IconSearch,
+  IconSafe,
   IconUser,
+  IconUserGroup,
 } from "@arco-design/web-vue/es/icon";
 import { Message } from "@arco-design/web-vue";
 
@@ -72,7 +75,6 @@ type AppReleaseRecord = {
 const token = ref(localStorage.getItem("user-admin-token") ?? "");
 const activeSection = ref<AdminSection>("users");
 const releasePlatforms: ReleasePlatform[] = ["desktop", "mobile"];
-const loginMode = ref<"login" | "register">("login");
 const authLoading = ref(false);
 const pageLoading = ref(false);
 const actionLoading = ref(false);
@@ -220,7 +222,10 @@ function resetFilters() {
 async function submitAuth() {
   authLoading.value = true;
   try {
-    const result = await requestAPI<{ accessToken: string }>(`/auth/${loginMode.value}`, {
+    // The admin panel uses the bootstrap admin account, which is the only
+    // email still allowed to log in with a password (every other user must
+    // use the verification-code flow on desktop/mobile).
+    const result = await requestAPI<{ accessToken: string }>(`/auth/login`, {
       method: "POST",
       body: JSON.stringify({
         email: loginForm.email.trim(),
@@ -229,7 +234,7 @@ async function submitAuth() {
     });
     token.value = result.accessToken;
     localStorage.setItem("user-admin-token", result.accessToken);
-    Message.success(loginMode.value === "login" ? "登录成功" : "注册成功");
+    Message.success("登录成功");
     await Promise.all([fetchUsers(), fetchReleases()]);
   } catch (error) {
     Message.error(error instanceof Error ? error.message : String(error));
@@ -566,27 +571,64 @@ function backToDevices() {
 
 <template>
   <main v-if="!isAuthenticated" class="login-page">
-    <a-card class="login-card" :bordered="false">
-      <div class="login-brand">
-        <div class="brand-mark"><icon-user /></div>
-        <h1>用户管理系统</h1>
-        <p>管理 AI 工作台真实桌面端和移动端用户。</p>
+    <section class="login-brand-panel">
+      <header class="login-brand-header">
+        <div class="login-brand-mark"><icon-safe /></div>
+        <strong>CodeHub AI</strong>
+      </header>
+
+      <div class="login-brand-hero">
+        <h1>用户管理控制台</h1>
+        <p>统一管理 AI 工作台用户、设备状态与客户端版本发布。</p>
       </div>
-      <a-form layout="vertical" :model="loginForm" @submit.prevent="submitAuth">
-        <a-form-item label="账号">
-          <a-input v-model="loginForm.email" placeholder="admin" />
-        </a-form-item>
-        <a-form-item label="密码">
-          <a-input-password v-model="loginForm.password" placeholder="请输入密码" />
-        </a-form-item>
-        <a-button type="primary" long :loading="authLoading" @click="submitAuth">
-          {{ loginMode === "login" ? "登录" : "注册并登录" }}
-        </a-button>
-      </a-form>
-      <button class="login-switch" type="button" @click="loginMode = loginMode === 'login' ? 'register' : 'login'">
-        {{ loginMode === "login" ? "没有账号？切换到注册" : "已有账号？切换到登录" }}
-      </button>
-    </a-card>
+
+      <div class="login-features">
+        <div class="login-feature">
+          <icon-user-group />
+          <div>
+            <strong>用户与设备管理</strong>
+            <span>集中查看桌面端和移动端用户及设备状态</span>
+          </div>
+        </div>
+        <div class="login-feature">
+          <icon-safe />
+          <div>
+            <strong>管理员专属访问</strong>
+            <span>管理控制台仅允许授权管理员账号登录</span>
+          </div>
+        </div>
+        <div class="login-feature">
+          <icon-file />
+          <div>
+            <strong>客户端版本发布</strong>
+            <span>统一维护桌面端与移动端发布信息</span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="login-form-panel">
+      <div class="login-form-container">
+        <h2>登录</h2>
+        <p class="login-form-subtitle">登录到用户管理控制台</p>
+        <a-form class="login-form" layout="vertical" :model="loginForm" @submit="submitAuth">
+          <a-form-item label="账号">
+            <a-input v-model="loginForm.email" size="large" placeholder="请输入管理员账号">
+              <template #prefix><icon-user /></template>
+            </a-input>
+          </a-form-item>
+          <a-form-item label="密码">
+            <a-input-password v-model="loginForm.password" size="large" placeholder="请输入密码">
+              <template #prefix><icon-lock /></template>
+            </a-input-password>
+          </a-form-item>
+          <a-button class="login-submit" type="primary" html-type="submit" long :loading="authLoading">
+            登录
+          </a-button>
+        </a-form>
+        <p class="login-hint">管理员账号密码登录。普通用户请使用桌面端或移动端验证码登录。</p>
+      </div>
+    </section>
   </main>
 
   <a-layout v-else class="admin-shell">
@@ -988,52 +1030,199 @@ function backToDevices() {
 }
 
 .login-page {
-  display: grid;
-  place-items: center;
-  padding: 32px;
+  display: flex;
+  width: 100%;
+  background: #ffffff;
+  color: #1a1d26;
 }
 
-.login-card {
-  width: 420px;
-  border: 1px solid #edf0f5;
-  border-radius: 8px;
-  box-shadow: 0 10px 30px rgba(29, 33, 41, 0.08);
+.login-brand-panel,
+.login-form-panel {
+  width: 50%;
+  min-height: 100vh;
+  padding: 40px 56px;
 }
 
-.login-brand {
+.login-brand-panel {
   display: flex;
   flex-direction: column;
-  align-items: center;
-  margin-bottom: 26px;
-  text-align: center;
+  background: #ffffff;
 }
 
-.login-brand h1,
-.login-brand p {
+.login-brand-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 16px;
+}
+
+.login-brand-mark {
+  display: grid;
+  width: 36px;
+  height: 36px;
+  place-items: center;
+  border-radius: 8px;
+  background: #1a1d26;
+  color: #ffffff;
+  font-size: 18px;
+}
+
+.login-brand-hero {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  justify-content: center;
+}
+
+.login-brand-hero h1,
+.login-brand-hero p,
+.login-form-container h2,
+.login-form-subtitle {
   margin: 0;
 }
 
-.login-brand h1 {
-  margin-top: 12px;
-  color: #1d2129;
-  font-size: 22px;
-  font-weight: 760;
+.login-brand-hero h1 {
+  max-width: 460px;
+  font-size: 32px;
+  font-weight: 700;
+  line-height: 1.3;
 }
 
-.login-brand p {
-  margin-top: 6px;
-  color: #86909c;
+.login-brand-hero p {
+  max-width: 460px;
+  margin-top: 16px;
+  color: #6b7280;
+  font-size: 15px;
+  line-height: 1.6;
+}
+
+.login-features {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  margin-bottom: 28px;
+}
+
+.login-feature {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  color: #4f46e5;
+  font-size: 18px;
+}
+
+.login-feature div {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.login-feature strong {
+  color: #1a1d26;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.login-feature span {
+  color: #9ca3af;
   font-size: 13px;
+  line-height: 1.5;
 }
 
-.login-switch {
+.login-form-panel {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #f8f9fb;
+}
+
+.login-form-container {
+  width: 400px;
+  max-width: 100%;
+}
+
+.login-form-container h2 {
+  font-size: 24px;
+  font-weight: 700;
+}
+
+.login-form-subtitle {
+  margin-top: 8px;
+  color: #6b7280;
+  font-size: 14px;
+}
+
+.login-form {
+  margin-top: 32px;
+}
+
+.login-form :deep(.arco-form-item) {
+  margin-bottom: 16px;
+}
+
+.login-form :deep(.arco-form-item-label-col) {
+  margin-bottom: 6px;
+}
+
+.login-form :deep(.arco-form-item-label) {
+  color: #374151;
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.login-form :deep(.arco-input-wrapper) {
+  min-height: 44px;
+  border: 1px solid #e2e5eb;
+  border-radius: 8px;
+  background: #ffffff;
+  box-shadow: none;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.login-form :deep(.arco-input-wrapper:hover) {
+  border-color: #a5a9b3;
+}
+
+.login-form :deep(.arco-input-wrapper.arco-input-focus) {
+  border-color: #4f46e5;
+  box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.1);
+}
+
+.login-form :deep(.arco-input-prefix) {
+  color: #9ca3af;
+}
+
+.login-submit {
+  height: 44px;
+  margin-top: 8px;
+  border-radius: 8px;
+  background: #4f46e5;
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.login-submit:hover {
+  background: #4338ca;
+}
+
+.login-hint {
   width: 100%;
   margin-top: 16px;
-  border: 0;
-  background: transparent;
-  color: #165dff;
-  cursor: pointer;
-  font-size: 13px;
+  color: #9ca3af;
+  font-size: 12px;
+  line-height: 1.6;
+  text-align: center;
+}
+
+@media (max-width: 960px) {
+  .login-brand-panel {
+    display: none;
+  }
+
+  .login-form-panel {
+    width: 100%;
+    padding: 32px 24px;
+  }
 }
 
 .admin-sidebar {

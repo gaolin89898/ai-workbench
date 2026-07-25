@@ -109,6 +109,15 @@
   /* Transitions */
   --transition-fast: 120ms ease;
   --transition-normal: 200ms ease;
+
+  /* Semantic aliases for Tailwind @theme inline bridge */
+  --color-background: var(--color-bg-app);
+  --color-foreground: var(--color-text-primary);
+  --color-card: var(--color-bg-elevated);
+  --color-muted: var(--color-text-muted);
+  --color-radius-sm: var(--radius-sm);
+  --color-radius-md: var(--radius-lg);
+  --color-radius-lg: var(--radius-xl);
 }
 
     </style>
@@ -116,14 +125,47 @@
     <script src="https://unpkg.com/lucide@1.8.0/dist/umd/lucide.min.js"></script>
     <style type="text/tailwindcss">
   @theme inline {
+    --color-background: var(--color-background);
+    --color-foreground: var(--color-foreground);
+    --color-card: var(--color-card);
     --color-primary: var(--color-primary);
+    --color-muted: var(--color-muted);
     --color-border: var(--color-border);
+    --radius-sm: var(--color-radius-sm);
+    --radius-md: var(--color-radius-md);
+    --radius-lg: var(--color-radius-lg);
   }
   @layer base {
-    body { background: var(--color-background); color: var(--color-text-primary); }
+    body { background: var(--color-background); color: var(--color-foreground); }
     td, th { @apply break-words; word-break: break-all; word-break: auto-phrase; }
     th { @apply whitespace-nowrap; }
   }
+    </style>
+    <style id="semantic-token-fallback">
+      .bg-background { background-color: var(--color-background); }
+      .text-background { color: var(--color-background); }
+      .border-background { border-color: var(--color-background); }
+      .ring-background { --tw-ring-color: var(--color-background); }
+      .bg-foreground { background-color: var(--color-foreground); }
+      .text-foreground { color: var(--color-foreground); }
+      .border-foreground { border-color: var(--color-foreground); }
+      .ring-foreground { --tw-ring-color: var(--color-foreground); }
+      .bg-card { background-color: var(--color-card); }
+      .text-card { color: var(--color-card); }
+      .border-card { border-color: var(--color-card); }
+      .ring-card { --tw-ring-color: var(--color-card); }
+      .bg-primary { background-color: var(--color-primary); }
+      .text-primary { color: var(--color-primary); }
+      .border-primary { border-color: var(--color-primary); }
+      .ring-primary { --tw-ring-color: var(--color-primary); }
+      .bg-muted { background-color: var(--color-muted); }
+      .text-muted { color: var(--color-muted); }
+      .border-muted { border-color: var(--color-muted); }
+      .ring-muted { --tw-ring-color: var(--color-muted); }
+      .bg-border { background-color: var(--color-border); }
+      .text-border { color: var(--color-border); }
+      .border-border { border-color: var(--color-border); }
+      .ring-border { --tw-ring-color: var(--color-border); }
     </style>
     <style>
       .no-scrollbar::-webkit-scrollbar { display: none; }

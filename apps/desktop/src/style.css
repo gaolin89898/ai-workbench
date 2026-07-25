@@ -145,6 +145,18 @@ body.theme-dark {
   background: transparent;
 }
 
+.session-table-filter-popup .arco-table-filters-list {
+  max-height: none;
+  margin: 0;
+  padding: 4px 0;
+  overflow-y: visible;
+  list-style: none;
+}
+
+.session-table-filter-popup .arco-table-filters-item:last-child {
+  margin-bottom: 8px;
+}
+
 :root.theme-dark *,
 body.theme-dark * {
   scrollbar-color: rgba(100, 116, 139, 0.72) transparent;
@@ -9016,6 +9028,10 @@ textarea:focus {
   scroll-behavior: smooth;
 }
 
+.settings-scroll.settings-scroll-resources {
+  width: min(1520px, calc(100% - 72px));
+}
+
 .settings-header {
   display: flex;
   align-items: flex-start;
@@ -9053,7 +9069,7 @@ textarea:focus {
 
 .settings-overview {
   display: grid;
-  grid-template-columns: 1.35fr 0.8fr 0.8fr;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 12px;
   margin-bottom: 24px;
 }
@@ -9164,13 +9180,13 @@ textarea:focus {
 .settings-overview-device-row code {
   display: block;
   min-width: 0;
-  overflow: hidden;
+  overflow-wrap: anywhere;
   color: var(--color-text-body);
   font-family: var(--font-mono);
   font-size: 13px;
   font-weight: 700;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  line-height: 1.45;
+  white-space: normal;
 }
 
 .settings-overview-copy {
@@ -9192,9 +9208,8 @@ textarea:focus {
 
 .settings-overview-copy img {
   display: block;
-  width: 12px;
-  height: 12px;
-  opacity: 0.85;
+  width: 14px;
+  height: 14px;
 }
 
 .settings-connection-card {

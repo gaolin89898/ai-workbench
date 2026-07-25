@@ -1,21 +1,22 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from "vue";
 import ArcoTable, { TableColumn as ArcoTableColumn } from "@arco-design/web-vue/es/table";
-import { useRouter } from "vue-router";
+import { useRoute, useRouter } from "vue-router";
 import { useWorkspace } from "../composables/useWorkspace";
 import { desktopApi, type AiActivityProject, type AiActivitySummary, type AiProvider, type DesktopRuntimeInfo, type ProviderActionKind, type ProviderStatus, type TokenUsageDailyItem, type TokenUsageSummary, type TokenUsageSummaryItem } from "../services/desktop";
 import CodexManagementPanel from "./CodexManagementPanel.vue";
+import ResourceCenterView from "./ResourceCenterView.vue";
 
 const settingsIcon = new URL("../assets/icons/settings.svg", import.meta.url).href;
 const riskGuardIcon = new URL("../assets/icons/risk-guard.svg", import.meta.url).href;
 const aiProvidersIcon = new URL("../assets/icons/ai-providers.svg", import.meta.url).href;
-const archiveBoxIcon = new URL("../assets/icons/archive-box.svg", import.meta.url).href;
 const providerCodexIcon = new URL("../assets/icons/provider-codex.svg", import.meta.url).href;
 const providerClaudeIcon = new URL("../assets/icons/provider-claude.svg", import.meta.url).href;
 const providerOpencodeIcon = new URL("../assets/icons/provider-opencode.svg", import.meta.url).href;
 const providerMimoIcon = new URL("../assets/icons/provider-mimo.svg", import.meta.url).href;
+const copyIcon = new URL("../assets/icons/copy.svg", import.meta.url).href;
 
-type SettingsPanel = "connection" | "codex" | "security" | "activity" | "about" | "archive" | "tokenUsage";
+type SettingsPanel = "connection" | "codex" | "resources" | "security" | "activity" | "about" | "tokenUsage";
 type ProviderRow = {
   provider: AiProvider;
   status?: ProviderStatus;
@@ -29,6 +30,7 @@ type SettingsPanelItem = {
 };
 
 const ws = useWorkspace();
+const route = useRoute();
 const router = useRouter();
 const settingsPanel = ref<SettingsPanel>("connection");
 const riskGuard = ref(true);
@@ -83,10 +85,17 @@ const settingsPanels: SettingsPanelItem[] = [
   },
   {
     id: "codex",
-    label: "Codex 管理",
+    label: "会话管理",
     eyebrow: "原生",
-    description: "管理 Codex 原生会话和本机配置",
+    description: "管理 Codex 原生会话、归档会话和本机配置",
     icon: providerCodexIcon,
+  },
+  {
+    id: "resources",
+    label: "资源中心",
+    eyebrow: "资源",
+    description: "管理对后续会话生效的 MCP 服务与 Skills",
+    icon: aiProvidersIcon,
   },
   {
     id: "security",
@@ -101,13 +110,6 @@ const settingsPanels: SettingsPanelItem[] = [
     eyebrow: "本地",
     description: "查看最近 12 个月的本地对话交互、连续活跃和使用节奏",
     icon: aiProvidersIcon,
-  },
-  {
-    id: "archive",
-    label: "已归档对话",
-    eyebrow: "历史",
-    description: "查看和恢复已归档的 AI 会话",
-    icon: archiveBoxIcon,
   },
   {
     id: "tokenUsage",
@@ -516,12 +518,7 @@ async function refreshDesktopRuntimeInfo() {
   }
 }
 
-const deviceIdDisplay = computed(() => {
-  if (!cloudDeviceId.value) return "未登录";
-  const id = cloudDeviceId.value;
-  if (id.length <= 16) return id;
-  return `${id.slice(0, 8)}...${id.slice(-4)}`;
-});
+const deviceIdDisplay = computed(() => cloudDeviceId.value || "未登录");
 
 const tokenUsageSummary = ref<TokenUsageSummary | null>(null);
 const aiActivitySummary = ref<AiActivitySummary | null>(null);
@@ -847,8 +844,10 @@ onMounted(() => {
   const requestedPanel = window.localStorage.getItem("ai-workbench.settingsPanel");
   if (requestedPanel === "mcp" || requestedPanel === "skills") {
     window.localStorage.removeItem("ai-workbench.settingsPanel");
-    void router.replace({ name: "resources", query: { tab: requestedPanel } });
-    return;
+    settingsPanel.value = "resources";
+    void router.replace({ name: "settings", query: { tab: requestedPanel } });
+  } else if (route.query.panel === "resources") {
+    settingsPanel.value = "resources";
   }
   if (requestedPanel && settingsPanels.some((panel) => panel.id === requestedPanel)) {
     settingsPanel.value = requestedPanel as SettingsPanel;
@@ -858,23 +857,6 @@ onMounted(() => {
   void refreshDesktopRuntimeInfo();
   void loadNpmRegistry();
 });
-
-function archivedAtLabel(value?: string | null) {
-  if (!value) return "时间未知";
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "时间未知";
-  return date.toLocaleString("zh-CN", { hour12: false });
-}
-
-function projectNameForSession(path?: string | null) {
-  if (!path) return "未关联项目";
-  const match = ws.projects.value.find((project) => project.path === path);
-  return match?.name ?? path.split(/[\\/]/).filter(Boolean).pop() ?? path;
-}
-
-async function restoreSession(sessionId: string) {
-  await ws.archiveAiSession(sessionId, false);
-}
 </script>
 
 <template>
@@ -918,7 +900,7 @@ async function restoreSession(sessionId: string) {
       </aside>
 
       <div class="settings-content">
-        <div class="settings-scroll" :class="{ 'settings-scroll-analytics': settingsPanel === 'tokenUsage' || settingsPanel === 'activity' }">
+        <div class="settings-scroll" :class="{ 'settings-scroll-analytics': settingsPanel === 'tokenUsage' || settingsPanel === 'activity', 'settings-scroll-resources': settingsPanel === 'resources' }">
           <header class="settings-header">
             <div>
               <span class="settings-kicker">Desktop Settings</span>
@@ -974,7 +956,7 @@ async function restoreSession(sessionId: string) {
                   aria-label="复制设备 ID"
                   @click="copyDeviceId"
                 >
-                  <img :src="clipboardIcon" alt="" />
+                  <img :src="copyIcon" alt="" />
                 </button>
               </div>
             </article>
@@ -1200,25 +1182,6 @@ async function restoreSession(sessionId: string) {
 
           </section>
 
-          <section v-else-if="settingsPanel === 'archive'" class="settings-section">
-            <div class="settings-archive-list">
-              <div v-if="!ws.archivedSessions.value.length" class="empty-state">暂无已归档的 AI 会话。</div>
-              <article
-                v-for="session in ws.archivedSessions.value"
-                :key="session.id"
-                class="settings-archive-item"
-              >
-                <div class="settings-archive-main">
-                  <strong>{{ session.title || "未命名会话" }}</strong>
-                  <small>{{ archivedAtLabel(session.archivedAt) }} · {{ projectNameForSession(session.summary) }}</small>
-                </div>
-                <button class="button secondary mini" type="button" @click="restoreSession(session.id)">
-                  取消归档
-                </button>
-              </article>
-            </div>
-          </section>
-
           <section v-else-if="settingsPanel === 'activity'" class="settings-section settings-activity-page">
             <p v-if="activityError" class="settings-token-usage-error">{{ activityError }}</p>
 
@@ -1410,6 +1373,10 @@ async function restoreSession(sessionId: string) {
 
           <section v-else-if="settingsPanel === 'codex'" class="settings-section">
             <CodexManagementPanel :cwd="ws.selectedProjectPath.value" />
+          </section>
+
+          <section v-else-if="settingsPanel === 'resources'" class="settings-section settings-resources-section">
+            <ResourceCenterView embedded />
           </section>
 
         </div>

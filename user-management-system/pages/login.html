@@ -1,0 +1,608 @@
+<!DOCTYPE html>
+<html lang="zh-CN" class="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>用户管理系统 - 登录</title>
+    <style id="theme-vars">
+/* User Management System - Light Professional Theme */
+:root {
+  /* Brand */
+  --color-primary: #4f46e5;
+  --color-primary-hover: #4338ca;
+  --color-primary-foreground: #ffffff;
+  --color-primary-muted: rgba(79, 70, 229, 0.12);
+  --color-primary-soft: rgba(79, 70, 229, 0.06);
+  --color-primary-ring: rgba(79, 70, 229, 0.35);
+
+  /* Semantic aliases for Tailwind @theme inline bridge */
+  --color-background: #f8f9fb;
+  --color-foreground: #1a1d26;
+  --color-card: #ffffff;
+  --color-card-foreground: #1a1d26;
+  --color-popover: #ffffff;
+  --color-popover-foreground: #1a1d26;
+  --color-muted: #6b7280;
+  --color-muted-foreground: #6b7280;
+  --color-border: #e2e5eb;
+  --color-input: #e2e5eb;
+  --color-ring: rgba(79, 70, 229, 0.35);
+  --color-radius-sm: 6px;
+  --color-radius-md: 8px;
+  --color-radius-lg: 12px;
+
+  /* Surface & Background */
+  --color-bg-app: #f8f9fb;
+  --color-bg-body: #f8f9fb;
+  --color-bg-sidebar: #ffffff;
+  --color-bg-main: #ffffff;
+  --color-bg-content: #ffffff;
+  --color-bg-surface: #ffffff;
+  --color-bg-elevated: #ffffff;
+  --color-bg-input: #ffffff;
+  --color-bg-hover: rgba(0, 0, 0, 0.04);
+  --color-bg-active: rgba(79, 70, 229, 0.08);
+
+  /* Text */
+  --color-text-primary: #1a1d26;
+  --color-text-body: #374151;
+  --color-text-secondary: #6b7280;
+  --color-text-muted: #9ca3af;
+  --color-text-placeholder: #9ca3af;
+  --color-text-inverse: #ffffff;
+
+  /* Border */
+  --color-border-subtle: #f0f1f3;
+  --color-border-active: var(--color-primary);
+
+  /* State Colors */
+  --state-success: #16a34a;
+  --state-success-bg: rgba(22, 163, 74, 0.1);
+  --state-success-ring: rgba(22, 163, 74, 0.25);
+  --state-warning: #d97706;
+  --state-warning-bg: rgba(217, 119, 6, 0.1);
+  --state-error: #dc2626;
+  --state-error-bg: rgba(220, 38, 38, 0.1);
+  --state-info: #2563eb;
+  --state-info-bg: rgba(37, 99, 235, 0.1);
+
+  /* Radius */
+  --radius-sm: 6px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --radius-xl: 16px;
+  --radius-full: 999px;
+
+  /* Typography */
+  --font-sans: "Inter", ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+
+  --text-xs: 11px;
+  --text-sm: 12px;
+  --text-base: 14px;
+  --text-md: 15px;
+  --text-lg: 16px;
+  --text-xl: 20px;
+  --text-2xl: 28px;
+  --text-3xl: 36px;
+
+  --leading-tight: 1.25;
+  --leading-normal: 1.5;
+  --leading-relaxed: 1.625;
+
+  /* Font Weights */
+  --fw-normal: 400;
+  --fw-medium: 500;
+  --fw-semibold: 600;
+  --fw-bold: 700;
+  --fw-extrabold: 800;
+
+  /* Shadows */
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.04);
+  --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.06);
+  --shadow-lg: 0 12px 32px rgba(0, 0, 0, 0.08);
+  --shadow-xl: 0 24px 56px rgba(0, 0, 0, 0.1);
+
+  /* Spacing */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-10: 40px;
+  --space-12: 48px;
+  --space-16: 64px;
+  --space-20: 80px;
+
+  /* Transitions */
+  --transition-fast: 120ms ease;
+  --transition-normal: 200ms ease;
+}
+
+    </style>
+    <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4.3.1/dist/index.global.js"></script>
+    <script src="https://unpkg.com/lucide@1.8.0/dist/umd/lucide.min.js"></script>
+    <style type="text/tailwindcss">
+  @theme inline {
+    --color-background: var(--color-background);
+    --color-foreground: var(--color-foreground);
+    --color-card: var(--color-card);
+    --color-card-foreground: var(--color-card-foreground);
+    --color-popover: var(--color-popover);
+    --color-popover-foreground: var(--color-popover-foreground);
+    --color-primary: var(--color-primary);
+    --color-primary-foreground: var(--color-primary-foreground);
+    --color-muted: var(--color-muted);
+    --color-muted-foreground: var(--color-muted-foreground);
+    --color-border: var(--color-border);
+    --color-input: var(--color-input);
+    --color-ring: var(--color-ring);
+    --radius-sm: var(--color-radius-sm);
+    --radius-md: var(--color-radius-md);
+    --radius-lg: var(--color-radius-lg);
+  }
+  @layer base {
+    body { background: var(--color-background); color: var(--color-foreground); }
+    td, th { @apply break-words; word-break: break-all; word-break: auto-phrase; }
+    th { @apply whitespace-nowrap; }
+  }
+    </style>
+    <style id="semantic-token-fallback">
+      .bg-background { background-color: var(--color-background); }
+      .text-background { color: var(--color-background); }
+      .border-background { border-color: var(--color-background); }
+      .ring-background { --tw-ring-color: var(--color-background); }
+      .bg-foreground { background-color: var(--color-foreground); }
+      .text-foreground { color: var(--color-foreground); }
+      .border-foreground { border-color: var(--color-foreground); }
+      .ring-foreground { --tw-ring-color: var(--color-foreground); }
+      .bg-card { background-color: var(--color-card); }
+      .text-card { color: var(--color-card); }
+      .border-card { border-color: var(--color-card); }
+      .ring-card { --tw-ring-color: var(--color-card); }
+      .bg-card-foreground { background-color: var(--color-card-foreground); }
+      .text-card-foreground { color: var(--color-card-foreground); }
+      .border-card-foreground { border-color: var(--color-card-foreground); }
+      .ring-card-foreground { --tw-ring-color: var(--color-card-foreground); }
+      .bg-popover { background-color: var(--color-popover); }
+      .text-popover { color: var(--color-popover); }
+      .border-popover { border-color: var(--color-popover); }
+      .ring-popover { --tw-ring-color: var(--color-popover); }
+      .bg-popover-foreground { background-color: var(--color-popover-foreground); }
+      .text-popover-foreground { color: var(--color-popover-foreground); }
+      .border-popover-foreground { border-color: var(--color-popover-foreground); }
+      .ring-popover-foreground { --tw-ring-color: var(--color-popover-foreground); }
+      .bg-primary { background-color: var(--color-primary); }
+      .text-primary { color: var(--color-primary); }
+      .border-primary { border-color: var(--color-primary); }
+      .ring-primary { --tw-ring-color: var(--color-primary); }
+      .bg-primary-foreground { background-color: var(--color-primary-foreground); }
+      .text-primary-foreground { color: var(--color-primary-foreground); }
+      .border-primary-foreground { border-color: var(--color-primary-foreground); }
+      .ring-primary-foreground { --tw-ring-color: var(--color-primary-foreground); }
+      .bg-muted { background-color: var(--color-muted); }
+      .text-muted { color: var(--color-muted); }
+      .border-muted { border-color: var(--color-muted); }
+      .ring-muted { --tw-ring-color: var(--color-muted); }
+      .bg-muted-foreground { background-color: var(--color-muted-foreground); }
+      .text-muted-foreground { color: var(--color-muted-foreground); }
+      .border-muted-foreground { border-color: var(--color-muted-foreground); }
+      .ring-muted-foreground { --tw-ring-color: var(--color-muted-foreground); }
+      .bg-border { background-color: var(--color-border); }
+      .text-border { color: var(--color-border); }
+      .border-border { border-color: var(--color-border); }
+      .ring-border { --tw-ring-color: var(--color-border); }
+      .bg-input { background-color: var(--color-input); }
+      .text-input { color: var(--color-input); }
+      .border-input { border-color: var(--color-input); }
+      .ring-input { --tw-ring-color: var(--color-input); }
+      .bg-ring { background-color: var(--color-ring); }
+      .text-ring { color: var(--color-ring); }
+      .border-ring { border-color: var(--color-ring); }
+      .ring-ring { --tw-ring-color: var(--color-ring); }
+    </style>
+    <style>
+      .no-scrollbar::-webkit-scrollbar { display: none; }
+      .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+      [data-icon] {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        -webkit-mask-size: contain;
+        mask-size: contain;
+        -webkit-mask-repeat: no-repeat;
+        mask-repeat: no-repeat;
+        -webkit-mask-position: center;
+        mask-position: center;
+        background-color: currentColor;
+      }
+    </style>
+</head>
+<body class="min-h-screen font-sans antialiased">
+    <style>
+      /* ===== Login page (v3 serious admin style) ===== */
+      .login-shell {
+        display: flex;
+        min-height: 100vh;
+        width: 100%;
+        font-family: var(--font-sans);
+      }
+
+      /* ---- Left brand panel ---- */
+      .brand-panel {
+        width: 50%;
+        background: var(--color-bg-surface);
+        display: flex;
+        flex-direction: column;
+        padding: 40px 56px;
+        box-sizing: border-box;
+      }
+      .brand-header { display: flex; align-items: center; gap: 12px; }
+      .brand-logo {
+        width: 36px;
+        height: 36px;
+        background: var(--color-text-primary);
+        border-radius: var(--radius-md);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: #ffffff;
+        flex-shrink: 0;
+      }
+      .brand-logo svg { width: 18px; height: 18px; }
+      .brand-name {
+        font-size: 16px;
+        font-weight: var(--fw-semibold);
+        color: var(--color-text-primary);
+      }
+
+      .brand-hero {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+      }
+      .brand-title {
+        font-size: 32px;
+        font-weight: var(--fw-bold);
+        color: var(--color-text-primary);
+        line-height: 1.3;
+        margin: 0;
+        max-width: 460px;
+      }
+      .brand-subtitle {
+        font-size: 15px;
+        color: var(--color-text-secondary);
+        line-height: 1.6;
+        margin: 16px 0 0;
+        max-width: 460px;
+      }
+
+      .brand-features {
+        display: flex;
+        flex-direction: column;
+        gap: 20px;
+        margin-bottom: 28px;
+      }
+      .feature-item { display: flex; align-items: flex-start; gap: 12px; }
+      .feature-icon {
+        color: var(--color-primary);
+        flex-shrink: 0;
+        margin-top: 1px;
+        display: inline-flex;
+      }
+      .feature-icon svg { width: 18px; height: 18px; }
+      .feature-text { display: flex; flex-direction: column; gap: 2px; }
+      .feature-title {
+        font-size: 14px;
+        font-weight: var(--fw-semibold);
+        color: var(--color-text-primary);
+      }
+      .feature-desc {
+        font-size: 13px;
+        color: var(--color-text-muted);
+        line-height: 1.5;
+      }
+
+      .brand-footer {
+        font-size: 12px;
+        color: var(--color-text-muted);
+      }
+
+      /* ---- Right form panel ---- */
+      .form-panel {
+        width: 50%;
+        background: var(--color-bg-app);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 40px;
+        box-sizing: border-box;
+      }
+      .form-container { width: 400px; max-width: 100%; }
+      .form-title {
+        font-size: 24px;
+        font-weight: var(--fw-bold);
+        color: var(--color-text-primary);
+        margin: 0;
+      }
+      .form-subtitle {
+        font-size: 14px;
+        color: var(--color-text-secondary);
+        margin: 8px 0 0;
+      }
+
+      .form { margin: 32px 0 0; display: flex; flex-direction: column; }
+      .form-field { display: flex; flex-direction: column; }
+      .form-field + .form-field { margin-top: 16px; }
+      .form-label {
+        font-size: 13px;
+        font-weight: var(--fw-medium);
+        color: var(--color-text-body);
+        margin-bottom: 6px;
+      }
+
+      .input-wrap { position: relative; }
+      .input-icon {
+        position: absolute;
+        left: 14px;
+        top: 50%;
+        transform: translateY(-50%);
+        color: var(--color-text-muted);
+        pointer-events: none;
+        display: inline-flex;
+      }
+      .input-icon svg { width: 18px; height: 18px; }
+      .form-input {
+        width: 100%;
+        height: 44px;
+        padding: 0 14px 0 42px;
+        background: var(--color-bg-input);
+        border: 1px solid var(--color-border);
+        border-radius: var(--radius-md);
+        font-size: 14px;
+        color: var(--color-text-primary);
+        font-family: var(--font-sans);
+        box-sizing: border-box;
+        transition: border-color var(--transition-normal), box-shadow var(--transition-normal);
+      }
+      .form-input::placeholder { color: var(--color-text-placeholder); }
+      .form-input:focus {
+        outline: none;
+        border-color: var(--color-primary);
+        box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.1);
+      }
+      .form-input.has-toggle { padding-right: 42px; }
+
+      .pwd-toggle {
+        position: absolute;
+        right: 8px;
+        top: 50%;
+        transform: translateY(-50%);
+        width: 30px;
+        height: 30px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: transparent;
+        border: none;
+        cursor: pointer;
+        color: var(--color-text-muted);
+        border-radius: var(--radius-sm);
+        transition: color var(--transition-normal), background var(--transition-normal);
+      }
+      .pwd-toggle:hover { color: var(--color-text-body); background: var(--color-bg-hover); }
+      .pwd-toggle svg { width: 18px; height: 18px; }
+
+      .form-row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-top: 16px;
+      }
+      .remember-label {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        font-size: 14px;
+        color: var(--color-text-body);
+        cursor: pointer;
+        user-select: none;
+      }
+      .remember-check {
+        width: 16px;
+        height: 16px;
+        accent-color: var(--color-primary);
+        cursor: pointer;
+      }
+      .forgot-link {
+        font-size: 14px;
+        color: var(--color-primary);
+        text-decoration: none;
+        transition: color var(--transition-normal);
+      }
+      .forgot-link:hover { color: var(--color-primary-hover); }
+
+      .login-btn {
+        margin-top: 24px;
+        width: 100%;
+        height: 44px;
+        background: var(--color-primary);
+        color: var(--color-primary-foreground);
+        border: none;
+        border-radius: var(--radius-md);
+        font-size: 15px;
+        font-weight: var(--fw-semibold);
+        font-family: var(--font-sans);
+        cursor: pointer;
+        transition: background var(--transition-normal);
+      }
+      .login-btn:hover { background: var(--color-primary-hover); }
+
+      .divider {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        margin-top: 20px;
+      }
+      .divider-line { flex: 1; height: 1px; background: var(--color-border); }
+      .divider-text {
+        font-size: 12px;
+        color: var(--color-text-muted);
+        white-space: nowrap;
+      }
+
+      .social-row { display: flex; gap: 12px; margin-top: 16px; }
+      .social-btn {
+        flex: 1;
+        height: 40px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+        background: var(--color-bg-surface);
+        border: 1px solid var(--color-border);
+        border-radius: var(--radius-md);
+        font-size: 13px;
+        color: var(--color-text-body);
+        font-family: var(--font-sans);
+        cursor: pointer;
+        transition: background var(--transition-normal), border-color var(--transition-normal);
+      }
+      .social-btn:hover { background: var(--color-bg-app); }
+      .social-icon { display: inline-flex; color: var(--color-text-secondary); }
+      .social-icon svg { width: 16px; height: 16px; }
+
+      .form-footer {
+        text-align: center;
+        margin-top: 24px;
+        font-size: 13px;
+        color: var(--color-text-muted);
+      }
+      .form-footer a {
+        color: var(--color-primary);
+        text-decoration: none;
+        transition: color var(--transition-normal);
+      }
+      .form-footer a:hover { color: var(--color-primary-hover); }
+    </style>
+    <main class="login-shell">
+      <!-- Left: brand panel -->
+      <section class="brand-panel">
+        <header class="brand-header">
+          <div class="brand-logo">
+            <i data-lucide="shield-check"></i>
+          </div>
+          <span class="brand-name">用户管理系统</span>
+        </header>
+
+        <div class="brand-hero">
+          <h1 class="brand-title">企业级用户权限管理平台</h1>
+          <p class="brand-subtitle">统一身份认证 · 角色权限管理 · 操作审计追溯</p>
+        </div>
+
+        <div class="brand-features">
+          <div class="feature-item">
+            <span class="feature-icon"><i data-lucide="users"></i></span>
+            <div class="feature-text">
+              <span class="feature-title">统一身份认证</span>
+              <span class="feature-desc">支持多源账号同步与单点登录</span>
+            </div>
+          </div>
+          <div class="feature-item">
+            <span class="feature-icon"><i data-lucide="shield-check"></i></span>
+            <div class="feature-text">
+              <span class="feature-title">细粒度权限</span>
+              <span class="feature-desc">基于角色的访问控制，精确到资源</span>
+            </div>
+          </div>
+          <div class="feature-item">
+            <span class="feature-icon"><i data-lucide="file-text"></i></span>
+            <div class="feature-text">
+              <span class="feature-title">完整审计日志</span>
+              <span class="feature-desc">所有操作行为可追溯、可导出</span>
+            </div>
+          </div>
+        </div>
+
+        <footer class="brand-footer">© 2026 用户管理系统 · v2.4.0</footer>
+      </section>
+
+      <!-- Right: login form panel -->
+      <section class="form-panel">
+        <div class="form-container">
+          <h2 class="form-title">登录</h2>
+          <p class="form-subtitle">登录到管理控制台</p>
+
+          <form class="form" onsubmit="return false;">
+            <div class="form-field">
+              <label class="form-label" for="email">邮箱</label>
+              <div class="input-wrap">
+                <span class="input-icon"><i data-lucide="mail"></i></span>
+                <input id="email" type="email" class="form-input" placeholder="name@company.com" autocomplete="username" />
+              </div>
+            </div>
+
+            <div class="form-field">
+              <label class="form-label" for="password">密码</label>
+              <div class="input-wrap">
+                <span class="input-icon"><i data-lucide="lock"></i></span>
+                <input id="password" type="password" class="form-input has-toggle" placeholder="请输入密码" autocomplete="current-password" />
+                <button type="button" id="pwdToggle" class="pwd-toggle" aria-label="显示或隐藏密码">
+                  <i data-lucide="eye"></i>
+                </button>
+              </div>
+            </div>
+
+            <div class="form-row">
+              <label class="remember-label">
+                <input type="checkbox" class="remember-check" />
+                <span>记住我</span>
+              </label>
+              <a href="#" class="forgot-link">忘记密码？</a>
+            </div>
+
+            <button type="submit" class="login-btn">登录</button>
+          </form>
+
+          <div class="divider">
+            <span class="divider-line"></span>
+            <span class="divider-text">其他登录方式</span>
+            <span class="divider-line"></span>
+          </div>
+
+          <div class="social-row">
+            <button type="button" class="social-btn">
+              <span class="social-icon"><i data-lucide="message-square"></i></span>
+              <span>企业微信</span>
+            </button>
+            <button type="button" class="social-btn">
+              <span class="social-icon"><i data-lucide="message-circle"></i></span>
+              <span>钉钉</span>
+            </button>
+          </div>
+
+          <p class="form-footer">没有账号？<a href="#">联系管理员</a>开通</p>
+        </div>
+      </section>
+    </main>
+    <script>
+      (function () {
+        var toggle = document.getElementById('pwdToggle');
+        var pwd = document.getElementById('password');
+        if (!toggle || !pwd) return;
+        toggle.addEventListener('click', function () {
+          var isPwd = pwd.type === 'password';
+          pwd.type = isPwd ? 'text' : 'password';
+          toggle.innerHTML = '<i data-lucide="' + (isPwd ? 'eye-off' : 'eye') + '"></i>';
+          if (window.lucide && typeof window.lucide.createIcons === 'function') {
+            window.lucide.createIcons();
+          }
+        });
+      })();
+    </script>
+    <script>lucide.createIcons();</script>
+</body>
+</html>

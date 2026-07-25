@@ -1,0 +1,298 @@
+{
+  "skillProvenance": {
+    "name": "solo-design",
+    "version": "2026.07.06.8",
+    "version_source": "skill-release-manifest.json",
+    "read_status": "ok"
+  },
+  "project": {
+    "designProjectPath": "ai-workbench-desktop-design",
+    "designProjectAbsPath": "c:\\Users\\32891\\Desktop\\ai-workbench\\ai-workbench-desktop-design",
+    "deviceType": "desktop",
+    "operatingMode": "free-explore",
+    "resolvedLane": "existing_edit_add_comparison",
+    "mutationMode": "comparison-page",
+    "selectedIntentWorkflowRead": true,
+    "selectedIntentWorkflowPath": "intent-workflows/intent-project-mutation/INTENT_WORKFLOW.md",
+    "contextRequirementsLoaded": [
+      {
+        "path": "shared-runtime/runtime-boundaries/lane-runtime-contracts.md",
+        "readStatus": "loaded",
+        "bodyRead": true
+      },
+      {
+        "path": "shared-runtime/agent-dispatch-runtime/lane-dispatch-index.md",
+        "readStatus": "loaded",
+        "bodyRead": true
+      },
+      {
+        "path": "shared-runtime/agent-dispatch-runtime/sub-agent-runtime-boundaries.md",
+        "readStatus": "loaded",
+        "bodyRead": true
+      },
+      {
+        "path": "delivery-quality/page-rendering-quality-gate.md",
+        "readStatus": "loaded",
+        "bodyRead": true
+      },
+      {
+        "path": "delivery-quality/design-artifact-validation.md",
+        "readStatus": "loaded",
+        "bodyRead": true
+      },
+      {
+        "path": "delivery-quality/delivery-evidence-contract.md",
+        "readStatus": "loaded",
+        "bodyRead": true
+      },
+      {
+        "path": "visual-experience/visual-experience-guidelines.md",
+        "readStatus": "loaded",
+        "bodyRead": true
+      },
+      {
+        "path": "intent-workflows/intent-project-mutation/existing-edit-page-runtime.md",
+        "readStatus": "loaded",
+        "bodyRead": true
+      },
+      {
+        "path": "intent-workflows/intent-project-mutation/existing-edit-dispatch-contract.md",
+        "readStatus": "loaded",
+        "bodyRead": true
+      },
+      {
+        "path": "intent-workflows/intent-project-mutation/comparison-page-contract.md",
+        "readStatus": "loaded",
+        "bodyRead": true
+      },
+      {
+        "path": "intent-workflows/intent-project-mutation/orchestration-summary-fields.md",
+        "readStatus": "loaded",
+        "bodyRead": true
+      }
+    ],
+    "contextReadScope": "intent-project-mutation lane only; no cross-lane runbook reads",
+    "sourceProjectLaneHeritage": {
+      "sourceProjectPath": "ai-workbench-desktop-design",
+      "sourcePageId": "page-settings-mcp-management",
+      "sourceHtmlSrc": "pages/settings-mcp-management.html",
+      "inheritedConstraints": [
+        "dark-theme-tokens",
+        "settings-sidebar-shell",
+        "lucide-icons",
+        "tailwind-v4-browser"
+      ]
+    },
+    "cssPreflightEvidence": {
+      "status": "passed",
+      "cssPath": "colors_and_type.css",
+      "brandPrefix": "color",
+      "semanticAliasesPresent": [
+        "background",
+        "foreground",
+        "card",
+        "primary",
+        "muted",
+        "border",
+        "radius-sm",
+        "radius-md",
+        "radius-lg"
+      ]
+    },
+    "validationRunDiscipline": {
+      "maxFullValidationRuns": 2,
+      "softWarningsTriggerRepair": false,
+      "blockingRepairMode": "targeted-once",
+      "forbiddenRepairTriggers": [
+        "soft-warning-only",
+        "provenance-warning-only",
+        "style-warning-only"
+      ]
+    },
+    "lowValueCallWatchdog": {
+      "noProgressNextAction": "move-to-readiness-or-blocked-summary",
+      "maxConsecutiveReasoningSteps": 3
+    },
+    "dispatchPreflightManifest": [
+      {
+        "recorded_at": "2026-07-25T06:35:27.533Z",
+        "generatedBy": "build-page-dispatch-manifest.mjs",
+        "packetType": "FreePagePacket",
+        "laneContract": {
+          "resolvedLane": "free_exploration",
+          "packetType": "FreePagePacket",
+          "pageRuntimeGuide": "intent-workflows/intent-page-free-exploration/free-exploration-page-runtime.md",
+          "dispatchContract": "intent-workflows/intent-page-free-exploration/dispatch-contract.md"
+        },
+        "taskLinePresent": true,
+        "outputPathPresent": true,
+        "sharedTemplate": "intent-workflows/intent-page-free-exploration/free-exploration-page-runtime.md",
+        "nodeId": "page-resource-center",
+        "htmlSrc": "pages/resource-center.html",
+        "supplementaryReads": [],
+        "allowedWritePaths": [
+          "pages/resource-center.html",
+          "assets/"
+        ],
+        "forbiddenWriteRoots": [
+          "*.design",
+          "runtime-orchestration-summary.json",
+          "validation-report.json",
+          "finish-readiness-report.json",
+          "restore-contract-report.json",
+          "page-generation-summary.json"
+        ],
+        "toolPolicy": {
+          "todoWriteAllowed": false,
+          "validationScriptsAllowed": false,
+          "previewAllowed": false,
+          "helperScriptsAllowed": false,
+          "designFileWriteAllowed": false,
+          "allowedWritePaths": [
+            "pages/resource-center.html",
+            "assets/"
+          ]
+        },
+        "skillRuntime": {
+          "skillDir": "c:\\Users\\32891\\.trae-cn\\builtin\\design\\hebe\\skills\\solo-design",
+          "deterministicToolDir": "c:\\Users\\32891\\.trae-cn\\builtin\\design\\hebe\\skills\\solo-design\\shared-runtime\\deterministic-tooling",
+          "toolPaths": {
+            "applyHtmlHeadContract": "c:\\Users\\32891\\.trae-cn\\builtin\\design\\hebe\\skills\\solo-design\\shared-runtime\\deterministic-tooling\\apply-html-head-contract.mjs",
+            "recordDispatchCompletion": "c:\\Users\\32891\\.trae-cn\\builtin\\design\\hebe\\skills\\solo-design\\shared-runtime\\deterministic-tooling\\record-dispatch-completion.mjs",
+            "buildPageDispatchManifest": "c:\\Users\\32891\\.trae-cn\\builtin\\design\\hebe\\skills\\solo-design\\shared-runtime\\deterministic-tooling\\build-page-dispatch-manifest.mjs",
+            "validateDesignWorkspace": "c:\\Users\\32891\\.trae-cn\\builtin\\design\\hebe\\skills\\solo-design\\shared-runtime\\deterministic-tooling\\validate-design-workspace.mjs",
+            "validateFinishReadiness": "c:\\Users\\32891\\.trae-cn\\builtin\\design\\hebe\\skills\\solo-design\\shared-runtime\\deterministic-tooling\\validate-finish-readiness.mjs",
+            "validateRestoreContract": "c:\\Users\\32891\\.trae-cn\\builtin\\design\\hebe\\skills\\solo-design\\shared-runtime\\deterministic-tooling\\validate-restore-contract.mjs"
+          },
+          "requiredForPageSubAgent": [
+            "applyHtmlHeadContract",
+            "recordDispatchCompletion"
+          ],
+          "pathInjection": "absolute",
+          "pathContract": "Do not use {SKILL_DIR} placeholders inside Page Sub-Agent packets; use toolPaths.* absolute paths.",
+          "commandTemplates": {
+            "recordDispatchCompletion": "node \"c:\\Users\\32891\\.trae-cn\\builtin\\design\\hebe\\skills\\solo-design\\shared-runtime\\deterministic-tooling\\record-dispatch-completion.mjs\" \"c:\\Users\\32891\\Desktop\\ai-workbench\\ai-workbench-desktop-design\" --node-id=\"page-resource-center\" --html-src=\"pages/resource-center.html\" --status=completed --changed-files=<comma-separated-project-relative-files> --trace-digest=<main-agent-runtime-trace-digest> --tool-ledger-json=<tool-ledger-json-or-file>"
+          }
+        },
+        "cssFilePath": "c:\\Users\\32891\\Desktop\\ai-workbench\\ai-workbench-desktop-design\\colors_and_type.css",
+        "htmlFilePath": "c:\\Users\\32891\\Desktop\\ai-workbench\\ai-workbench-desktop-design\\pages\\resource-center.html",
+        "brandPrefix": "color",
+        "aestheticsMode": "free-explore",
+        "toolDisciplineBlockPresent": true,
+        "fillHtmlHeadCommand": "node \"c:\\Users\\32891\\.trae-cn\\builtin\\design\\hebe\\skills\\solo-design\\shared-runtime\\deterministic-tooling\\apply-html-head-contract.mjs\" \"c:\\Users\\32891\\Desktop\\ai-workbench\\ai-workbench-desktop-design\\colors_and_type.css\" \"c:\\Users\\32891\\Desktop\\ai-workbench\\ai-workbench-desktop-design\\pages\\resource-center.html\" --title=\"资源中心 - 重设计\" --lang=\"zh-CN\" --prefix=\"color\"",
+        "headFillMode": "skeleton-first",
+        "viewportMode": "app-shell",
+        "completionSchemaExpected": "compact",
+        "restoreFields": null,
+        "restoreContractStatus": null,
+        "restoreCompactPacket": null,
+        "deterministicCommands": null,
+        "sourceAuthorityLock": null,
+        "preDispatchFileHashes": {
+          "ai-workbench-desktop.design": "a828d455701ba672a48855690559e61008aaade2cccdba0aa51cafc41e737d57"
+        },
+        "contextPreflight": {
+          "workflowPath": "intent-workflows/intent-page-free-exploration/INTENT_WORKFLOW.md",
+          "requiredContextFiles": [
+            "shared-runtime/runtime-boundaries/lane-runtime-contracts.md",
+            "shared-runtime/agent-dispatch-runtime/lane-dispatch-index.md",
+            "delivery-quality/page-rendering-quality-gate.md",
+            "delivery-quality/design-artifact-validation.md",
+            "delivery-quality/delivery-evidence-contract.md",
+            "visual-experience/visual-experience-guidelines.md"
+          ],
+          "optionalContextFiles": [],
+          "passed": true
+        },
+        "pageSliceOnly": true,
+        "requiredFieldsPresent": true,
+        "missingFields": [],
+        "fillHtmlHeadCommandValid": true,
+        "mobileNavigation": {
+          "required": false,
+          "appliesToThisPage": false,
+          "canonicalHtmlIncluded": false,
+          "missingFields": []
+        },
+        "persistedToSummary": true,
+        "taskQueryAudited": false,
+        "proofSource": "summary-only",
+        "largeWorkflowFilesInTaskQuery": null
+      }
+    ],
+    "readScopeLedger": [
+      {
+        "actor": "page-sub-agent",
+        "lane": "free_exploration",
+        "path": "intent-workflows/intent-page-free-exploration/free-exploration-page-runtime.md",
+        "reason": "page runtime guide",
+        "scopeClass": "page-runtime",
+        "declaredBeforeRead": true,
+        "recordedAt": "2026-07-25T06:35:27.533Z",
+        "nodeId": "page-resource-center",
+        "htmlSrc": "pages/resource-center.html"
+      },
+      {
+        "actor": "page-sub-agent",
+        "lane": "free_exploration",
+        "path": "intent-workflows/intent-page-free-exploration/dispatch-contract.md",
+        "reason": "dispatch contract",
+        "scopeClass": "dispatch-contract",
+        "declaredBeforeRead": true,
+        "recordedAt": "2026-07-25T06:35:27.533Z",
+        "nodeId": "page-resource-center",
+        "htmlSrc": "pages/resource-center.html"
+      }
+    ],
+    "expectedDispatches": [
+      {
+        "nodeId": "page-resource-center",
+        "pageId": "page-resource-center",
+        "targetPageId": "page-resource-center",
+        "htmlSrc": "pages/resource-center.html",
+        "packetType": "FreePagePacket",
+        "status": "completed",
+        "changedFiles": [
+          "pages/resource-center.html"
+        ],
+        "toolCallLedger": {
+          "source": "main-agent-runtime-trace",
+          "traceDigest": "resource-center-page-v1",
+          "todoWriteCalls": 0,
+          "previewCalls": 0,
+          "validationScriptCalls": 0,
+          "helperScriptWrites": 0
+        },
+        "recordedAt": "2026-07-25T06:40:40.997Z",
+        "source": "record-dispatch-completion.mjs"
+      }
+    ],
+    "mainAgentPostDispatchMutations": []
+  },
+  "pages": [
+    {
+      "nodeId": "page-resource-center",
+      "htmlSrc": "pages/resource-center.html",
+      "title": "资源中心 - 重设计",
+      "deviceType": "desktop",
+      "viewportMode": "app-shell",
+      "pageType": "task-driven",
+      "cssPath": "colors_and_type.css",
+      "brandPrefix": "color",
+      "sourcePageId": "page-settings-mcp-management",
+      "sourceHtmlSrc": "pages/settings-mcp-management.html",
+      "derivationType": "comparison-page",
+      "inPlaceEditAllowed": false,
+      "qualityRisks": [
+        "density",
+        "information-dense-three-panel",
+        "three-column-layout"
+      ],
+      "domIdsRequired": [],
+      "assets": [],
+      "supplementaryReads": [],
+      "visualNorthStar": "A unified resource management console that elevates the MCP three-panel server/inventory/detail layout and Skills master-detail browser into a cohesive dark-theme workspace - with clear status indicators, scannable lists, and actionable detail panels that make global resource configuration feel lightweight.",
+      "compositionPattern": "console-workbench"
+    }
+  ]
+}

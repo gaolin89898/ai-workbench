@@ -1,0 +1,302 @@
+{
+  "success": true,
+  "outcome": "passed",
+  "repairable": true,
+  "terminalViolations": [],
+  "terminalBlockingSummary": null,
+  "skillProvenance": {
+    "name": "solo-design",
+    "version": "2026.07.06.8",
+    "version_source": "skill-release-manifest.json",
+    "runtime_skill_dir": null,
+    "recorded_at": null,
+    "expected_version": "2026.07.22.00.00.00",
+    "status": "mismatch",
+    "read_status": "ok"
+  },
+  "operatingMode": "free-explore",
+  "renderBlockingErrorCount": 0,
+  "softWarningCount": 13,
+  "renderBlockingErrors": [],
+  "errorSignatures": [],
+  "softWarnings": [
+    "[html-quality] colors_and_type.css: ordinary/static shadow tokens must keep every shadow alpha <= 0.05; deeper shadows are allowed only for floating-layer tokens such as modal/popover/dropdown/drawer/overlay (--shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.15), --shadow-md: 0 10px 24px rgba(0, 0, 0, 0.25), --shadow-lg: 0 24px 56px rgba(0, 0, 0, 0.35), --shadow-composer: 0 16px 42px rgba(0, 0, 0, 0.3)).",
+    "[html-quality] account-menu.html: hardcoded colors are forbidden outside <style id=\"theme-vars\">. Use brand CSS variables from the token reference.",
+    "[html-quality] chat-empty-session.html: hardcoded colors are forbidden outside <style id=\"theme-vars\">. Use brand CSS variables from the token reference.",
+    "[html-quality] chat-fs-permission.html: hardcoded colors are forbidden outside <style id=\"theme-vars\">. Use brand CSS variables from the token reference.",
+    "[html-quality] chat-goal-mode.html: hardcoded colors are forbidden outside <style id=\"theme-vars\">. Use brand CSS variables from the token reference.",
+    "[html-quality] chat-plan-mode.html: hardcoded colors are forbidden outside <style id=\"theme-vars\">. Use brand CSS variables from the token reference.",
+    "[html-quality] chat-session-composer-v2.html: hardcoded colors are forbidden outside <style id=\"theme-vars\">. Use brand CSS variables from the token reference.",
+    "[html-quality] dialog-states.html: hardcoded colors are forbidden outside <style id=\"theme-vars\">. Use brand CSS variables from the token reference.",
+    "[html-quality] file-icons.html: hardcoded colors are forbidden outside <style id=\"theme-vars\">. Use brand CSS variables from the token reference.",
+    "[html-quality] login.html: hardcoded colors are forbidden outside <style id=\"theme-vars\">. Use brand CSS variables from the token reference.",
+    "[html-quality] providers.html: hardcoded colors are forbidden outside <style id=\"theme-vars\">. Use brand CSS variables from the token reference.",
+    "[html-quality] settings.html: hardcoded colors are forbidden outside <style id=\"theme-vars\">. Use brand CSS variables from the token reference.",
+    "[html-quality] terminal.html: hardcoded colors are forbidden outside <style id=\"theme-vars\">. Use brand CSS variables from the token reference."
+  ],
+  "repairPlanHints": [
+    {
+      "errorClass": "hardcoded-color-in-body",
+      "owner": "sub-agent",
+      "repairScope": "targeted-token-replace",
+      "strategy": "targeted_token_replace_once",
+      "affectedFiles": [
+        "account-menu.html"
+      ],
+      "repairReportPath": null,
+      "repairAlreadyAttempted": false,
+      "allowSourceRead": "no-full-html-read",
+      "maxValidationRuns": 2
+    },
+    {
+      "errorClass": "hardcoded-color-in-body",
+      "owner": "sub-agent",
+      "repairScope": "targeted-token-replace",
+      "strategy": "targeted_token_replace_once",
+      "affectedFiles": [
+        "chat-empty-session.html"
+      ],
+      "repairReportPath": null,
+      "repairAlreadyAttempted": false,
+      "allowSourceRead": "no-full-html-read",
+      "maxValidationRuns": 2
+    },
+    {
+      "errorClass": "hardcoded-color-in-body",
+      "owner": "sub-agent",
+      "repairScope": "targeted-token-replace",
+      "strategy": "targeted_token_replace_once",
+      "affectedFiles": [
+        "chat-fs-permission.html"
+      ],
+      "repairReportPath": null,
+      "repairAlreadyAttempted": false,
+      "allowSourceRead": "no-full-html-read",
+      "maxValidationRuns": 2
+    },
+    {
+      "errorClass": "hardcoded-color-in-body",
+      "owner": "sub-agent",
+      "repairScope": "targeted-token-replace",
+      "strategy": "targeted_token_replace_once",
+      "affectedFiles": [
+        "chat-goal-mode.html"
+      ],
+      "repairReportPath": null,
+      "repairAlreadyAttempted": false,
+      "allowSourceRead": "no-full-html-read",
+      "maxValidationRuns": 2
+    },
+    {
+      "errorClass": "hardcoded-color-in-body",
+      "owner": "sub-agent",
+      "repairScope": "targeted-token-replace",
+      "strategy": "targeted_token_replace_once",
+      "affectedFiles": [
+        "chat-plan-mode.html"
+      ],
+      "repairReportPath": null,
+      "repairAlreadyAttempted": false,
+      "allowSourceRead": "no-full-html-read",
+      "maxValidationRuns": 2
+    },
+    {
+      "errorClass": "hardcoded-color-in-body",
+      "owner": "sub-agent",
+      "repairScope": "targeted-token-replace",
+      "strategy": "targeted_token_replace_once",
+      "affectedFiles": [
+        "chat-session-composer-v2.html"
+      ],
+      "repairReportPath": null,
+      "repairAlreadyAttempted": false,
+      "allowSourceRead": "no-full-html-read",
+      "maxValidationRuns": 2
+    },
+    {
+      "errorClass": "hardcoded-color-in-body",
+      "owner": "sub-agent",
+      "repairScope": "targeted-token-replace",
+      "strategy": "targeted_token_replace_once",
+      "affectedFiles": [
+        "dialog-states.html"
+      ],
+      "repairReportPath": null,
+      "repairAlreadyAttempted": false,
+      "allowSourceRead": "no-full-html-read",
+      "maxValidationRuns": 2
+    },
+    {
+      "errorClass": "hardcoded-color-in-body",
+      "owner": "sub-agent",
+      "repairScope": "targeted-token-replace",
+      "strategy": "targeted_token_replace_once",
+      "affectedFiles": [
+        "file-icons.html"
+      ],
+      "repairReportPath": null,
+      "repairAlreadyAttempted": false,
+      "allowSourceRead": "no-full-html-read",
+      "maxValidationRuns": 2
+    },
+    {
+      "errorClass": "hardcoded-color-in-body",
+      "owner": "sub-agent",
+      "repairScope": "targeted-token-replace",
+      "strategy": "targeted_token_replace_once",
+      "affectedFiles": [
+        "login.html"
+      ],
+      "repairReportPath": null,
+      "repairAlreadyAttempted": false,
+      "allowSourceRead": "no-full-html-read",
+      "maxValidationRuns": 2
+    },
+    {
+      "errorClass": "hardcoded-color-in-body",
+      "owner": "sub-agent",
+      "repairScope": "targeted-token-replace",
+      "strategy": "targeted_token_replace_once",
+      "affectedFiles": [
+        "providers.html"
+      ],
+      "repairReportPath": null,
+      "repairAlreadyAttempted": false,
+      "allowSourceRead": "no-full-html-read",
+      "maxValidationRuns": 2
+    },
+    {
+      "errorClass": "hardcoded-color-in-body",
+      "owner": "sub-agent",
+      "repairScope": "targeted-token-replace",
+      "strategy": "targeted_token_replace_once",
+      "affectedFiles": [
+        "settings.html"
+      ],
+      "repairReportPath": null,
+      "repairAlreadyAttempted": false,
+      "allowSourceRead": "no-full-html-read",
+      "maxValidationRuns": 2
+    },
+    {
+      "errorClass": "hardcoded-color-in-body",
+      "owner": "sub-agent",
+      "repairScope": "targeted-token-replace",
+      "strategy": "targeted_token_replace_once",
+      "affectedFiles": [
+        "terminal.html"
+      ],
+      "repairReportPath": null,
+      "repairAlreadyAttempted": false,
+      "allowSourceRead": "no-full-html-read",
+      "maxValidationRuns": 2
+    }
+  ],
+  "repairActionTable": [],
+  "errorCount": 0,
+  "warningCount": 13,
+  "errors": [],
+  "warnings": [
+    "[html-quality] colors_and_type.css: ordinary/static shadow tokens must keep every shadow alpha <= 0.05; deeper shadows are allowed only for floating-layer tokens such as modal/popover/dropdown/drawer/overlay (--shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.15), --shadow-md: 0 10px 24px rgba(0, 0, 0, 0.25), --shadow-lg: 0 24px 56px rgba(0, 0, 0, 0.35), --shadow-composer: 0 16px 42px rgba(0, 0, 0, 0.3)).",
+    "[html-quality] account-menu.html: hardcoded colors are forbidden outside <style id=\"theme-vars\">. Use brand CSS variables from the token reference.",
+    "[html-quality] chat-empty-session.html: hardcoded colors are forbidden outside <style id=\"theme-vars\">. Use brand CSS variables from the token reference.",
+    "[html-quality] chat-fs-permission.html: hardcoded colors are forbidden outside <style id=\"theme-vars\">. Use brand CSS variables from the token reference.",
+    "[html-quality] chat-goal-mode.html: hardcoded colors are forbidden outside <style id=\"theme-vars\">. Use brand CSS variables from the token reference.",
+    "[html-quality] chat-plan-mode.html: hardcoded colors are forbidden outside <style id=\"theme-vars\">. Use brand CSS variables from the token reference.",
+    "[html-quality] chat-session-composer-v2.html: hardcoded colors are forbidden outside <style id=\"theme-vars\">. Use brand CSS variables from the token reference.",
+    "[html-quality] dialog-states.html: hardcoded colors are forbidden outside <style id=\"theme-vars\">. Use brand CSS variables from the token reference.",
+    "[html-quality] file-icons.html: hardcoded colors are forbidden outside <style id=\"theme-vars\">. Use brand CSS variables from the token reference.",
+    "[html-quality] login.html: hardcoded colors are forbidden outside <style id=\"theme-vars\">. Use brand CSS variables from the token reference.",
+    "[html-quality] providers.html: hardcoded colors are forbidden outside <style id=\"theme-vars\">. Use brand CSS variables from the token reference.",
+    "[html-quality] settings.html: hardcoded colors are forbidden outside <style id=\"theme-vars\">. Use brand CSS variables from the token reference.",
+    "[html-quality] terminal.html: hardcoded colors are forbidden outside <style id=\"theme-vars\">. Use brand CSS variables from the token reference."
+  ],
+  "validationRunDisciplineStatus": {
+    "declared": true,
+    "restoreMode": false,
+    "maxFullValidationRuns": 2,
+    "validationHistoryCount": 0,
+    "repairLedgerCount": 0,
+    "softWarningsTriggerRepair": false,
+    "terminalState": null,
+    "nextAction": null,
+    "violations": [],
+    "success": true
+  },
+  "terminalState": null,
+  "nextCheck": {
+    "type": "finish-readiness",
+    "command": "node \"c:\\Users\\32891\\.trae-cn\\builtin\\design\\hebe\\skills\\solo-design\\shared-runtime\\deterministic-tooling\\validate-finish-readiness.mjs\" \"c:\\Users\\32891\\Desktop\\ai-workbench\\ai-workbench-desktop-design\" --check=all",
+    "fullValidationAllowed": false,
+    "reason": "workspace validation passed; run complete finish readiness before final delivery"
+  },
+  "repairBatch": [],
+  "repairContextPacket": {
+    "schema_version": "1.0",
+    "purpose": "small-context repair packet; read this before full validation-report.json",
+    "success": true,
+    "terminalState": null,
+    "skillProvenance": {
+      "name": "solo-design",
+      "version": "2026.07.06.8",
+      "version_source": "skill-release-manifest.json",
+      "runtime_skill_dir": null,
+      "recorded_at": null,
+      "expected_version": "2026.07.22.00.00.00",
+      "status": "mismatch",
+      "read_status": "ok"
+    },
+    "renderBlockingErrorCount": 0,
+    "softWarningCount": 13,
+    "renderBlockingErrors": [],
+    "repairActionTable": [],
+    "nextCheck": {
+      "type": "finish-readiness",
+      "command": "node \"c:\\Users\\32891\\.trae-cn\\builtin\\design\\hebe\\skills\\solo-design\\shared-runtime\\deterministic-tooling\\validate-finish-readiness.mjs\" \"c:\\Users\\32891\\Desktop\\ai-workbench\\ai-workbench-desktop-design\" --check=all",
+      "fullValidationAllowed": false,
+      "reason": "workspace validation passed; run complete finish readiness before final delivery"
+    },
+    "forbidden": [
+      "do not read validator source",
+      "do not rerun full validation when nextCheck.fullValidationAllowed=false",
+      "do not start preview/browser unless user explicitly asks",
+      "do not hand-edit repair ledger fields"
+    ]
+  },
+  "projectFileHashes": {
+    "ai-workbench-desktop.design": "a828d455701ba672a48855690559e61008aaade2cccdba0aa51cafc41e737d57",
+    "colors_and_type.css": "ede29e4a835304fae882c3874fb9c91aa64a1cae5bb59375dc4c172ac3b9af82",
+    "runtime-orchestration-summary.json": "fd6d1262bcb1b2ea89183c8cdec40dded1b5a4d9431653b2cdd213d7ecd0eabb",
+    "pages/account-menu.html": "e4316c1d6e9690c2d932452e2a5c6293ee8485be0eb51e40d84006c41e7c23d4",
+    "pages/ai-activity-records.html": "7d6c547f9908bc68fb2f54f2af4b2630ec6f2980f6d470a7c0b9892a51c1e497",
+    "pages/chat-empty-session.html": "91b55e20410f8496d76c2e32516038d1e25d306b4525a06c6d26e16422a2ad91",
+    "pages/chat-fs-permission.html": "c916071ccd986d006581d6effcfc7fbd871b4f9e5ac7da62bad14358926e3617",
+    "pages/chat-goal-mode.html": "20daeccaa4c302c7955baf21f921689dd51c4b3f0119d8903ac66d6da019f2fd",
+    "pages/chat-plan-mode.html": "8fc44c46909d842e7b9278c657314e332401abef4bd8aa6fb40f2284fa4743e0",
+    "pages/chat-session-composer-v2.html": "b1dbf418c3485b247b612af3df8024a7742d31a524dacc34fba88685d9534214",
+    "pages/chat-ultra-codex-style.html": "28cc003409f1c95f7cbb1d24c070f6dde1e8b38d4413e0d05d5550c894b1e977",
+    "pages/chat-ultra-parallel-light.html": "1b52c07141b9f41982d58912f92612f514acf8c74f0c770231926abc65b35eba",
+    "pages/chat-ultra-parallel.html": "4ae751502b85ee5ebf94ecb9b09f604d98f6b185cb05faf0635c6ab8931ad413",
+    "pages/dialog-states.html": "cc364c78343585e964f04d0fcf4a0e1719beb4ff2ae7578e4169b775861c28e4",
+    "pages/file-icons.html": "9aa10b4bd76c6639aa0162119b133dad2fd192fa4aaac5060c3317e0793089a0",
+    "pages/login-redesign.html": "b9ea11cd91f82474250929bc488f035c120a190eab70017693517ac067b67ecf",
+    "pages/login.html": "bee429bc8b8ec3035e86ebaefe2f2b1d8e7d0620b122a20c1ce9c88095808d56",
+    "pages/project-menu-and-files.html": "99365c0543e89a04cc32f0705ee24b06f28b3a977d614f159722e226a9b0b304",
+    "pages/providers.html": "be4c2fc096376311a1f1c04846d32b78b58f9b00d3e8f1231a7658acc1f8c803",
+    "pages/resource-center.html": "9cf4b271b2adeea7e9eb3a5bb95cd7d863b8835d2c5d1416676ddafbda072eb0",
+    "pages/session-context-menu.html": "947f30a34d2ae58cb2d611d31b2fed2dddadccd560bdf6bc5d57297f350c7f27",
+    "pages/session-management.html": "fb83191840fafc60eb92b7c61adaec03c2396771ffd878a5f19cf7974bace745",
+    "pages/settings-mcp-management.html": "fd899f2e37d97f585b65e17bc4472ffcebe658bd840c78b04a184e6eb98acb48",
+    "pages/settings.html": "41cdddd20ec59a3a5f5763bc20c8c90ed7c5dced34ab94260ce1be08d94701cb",
+    "pages/terminal.html": "ac8ad5934c50a0cbd53ef1f66c0733e80d4b3346df96cf5f0c2fbcd65d83c3d0",
+    "pages/token-usage-redesign.html": "52727820d3fa42bd9ff178015e696fb6a276bc751664d534aa36cd071b4d5bd0",
+    "pages/token-usage.html": "1895c690c36f9f339ea5aceea44678191c10b12b9fefb1376f0a980b4789cfe3",
+    "pages/ultra-agent-detail-codex.html": "e19a3482ca79475fa2f5e3fb6d4204a65b9c4cb4ce483df88bbc00842990a398",
+    "pages/ultra-agent-inspector-light.html": "28989e462e93fc623f6a19e0eee40fc3cddfbcb46c271e35115fb5618387b64c",
+    "pages/ultra-agent-inspector.html": "972659a0f83a6cfdde90c4faa90680ac2856c91daf869cade8a6d5a06c2dd968"
+  },
+  "designDir": "c:\\Users\\32891\\Desktop\\ai-workbench\\ai-workbench-desktop-design",
+  "expectedPages": 27,
+  "requireInteractions": null,
+  "checkedAt": "2026-07-25T06:40:46.518Z"
+}

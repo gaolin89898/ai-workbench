@@ -6,12 +6,16 @@
     <title>AI 会话 — 文件写入权限审批 — AI 工作台</title>
     <style id="theme-vars">
 /* AI Workbench Desktop — Dark Theme */
+/* Based on actual project style.css, inverted to dark */
 :root {
+  /* Brand */
   --color-primary: #2563eb;
   --color-primary-hover: #1d4ed8;
   --color-primary-muted: rgba(37, 99, 235, 0.15);
   --color-primary-soft: rgba(37, 99, 235, 0.08);
   --color-primary-ring: rgba(37, 99, 235, 0.25);
+
+  /* Surface & Background */
   --color-bg-app: #0f1117;
   --color-bg-body: #111318;
   --color-bg-sidebar: #161822;
@@ -22,15 +26,21 @@
   --color-bg-input: #1e2235;
   --color-bg-hover: rgba(255, 255, 255, 0.06);
   --color-bg-active: rgba(37, 99, 235, 0.12);
+
+  /* Text */
   --color-text-primary: #e8eaed;
   --color-text-body: #d1d5db;
   --color-text-secondary: #9aa0b4;
   --color-text-muted: #6b7280;
   --color-text-placeholder: #6b7280;
   --color-text-inverse: #ffffff;
+
+  /* Border */
   --color-border: rgba(255, 255, 255, 0.1);
   --color-border-subtle: rgba(255, 255, 255, 0.06);
   --color-border-active: rgba(37, 99, 235, 0.5);
+
+  /* State Colors */
   --state-success: #22c55e;
   --state-success-bg: rgba(34, 197, 94, 0.12);
   --state-success-ring: rgba(34, 197, 94, 0.25);
@@ -40,13 +50,18 @@
   --state-error-bg: rgba(239, 68, 68, 0.12);
   --state-info: #3b82f6;
   --state-info-bg: rgba(59, 130, 246, 0.12);
+
+  /* Radius */
   --radius-sm: 4px;
   --radius-md: 7px;
   --radius-lg: 8px;
   --radius-xl: 12px;
   --radius-full: 999px;
+
+  /* Typography */
   --font-sans: "Inter", ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+
   --text-xs: 11px;
   --text-sm: 12px;
   --text-base: 13px;
@@ -54,20 +69,27 @@
   --text-lg: 16px;
   --text-xl: 20px;
   --text-2xl: 28px;
+
   --leading-tight: 1.25;
   --leading-normal: 1.5;
   --leading-relaxed: 1.625;
   --leading-chat: 1.62;
+
+  /* Font Weights */
   --fw-normal: 400;
   --fw-medium: 500;
   --fw-semibold: 620;
   --fw-bold: 700;
   --fw-extrabold: 800;
   --fw-black: 850;
+
+  /* Shadows */
   --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.15);
   --shadow-md: 0 10px 24px rgba(0, 0, 0, 0.25);
   --shadow-lg: 0 24px 56px rgba(0, 0, 0, 0.35);
   --shadow-composer: 0 16px 42px rgba(0, 0, 0, 0.3);
+
+  /* Spacing */
   --space-1: 4px;
   --space-2: 8px;
   --space-3: 12px;
@@ -78,25 +100,72 @@
   --space-10: 40px;
   --space-14: 56px;
   --space-18: 72px;
+
+  /* Layout */
   --sidebar-width: 286px;
   --topbar-height: 56px;
   --composer-max-width: 760px;
+
+  /* Transitions */
   --transition-fast: 120ms ease;
   --transition-normal: 200ms ease;
+
+  /* Semantic aliases for Tailwind @theme inline bridge */
+  --color-background: var(--color-bg-app);
+  --color-foreground: var(--color-text-primary);
+  --color-card: var(--color-bg-elevated);
+  --color-muted: var(--color-text-muted);
+  --color-radius-sm: var(--radius-sm);
+  --color-radius-md: var(--radius-lg);
+  --color-radius-lg: var(--radius-xl);
 }
+
     </style>
     <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4.3.1/dist/index.global.js"></script>
     <script src="https://unpkg.com/lucide@1.8.0/dist/umd/lucide.min.js"></script>
     <style type="text/tailwindcss">
   @theme inline {
+    --color-background: var(--color-background);
+    --color-foreground: var(--color-foreground);
+    --color-card: var(--color-card);
     --color-primary: var(--color-primary);
+    --color-muted: var(--color-muted);
     --color-border: var(--color-border);
+    --radius-sm: var(--color-radius-sm);
+    --radius-md: var(--color-radius-md);
+    --radius-lg: var(--color-radius-lg);
   }
   @layer base {
-    body { background: var(--color-background); color: var(--color-text-primary); }
+    body { background: var(--color-background); color: var(--color-foreground); }
     td, th { @apply break-words; word-break: break-all; word-break: auto-phrase; }
     th { @apply whitespace-nowrap; }
   }
+    </style>
+    <style id="semantic-token-fallback">
+      .bg-background { background-color: var(--color-background); }
+      .text-background { color: var(--color-background); }
+      .border-background { border-color: var(--color-background); }
+      .ring-background { --tw-ring-color: var(--color-background); }
+      .bg-foreground { background-color: var(--color-foreground); }
+      .text-foreground { color: var(--color-foreground); }
+      .border-foreground { border-color: var(--color-foreground); }
+      .ring-foreground { --tw-ring-color: var(--color-foreground); }
+      .bg-card { background-color: var(--color-card); }
+      .text-card { color: var(--color-card); }
+      .border-card { border-color: var(--color-card); }
+      .ring-card { --tw-ring-color: var(--color-card); }
+      .bg-primary { background-color: var(--color-primary); }
+      .text-primary { color: var(--color-primary); }
+      .border-primary { border-color: var(--color-primary); }
+      .ring-primary { --tw-ring-color: var(--color-primary); }
+      .bg-muted { background-color: var(--color-muted); }
+      .text-muted { color: var(--color-muted); }
+      .border-muted { border-color: var(--color-muted); }
+      .ring-muted { --tw-ring-color: var(--color-muted); }
+      .bg-border { background-color: var(--color-border); }
+      .text-border { color: var(--color-border); }
+      .border-border { border-color: var(--color-border); }
+      .ring-border { --tw-ring-color: var(--color-border); }
     </style>
     <style>
       .no-scrollbar::-webkit-scrollbar { display: none; }

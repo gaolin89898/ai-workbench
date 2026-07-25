@@ -2362,7 +2362,7 @@ function selectSlashCommand(command: SlashCommand) {
   prompt.value = "";
   switch (command.id) {
     case "mcp":
-      void router.push({ name: "resources", query: { tab: "mcp" } });
+      void router.push({ name: "settings", query: { panel: "resources", tab: "mcp" } });
       return;
     case "compact":
       if (activeCodexThreadId.value && !ws.activeChatIsRunning.value && !codexCompactBusy.value) {

@@ -202,6 +202,11 @@ async function toggleProjectFileList(project: WorkspaceProject) {
   await loadDirectoryFiles(project);
 }
 
+function openResourceSettings() {
+  window.localStorage.setItem("ai-workbench.settingsPanel", "resources");
+  emit("switchView", "settings");
+}
+
 function closeProjectFileList() {
   fileListProjectPath.value = null;
 }
@@ -935,7 +940,7 @@ onBeforeUnmount(() => {
       </div>
     </section>
     <section class="sidebar-resource-section" aria-label="全局资源">
-      <button class="sidebar-resource-link" :class="{ active: activeView === 'resources' }" type="button" @click="emit('switchView', 'resources')">
+      <button class="sidebar-resource-link" type="button" @click="openResourceSettings">
         <span class="sidebar-resource-icon" aria-hidden="true">
           <svg viewBox="0 0 24 24" fill="none"><rect x="4" y="4" width="16" height="16" rx="3" /><path d="M8 9h8M8 13h5M8 17h8" /></svg>
         </span>

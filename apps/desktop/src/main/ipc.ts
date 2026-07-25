@@ -61,6 +61,7 @@ import { hasLiveOpenCodeChat, listOpenCodeConfigOptions, runOpenCodeChat, stopOp
 import { hasLiveMimoChat, listMimoConfigOptions, respondMimoApproval, runMimoChat, stopMimoChat } from "./mimo";
 import { checkAppUpdate, getUpdateDownloadSize, installAppUpdate, initUpdater } from "./updater";
 import { listProjectFiles, openProjectHtmlInBrowser, readProjectFileForViewer, readProjectFilePreview } from "./project_files";
+import { attachProviderSession, listProviderSessions } from "./provider_sessions";
 import type {
   CreateAiSessionRequest,
   StartShellPtyRequest,
@@ -86,6 +87,7 @@ import type {
   ChatFileAttachment,
   ChatMessage,
   ProjectOpenTarget,
+  ProviderSessionCatalogEntry,
 } from "../services/desktop";
 
 let mainWindow: BrowserWindow | null = null;
@@ -659,6 +661,14 @@ export function registerIpcHandlers(win?: BrowserWindow): void {
   );
 
   handle("list_local_ai_sessions", async () => db.listLocalAiSessions());
+
+  handle("list_provider_sessions", async (event) => listProviderSessions(event.sender));
+
+  handle("attach_provider_session", async (_event, args: [ProviderSessionCatalogEntry]) => {
+    const session = attachProviderSession(args[0]);
+    getDesktopCloudSync()?.pushSessionSnapshot();
+    return session;
+  });
 
   handle("archive_local_ai_session", async (event, args: [string, boolean]) => {
     const [aiSessionId, archived] = args;

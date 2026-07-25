@@ -132,6 +132,26 @@ export type AiSession = {
   updatedAt?: string;
 };
 
+export type ProviderSessionCatalogEntry = {
+  key: string;
+  providerId: string;
+  providerSessionId: string | null;
+  title: string;
+  cwd: string | null;
+  updatedAt: string | null;
+  archived: boolean;
+  source: "workbench" | "provider-api" | "provider-files";
+  sourceApp?: "codehub" | "vscode" | "cli" | "desktop" | "unknown";
+  linkedAiSessionId: string | null;
+  capabilities: {
+    read: boolean;
+    resume: boolean;
+    rename: boolean;
+    archive: boolean;
+    delete: boolean;
+  };
+};
+
 export type PairResponse = {
   deviceId?: string;
   device_id?: string;
@@ -623,6 +643,7 @@ export type CodexNativeThread = {
   modelProvider: string;
   cliVersion: string;
   source: string;
+  originator?: string | null;
   createdAt: number;
   updatedAt: number;
   recencyAt?: number | null;
@@ -1188,6 +1209,10 @@ export const desktopApi = {
     ipc<AiProviderTrace | null>("get_local_ai_trace", aiSessionId, traceKind),
   listLocalAiSessions: (): Promise<AiSession[]> =>
     ipc<AiSession[]>("list_local_ai_sessions"),
+  listProviderSessions: (): Promise<ProviderSessionCatalogEntry[]> =>
+    ipc<ProviderSessionCatalogEntry[]>("list_provider_sessions"),
+  attachProviderSession: (entry: ProviderSessionCatalogEntry): Promise<AiSession> =>
+    ipc<AiSession>("attach_provider_session", entry),
   archiveLocalAiSession: (aiSessionId: string, archived: boolean): Promise<AiSession> =>
     ipc<AiSession>("archive_local_ai_session", aiSessionId, archived),
   deleteLocalAiSession: (aiSessionId: string): Promise<boolean> =>

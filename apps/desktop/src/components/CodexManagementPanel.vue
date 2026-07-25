@@ -1,5 +1,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
+import ArcoButton from "@arco-design/web-vue/es/button";
+import ArcoTable, { TableColumn as ArcoTableColumn } from "@arco-design/web-vue/es/table";
 import {
   desktopApi,
   type CodexAdminEvent,
@@ -13,7 +15,22 @@ import {
   type CodexMcpServer,
   type CodexMcpTool,
   type CodexNativeThread,
+  type AiSession,
+  type ProviderSessionCatalogEntry,
+  type ProviderStatus,
 } from "../services/desktop";
+import { useWorkspace } from "../composables/useWorkspace";
+import router from "../router";
+
+const providerCodexIcon = new URL("../assets/icons/provider-codex.svg", import.meta.url).href;
+const providerClaudeIcon = new URL("../assets/icons/provider-claude.svg", import.meta.url).href;
+const providerOpencodeIcon = new URL("../assets/icons/provider-opencode.svg", import.meta.url).href;
+const providerMimoIcon = new URL("../assets/icons/provider-mimo.svg", import.meta.url).href;
+const providerFallbackIcon = new URL("../assets/icons/ai-providers.svg", import.meta.url).href;
+const codeHubIcon = new URL("../assets/brand/ai-workbench-mark.svg", import.meta.url).href;
+const vscodeIcon = new URL("../assets/icons/vscode.svg", import.meta.url).href;
+const terminalIcon = new URL("../assets/icons/terminal.svg", import.meta.url).href;
+const windowIcon = new URL("../assets/icons/window.svg", import.meta.url).href;
 
 const props = withDefaults(defineProps<{
   cwd?: string | null;
@@ -23,11 +40,13 @@ const props = withDefaults(defineProps<{
   mode: "codex",
 });
 
-type AdminTab = "threads" | "mcp" | "config";
+type AdminTab = "threads" | "mcp" | "config" | "archive";
 type ThreadScope = "project" | "all";
 type McpInventoryTab = "tools" | "resources" | "templates";
 type ConfigView = "effective" | "layers" | "features";
 type DescriptionLanguage = "zh" | "en";
+type LocalProviderFilter = "codex" | "claude" | "opencode" | "mimo";
+type ConfigurableProvider = "codex" | "claude" | "opencode" | "mimo";
 
 type ConfigEntry = {
   keyPath: string;
@@ -42,8 +61,10 @@ type BatchRow = {
   mergeStrategy: "replace" | "upsert";
 };
 
-const storedTab = window.localStorage.getItem("ai-workbench.codexAdminTab");
-const activeTab = ref<AdminTab>(props.mode === "mcp" ? "mcp" : storedTab === "config" ? "config" : "threads");
+const initialTab: AdminTab = props.mode === "mcp"
+  ? "mcp"
+  : "threads";
+const activeTab = ref<AdminTab>(initialTab);
 const showAdvanced = ref(window.localStorage.getItem("ai-workbench.codexAdminAdvanced") === "true");
 const descriptionLanguage = ref<DescriptionLanguage>(
   window.localStorage.getItem("ai-workbench.mcpDescriptionLanguage") === "en" ? "en" : "zh",
@@ -68,6 +89,67 @@ const threadActionBusy = ref(false);
 const threadNameDraft = ref("");
 let threadSearchTimer: ReturnType<typeof setTimeout> | null = null;
 let threadRequestVersion = 0;
+
+const ws = useWorkspace();
+const localArchivedSessions = computed(() => ws.archivedSessions.value);
+const localArchiveRestoreBusy = ref<Record<string, boolean>>({});
+const providerSessionCatalog = ref<ProviderSessionCatalogEntry[]>([]);
+const providerSessionLoading = ref(false);
+const providerSessionError = ref("");
+const localProviderOptions: Array<{ id: LocalProviderFilter; label: string }> = [
+  { id: "codex", label: "Codex" },
+  { id: "claude", label: "Claude" },
+  { id: "opencode", label: "OpenCode" },
+  { id: "mimo", label: "MiMo" },
+];
+const providerColumnFilter = {
+  filters: localProviderOptions.map((provider) => ({ text: provider.label, value: provider.id })),
+  filter: (values: string[], record: ProviderSessionCatalogEntry) => values.length === 0 || values.includes(record.providerId),
+  multiple: true,
+  triggerProps: { contentClass: "session-table-filter-popup", popupContainer: "body", updateAtScroll: true },
+};
+const sourceColumnFilter = {
+  filters: [
+    { text: "CodeHub AI", value: "codehub" },
+    { text: "VS Code", value: "vscode" },
+    { text: "CLI", value: "cli" },
+    { text: "桌面版", value: "desktop" },
+    { text: "其他", value: "unknown" },
+  ],
+  filter: (values: string[], record: ProviderSessionCatalogEntry) => values.length === 0 || values.includes(record.sourceApp || "unknown"),
+  multiple: true,
+  triggerProps: { contentClass: "session-table-filter-popup", popupContainer: "body", updateAtScroll: true },
+};
+const archiveColumnFilter = {
+  filters: [{ text: "未归档", value: "active" }, { text: "已归档", value: "archived" }],
+  filter: (values: string[], record: ProviderSessionCatalogEntry) => values.length === 0 || values.includes(record.archived ? "archived" : "active"),
+  multiple: false,
+  triggerProps: { contentClass: "session-table-filter-popup", popupContainer: "body", updateAtScroll: true },
+};
+const providerConfigOpen = ref(false);
+const selectedConfigProvider = ref<ConfigurableProvider>("codex");
+const providerConfigModel = ref("");
+const providerConfigEffort = ref("");
+const providerConfigOptions: Array<{ id: ConfigurableProvider; label: string }> = [
+  { id: "codex", label: "Codex" },
+  { id: "claude", label: "Claude Code" },
+  { id: "opencode", label: "OpenCode" },
+  { id: "mimo", label: "MiMo Code" },
+];
+const selectedProviderStatus = computed<ProviderStatus | undefined>(() => (
+  ws.providerStatuses.value.find((status) => status.providerId === selectedConfigProvider.value)
+));
+const localSessions = computed(() => providerSessionCatalog.value);
+const threadOverview = computed(() => {
+  const recentThreshold = Date.now() - 7 * 24 * 60 * 60 * 1000;
+  const allSessions = providerSessionCatalog.value;
+  return {
+    visible: allSessions.length,
+    active: allSessions.filter((session) => !session.archived).length,
+    archived: allSessions.filter((session) => session.archived).length,
+    recent: allSessions.filter((session) => (Date.parse(session.updatedAt || "") || 0) >= recentThreshold).length,
+  };
+});
 
 const mcpServers = ref<CodexMcpServer[]>([]);
 const mcpLoaded = ref(false);
@@ -303,6 +385,232 @@ function compactPath(value: string): string {
   if (!value) return "未记录工作目录";
   const parts = value.split(/[\\/]/).filter(Boolean);
   return parts.length > 2 ? `.../${parts.slice(-2).join("/")}` : value;
+}
+
+function localArchivedAtLabel(value?: string | null): string {
+  if (!value) return "时间未知";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "时间未知";
+  return date.toLocaleString("zh-CN", { hour12: false });
+}
+
+function localProjectNameForSession(path?: string | null): string {
+  if (!path) return "未关联项目";
+  const match = ws.projects.value.find((project) => project.path === path);
+  return match?.name ?? path.split(/[\\/]/).filter(Boolean).pop() ?? path;
+}
+
+function localProviderLabel(providerId?: string | null): string {
+  switch (providerId) {
+    case "codex": return "Codex";
+    case "claude": return "Claude";
+    case "opencode": return "OpenCode";
+    case "mimo": return "MiMo";
+    default: return providerId || "未知";
+  }
+}
+
+function localProviderIcon(providerId: string): string {
+  if (providerId === "codex") return providerCodexIcon;
+  if (providerId === "claude") return providerClaudeIcon;
+  if (providerId === "opencode") return providerOpencodeIcon;
+  if (providerId === "mimo") return providerMimoIcon;
+  return providerFallbackIcon;
+}
+
+function localSessionSourceLabel(session: ProviderSessionCatalogEntry): string {
+  if (session.sourceApp === "vscode") return "VS Code";
+  if (session.sourceApp === "cli") return `${localProviderLabel(session.providerId)} CLI`;
+  if (session.sourceApp === "desktop") return `${localProviderLabel(session.providerId)} Desktop`;
+  if (session.sourceApp === "codehub" || session.source === "workbench") return "CodeHub AI";
+  return localProviderLabel(session.providerId);
+}
+
+function localSessionSourceIcon(session: ProviderSessionCatalogEntry): string {
+  if (session.sourceApp === "vscode") return vscodeIcon;
+  if (session.sourceApp === "cli") return terminalIcon;
+  if (session.sourceApp === "desktop") return windowIcon;
+  return session.sourceApp === "codehub" || session.source === "workbench" ? codeHubIcon : localProviderIcon(session.providerId);
+}
+
+function localSessionStatusLabel(session: ProviderSessionCatalogEntry): string {
+  return session.archived ? "已归档" : "未归档";
+}
+
+function localSessionStatusTone(session: ProviderSessionCatalogEntry): string {
+  return session.archived ? "archived" : "active";
+}
+
+async function loadProviderSessions(): Promise<void> {
+  providerSessionLoading.value = true;
+  providerSessionError.value = "";
+  try {
+    providerSessionCatalog.value = await desktopApi.listProviderSessions();
+  } catch (error) {
+    const message = errorText(error);
+    if (message.includes("No handler registered for 'list_provider_sessions'")) {
+      const sessions = await desktopApi.listLocalAiSessions();
+      const catalog = sessions.map((session) => ({
+        key: `workbench:${session.id}`,
+        providerId: session.providerId,
+        providerSessionId: session.providerSessionId || null,
+        title: session.title,
+        cwd: session.summary || null,
+        updatedAt: session.updatedAt || null,
+        archived: Boolean(session.archivedAt),
+        source: "workbench",
+        sourceApp: "codehub",
+        linkedAiSessionId: session.id,
+        capabilities: { read: true, resume: true, rename: true, archive: true, delete: true },
+      } satisfies ProviderSessionCatalogEntry));
+      const linkedCodexThreads = new Map<string, ProviderSessionCatalogEntry>();
+      for (const entry of catalog) {
+        if (entry.providerId !== "codex" || !entry.providerSessionId) continue;
+        const threadId = entry.providerSessionId.startsWith("app-server:") ? entry.providerSessionId.slice("app-server:".length) : entry.providerSessionId;
+        linkedCodexThreads.set(threadId, entry);
+      }
+      for (const archived of [false, true]) {
+        let cursor: string | null = null;
+        do {
+          const response = await desktopApi.listCodexThreads({ cursor, limit: 100, archived, cwd: null });
+          for (const thread of response.data) {
+            const linked = linkedCodexThreads.get(thread.id);
+            if (linked) {
+              linked.sourceApp = "codehub";
+              linked.cwd = thread.cwd || linked.cwd;
+              linked.updatedAt = new Date(thread.updatedAt * 1000).toISOString();
+              linked.archived = thread.archived;
+              continue;
+            }
+            catalog.push({
+              key: `codex:${thread.id}`,
+              providerId: "codex",
+              providerSessionId: thread.id,
+              title: thread.name?.trim() || thread.preview.trim().split(/\r?\n/)[0] || "未命名会话",
+              cwd: thread.cwd || null,
+              updatedAt: new Date(thread.updatedAt * 1000).toISOString(),
+              archived: thread.archived,
+              source: "provider-api",
+              sourceApp: thread.originator === "CodeHub AI"
+                ? "codehub"
+                : thread.originator === "Codex Desktop"
+                  ? "desktop"
+                  : thread.source === "vscode"
+                    ? "vscode"
+                    : thread.source === "cli"
+                      ? "cli"
+                      : "unknown",
+              linkedAiSessionId: null,
+              capabilities: { read: true, resume: true, rename: true, archive: true, delete: true },
+            });
+          }
+          cursor = response.nextCursor;
+        } while (cursor && catalog.length < 10_000);
+      }
+      providerSessionCatalog.value = catalog.sort((left, right) => Date.parse(right.updatedAt || "") - Date.parse(left.updatedAt || ""));
+    } else {
+      providerSessionError.value = message;
+    }
+  } finally {
+    providerSessionLoading.value = false;
+  }
+}
+
+async function openLocalSession(session: ProviderSessionCatalogEntry): Promise<void> {
+  if (!session.capabilities.resume) return;
+  try {
+    const existingSession = session.linkedAiSessionId
+      ? [...ws.activeSessions.value, ...ws.archivedSessions.value].find((item) => item.id === session.linkedAiSessionId)
+      : null;
+    const localSession = existingSession || await desktopApi.attachProviderSession(session);
+    await ws.loadLocalWorkspace();
+    await ws.setActiveAiSession(localSession);
+    void router.push({ name: "aiSessions" });
+  } catch (error) {
+    showNotice(`打开失败：${errorText(error)}`, true);
+  }
+}
+
+function startLocalSession(): void {
+  if (!ws.selectedProjectPath.value) {
+    showNotice("请先在工作台选择一个项目", true);
+    return;
+  }
+  ws.resetChatControlsForNewSession(ws.selectedProjectPath.value);
+  void router.push({ name: "aiSessions" });
+}
+
+function loadProviderConfig(providerId: ConfigurableProvider): void {
+  selectedConfigProvider.value = providerId;
+  try {
+    const preferences = JSON.parse(window.localStorage.getItem("ai-workbench.aiRunPreferences.v1") ?? "{}") as Record<string, { model?: string; reasoningEffort?: string }>;
+    providerConfigModel.value = preferences[providerId]?.model ?? "";
+    providerConfigEffort.value = preferences[providerId]?.reasoningEffort ?? "";
+  } catch {
+    providerConfigModel.value = "";
+    providerConfigEffort.value = "";
+  }
+  if (providerId === "codex" && !configLoaded.value) void loadConfig();
+}
+
+function openProviderConfig(): void {
+  loadProviderConfig("codex");
+  providerConfigOpen.value = true;
+  void ws.detectProviders();
+}
+
+function closeProviderConfig(): void {
+  providerConfigOpen.value = false;
+}
+
+function saveProviderConfig(): void {
+  let preferences: Record<string, { model?: string; reasoningEffort?: string; serviceTier?: string | null }> = {};
+  try {
+    const stored = JSON.parse(window.localStorage.getItem("ai-workbench.aiRunPreferences.v1") ?? "{}") as unknown;
+    if (stored && typeof stored === "object" && !Array.isArray(stored)) preferences = stored as typeof preferences;
+  } catch {
+    preferences = {};
+  }
+  preferences[selectedConfigProvider.value] = {
+    ...preferences[selectedConfigProvider.value],
+    model: providerConfigModel.value.trim(),
+    reasoningEffort: providerConfigEffort.value,
+  };
+  window.localStorage.setItem("ai-workbench.aiRunPreferences.v1", JSON.stringify(preferences));
+  showNotice(`${localProviderLabel(selectedConfigProvider.value)} 默认配置已保存`);
+  closeProviderConfig();
+}
+
+function providerAuthLabel(status?: ProviderStatus): string {
+  if (!status?.installed) return "未安装";
+  if (status.authStatus === "signedIn") return "已登录";
+  if (status.authStatus === "signedOut") return "未登录";
+  return "认证状态未知";
+}
+
+async function restoreLocalSession(sessionId: string): Promise<void> {
+  if (localArchiveRestoreBusy.value[sessionId]) return;
+  localArchiveRestoreBusy.value = { ...localArchiveRestoreBusy.value, [sessionId]: true };
+  try {
+    await ws.archiveAiSession(sessionId, false);
+    showNotice("会话已恢复");
+  } catch (error) {
+    showNotice(`恢复失败：${errorText(error)}`, true);
+  } finally {
+    localArchiveRestoreBusy.value = { ...localArchiveRestoreBusy.value, [sessionId]: false };
+  }
+}
+
+async function setLocalSessionArchived(session: ProviderSessionCatalogEntry, archived: boolean): Promise<void> {
+  if (!session.linkedAiSessionId || !session.capabilities.archive || localArchiveRestoreBusy.value[session.key]) return;
+  localArchiveRestoreBusy.value = { ...localArchiveRestoreBusy.value, [session.key]: true };
+  try {
+    await ws.archiveAiSession(session.linkedAiSessionId, archived);
+    await loadProviderSessions();
+    showNotice(archived ? "会话已归档" : "会话已恢复");
+  } finally {
+    localArchiveRestoreBusy.value = { ...localArchiveRestoreBusy.value, [session.key]: false };
+  }
 }
 
 function threadTitle(thread: CodexNativeThread): string {
@@ -726,16 +1034,9 @@ function handleAdminEvent(event: CodexAdminEvent): void {
 }
 
 async function ensureActiveTabLoaded(force = false): Promise<void> {
-  if (activeTab.value === "threads" && (force || !threadLoaded.value)) await loadThreads(true);
+  if (activeTab.value === "threads" && (force || !providerSessionCatalog.value.length)) await loadProviderSessions();
   if (activeTab.value === "mcp" && (force || !mcpLoaded.value)) await loadMcpServers();
   if (activeTab.value === "config" && (force || !configLoaded.value)) await loadConfig();
-}
-
-function selectAdminTab(tab: AdminTab): void {
-  activeTab.value = tab;
-  window.localStorage.setItem("ai-workbench.codexAdminTab", tab);
-  notice.value = "";
-  void ensureActiveTabLoaded();
 }
 
 function toggleAdvanced(): void {
@@ -790,23 +1091,11 @@ defineExpose({
 <template>
   <div class="codex-admin">
     <div v-if="mode === 'codex'" class="codex-admin-toolbar">
-      <div class="codex-admin-tabs" role="tablist" aria-label="Codex 管理类别">
-        <button :class="{ active: activeTab === 'threads' }" type="button" role="tab" :aria-selected="activeTab === 'threads'" @click="selectAdminTab('threads')">
-          <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M7 8h10M7 12h7M5 19l-2 2v-4a8 8 0 1 1 4 2h-2Z" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" /></svg>
-          <span>会话</span>
-        </button>
-        <button :class="{ active: activeTab === 'config' }" type="button" role="tab" :aria-selected="activeTab === 'config'" @click="selectAdminTab('config')">
-          <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M4 7h10m4 0h2M4 17h2m4 0h10M14 4v6M6 14v6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" /></svg>
-          <span>配置</span>
-        </button>
-      </div>
       <div class="codex-admin-context">
-        <label class="codex-advanced-toggle">
-          <span>高级功能</span>
-          <input class="settings-switch" type="checkbox" :checked="showAdvanced" @change="toggleAdvanced" />
-        </label>
-        <span class="codex-admin-context-label">项目</span>
-        <code :title="cwd || '未选择项目'">{{ cwd ? compactPath(cwd) : "全部" }}</code>
+        <button class="codex-action-button" type="button" @click="openProviderConfig">
+          <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M4 7h10m4 0h2M4 17h2m4 0h10M14 4v6M6 14v6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" /></svg>
+          Provider 配置
+        </button>
         <button class="codex-action-button" type="button" @click="refreshActiveTab">
           <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M20 6v5h-5M4 18v-5h5M6.1 9a7 7 0 0 1 11.5-2.5L20 11M4 13l2.4 4.5A7 7 0 0 0 18 15" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" /></svg>
           刷新
@@ -817,115 +1106,108 @@ defineExpose({
     <p v-if="notice" class="codex-admin-notice" :class="{ error: noticeError }">{{ notice }}</p>
 
     <section v-if="activeTab === 'threads'" class="codex-admin-page" aria-label="Codex 会话中心">
-      <div class="codex-admin-filterbar">
-        <label class="codex-search-field">
-          <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="11" cy="11" r="7" stroke="currentColor" stroke-width="1.8" /><path d="m16.5 16.5 4 4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" /></svg>
-          <input v-model="threadSearch" type="search" placeholder="搜索会话" @input="scheduleThreadSearch" />
-        </label>
-        <div class="codex-segmented" aria-label="会话范围">
-          <button type="button" :class="{ active: threadScope === 'project' }" :disabled="!cwd" @click="threadScope = 'project'">当前项目</button>
-          <button type="button" :class="{ active: threadScope === 'all' }" @click="threadScope = 'all'">全部</button>
-        </div>
-        <label class="codex-checkbox">
-          <input v-model="threadArchived" type="checkbox" />
+      <div class="codex-session-overview" aria-label="会话概览">
+        <article>
+          <span>全部会话</span>
+          <strong>{{ threadOverview.visible }}</strong>
+          <small>当前列表总数</small>
+        </article>
+        <article class="active">
+          <span>进行中</span>
+          <strong>{{ threadOverview.active }}</strong>
+          <small>正在执行的会话</small>
+        </article>
+        <article>
           <span>已归档</span>
-        </label>
+          <strong>{{ threadOverview.archived }}</strong>
+          <small>可随时恢复</small>
+        </article>
+        <article>
+          <span>本周新增</span>
+          <strong>{{ threadOverview.recent }}</strong>
+          <small>最近七天创建或更新</small>
+        </article>
       </div>
 
-      <p v-if="threadError" class="codex-inline-error">{{ threadError }}</p>
+      <div class="codex-local-session-list">
+        <div v-if="providerSessionLoading" class="codex-empty">正在扫描本机会话...</div>
+        <div v-else-if="providerSessionError" class="codex-empty">{{ providerSessionError }}</div>
+        <div v-else-if="!localSessions.length" class="codex-empty">没有匹配的会话</div>
+        <ArcoTable v-else row-key="key" :data="localSessions" :pagination="false" :scroll="{ x: 900 }" filter-icon-align-left hoverable @row-click="openLocalSession">
+          <template #columns>
+            <ArcoTableColumn data-index="providerId" title="Provider" :width="96" align="center" :filterable="providerColumnFilter">
+              <template #cell="{ record }"><span class="codex-thread-provider-icon" aria-hidden="true"><img :src="localProviderIcon(record.providerId)" alt="" /></span></template>
+            </ArcoTableColumn>
+            <ArcoTableColumn title="会话" :width="360">
+              <template #cell="{ record }"><span class="codex-thread-copy"><span class="codex-thread-row-head"><strong>{{ record.title || "未命名会话" }}</strong></span><span class="codex-thread-preview">{{ record.cwd || "未记录工作目录" }}</span></span></template>
+            </ArcoTableColumn>
+            <ArcoTableColumn data-index="sourceApp" title="来源" :width="120" align="center" :filterable="sourceColumnFilter">
+              <template #cell="{ record }"><span class="codex-thread-provider-chip icon-only" :title="localSessionSourceLabel(record)" :aria-label="localSessionSourceLabel(record)"><img :src="localSessionSourceIcon(record)" alt="" /></span></template>
+            </ArcoTableColumn>
+            <ArcoTableColumn data-index="archived" title="状态" :width="110" align="center" :filterable="archiveColumnFilter">
+              <template #cell="{ record }"><span class="codex-thread-state"><i :class="localSessionStatusTone(record)" aria-hidden="true"></i><span>{{ localSessionStatusLabel(record) }}</span></span></template>
+            </ArcoTableColumn>
+            <ArcoTableColumn title="更新时间" :width="170" align="center">
+              <template #cell="{ record }"><span class="codex-thread-updated"><time>{{ localArchivedAtLabel(record.updatedAt) }}</time></span></template>
+            </ArcoTableColumn>
+            <ArcoTableColumn title="操作" :width="130" align="right">
+              <template #cell="{ record }"><span class="codex-local-session-actions" @click.stop><ArcoButton type="text" size="mini" :disabled="!record.capabilities.resume" @click="openLocalSession(record)">{{ record.linkedAiSessionId ? "打开" : "接入" }}</ArcoButton><ArcoButton v-if="record.linkedAiSessionId && record.capabilities.archive" type="text" size="mini" :disabled="localArchiveRestoreBusy[record.key]" @click="setLocalSessionArchived(record, !record.archived)">{{ record.archived ? "恢复" : "归档" }}</ArcoButton></span></template>
+            </ArcoTableColumn>
+          </template>
+        </ArcoTable>
+      </div>
+    </section>
 
-      <div class="codex-admin-split codex-thread-layout">
-        <aside class="codex-list-pane">
-          <div class="codex-pane-title">
-            <strong>会话</strong>
-            <span>{{ threads.length }}</span>
+    <section v-else-if="activeTab === 'archive'" class="codex-admin-page" aria-label="归档会话">
+      <div class="codex-archive-stats">
+        <div class="codex-archive-stat-card">
+          <span>已归档</span>
+          <strong>{{ localArchivedSessions.length }}</strong>
+          <small>可恢复的本地会话</small>
+        </div>
+      </div>
+
+      <div v-if="!localArchivedSessions.length" class="codex-archive-empty">
+        <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M4 7v13h16V7M3 7h18l-1-3H4L3 7Zm6 4v4m6-4v4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" /></svg>
+        <strong>暂无已归档的 AI 会话</strong>
+        <span>归档后会话会出现在这里，可随时恢复。</span>
+      </div>
+
+      <div v-else class="codex-archive-list">
+        <article
+          v-for="session in localArchivedSessions"
+          :key="session.id"
+          class="codex-archive-row"
+        >
+          <div class="codex-archive-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none"><path d="M4 7v13h16V7M3 7h18l-1-3H4L3 7Zm6 4v4m6-4v4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" /></svg>
           </div>
-          <div class="codex-thread-list">
-            <div v-if="threadLoading" class="codex-loading">正在读取会话...</div>
-            <div v-else-if="!threads.length" class="codex-empty">没有匹配的会话</div>
+          <div class="codex-archive-info">
+            <div class="codex-archive-title-row">
+              <strong>{{ session.title || "未命名会话" }}</strong>
+              <span class="codex-archive-chip">{{ localProviderLabel(session.providerId) }}</span>
+            </div>
+            <div class="codex-archive-path">
+              <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7Z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" /></svg>
+              <span>{{ localProjectNameForSession(session.summary) }}</span>
+            </div>
+          </div>
+          <div class="codex-archive-time">
+            <span>归档于</span>
+            <strong>{{ localArchivedAtLabel(session.archivedAt) }}</strong>
+          </div>
+          <div class="codex-archive-actions">
             <button
-              v-for="thread in threads"
-              v-else
-              :key="thread.id"
-              class="codex-thread-row"
-              :class="{ active: selectedThreadId === thread.id }"
+              class="codex-archive-restore"
               type="button"
-              @click="selectThread(thread)"
+              :disabled="localArchiveRestoreBusy[session.id]"
+              @click="restoreLocalSession(session.id)"
             >
-              <span class="codex-thread-row-head">
-                <strong>{{ threadTitle(thread) }}</strong>
-                <span class="codex-status" :class="threadStatusTone(thread)">{{ threadStatusLabel(thread) }}</span>
-              </span>
-              <span class="codex-thread-preview">{{ thread.preview || "暂无预览" }}</span>
-              <span class="codex-thread-meta">
-                <code :title="thread.cwd">{{ compactPath(thread.cwd) }}</code>
-                <time>{{ formatDate(thread.recencyAt || thread.updatedAt) }}</time>
-              </span>
+              <svg v-if="!localArchiveRestoreBusy[session.id]" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M3 12a9 9 0 1 0 3-6.7M3 4v4h4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" /></svg>
+              {{ localArchiveRestoreBusy[session.id] ? "恢复中..." : "取消归档" }}
             </button>
           </div>
-          <button v-if="threadCursor" class="codex-load-more" type="button" :disabled="threadLoadingMore" @click="loadThreads(false)">
-            {{ threadLoadingMore ? "加载中..." : "加载更多" }}
-          </button>
-        </aside>
-
-        <div class="codex-detail-pane">
-          <div v-if="!selectedThread" class="codex-empty codex-empty-detail">选择一个会话查看详情</div>
-          <template v-else>
-            <header class="codex-thread-detail-head">
-              <div class="codex-thread-title-editor">
-                <input v-model="threadNameDraft" type="text" maxlength="160" aria-label="会话名称" @keydown.enter="renameSelectedThread" />
-                <button class="codex-icon-button" type="button" title="保存会话名称" aria-label="保存会话名称" :disabled="threadRenameBusy || !threadNameDraft.trim()" @click="renameSelectedThread">
-                  <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M5 4h12l2 2v14H5V4Zm3 0v6h8V4M8 20v-6h8v6" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" /></svg>
-                </button>
-              </div>
-              <div class="codex-thread-detail-actions">
-                <span class="codex-status large" :class="threadStatusTone(selectedThread)">{{ threadStatusLabel(selectedThread) }}</span>
-                <button class="codex-action-button" type="button" :disabled="threadActionBusy || selectedThread.status.type === 'active'" :title="selectedThread.status.type === 'active' ? '请先停止当前 Turn' : ''" @click="setSelectedThreadArchived(!selectedThread.archived)">
-                  {{ selectedThread.archived ? "恢复" : "归档" }}
-                </button>
-                <button class="codex-action-button danger" type="button" :disabled="threadActionBusy || selectedThread.status.type === 'active'" :title="selectedThread.status.type === 'active' ? '请先停止当前 Turn' : ''" @click="deleteSelectedThread">删除</button>
-              </div>
-            </header>
-
-            <dl class="codex-thread-facts">
-              <div><dt>Thread ID</dt><dd><code :title="selectedThread.id">{{ selectedThread.id }}</code></dd></div>
-              <div><dt>来源</dt><dd>{{ selectedThread.source }}</dd></div>
-              <div><dt>Provider</dt><dd>{{ selectedThread.modelProvider }}</dd></div>
-              <div><dt>CLI</dt><dd>{{ selectedThread.cliVersion || "未知" }}</dd></div>
-              <div class="wide"><dt>工作目录</dt><dd><code :title="selectedThread.cwd">{{ selectedThread.cwd }}</code></dd></div>
-            </dl>
-
-            <div class="codex-pane-title codex-turns-title">
-              <strong>Turn</strong>
-              <span>{{ selectedThread.turns.length }}</span>
-            </div>
-            <div v-if="threadDetailLoading" class="codex-loading">正在读取完整记录...</div>
-            <div v-else-if="!selectedThread.turns.length" class="codex-empty">该会话没有可读取的 Turn</div>
-            <div v-else class="codex-turn-list">
-              <article v-for="(turn, turnIndex) in selectedThread.turns" :key="turn.id || turnIndex" class="codex-turn">
-                <header>
-                  <span class="codex-turn-index">{{ turnIndex + 1 }}</span>
-                  <strong>{{ turn.status }}</strong>
-                  <time>{{ formatDate(turn.startedAt) }}</time>
-                  <span v-if="turn.durationMs !== null" class="codex-duration">{{ formatDuration(turn.durationMs) }}</span>
-                </header>
-                <p v-if="turn.error" class="codex-inline-error">{{ turn.error }}</p>
-                <div class="codex-turn-items">
-                  <details v-for="(item, itemIndex) in turn.items" :key="item.id || itemIndex" class="codex-turn-item">
-                    <summary>
-                      <span class="codex-item-type">{{ item.type }}</span>
-                      <strong>{{ item.title }}</strong>
-                      <span v-if="item.status" class="codex-item-status">{{ item.status }}</span>
-                      <span v-if="item.durationMs !== null && item.durationMs !== undefined" class="codex-duration">{{ formatDuration(item.durationMs) }}</span>
-                    </summary>
-                    <p v-if="item.text" class="codex-item-text">{{ item.text }}</p>
-                    <pre v-if="showAdvanced && item.detail"><code>{{ item.detail }}</code></pre>
-                  </details>
-                </div>
-              </article>
-            </div>
-          </template>
-        </div>
+        </article>
       </div>
     </section>
 
@@ -1007,122 +1289,256 @@ defineExpose({
       </div>
     </section>
 
-    <section v-else class="codex-admin-page" aria-label="Codex 配置中心">
-      <div class="codex-config-head">
-        <div class="codex-subtabs" role="tablist" aria-label="配置视图">
-          <button type="button" :class="{ active: configView === 'effective' }" @click="configView = 'effective'">{{ showAdvanced ? "全部配置" : "常用配置" }} <span>{{ configEntries.length }}</span></button>
-          <button v-if="showAdvanced" type="button" :class="{ active: configView === 'layers' }" @click="configView = 'layers'">来源分层 <span>{{ configSnapshot?.layers.length || 0 }}</span></button>
-          <button type="button" :class="{ active: configView === 'features' }" @click="configView = 'features'">功能开关 <span>{{ visibleFeatures.length }}</span></button>
-        </div>
-        <code v-if="showAdvanced && configSnapshot?.userConfigPath" class="codex-config-path" :title="configSnapshot.userConfigPath">{{ compactPath(configSnapshot.userConfigPath) }}</code>
-      </div>
-      <p v-if="configError" class="codex-inline-error">{{ configError }}</p>
-      <div v-if="configLoading && !configSnapshot" class="codex-loading">正在读取 Codex 配置...</div>
-
-      <template v-else-if="configView === 'effective'">
-        <div class="codex-admin-filterbar config-filterbar">
-          <label class="codex-search-field">
-            <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="11" cy="11" r="7" stroke="currentColor" stroke-width="1.8" /><path d="m16.5 16.5 4 4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" /></svg>
-            <input v-model="configSearch" type="search" placeholder="搜索配置键或值" />
-          </label>
-          <button v-if="showAdvanced" class="codex-action-button" type="button" @click="beginNewConfigValue">新增配置</button>
-          <button v-if="showAdvanced" class="codex-action-button" type="button" @click="addBatchRow()">批量修改</button>
-        </div>
-
-        <div class="codex-admin-split codex-config-layout">
-          <div class="codex-config-list">
-            <button v-for="entry in configEntries" :key="entry.keyPath" type="button" :class="{ active: selectedConfigKey === entry.keyPath }" @click="selectConfigEntry(entry)">
-              <code>{{ entry.keyPath }}</code>
-              <span>{{ previewValue(entry.value) }}</span>
-              <small>{{ entry.origin?.label || "默认值" }}</small>
+    <div v-if="providerConfigOpen" class="codex-provider-config-overlay" @click.self="closeProviderConfig">
+      <section class="codex-provider-config-dialog" role="dialog" aria-modal="true" aria-labelledby="provider-config-title">
+        <header>
+          <div><h3 id="provider-config-title">Provider 配置</h3><p>设置新会话默认模型与推理强度</p></div>
+          <button type="button" aria-label="关闭" @click="closeProviderConfig">×</button>
+        </header>
+        <div class="codex-provider-config-body">
+          <nav aria-label="Provider">
+            <button v-for="provider in providerConfigOptions" :key="provider.id" type="button" :class="{ active: selectedConfigProvider === provider.id }" @click="loadProviderConfig(provider.id)">
+              <span>{{ provider.label }}</span>
+              <small>{{ providerAuthLabel(ws.providerStatuses.value.find((status) => status.providerId === provider.id)) }}</small>
             </button>
-            <div v-if="!configEntries.length" class="codex-empty">没有匹配的配置</div>
-          </div>
-          <div class="codex-config-editor">
-            <div class="codex-editor-head">
-              <strong>{{ selectedConfigKey ? "编辑配置" : "新增配置" }}</strong>
-              <span v-if="selectedConfigKey">{{ selectedConfigOriginLabel }}</span>
+          </nav>
+          <div class="codex-provider-config-content">
+            <div class="codex-provider-config-status">
+              <strong>{{ localProviderLabel(selectedConfigProvider) }}</strong>
+              <span :class="{ success: selectedProviderStatus?.installed }">{{ selectedProviderStatus?.installed ? "已安装" : "未安装" }}</span>
+              <span>{{ providerAuthLabel(selectedProviderStatus) }}</span>
+              <small>{{ selectedProviderStatus?.version || "未检测到版本" }}</small>
             </div>
-            <label>
-              <span>键路径</span>
-              <input v-model="configKeyDraft" type="text" spellcheck="false" placeholder="例如 model_reasoning_effort" />
-            </label>
-            <label>
-              <span>JSON 值</span>
-              <textarea v-model="configValueDraft" spellcheck="false" rows="10" placeholder="null"></textarea>
-            </label>
-            <div class="codex-editor-actions">
-              <button v-if="showAdvanced" class="codex-action-button" type="button" :disabled="!configKeyDraft.trim()" @click="addEditorToBatch">加入批量</button>
-              <button class="codex-action-button primary" type="button" :disabled="configWriteBusy || !configKeyDraft.trim()" @click="saveConfigValue">{{ configWriteBusy ? "保存中" : "保存" }}</button>
-            </div>
+            <section v-if="selectedConfigProvider === 'codex'" class="codex-provider-native-panel" aria-label="Codex 原生配置">
+              <div class="codex-config-head">
+                <div class="codex-subtabs" role="tablist" aria-label="配置视图">
+                  <button type="button" :class="{ active: configView === 'effective' }" @click="configView = 'effective'">{{ showAdvanced ? "全部配置" : "常用配置" }} <span>{{ configEntries.length }}</span></button>
+                  <button v-if="showAdvanced" type="button" :class="{ active: configView === 'layers' }" @click="configView = 'layers'">来源分层 <span>{{ configSnapshot?.layers.length || 0 }}</span></button>
+                  <button type="button" :class="{ active: configView === 'features' }" @click="configView = 'features'">功能开关 <span>{{ visibleFeatures.length }}</span></button>
+                </div>
+                <label class="codex-advanced-toggle"><span>高级功能</span><input class="settings-switch" type="checkbox" :checked="showAdvanced" @change="toggleAdvanced" /></label>
+              </div>
+              <p v-if="configError" class="codex-inline-error">{{ configError }}</p>
+              <div v-if="configLoading && !configSnapshot" class="codex-loading">正在读取 Codex 配置...</div>
+              <template v-else-if="configView === 'effective'">
+                <div class="codex-admin-filterbar config-filterbar">
+                  <label class="codex-search-field"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="11" cy="11" r="7" stroke="currentColor" stroke-width="1.8" /><path d="m16.5 16.5 4 4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" /></svg><input v-model="configSearch" type="search" placeholder="搜索配置键或值" /></label>
+                  <button v-if="showAdvanced" class="codex-action-button" type="button" @click="beginNewConfigValue">新增配置</button>
+                  <button v-if="showAdvanced" class="codex-action-button" type="button" @click="addBatchRow()">批量修改</button>
+                </div>
+                <div class="codex-admin-split codex-config-layout">
+                  <div class="codex-config-list">
+                    <button v-for="entry in configEntries" :key="entry.keyPath" type="button" :class="{ active: selectedConfigKey === entry.keyPath }" @click="selectConfigEntry(entry)"><code>{{ entry.keyPath }}</code><span>{{ previewValue(entry.value) }}</span><small>{{ entry.origin?.label || "默认值" }}</small></button>
+                    <div v-if="!configEntries.length" class="codex-empty">没有匹配的配置</div>
+                  </div>
+                  <div class="codex-config-editor">
+                    <div class="codex-editor-head"><strong>{{ selectedConfigKey ? "编辑配置" : "新增配置" }}</strong><span v-if="selectedConfigKey">{{ selectedConfigOriginLabel }}</span></div>
+                    <label><span>键路径</span><input v-model="configKeyDraft" type="text" spellcheck="false" placeholder="例如 model_reasoning_effort" /></label>
+                    <label><span>JSON 值</span><textarea v-model="configValueDraft" spellcheck="false" rows="10" placeholder="null"></textarea></label>
+                    <div class="codex-editor-actions"><button v-if="showAdvanced" class="codex-action-button" type="button" :disabled="!configKeyDraft.trim()" @click="addEditorToBatch">加入批量</button><button class="codex-action-button primary" type="button" :disabled="configWriteBusy || !configKeyDraft.trim()" @click="saveConfigValue">{{ configWriteBusy ? "保存中" : "保存" }}</button></div>
+                  </div>
+                </div>
+                <div v-if="batchRows.length" class="codex-batch-panel">
+                  <div class="codex-pane-title"><strong>待批量写入</strong><span>{{ batchRows.length }}</span></div>
+                  <div class="codex-batch-rows"><div v-for="row in batchRows" :key="row.id" class="codex-batch-row"><input v-model="row.keyPath" type="text" aria-label="配置键" spellcheck="false" placeholder="配置键" /><input v-model="row.valueText" type="text" aria-label="JSON 值" spellcheck="false" placeholder="JSON 值" /><select v-model="row.mergeStrategy" aria-label="合并方式"><option value="replace">替换</option><option value="upsert">合并</option></select><button class="codex-icon-button danger" type="button" title="移除" aria-label="移除批量修改" @click="removeBatchRow(row.id)"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M5 7h14M9 7V4h6v3m-8 0 1 13h8l1-13M10 11v5m4-5v5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" /></svg></button></div></div>
+                  <div class="codex-batch-actions"><button class="codex-action-button" type="button" @click="addBatchRow()">添加一项</button><button class="codex-action-button primary" type="button" :disabled="configWriteBusy" @click="saveBatchRows">{{ configWriteBusy ? "写入中" : "全部写入" }}</button></div>
+                </div>
+              </template>
+              <div v-else-if="configView === 'layers'" class="codex-admin-split codex-layer-layout">
+                <div class="codex-layer-list"><button v-for="(layer, index) in configSnapshot?.layers || []" :key="`${layer.type}-${index}`" type="button" :class="{ active: selectedLayerIndex === index }" @click="selectedLayerIndex = index"><span class="codex-layer-order">{{ index + 1 }}</span><span><strong>{{ layer.label }}</strong><small>{{ layer.path || layer.type }}</small></span><span v-if="layer.disabledReason" class="codex-status error">禁用</span></button><div v-if="!configSnapshot?.layers.length" class="codex-empty">没有配置层信息</div></div>
+                <div class="codex-layer-detail"><template v-if="selectedLayer"><div class="codex-editor-head"><strong>{{ selectedLayer.label }}</strong><span>版本 {{ selectedLayer.version || "未知" }}</span></div><code v-if="selectedLayer.path" class="codex-identifier">{{ selectedLayer.path }}</code><p v-if="selectedLayer.disabledReason" class="codex-inline-error">{{ selectedLayer.disabledReason }}</p><pre><code>{{ jsonText(selectedLayer.config) }}</code></pre></template></div>
+              </div>
+              <template v-else>
+                <div class="codex-admin-filterbar config-filterbar"><label class="codex-search-field"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="11" cy="11" r="7" stroke="currentColor" stroke-width="1.8" /><path d="m16.5 16.5 4 4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" /></svg><input v-model="featureSearch" type="search" placeholder="搜索功能开关" /></label><span class="codex-feature-count">已启用 {{ visibleFeatures.filter((feature) => feature.enabled).length }} / {{ visibleFeatures.length }}</span></div>
+                <p v-if="featuresError" class="codex-inline-error">{{ featuresError }}</p>
+                <div class="codex-feature-list"><label v-for="feature in visibleFeatures" :key="feature.name" class="codex-feature-row"><span class="codex-feature-copy"><span class="codex-feature-title"><strong>{{ feature.displayName || feature.name }}</strong><span class="codex-stage" :class="feature.stage">{{ feature.stage }}</span></span><code>{{ feature.name }}</code><small>{{ feature.description || feature.announcement || "" }}</small></span><span class="codex-feature-default">默认 {{ feature.defaultEnabled ? "开启" : "关闭" }}</span><input class="settings-switch" type="checkbox" :checked="feature.enabled" :disabled="featureBusy[feature.name]" @change="toggleFeature(feature, $event)" /></label><div v-if="!visibleFeatures.length" class="codex-empty">没有匹配的功能开关</div></div>
+              </template>
+            </section>
+            <template v-else>
+              <label><span>默认模型</span><input v-model="providerConfigModel" type="text" placeholder="留空使用 Provider 默认模型" /></label>
+              <label><span>推理强度</span><select v-model="providerConfigEffort"><option value="">默认</option><option value="low">低</option><option value="medium">中</option><option value="high">高</option><option value="xhigh">超高</option></select></label>
+            </template>
           </div>
         </div>
-
-        <div v-if="batchRows.length" class="codex-batch-panel">
-          <div class="codex-pane-title"><strong>待批量写入</strong><span>{{ batchRows.length }}</span></div>
-          <div class="codex-batch-rows">
-            <div v-for="row in batchRows" :key="row.id" class="codex-batch-row">
-              <input v-model="row.keyPath" type="text" aria-label="配置键" spellcheck="false" placeholder="配置键" />
-              <input v-model="row.valueText" type="text" aria-label="JSON 值" spellcheck="false" placeholder="JSON 值" />
-              <select v-model="row.mergeStrategy" aria-label="合并方式"><option value="replace">替换</option><option value="upsert">合并</option></select>
-              <button class="codex-icon-button danger" type="button" title="移除" aria-label="移除批量修改" @click="removeBatchRow(row.id)">
-                <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M5 7h14M9 7V4h6v3m-8 0 1 13h8l1-13M10 11v5m4-5v5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" /></svg>
-              </button>
-            </div>
-          </div>
-          <div class="codex-batch-actions">
-            <button class="codex-action-button" type="button" @click="addBatchRow()">添加一项</button>
-            <button class="codex-action-button primary" type="button" :disabled="configWriteBusy" @click="saveBatchRows">{{ configWriteBusy ? "写入中" : "全部写入" }}</button>
-          </div>
-        </div>
-      </template>
-
-      <div v-else-if="configView === 'layers'" class="codex-admin-split codex-layer-layout">
-        <div class="codex-layer-list">
-          <button v-for="(layer, index) in configSnapshot?.layers || []" :key="`${layer.type}-${index}`" type="button" :class="{ active: selectedLayerIndex === index }" @click="selectedLayerIndex = index">
-            <span class="codex-layer-order">{{ index + 1 }}</span>
-            <span><strong>{{ layer.label }}</strong><small>{{ layer.path || layer.type }}</small></span>
-            <span v-if="layer.disabledReason" class="codex-status error">禁用</span>
-          </button>
-          <div v-if="!configSnapshot?.layers.length" class="codex-empty">没有配置层信息</div>
-        </div>
-        <div class="codex-layer-detail">
-          <template v-if="selectedLayer">
-            <div class="codex-editor-head"><strong>{{ selectedLayer.label }}</strong><span>版本 {{ selectedLayer.version || "未知" }}</span></div>
-            <code v-if="selectedLayer.path" class="codex-identifier">{{ selectedLayer.path }}</code>
-            <p v-if="selectedLayer.disabledReason" class="codex-inline-error">{{ selectedLayer.disabledReason }}</p>
-            <pre><code>{{ jsonText(selectedLayer.config) }}</code></pre>
-          </template>
-        </div>
-      </div>
-
-      <template v-else>
-        <div class="codex-admin-filterbar config-filterbar">
-          <label class="codex-search-field">
-            <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="11" cy="11" r="7" stroke="currentColor" stroke-width="1.8" /><path d="m16.5 16.5 4 4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" /></svg>
-            <input v-model="featureSearch" type="search" placeholder="搜索功能开关" />
-          </label>
-          <span class="codex-feature-count">已启用 {{ visibleFeatures.filter((feature) => feature.enabled).length }} / {{ visibleFeatures.length }}</span>
-        </div>
-        <p v-if="featuresError" class="codex-inline-error">{{ featuresError }}</p>
-        <div class="codex-feature-list">
-          <label v-for="feature in visibleFeatures" :key="feature.name" class="codex-feature-row">
-            <span class="codex-feature-copy">
-              <span class="codex-feature-title"><strong>{{ feature.displayName || feature.name }}</strong><span class="codex-stage" :class="feature.stage">{{ feature.stage }}</span></span>
-              <code>{{ feature.name }}</code>
-              <small>{{ feature.description || feature.announcement || "" }}</small>
-            </span>
-            <span class="codex-feature-default">默认 {{ feature.defaultEnabled ? "开启" : "关闭" }}</span>
-            <input class="settings-switch" type="checkbox" :checked="feature.enabled" :disabled="featureBusy[feature.name]" @change="toggleFeature(feature, $event)" />
-          </label>
-          <div v-if="!visibleFeatures.length" class="codex-empty">没有匹配的功能开关</div>
-        </div>
-      </template>
-    </section>
+        <footer><button class="codex-action-button" type="button" @click="closeProviderConfig">关闭</button><button v-if="selectedConfigProvider !== 'codex'" class="codex-action-button primary" type="button" @click="saveProviderConfig">保存配置</button></footer>
+      </section>
+    </div>
   </div>
 </template>
 
 <style scoped>
+.codex-provider-config-overlay {
+  position: fixed;
+  z-index: 1000;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  background: rgb(15 23 42 / 42%);
+  padding: 24px;
+}
+
+.codex-provider-config-dialog {
+  width: min(1120px, 100%);
+  max-height: calc(100vh - 48px);
+  overflow: hidden;
+  border: 1px solid var(--color-border);
+  border-radius: 14px;
+  background: var(--color-bg-surface);
+  box-shadow: var(--shadow-lg);
+}
+
+.codex-provider-config-dialog > header,
+.codex-provider-config-dialog > footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 16px 20px;
+}
+
+.codex-provider-config-dialog > header {
+  border-bottom: 1px solid var(--color-border);
+}
+
+.codex-provider-config-dialog > header h3,
+.codex-provider-config-dialog > header p {
+  margin: 0;
+}
+
+.codex-provider-config-dialog > header h3 {
+  font-size: 17px;
+}
+
+.codex-provider-config-dialog > header p {
+  margin-top: 3px;
+  color: var(--color-text-secondary);
+  font-size: 12px;
+}
+
+.codex-provider-config-dialog > header > button {
+  border: 0;
+  background: transparent;
+  color: var(--color-text-secondary);
+  font-size: 24px;
+}
+
+.codex-provider-config-body {
+  display: grid;
+  grid-template-columns: 180px minmax(0, 1fr);
+  min-height: 560px;
+  max-height: calc(100vh - 174px);
+}
+
+.codex-provider-config-body nav {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  border-right: 1px solid var(--color-border);
+  background: var(--color-bg-content);
+  padding: 12px;
+}
+
+.codex-provider-config-body nav button {
+  display: flex;
+  align-items: flex-start;
+  flex-direction: column;
+  gap: 2px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--color-text-primary);
+  padding: 10px 12px;
+  text-align: left;
+}
+
+.codex-provider-config-body nav button.active {
+  background: var(--color-primary-soft);
+  color: var(--color-primary);
+}
+
+.codex-provider-config-body nav small {
+  color: var(--color-text-muted);
+}
+
+.codex-provider-config-content {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 16px;
+  overflow: auto;
+  padding: 20px;
+}
+
+.codex-provider-native-panel {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.codex-provider-native-panel .codex-config-layout,
+.codex-provider-native-panel .codex-layer-layout {
+  min-height: 430px;
+  height: min(52vh, 560px);
+}
+
+.codex-provider-config-content > label {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  color: var(--color-text-secondary);
+  font-size: 12px;
+}
+
+.codex-provider-config-content input,
+.codex-provider-config-content select {
+  min-height: 38px;
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  outline: 0;
+  background: var(--color-bg-input);
+  color: var(--color-text-primary);
+  padding: 0 11px;
+  font: inherit;
+}
+
+.codex-provider-config-status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.codex-provider-config-status span {
+  border-radius: 999px;
+  background: var(--color-bg-elevated);
+  color: var(--color-text-secondary);
+  padding: 3px 8px;
+  font-size: 11px;
+}
+
+.codex-provider-config-status span.success {
+  background: var(--state-success-muted);
+  color: var(--state-success);
+}
+
+.codex-provider-config-status small {
+  margin-left: auto;
+  color: var(--color-text-muted);
+}
+
+.codex-provider-native-config {
+  align-self: flex-start;
+  border: 0;
+  background: transparent;
+  color: var(--color-primary);
+  padding: 0;
+}
+
+.codex-provider-config-dialog > footer {
+  justify-content: flex-end;
+  border-top: 1px solid var(--color-border);
+}
+
 .codex-admin {
   display: flex;
   min-width: 0;
@@ -3059,6 +3475,616 @@ defineExpose({
   .codex-batch-row input:nth-child(2) {
     grid-column: 1 / -1;
     grid-row: 2;
+  }
+}
+
+.codex-admin {
+  gap: 16px;
+}
+
+.codex-admin-toolbar {
+  min-height: 58px;
+  padding-bottom: 0;
+}
+
+.codex-admin-tabs {
+  gap: 4px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  padding: 0;
+}
+
+.codex-admin-tabs button {
+  position: relative;
+  min-height: 42px;
+  border-radius: 0;
+  padding: 0 14px;
+  font-size: 13px;
+  font-weight: 650;
+}
+
+.codex-admin-tabs button:hover {
+  color: var(--color-text-primary);
+}
+
+.codex-admin-tabs button.active {
+  background: transparent;
+  box-shadow: none;
+  color: var(--color-primary);
+}
+
+.codex-admin-tabs button.active::after {
+  position: absolute;
+  right: 12px;
+  bottom: -9px;
+  left: 12px;
+  height: 2px;
+  border-radius: 999px;
+  background: var(--color-primary);
+  content: "";
+}
+
+.codex-admin-context {
+  gap: 10px;
+  margin-left: auto;
+}
+
+.codex-admin-filterbar {
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.codex-session-overview {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+  margin-top: 2px;
+}
+
+.codex-session-overview article {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 5px;
+  border: 1px solid var(--color-border-subtle, var(--color-border));
+  border-radius: 12px;
+  background: var(--color-bg-surface);
+  min-height: 104px;
+  justify-content: center;
+  padding: 14px 16px;
+}
+
+.codex-session-overview span {
+  color: var(--color-text-secondary);
+  font-size: 12px;
+}
+
+.codex-session-overview strong {
+  color: var(--color-text-primary);
+  font-size: 24px;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.codex-session-overview article.active strong {
+  color: var(--state-success);
+}
+
+.codex-session-overview small {
+  color: var(--color-text-muted);
+  font-size: 11px;
+}
+
+.codex-search-field {
+  min-width: 200px;
+  max-width: none;
+  min-height: 36px;
+  flex: 1 1 380px;
+  border-radius: 8px;
+  padding: 0 12px;
+}
+
+.codex-search-field input {
+  font-size: 13px;
+}
+
+.codex-segmented {
+  gap: 6px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  padding: 0;
+}
+
+.codex-segmented button {
+  min-height: 30px;
+  border-radius: 999px;
+  border: 1px solid var(--color-border);
+  padding: 0 14px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.codex-segmented button.active {
+  border-color: var(--color-border-active);
+  background: var(--color-primary-soft);
+  box-shadow: none;
+  color: var(--color-primary);
+}
+
+.codex-checkbox {
+  min-height: 30px;
+  border: 1px solid var(--color-border);
+  border-radius: 999px;
+  padding: 0 12px;
+  font-weight: 600;
+}
+
+.codex-admin-split {
+  border-color: var(--color-border-subtle, var(--color-border));
+  border-radius: 12px;
+  background: var(--color-bg-surface);
+}
+
+.codex-thread-layout {
+  grid-template-columns: minmax(0, 1fr);
+  height: clamp(540px, calc(100vh - 280px), 720px);
+}
+
+.codex-thread-layout.has-selection {
+  grid-template-columns: minmax(420px, 0.46fr) minmax(0, 0.54fr);
+}
+
+.codex-thread-layout:not(.has-selection) .codex-list-pane {
+  border-right: 0;
+}
+
+.codex-thread-layout:not(.has-selection) .codex-detail-pane {
+  display: none;
+}
+
+.codex-pane-title {
+  min-height: 48px;
+  padding: 0 16px;
+}
+
+.codex-thread-list {
+  padding: 6px;
+}
+
+.codex-thread-row {
+  display: grid;
+  grid-template-columns: 36px minmax(0, 1fr) 64px 112px;
+  width: 100%;
+  min-height: 76px;
+  align-items: center;
+  gap: 14px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  padding: 10px 12px;
+  text-align: left;
+  transition: background var(--transition-fast, 120ms ease);
+}
+
+.codex-thread-row:hover {
+  background: var(--color-bg-hover);
+}
+
+.codex-thread-row.active {
+  background: var(--color-bg-active);
+  box-shadow: inset 3px 0 0 var(--color-primary);
+}
+
+.codex-thread-provider-icon {
+  display: grid;
+  width: 36px;
+  height: 36px;
+  place-items: center;
+  color: var(--color-text-secondary);
+}
+
+.codex-thread-provider-icon svg,
+.codex-thread-provider-icon img {
+  width: 18px;
+  height: 18px;
+  object-fit: contain;
+}
+
+.codex-thread-copy {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.codex-thread-row-head {
+  justify-content: flex-start;
+  gap: 8px;
+}
+
+.codex-thread-row-head strong {
+  color: var(--color-text-primary);
+  font-size: 14px;
+  font-weight: 620;
+}
+
+.codex-thread-provider-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+  color: var(--color-text-muted);
+  padding: 1px 8px;
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.codex-thread-provider-chip img {
+  width: 12px;
+  height: 12px;
+  object-fit: contain;
+}
+
+.codex-thread-provider-chip.icon-only {
+  width: 24px;
+  height: 24px;
+  justify-content: center;
+  padding: 0;
+}
+
+.codex-thread-provider-chip.icon-only img {
+  width: 16px;
+  height: 16px;
+}
+
+.codex-thread-preview {
+  display: block;
+  overflow: hidden;
+  color: var(--color-text-secondary);
+  font-size: 12px;
+  line-height: 1.4;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.codex-thread-meta {
+  justify-content: flex-start;
+}
+
+.codex-thread-meta code {
+  font-size: 11px;
+}
+
+.codex-thread-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 5px;
+  color: var(--color-text-muted);
+  font-size: 11px;
+}
+
+.codex-thread-state i {
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background: var(--color-text-muted);
+}
+
+.codex-thread-state i.active,
+.codex-thread-state i.ready {
+  position: relative;
+  background: var(--state-success);
+}
+
+.codex-thread-state i.error {
+  background: var(--state-error);
+}
+
+.codex-thread-updated {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  justify-content: center;
+  color: var(--color-text-secondary);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.codex-local-session-list {
+  min-height: 420px;
+  overflow: auto;
+  border: 1px solid var(--color-border-subtle, var(--color-border));
+  border-radius: 12px;
+  background: var(--color-bg-surface);
+}
+
+.codex-local-session-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 4px;
+}
+
+.codex-detail-pane {
+  padding: 20px;
+  background: var(--color-bg-content);
+}
+
+.codex-empty-detail {
+  min-height: 100%;
+}
+
+@media (max-width: 980px) {
+  .codex-admin-toolbar {
+    align-items: flex-start;
+    flex-direction: column;
+    padding: 0 0 12px;
+  }
+
+  .codex-admin-tabs button.active::after {
+    bottom: -6px;
+  }
+
+  .codex-admin-context {
+    width: 100%;
+    flex-wrap: wrap;
+  }
+
+  .codex-session-overview {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .codex-session-filter-card {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .codex-session-filter-actions {
+    justify-content: flex-start;
+    flex-wrap: wrap;
+  }
+
+  .codex-thread-layout.has-selection {
+    grid-template-columns: minmax(320px, 0.42fr) minmax(0, 0.58fr);
+  }
+
+  .codex-thread-row {
+    grid-template-columns: 36px minmax(0, 1fr) 64px;
+  }
+
+  .codex-thread-updated {
+    display: none;
+  }
+
+}
+
+.codex-archive-stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 12px;
+  margin-bottom: 20px;
+}
+
+.codex-archive-stat-card {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 16px;
+  border: 1px solid var(--color-border-subtle, var(--color-border));
+  border-radius: 12px;
+  background: var(--color-bg-surface);
+}
+
+.codex-archive-stat-card span {
+  font-size: 12px;
+  color: var(--color-text-secondary);
+}
+
+.codex-archive-stat-card strong {
+  font-size: 24px;
+  font-weight: 700;
+  line-height: 1;
+  color: var(--color-text-primary);
+}
+
+.codex-archive-stat-card small {
+  font-size: 11px;
+  color: var(--color-text-muted);
+}
+
+.codex-archive-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 220px;
+  padding: 32px;
+  border: 1px dashed var(--color-border);
+  border-radius: 12px;
+  color: var(--color-text-muted);
+  text-align: center;
+}
+
+.codex-archive-empty svg {
+  width: 34px;
+  height: 34px;
+  color: var(--color-text-muted);
+  opacity: 0.6;
+}
+
+.codex-archive-empty strong {
+  font-size: 14px;
+  font-weight: 650;
+  color: var(--color-text-secondary);
+}
+
+.codex-archive-empty span {
+  font-size: 12px;
+  color: var(--color-text-muted);
+}
+
+.codex-archive-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.codex-archive-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  min-height: 64px;
+  padding: 12px 16px;
+  border-radius: 8px;
+  box-sizing: border-box;
+  cursor: default;
+  transition: background var(--transition-fast, 120ms ease);
+}
+
+.codex-archive-row:hover {
+  background: var(--color-bg-hover, rgba(255, 255, 255, 0.06));
+}
+
+.codex-archive-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  flex-shrink: 0;
+  border-radius: 7px;
+  background: var(--color-bg-elevated);
+  color: var(--color-text-secondary);
+}
+
+.codex-archive-icon svg {
+  width: 18px;
+  height: 18px;
+}
+
+.codex-archive-info {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.codex-archive-title-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.codex-archive-title-row strong {
+  font-size: 14px;
+  font-weight: 620;
+  color: var(--color-text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.codex-archive-chip {
+  flex-shrink: 0;
+  padding: 1px 8px;
+  border-radius: 999px;
+  background: var(--color-bg-elevated);
+  color: var(--color-text-muted);
+  font-size: 11px;
+  line-height: 1.5;
+  white-space: nowrap;
+}
+
+.codex-archive-path {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+}
+
+.codex-archive-path svg {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+  color: var(--color-text-secondary);
+}
+
+.codex-archive-path span {
+  font-size: 12px;
+  color: var(--color-text-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.codex-archive-time {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2px;
+  flex-shrink: 0;
+  min-width: 120px;
+}
+
+.codex-archive-time span {
+  font-size: 11px;
+  color: var(--color-text-muted);
+}
+
+.codex-archive-time strong {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--color-text-secondary);
+}
+
+.codex-archive-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.codex-archive-restore {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 28px;
+  padding: 0 12px;
+  border-radius: 7px;
+  border: 1px solid var(--color-primary-muted, rgba(37, 99, 235, 0.15));
+  background: var(--color-primary-muted, rgba(37, 99, 235, 0.15));
+  color: var(--color-primary);
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  font-family: inherit;
+  transition: background var(--transition-fast, 120ms ease), color var(--transition-fast, 120ms ease);
+}
+
+.codex-archive-restore svg {
+  width: 14px;
+  height: 14px;
+}
+
+.codex-archive-restore:hover:not(:disabled) {
+  background: var(--color-primary-soft, rgba(37, 99, 235, 0.08));
+  color: var(--color-primary-hover, var(--color-primary));
+}
+
+.codex-archive-restore:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+@media (max-width: 720px) {
+  .codex-archive-time {
+    display: none;
   }
 }
 </style>

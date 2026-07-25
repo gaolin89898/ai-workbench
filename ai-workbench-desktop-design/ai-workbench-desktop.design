@@ -399,6 +399,38 @@
         "htmlSrc": "pages/login-redesign.html",
         "interactions": []
       }
+    },
+    {
+      "id": "page-session-management",
+      "title": "会话管理 - 重设计",
+      "type": "page",
+      "version": 1,
+      "createdAt": 1785000000000,
+      "canvasData": {
+        "x": 15500,
+        "y": 0,
+        "group": 0
+      },
+      "devMetadata": {
+        "htmlSrc": "pages/session-management.html",
+        "interactions": []
+      }
+    },
+    {
+      "id": "page-resource-center",
+      "title": "资源中心 - 重设计",
+      "type": "page",
+      "version": 1,
+      "createdAt": 1785100000000,
+      "canvasData": {
+        "x": 16120,
+        "y": 0,
+        "group": 0
+      },
+      "devMetadata": {
+        "htmlSrc": "pages/resource-center.html",
+        "interactions": []
+      }
     }
   ],
   "config": {

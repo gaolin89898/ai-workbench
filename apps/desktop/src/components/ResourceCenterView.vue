@@ -6,6 +6,8 @@ import SkillsManagementPanel from "./SkillsManagementPanel.vue";
 
 type ResourceTab = "mcp" | "skills";
 
+const props = defineProps<{ embedded?: boolean }>();
+
 const route = useRoute();
 const router = useRouter();
 const activeTab = ref<ResourceTab>("mcp");
@@ -22,7 +24,9 @@ watch(tabFromRoute, (tab) => {
 function selectTab(tab: ResourceTab): void {
   if (tab === activeTab.value && route.query.tab === tab) return;
   activeTab.value = tab;
-  void router.replace({ name: "resources", query: { tab } });
+  void router.replace(props.embedded
+    ? { name: "settings", query: { panel: "resources", tab } }
+    : { name: "resources", query: { tab } });
 }
 
 function refreshActiveTab(): void {
@@ -35,8 +39,8 @@ function refreshActiveTab(): void {
 </script>
 
 <template>
-  <main class="resource-center" data-view-panel="resources">
-    <header class="resource-center-header">
+  <main class="resource-center" :class="{ embedded }" data-view-panel="resources">
+    <header v-if="!embedded" class="resource-center-header">
       <div>
         <span class="resource-center-kicker">全局资源</span>
         <h1>资源中心</h1>
@@ -71,6 +75,7 @@ function refreshActiveTab(): void {
 
 <style scoped>
 .resource-center { height: 100%; min-height: 0; overflow: auto; padding: 30px 34px 36px; color: var(--color-text-primary); background: var(--color-bg-content); box-sizing: border-box; }
+.resource-center.embedded { height: auto; overflow: visible; padding: 0; background: transparent; }
 .resource-center-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 24px; max-width: 1520px; margin: 0 auto 24px; }
 .resource-center-kicker { display: block; margin-bottom: 6px; color: var(--color-primary); font-size: 12px; font-weight: 750; }
 .resource-center h1 { margin: 0; font-size: 26px; line-height: 1.2; letter-spacing: 0; }

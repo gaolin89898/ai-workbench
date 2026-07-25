@@ -581,7 +581,7 @@ const routePaths: Record<ViewName, string> = {
   workspace: "/workspace",
   projects: "/projects",
   aiSessions: "/chat",
-  providers: "/providers",
+  providers: "/chat",
   resources: "/resources",
   settings: "/settings",
   tokenUsage: "/token-usage",
