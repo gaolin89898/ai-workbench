@@ -136,7 +136,7 @@ function normalizeCandidateCwd(value: string): string {
   return path.isAbsolute(value) ? value : path.resolve(value);
 }
 
-function resolveCodexCwd(cwd: string): CodexCwdResolution {
+function resolveCodexCwd(cwd: string | null | undefined): CodexCwdResolution {
   const requestedCwd = (cwd || "").trim();
   const candidates = uniquePaths([
     requestedCwd ? normalizeCandidateCwd(requestedCwd) : null,
@@ -1579,7 +1579,7 @@ export async function runCodexChat(
   if (existingSession && !existingSession.closed && !existingSession.cancelled) {
     throw new Error("当前 Codex 会话仍在执行，请等待完成或先停止当前任务。");
   }
-  const session = createSession(aiSessionId, projectPath, sender, true, approvalMode);
+  const session = createSession(aiSessionId, resolveCodexCwd(projectPath).resolvedCwd, sender, true, approvalMode);
   const initialTrace = resetLocalAiTrace({
     aiSessionId,
     providerId: "codex",

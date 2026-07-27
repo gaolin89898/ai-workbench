@@ -259,7 +259,7 @@ const providerOrder = new Map(builtInProviders.map((provider, index) => [provide
 
 const currentProject = computed(() => {
   return ws.projects.value.find((project) => project.path === ws.selectedProjectPath.value)
-    ?? ws.projects.value.find((project) => project.path === ws.activeAiSession.value?.summary)
+    ?? ws.projects.value.find((project) => project.path === ws.activeAiSession.value?.projectPath)
     ?? ws.projects.value[0];
 });
 const providerChoices = computed(() => {
@@ -1078,7 +1078,9 @@ function addPreviewSelectionToContext() {
 }
 
 function providerIcon(providerId: string) {
-  return providerIcons[providerId] ?? providerCodexIcon;
+  const normalized = providerId.trim().toLowerCase();
+  const providerKey = normalized.includes("mimo") ? "mimo" : normalized;
+  return providerIcons[providerKey] ?? providerCodexIcon;
 }
 
 function isFloatingMenuTarget(target: EventTarget | null) {

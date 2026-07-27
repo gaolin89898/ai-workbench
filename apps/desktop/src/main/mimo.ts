@@ -92,7 +92,7 @@ function isDirectoryPath(value: string): boolean {
   }
 }
 
-function resolveMimoCwd(cwd: string): string {
+function resolveMimoCwd(cwd: string | null | undefined): string {
   const requested = (cwd || "").trim();
   const candidates = [
     requested ? (path.isAbsolute(requested) ? requested : path.resolve(requested)) : "",

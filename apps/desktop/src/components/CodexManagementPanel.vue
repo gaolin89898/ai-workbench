@@ -400,8 +400,27 @@ function localProjectNameForSession(path?: string | null): string {
   return match?.name ?? path.split(/[\\/]/).filter(Boolean).pop() ?? path;
 }
 
+function codexSourceApp(source?: string | null, originator?: string | null): NonNullable<ProviderSessionCatalogEntry["sourceApp"]> {
+  const normalizedSource = (source ?? "").trim().toLowerCase().replace(/[_-]+/g, " ");
+  const normalizedOriginator = (originator ?? "").trim().toLowerCase().replace(/[_-]+/g, " ");
+  if (normalizedOriginator.includes("codehub") || normalizedOriginator.includes("ai-workbench")) return "codehub";
+  if (
+    normalizedOriginator.includes("codex desktop")
+    || normalizedOriginator.includes("codex app")
+  ) return "desktop";
+  if (normalizedOriginator.includes("vscode") || normalizedOriginator.includes("visual studio code")) return "vscode";
+  if (normalizedOriginator.includes("cli") || normalizedOriginator.includes("terminal")) return "cli";
+  if (normalizedOriginator === "codex" || normalizedOriginator.includes("openai codex")) return "desktop";
+  if (normalizedSource === "vscode") return "vscode";
+  if (normalizedSource === "cli") return "cli";
+  if (normalizedSource === "desktop" || normalizedSource.includes("codex desktop") || normalizedSource.includes("codex app")) return "desktop";
+  return "unknown";
+}
+
 function localProviderLabel(providerId?: string | null): string {
-  switch (providerId) {
+  const providerKey = (providerId ?? "").trim().toLowerCase();
+  const normalized = providerKey.includes("mimo") ? "mimo" : providerKey;
+  switch (normalized) {
     case "codex": return "Codex";
     case "claude": return "Claude";
     case "opencode": return "OpenCode";
@@ -411,10 +430,12 @@ function localProviderLabel(providerId?: string | null): string {
 }
 
 function localProviderIcon(providerId: string): string {
-  if (providerId === "codex") return providerCodexIcon;
-  if (providerId === "claude") return providerClaudeIcon;
-  if (providerId === "opencode") return providerOpencodeIcon;
-  if (providerId === "mimo") return providerMimoIcon;
+  const providerKey = providerId.trim().toLowerCase();
+  const normalized = providerKey.includes("mimo") ? "mimo" : providerKey;
+  if (normalized === "codex") return providerCodexIcon;
+  if (normalized === "claude") return providerClaudeIcon;
+  if (normalized === "opencode") return providerOpencodeIcon;
+  if (normalized === "mimo") return providerMimoIcon;
   return providerFallbackIcon;
 }
 
@@ -455,7 +476,7 @@ async function loadProviderSessions(): Promise<void> {
         providerId: session.providerId,
         providerSessionId: session.providerSessionId || null,
         title: session.title,
-        cwd: session.summary || null,
+        cwd: session.projectPath || null,
         updatedAt: session.updatedAt || null,
         archived: Boolean(session.archivedAt),
         source: "workbench",
@@ -491,15 +512,7 @@ async function loadProviderSessions(): Promise<void> {
               updatedAt: new Date(thread.updatedAt * 1000).toISOString(),
               archived: thread.archived,
               source: "provider-api",
-              sourceApp: thread.originator === "CodeHub AI"
-                ? "codehub"
-                : thread.originator === "Codex Desktop"
-                  ? "desktop"
-                  : thread.source === "vscode"
-                    ? "vscode"
-                    : thread.source === "cli"
-                      ? "cli"
-                      : "unknown",
+              sourceApp: codexSourceApp(thread.source, thread.originator),
               linkedAiSessionId: null,
               capabilities: { read: true, resume: true, rename: true, archive: true, delete: true },
             });
@@ -1180,7 +1193,7 @@ defineExpose({
           class="codex-archive-row"
         >
           <div class="codex-archive-icon" aria-hidden="true">
-            <svg viewBox="0 0 24 24" fill="none"><path d="M4 7v13h16V7M3 7h18l-1-3H4L3 7Zm6 4v4m6-4v4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" /></svg>
+            <img :src="localProviderIcon(session.providerId)" alt="" />
           </div>
           <div class="codex-archive-info">
             <div class="codex-archive-title-row">
@@ -1189,7 +1202,7 @@ defineExpose({
             </div>
             <div class="codex-archive-path">
               <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7Z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" /></svg>
-              <span>{{ localProjectNameForSession(session.summary) }}</span>
+              <span>{{ localProjectNameForSession(session.projectPath) }}</span>
             </div>
           </div>
           <div class="codex-archive-time">
@@ -3961,9 +3974,11 @@ defineExpose({
   color: var(--color-text-secondary);
 }
 
-.codex-archive-icon svg {
+.codex-archive-icon svg,
+.codex-archive-icon img {
   width: 18px;
   height: 18px;
+  object-fit: contain;
 }
 
 .codex-archive-info {

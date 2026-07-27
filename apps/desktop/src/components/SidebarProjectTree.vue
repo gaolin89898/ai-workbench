@@ -47,6 +47,7 @@ const emit = defineEmits<{
   chooseProject: [];
   selectProject: [path: string];
   newChat: [path: string];
+  newFreeChat: [];
   createSession: [path: string, providerId: string];
   attachSession: [path: string, terminalSessionId: string, providerId: string];
   selectSession: [session: AiSession];
@@ -122,9 +123,17 @@ function toggleProjectCollapsed(path: string) {
   };
 }
 const COLLAPSED_SESSION_LIMIT = 5;
+const FREE_SESSION_GROUP_KEY = "__free_sessions__";
+
+function sessionProjectPath(session: AiSession) {
+  return session.projectPath || session.summary || "";
+}
 
 function sessionsForProject(path: string) {
-  return props.activeSessions.filter((session) => session.summary === path);
+  if (path === FREE_SESSION_GROUP_KEY) {
+    return props.activeSessions.filter((session) => !sessionProjectPath(session));
+  }
+  return props.activeSessions.filter((session) => sessionProjectPath(session) === path);
 }
 
 function allSessionsForProject(path: string): AiSession[] {
@@ -200,11 +209,6 @@ async function toggleProjectFileList(project: WorkspaceProject) {
   expandedDirectories.value = { ...expandedDirectories.value, [directoryKey(project.path)]: true };
   if (directoryFiles.value[directoryKey(project.path)] || directoryLoading.value[directoryKey(project.path)]) return;
   await loadDirectoryFiles(project);
-}
-
-function openResourceSettings() {
-  window.localStorage.setItem("ai-workbench.settingsPanel", "resources");
-  emit("switchView", "settings");
 }
 
 function closeProjectFileList() {
@@ -387,6 +391,13 @@ function startNewChat(path: string) {
   emit("switchView", "aiSessions");
 }
 
+function startNewFreeChat() {
+  openProjectMenuPath.value = null;
+  openContextMenu.value = null;
+  emit("newFreeChat");
+  emit("switchView", "aiSessions");
+}
+
 function openProjectMenu(event: MouseEvent, path: string) {
   event.preventDefault();
   openContextMenu.value = null;
@@ -566,12 +577,14 @@ function archiveSession(session: AiSession) {
 }
 
 function providerIdFromTool(tool: string) {
-  const normalized = tool.toLowerCase();
+  const toolKey = tool.trim().toLowerCase();
+  const normalized = toolKey.includes("mimo") ? "mimo" : toolKey;
   return props.providers.some((provider) => provider.id === normalized) ? normalized : (props.providers[0]?.id ?? "codex");
 }
 
 function providerIcon(providerId?: string | null) {
-  const normalized = (providerId ?? "").toLowerCase();
+  const providerKey = (providerId ?? "").trim().toLowerCase();
+  const normalized = providerKey.includes("mimo") ? "mimo" : providerKey;
   if (normalized === "codex") return providerCodexIcon;
   if (normalized === "claude") return providerClaudeIcon;
   if (normalized === "opencode") return providerOpencodeIcon;
@@ -750,6 +763,87 @@ onBeforeUnmount(() => {
     </div>
   </div>
   <aside class="sidebar">
+    <button
+      class="tree-free-session"
+      type="button"
+      title="创建不依托文件夹的自由会话"
+      @click.stop="startNewFreeChat"
+    >
+      <img class="tree-icon" :src="sessionPlusIcon" alt="" aria-hidden="true" />
+      <strong>新建会话</strong>
+    </button>
+    <div v-if="allSessionsForProject(FREE_SESSION_GROUP_KEY).length" class="tree-chat-list tree-free-chat-list">
+      <div
+        v-for="session in visibleSessionsForProject(FREE_SESSION_GROUP_KEY)"
+        :key="session.id"
+        class="tree-chat-row"
+        :class="{
+          active: activeAiSession?.id === session.id,
+          terminal: Boolean(session.terminalSessionId),
+        }"
+        @contextmenu.prevent.stop="openSessionContextMenu($event, session)"
+      >
+        <button
+          class="tree-chat"
+          :class="{
+            active: activeAiSession?.id === session.id,
+            terminal: Boolean(session.terminalSessionId),
+          }"
+          type="button"
+          @click="selectSession(session)"
+        >
+          <span class="tree-chat-copy">
+            <span class="tree-chat-title">
+              <img
+                class="tree-chat-provider-icon"
+                :src="projectSessionIcon(session)"
+                :alt="projectSessionIconLabel(session)"
+                :title="projectSessionIconLabel(session)"
+              />
+              <i
+                v-if="isSessionPinnedLocal(session)"
+                class="tree-chat-pin"
+                :title="'已置顶'"
+                aria-hidden="true"
+              >▾</i>
+              <span>{{ session.title }}</span>
+            </span>
+            <i v-if="isThinking(session)" class="tree-chat-spinner" aria-label="思考中"></i>
+            <i
+              v-else-if="isSessionUnreadLocal(session)"
+              class="tree-chat-unread"
+              :title="'未读'"
+              aria-label="未读"
+            ></i>
+            <small v-else-if="sessionTimeLabel(session)">{{ sessionTimeLabel(session) }}</small>
+          </span>
+        </button>
+        <button
+          class="tree-chat-action"
+          title="归档会话"
+          type="button"
+          @click.stop="archiveSession(session)"
+        >
+          <img :src="archiveBoxIcon" alt="" aria-hidden="true" />
+        </button>
+      </div>
+      <button
+        v-if="hiddenSessionCountForProject(FREE_SESSION_GROUP_KEY) > 0"
+        class="tree-chat-toggle"
+        type="button"
+        @click="toggleProjectSessionsExpanded(FREE_SESSION_GROUP_KEY)"
+      >
+        <span>展开显示</span>
+      </button>
+      <button
+        v-else-if="isProjectSessionsExpanded(FREE_SESSION_GROUP_KEY) && allSessionsForProject(FREE_SESSION_GROUP_KEY).length > COLLAPSED_SESSION_LIMIT"
+        class="tree-chat-toggle"
+        type="button"
+        @click="toggleProjectSessionsExpanded(FREE_SESSION_GROUP_KEY)"
+      >
+        <span>收起</span>
+      </button>
+    </div>
     <section class="sidebar-section">
       <div class="sidebar-heading">
         <span>项目</span>
@@ -938,15 +1032,6 @@ onBeforeUnmount(() => {
           </div>
         </section>
       </div>
-    </section>
-    <section class="sidebar-resource-section" aria-label="全局资源">
-      <button class="sidebar-resource-link" type="button" @click="openResourceSettings">
-        <span class="sidebar-resource-icon" aria-hidden="true">
-          <svg viewBox="0 0 24 24" fill="none"><rect x="4" y="4" width="16" height="16" rx="3" /><path d="M8 9h8M8 13h5M8 17h8" /></svg>
-        </span>
-        <span><strong>资源中心</strong><small>MCP 与 Skills</small></span>
-        <svg class="sidebar-resource-arrow" viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="m7.5 4.5 5 5-5 5" /></svg>
-      </button>
     </section>
     <div class="account-menu-wrap">
       <button

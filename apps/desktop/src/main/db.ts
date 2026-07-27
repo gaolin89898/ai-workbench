@@ -53,10 +53,25 @@ db.exec(`
     title TEXT NOT NULL,
     status TEXT NOT NULL,
     summary TEXT,
+    project_path TEXT,
     archived_at TEXT,
     updated_at TEXT NOT NULL
   );
+`);
 
+// 迁移：为旧数据库补充 project_path 列（新数据库已包含该列）
+try {
+  const columns = db.prepare("PRAGMA table_info(local_ai_sessions)").all() as Array<{ name: string }>;
+  if (!columns.some((col) => col.name === "project_path")) {
+    db.exec("ALTER TABLE local_ai_sessions ADD COLUMN project_path TEXT");
+    // 将旧数据中复用为项目路径的 summary 迁移到 project_path，并清空 summary 以恢复其摘要语义
+    db.exec("UPDATE local_ai_sessions SET project_path = summary, summary = NULL WHERE summary IS NOT NULL");
+  }
+} catch {
+  // 忽略迁移错误，保持启动健壮
+}
+
+db.exec(`
   CREATE TABLE IF NOT EXISTS local_ai_messages (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     ai_session_id TEXT NOT NULL,
@@ -110,6 +125,7 @@ interface SessionRow {
   title: string;
   status: string;
   summary: string | null;
+  project_path: string | null;
   archived_at: string | null;
   updated_at: string;
 }
@@ -155,6 +171,7 @@ function rowToSession(row: SessionRow): AiSession {
     title: row.title,
     status: row.status,
     summary: row.summary,
+    projectPath: row.project_path,
     archivedAt: row.archived_at,
     updatedAt: row.updated_at,
   };
@@ -295,13 +312,14 @@ export function createLocalAiSession(params: {
   title: string;
   status: string;
   summary?: string | null;
+  projectPath?: string | null;
   updatedAt?: string | null;
 }): AiSession {
   const now = params.updatedAt || new Date().toISOString();
   db.prepare(
     `INSERT INTO local_ai_sessions
-      (id, provider_id, terminal_session_id, provider_session_id, title, status, summary, archived_at, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, NULL, ?)`
+      (id, provider_id, terminal_session_id, provider_session_id, title, status, summary, project_path, archived_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, NULL, ?)`
   ).run(
     params.id,
     params.providerId,
@@ -310,6 +328,7 @@ export function createLocalAiSession(params: {
     params.title,
     params.status,
     params.summary ?? null,
+    params.projectPath ?? null,
     now
   );
   const row = db
@@ -338,6 +357,7 @@ export function updateLocalAiSession(
     providerSessionId: string | null;
     status: string;
     summary: string | null;
+    projectPath: string | null;
     title: string;
     updatedAt: string | null;
   }>
@@ -355,6 +375,10 @@ export function updateLocalAiSession(
   if (updates.summary !== undefined) {
     sets.push("summary = ?");
     values.push(updates.summary);
+  }
+  if (updates.projectPath !== undefined) {
+    sets.push("project_path = ?");
+    values.push(updates.projectPath);
   }
   if (updates.title !== undefined) {
     sets.push("title = ?");
@@ -588,7 +612,7 @@ function writeLocalAiSessionLog(aiSessionId: string): void {
       "",
       `- Session ID: ${aiSessionId}`,
       `- Provider: ${session?.providerId ?? "unknown"}`,
-      `- Project: ${session?.summary ?? ""}`,
+      `- Project: ${session?.projectPath ?? ""}`,
       `- Updated: ${new Date().toISOString()}`,
       "",
     ];
@@ -634,7 +658,7 @@ export function getAiActivitySummary(): AiActivitySummary {
   queryStart.setHours(0, 0, 0, 0);
   const rows = db
     .prepare(
-      `SELECT messages.created_at, sessions.provider_id, sessions.summary AS project_path
+      `SELECT messages.created_at, sessions.provider_id, sessions.project_path
        FROM local_ai_messages AS messages
        LEFT JOIN local_ai_sessions AS sessions ON sessions.id = messages.ai_session_id
        WHERE messages.role = 'user' AND datetime(messages.created_at) >= datetime(?)

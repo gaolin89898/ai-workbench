@@ -592,7 +592,7 @@ watch(providers, (next) => {
 });
 
 watch(selectedProjectPath, () => {
-  if (activeAiSession.value && selectedProjectPath.value && activeAiSession.value.summary !== selectedProjectPath.value) {
+  if (activeAiSession.value && selectedProjectPath.value && activeAiSession.value.projectPath && activeAiSession.value.projectPath !== selectedProjectPath.value) {
     cacheActiveChatMessages();
     activeAiSession.value = null;
     chatMessages.value = [];
@@ -657,7 +657,7 @@ function ensureSelectedProject() {
   if (selectedProjectPath.value && projects.value.some((project) => project.path === selectedProjectPath.value)) {
     return;
   }
-  const activeProjectPath = activeAiSession.value?.summary;
+  const activeProjectPath = activeAiSession.value?.projectPath;
   if (activeProjectPath && projects.value.some((project) => project.path === activeProjectPath)) {
     selectedProjectPath.value = activeProjectPath;
     return;
@@ -739,7 +739,7 @@ async function removeProject(project: WorkspaceProject) {
     if (selectedProjectPath.value === project.path) {
       selectedProjectPath.value = projects.value[0]?.path ?? "";
     }
-    if (activeAiSession.value?.summary === project.path) {
+    if (activeAiSession.value?.projectPath === project.path) {
       cacheActiveChatMessages();
       activeAiSession.value = null;
       chatMessages.value = [];
@@ -840,6 +840,29 @@ async function createAiSession(): Promise<AiSession | null> {
   }
 }
 
+async function createFreeAiSession(): Promise<AiSession | null> {
+  await initAiEventListeners();
+  try {
+    const session = await desktopApi.createAiSession({
+      providerId: selectedProviderId.value || providers.value[0]?.id || "codex",
+      projectPath: null,
+      title: aiSessionTitle.value.trim() || "自由会话",
+      creationMode: "pty",
+      terminalSessionId: null,
+    });
+    aiSessions.value = [session, ...aiSessions.value.filter((item) => item.id !== session.id)];
+    await setActiveAiSession(session);
+    warmupAiForSession(session.id);
+    createAiResult.value = `已新建自由会话：${session.title}`;
+    createAiError.value = false;
+    return session;
+  } catch (error) {
+    createAiResult.value = `创建失败：${String(error)}`;
+    createAiError.value = true;
+    return null;
+  }
+}
+
 function warmupAiForSession(sessionId: string) {
   const providerName = providerNameForSession(sessionId);
   pushChatDebugEvent(`warmup ${providerName}: ${sessionId.slice(0, 8)}`);
@@ -858,7 +881,7 @@ async function startShellForActiveSession(forceRestart = false) {
   await initAiEventListeners();
   const session = activeAiSession.value;
   const sessionId = session?.id;
-  const cwd = session?.summary || selectedProjectPath.value;
+  const cwd = session?.projectPath || selectedProjectPath.value;
   if (!sessionId || !cwd) return;
   if (liveShellSessions.value[sessionId] && !forceRestart) return;
   try {
@@ -928,7 +951,7 @@ function syncChatControlsWithSession(session: AiSession) {
   selectedProviderId.value = session.providerId;
   selectedTerminalSessionId.value = session.terminalSessionId ?? "";
   selectedCreationMode.value = session.terminalSessionId ? "attach" : "auto";
-  if (session.summary) selectedProjectPath.value = session.summary;
+  if (session.projectPath) selectedProjectPath.value = session.projectPath;
 }
 
 function selectAiSessionFromDropdown(sessionId: string) {
@@ -1349,7 +1372,7 @@ async function sendPrompt(
   const providerId = targetSession.providerId;
   const providerName = providerDisplayName(providerId);
   const runtimeName = providerRuntimeName(providerId);
-  const projectPath = targetSession.summary || (activeAiSession.value?.id === sessionId ? selectedProjectPath.value : "");
+  const projectPath = targetSession.projectPath || (activeAiSession.value?.id === sessionId ? selectedProjectPath.value : "");
   if (plainAttachments.length && providerId !== "codex") {
     appendChatMessageForSession(sessionId, { role: "error", text: "文件附件目前仅支持 Codex 会话。" });
     return false;
@@ -1364,10 +1387,6 @@ async function sendPrompt(
       }],
       text: `${providerName} 暂不支持结构化聊天。可以在终端页直接运行对应 CLI。`,
     });
-    return false;
-  }
-  if (!projectPath) {
-    appendChatMessageForSession(sessionId, { role: "error", text: `当前 ${providerName} 会话没有项目路径，请先在左侧选择项目。` });
     return false;
   }
   if (stoppedAiSessions.has(sessionId)) return false;
@@ -2468,7 +2487,7 @@ async function openAiSessionInNewWindow(session: AiSession) {
 function deriveSessionToLocal(session: AiSession) {
   if (activeAiSession.value?.id !== session.id) cacheActiveChatMessages();
   activeAiSession.value = session;
-  selectedProjectPath.value = session.summary ?? selectedProjectPath.value;
+  selectedProjectPath.value = session.projectPath ?? selectedProjectPath.value;
   selectedProviderId.value = session.providerId;
   chatMessages.value = chatMessagesBySessionId.value[session.id] ?? [];
   void startShellForActiveSession(true);
@@ -2666,6 +2685,7 @@ export function useWorkspace() {
     attachAiSessionForProject,
     prepareProjectSession,
     createAiSession,
+    createFreeAiSession,
     startShellForActiveSession,
     restartShellForActiveSession,
     startShellForProject,

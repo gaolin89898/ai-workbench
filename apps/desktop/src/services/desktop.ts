@@ -128,6 +128,7 @@ export type AiSession = {
   title: string;
   status: string;
   summary?: string | null;
+  projectPath?: string | null;
   archivedAt?: string | null;
   updatedAt?: string;
 };
@@ -417,7 +418,7 @@ export type AiHistoryMessage = {
 
 export type CreateAiSessionRequest = {
   providerId: string;
-  projectPath: string;
+  projectPath?: string | null;
   title: string;
   creationMode: string;
   terminalSessionId: string | null;
@@ -566,7 +567,7 @@ export type AiChatOptions = CodexChatOptions & {
 
 export type RunCodexChatRequest = {
   aiSessionId: string;
-  projectPath: string;
+  projectPath?: string | null;
   prompt: string;
   images?: ChatImageAttachment[];
   attachments?: ChatFileAttachment[];
@@ -869,7 +870,7 @@ export type CodexAdminEvent =
 
 export type RunAiChatRequest = {
   aiSessionId: string;
-  projectPath: string;
+  projectPath?: string | null;
   prompt: string;
   images?: ChatImageAttachment[];
   attachments?: ChatFileAttachment[];

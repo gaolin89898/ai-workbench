@@ -1,8 +1,8 @@
 {
   "schema_version": "1.0",
-  "generated_at": "2026-07-25T06:35:27.540Z",
+  "generated_at": "2026-07-27T06:46:17.192Z",
   "source": "build-page-dispatch-manifest.mjs",
-  "mode": "free-fast",
+  "mode": "existing-edit",
   "summary_path": "runtime-orchestration-summary.json",
   "skillProvenance": {
     "name": "solo-design",
@@ -12,23 +12,23 @@
   },
   "dispatchPreflightManifest": [
     {
-      "recorded_at": "2026-07-25T06:35:27.533Z",
+      "recorded_at": "2026-07-27T06:46:17.183Z",
       "generatedBy": "build-page-dispatch-manifest.mjs",
-      "packetType": "FreePagePacket",
+      "packetType": "ExistingEditPagePacket",
       "laneContract": {
-        "resolvedLane": "free_exploration",
-        "packetType": "FreePagePacket",
-        "pageRuntimeGuide": "intent-workflows/intent-page-free-exploration/free-exploration-page-runtime.md",
-        "dispatchContract": "intent-workflows/intent-page-free-exploration/dispatch-contract.md"
+        "resolvedLane": "existing_edit_add_comparison",
+        "packetType": "ExistingEditPagePacket",
+        "pageRuntimeGuide": "intent-workflows/intent-project-mutation/existing-edit-page-runtime.md",
+        "dispatchContract": "intent-workflows/intent-project-mutation/existing-edit-dispatch-contract.md"
       },
       "taskLinePresent": true,
       "outputPathPresent": true,
-      "sharedTemplate": "intent-workflows/intent-page-free-exploration/free-exploration-page-runtime.md",
-      "nodeId": "page-resource-center",
-      "htmlSrc": "pages/resource-center.html",
+      "sharedTemplate": "intent-workflows/intent-project-mutation/existing-edit-page-runtime.md",
+      "nodeId": "page-resource-center-v2",
+      "htmlSrc": "pages/resource-center-v2.html",
       "supplementaryReads": [],
       "allowedWritePaths": [
-        "pages/resource-center.html",
+        "pages/resource-center-v2.html",
         "assets/"
       ],
       "forbiddenWriteRoots": [
@@ -46,7 +46,7 @@
         "helperScriptsAllowed": false,
         "designFileWriteAllowed": false,
         "allowedWritePaths": [
-          "pages/resource-center.html",
+          "pages/resource-center-v2.html",
           "assets/"
         ]
       },
@@ -68,37 +68,39 @@
         "pathInjection": "absolute",
         "pathContract": "Do not use {SKILL_DIR} placeholders inside Page Sub-Agent packets; use toolPaths.* absolute paths.",
         "commandTemplates": {
-          "recordDispatchCompletion": "node \"c:\\Users\\32891\\.trae-cn\\builtin\\design\\hebe\\skills\\solo-design\\shared-runtime\\deterministic-tooling\\record-dispatch-completion.mjs\" \"c:\\Users\\32891\\Desktop\\ai-workbench\\ai-workbench-desktop-design\" --node-id=\"page-resource-center\" --html-src=\"pages/resource-center.html\" --status=completed --changed-files=<comma-separated-project-relative-files> --trace-digest=<main-agent-runtime-trace-digest> --tool-ledger-json=<tool-ledger-json-or-file>"
+          "recordDispatchCompletion": "node \"c:\\Users\\32891\\.trae-cn\\builtin\\design\\hebe\\skills\\solo-design\\shared-runtime\\deterministic-tooling\\record-dispatch-completion.mjs\" \"c:\\Users\\32891\\Desktop\\ai-workbench\\ai-workbench-desktop-design\" --node-id=\"page-resource-center-v2\" --html-src=\"pages/resource-center-v2.html\" --status=completed --changed-files=<comma-separated-project-relative-files> --trace-digest=<main-agent-runtime-trace-digest> --tool-ledger-json=<tool-ledger-json-or-file>"
         }
       },
       "cssFilePath": "c:\\Users\\32891\\Desktop\\ai-workbench\\ai-workbench-desktop-design\\colors_and_type.css",
-      "htmlFilePath": "c:\\Users\\32891\\Desktop\\ai-workbench\\ai-workbench-desktop-design\\pages\\resource-center.html",
+      "htmlFilePath": "c:\\Users\\32891\\Desktop\\ai-workbench\\ai-workbench-desktop-design\\pages\\resource-center-v2.html",
       "brandPrefix": "color",
       "aestheticsMode": "free-explore",
       "toolDisciplineBlockPresent": true,
-      "fillHtmlHeadCommand": "node \"c:\\Users\\32891\\.trae-cn\\builtin\\design\\hebe\\skills\\solo-design\\shared-runtime\\deterministic-tooling\\apply-html-head-contract.mjs\" \"c:\\Users\\32891\\Desktop\\ai-workbench\\ai-workbench-desktop-design\\colors_and_type.css\" \"c:\\Users\\32891\\Desktop\\ai-workbench\\ai-workbench-desktop-design\\pages\\resource-center.html\" --title=\"资源中心 - 重设计\" --lang=\"zh-CN\" --prefix=\"color\"",
+      "fillHtmlHeadCommand": "node \"c:\\Users\\32891\\.trae-cn\\builtin\\design\\hebe\\skills\\solo-design\\shared-runtime\\deterministic-tooling\\apply-html-head-contract.mjs\" \"c:\\Users\\32891\\Desktop\\ai-workbench\\ai-workbench-desktop-design\\colors_and_type.css\" \"c:\\Users\\32891\\Desktop\\ai-workbench\\ai-workbench-desktop-design\\pages\\resource-center-v2.html\" --title=\"资源中心 - 重设计 V2\" --lang=\"zh-CN\" --prefix=\"color\"",
       "headFillMode": "skeleton-first",
       "viewportMode": "app-shell",
-      "completionSchemaExpected": "compact",
+      "completionSchemaExpected": "full",
       "restoreFields": null,
       "restoreContractStatus": null,
       "restoreCompactPacket": null,
       "deterministicCommands": null,
       "sourceAuthorityLock": null,
       "preDispatchFileHashes": {
-        "ai-workbench-desktop.design": "a828d455701ba672a48855690559e61008aaade2cccdba0aa51cafc41e737d57"
+        "ai-workbench-desktop.design": "62ec4ca97892630404845bf476080c8bc9dcf0da353516bb52188b22e655d9e6"
       },
       "contextPreflight": {
-        "workflowPath": "intent-workflows/intent-page-free-exploration/INTENT_WORKFLOW.md",
+        "workflowPath": "intent-workflows/intent-project-mutation/INTENT_WORKFLOW.md",
         "requiredContextFiles": [
           "shared-runtime/runtime-boundaries/lane-runtime-contracts.md",
           "shared-runtime/agent-dispatch-runtime/lane-dispatch-index.md",
+          "shared-runtime/agent-dispatch-runtime/shared-page-rendering-kernel.md",
           "delivery-quality/page-rendering-quality-gate.md",
           "delivery-quality/design-artifact-validation.md",
-          "delivery-quality/delivery-evidence-contract.md",
+          "delivery-quality/delivery-evidence-contract.md"
+        ],
+        "optionalContextFiles": [
           "visual-experience/visual-experience-guidelines.md"
         ],
-        "optionalContextFiles": [],
         "passed": true
       },
       "pageSliceOnly": true,
@@ -118,6 +120,6 @@
     }
   ],
   "deterministicCommandsByPage": {
-    "pages/resource-center.html": {}
+    "pages/resource-center-v2.html": {}
   }
 }

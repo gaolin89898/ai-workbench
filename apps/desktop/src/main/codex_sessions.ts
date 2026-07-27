@@ -674,13 +674,13 @@ function historiesEqual(
 
 export async function syncCodexHistoryMirror(sessionId: string): Promise<boolean> {
   const session = db.getLocalAiSession(sessionId);
-  if (!session?.providerSessionId || session.providerId !== "codex" || !session.summary) return false;
+  if (!session?.providerSessionId || session.providerId !== "codex" || !session.projectPath) return false;
   if (isAppServerProviderSession(session.providerSessionId)) return false;
   const existingHistory = db.listLocalAiHistory(sessionId);
   const isImportedMirror = hasImportedCodexHistory(existingHistory);
   if (!isImportedMirror && hasLocalWorkbenchHistory(existingHistory)) return false;
   const needsUpgrade = !hasToolCodexHistory(existingHistory);
-  const codexSession = (await listCodexProjectSessions(session.summary, db.listLocalAiSessions()))
+  const codexSession = (await listCodexProjectSessions(session.projectPath, db.listLocalAiSessions()))
     .find((item) => item.id === session.providerSessionId);
   if (!codexSession) return false;
   const history = await readCodexSessionHistory(codexSession.filePath);

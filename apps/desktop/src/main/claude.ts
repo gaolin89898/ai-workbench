@@ -37,7 +37,7 @@ function normalizeCwd(value: string): string {
   return path.isAbsolute(value) ? value : path.resolve(value);
 }
 
-function resolveClaudeCwd(cwd: string): string {
+function resolveClaudeCwd(cwd: string | null | undefined): string {
   const requestedCwd = (cwd || "").trim();
   const candidates = [
     requestedCwd ? normalizeCwd(requestedCwd) : "",

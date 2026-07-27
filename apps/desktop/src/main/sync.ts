@@ -627,8 +627,7 @@ class DesktopCloudSync {
   private runSettings: AiRunSettingsState = cloneRunSettings(defaultRunSettings);
   private runSettingsRevision = 0;
   private stopped = false;
-  // Tracks projectPath per session for mobile-originated sessions, since the
-  // local DB schema does not store project_path on local_ai_sessions.
+  // Tracks projectPath per session for mobile-originated sessions as an in-memory cache.
   private sessionProjectPaths = new Map<string, string>();
   private mobileAssistantDrafts = new Map<string, MobileAssistantDraft>();
   private mobileDeltaBuffers = new Map<string, { text: string; segments: unknown[]; timer: ReturnType<typeof setTimeout> | null; deviceId: string }>();
@@ -1086,7 +1085,7 @@ class DesktopCloudSync {
           terminalSessionId: terminalSessionId ?? null,
           title: title || "Mobile session",
           status: "idle",
-          summary: sessionProjectPath,
+          projectPath: sessionProjectPath,
         });
       }
 
@@ -1412,7 +1411,7 @@ class DesktopCloudSync {
         return;
       }
 
-      const projectPath = this.sessionProjectPaths.get(aiSessionId) ?? session.summary ?? os.homedir();
+      const projectPath = this.sessionProjectPaths.get(aiSessionId) ?? session.projectPath ?? os.homedir();
       const contexts = incomingContexts.filter((context) => chatContextIsInsideProject(context, projectPath));
       const prompt = content.trim() || (contexts.length ? "查看添加的上下文" : "");
       if (!prompt) {

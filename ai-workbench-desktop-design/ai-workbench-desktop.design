@@ -431,6 +431,22 @@
         "htmlSrc": "pages/resource-center.html",
         "interactions": []
       }
+    },
+    {
+      "id": "page-resource-center-v2",
+      "title": "资源中心 - 重设计 V2",
+      "type": "page",
+      "version": 1,
+      "createdAt": 1785134696000,
+      "canvasData": {
+        "x": 16740,
+        "y": 0,
+        "group": 0
+      },
+      "devMetadata": {
+        "htmlSrc": "pages/resource-center-v2.html",
+        "interactions": []
+      }
     }
   ],
   "config": {

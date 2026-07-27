@@ -97,7 +97,7 @@ const firstProject = computed(() => ws.projects.value[0]);
                   <strong>{{ session.title }}</strong>
                   <span>{{ ws.providers.value.find((provider) => provider.id === session.providerId)?.name ?? session.providerId }}</span>
                 </div>
-                <p>{{ session.summary ?? session.terminalSessionId ?? "本地 AI 会话" }}</p>
+                <p>{{ session.projectPath ?? session.summary ?? session.terminalSessionId ?? "本地 AI 会话" }}</p>
               </div>
               <div class="session-actions">
                 <div class="session-state">

@@ -14,6 +14,23 @@ function codexThreadId(providerSessionId?: string | null): string | null {
   return value.startsWith("app-server:") ? value.slice("app-server:".length) : value;
 }
 
+function codexSourceApp(source?: string | null, originator?: string | null): NonNullable<ProviderSessionCatalogEntry["sourceApp"]> {
+  const normalizedSource = (source ?? "").trim().toLowerCase().replace(/[_-]+/g, " ");
+  const normalizedOriginator = (originator ?? "").trim().toLowerCase().replace(/[_-]+/g, " ");
+  if (normalizedOriginator.includes("codehub") || normalizedOriginator.includes("ai-workbench")) return "codehub";
+  if (
+    normalizedOriginator.includes("codex desktop")
+    || normalizedOriginator.includes("codex app")
+  ) return "desktop";
+  if (normalizedOriginator.includes("vscode") || normalizedOriginator.includes("visual studio code")) return "vscode";
+  if (normalizedOriginator.includes("cli") || normalizedOriginator.includes("terminal")) return "cli";
+  if (normalizedOriginator === "codex" || normalizedOriginator.includes("openai codex")) return "desktop";
+  if (normalizedSource === "vscode") return "vscode";
+  if (normalizedSource === "cli") return "cli";
+  if (normalizedSource === "desktop" || normalizedSource.includes("codex desktop") || normalizedSource.includes("codex app")) return "desktop";
+  return "unknown";
+}
+
 async function listAllCodexThreads(archived: boolean, sender?: Sender) {
   const threads = [];
   let cursor: string | null = null;
@@ -38,7 +55,7 @@ export async function listProviderSessions(sender?: Sender): Promise<ProviderSes
       providerId: session.providerId,
       providerSessionId,
       title: session.title,
-      cwd: session.summary || null,
+      cwd: session.projectPath || null,
       updatedAt: session.updatedAt || null,
       archived: Boolean(session.archivedAt),
       source: "workbench",
@@ -79,15 +96,7 @@ export async function listProviderSessions(sender?: Sender): Promise<ProviderSes
         updatedAt: new Date(thread.updatedAt * 1000).toISOString(),
         archived: thread.archived,
         source: "provider-api",
-        sourceApp: thread.originator === "CodeHub AI"
-          ? "codehub"
-          : thread.originator === "Codex Desktop"
-            ? "desktop"
-            : thread.source === "vscode"
-              ? "vscode"
-              : thread.source === "cli"
-                ? "cli"
-                : "unknown",
+        sourceApp: codexSourceApp(thread.source, thread.originator),
         linkedAiSessionId: null,
         capabilities: { read: true, resume: true, rename: true, archive: true, delete: true },
       });

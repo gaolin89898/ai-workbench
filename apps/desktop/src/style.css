@@ -2039,6 +2039,49 @@ button {
   color: var(--color-text-body);
 }
 
+.tree-free-session {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  min-height: 32px;
+  margin-bottom: 2px;
+  padding: 0 6px;
+  border: 0;
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--color-text-secondary);
+  text-align: left;
+  cursor: pointer;
+}
+
+.tree-free-session:hover {
+  background: var(--color-bg-hover);
+  color: var(--color-text-body);
+}
+
+.tree-free-session .tree-icon {
+  width: 18px;
+  height: 18px;
+  opacity: 0.72;
+}
+
+.tree-free-session:hover .tree-icon {
+  opacity: 0.9;
+}
+
+.tree-free-session strong {
+  font-size: var(--text-md);
+  font-weight: var(--fw-semibold);
+}
+
+.tree-free-chat-list {
+  flex: 0 0 auto;
+  max-height: 240px;
+  padding-left: 8px;
+  overflow-y: auto;
+}
+
 .tree-empty-icon {
   display: block;
   width: 18px;
@@ -2890,44 +2933,6 @@ h2 {
   flex: 0 0 auto;
   position: static;
 }
-
-.sidebar-resource-section {
-  flex: 0 0 auto;
-  padding-top: 2px;
-}
-
-.sidebar-resource-link {
-  display: grid;
-  grid-template-columns: 28px minmax(0, 1fr) 16px;
-  align-items: center;
-  gap: 10px;
-  width: 100%;
-  min-height: 54px;
-  border: 1px solid var(--color-border);
-  border-radius: 7px;
-  padding: 8px 10px;
-  background: var(--color-bg-surface);
-  color: var(--color-text-primary);
-  text-align: left;
-}
-
-.sidebar-resource-link:hover,
-.sidebar-resource-link.active {
-  border-color: color-mix(in srgb, var(--color-primary) 42%, var(--color-border));
-  background: var(--color-primary-soft);
-}
-
-.sidebar-resource-link > span:nth-child(2) {
-  display: grid;
-  min-width: 0;
-  gap: 2px;
-}
-
-.sidebar-resource-link strong { font-size: 13px; font-weight: 720; }
-.sidebar-resource-link small { color: var(--color-text-muted); font-size: 11px; }
-.sidebar-resource-icon { display: grid; width: 28px; height: 28px; place-items: center; border-radius: 6px; background: var(--color-bg-hover); color: var(--color-primary); }
-.sidebar-resource-icon svg { width: 17px; height: 17px; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
-.sidebar-resource-arrow { width: 16px; height: 16px; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; color: var(--color-text-muted); }
 
 .codex-start-toolbar .codex-composer-add-menu {
   left: -14px;

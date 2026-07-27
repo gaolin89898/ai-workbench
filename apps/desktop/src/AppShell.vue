@@ -76,6 +76,7 @@ onUnmounted(() => {
       @choose-project="ws.chooseProject"
       @select-project="ws.selectProjectPath"
       @new-chat="ws.resetChatControlsForNewSession"
+      @new-free-chat="ws.createFreeAiSession"
       @create-session="ws.createAiSessionForProject"
       @attach-session="ws.attachAiSessionForProject"
       @select-session="ws.setActiveAiSession"

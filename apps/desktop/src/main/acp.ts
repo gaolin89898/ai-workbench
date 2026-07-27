@@ -58,7 +58,7 @@ function isDirectoryPath(value: string): boolean {
   }
 }
 
-function resolveAcpCwd(cwd: string): string {
+function resolveAcpCwd(cwd: string | null | undefined): string {
   const requested = (cwd || "").trim();
   const candidates = [
     requested ? (path.isAbsolute(requested) ? requested : path.resolve(requested)) : "",
@@ -290,7 +290,7 @@ function reportAcpUsage(session: AcpSession, response: unknown): void {
 
 function spawnAcpSession(
   aiSessionId: string,
-  cwd: string,
+  cwd: string | null | undefined,
   sender: Sender,
 ): AcpSession {
   const command = OPENCODE_COMMAND;

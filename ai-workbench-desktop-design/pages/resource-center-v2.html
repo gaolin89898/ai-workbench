@@ -1,0 +1,894 @@
+<!DOCTYPE html>
+<html lang="zh-CN" class="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>资源中心 - 重设计 V2</title>
+    <style id="theme-vars">
+/* AI Workbench Desktop - Dark Theme */
+/* Based on actual project style.css, inverted to dark */
+:root {
+  /* Brand */
+  --color-primary: #2563eb;
+  --color-primary-hover: #1d4ed8;
+  --color-primary-muted: rgba(37, 99, 235, 0.15);
+  --color-primary-soft: rgba(37, 99, 235, 0.08);
+  --color-primary-ring: rgba(37, 99, 235, 0.25);
+
+  /* Surface & Background */
+  --color-bg-app: #0f1117;
+  --color-bg-body: #111318;
+  --color-bg-sidebar: #161822;
+  --color-bg-main: #1a1d2e;
+  --color-bg-content: #1e2235;
+  --color-bg-surface: #1e2235;
+  --color-bg-elevated: #252a3a;
+  --color-bg-input: #1e2235;
+  --color-bg-hover: rgba(255, 255, 255, 0.06);
+  --color-bg-active: rgba(37, 99, 235, 0.12);
+
+  /* Text */
+  --color-text-primary: #e8eaed;
+  --color-text-body: #d1d5db;
+  --color-text-secondary: #9aa0b4;
+  --color-text-muted: #6b7280;
+  --color-text-placeholder: #6b7280;
+  --color-text-inverse: #ffffff;
+
+  /* Border */
+  --color-border: rgba(255, 255, 255, 0.1);
+  --color-border-subtle: rgba(255, 255, 255, 0.06);
+  --color-border-active: rgba(37, 99, 235, 0.5);
+
+  /* State Colors */
+  --state-success: #22c55e;
+  --state-success-bg: rgba(34, 197, 94, 0.12);
+  --state-success-ring: rgba(34, 197, 94, 0.25);
+  --state-warning: #f59e0b;
+  --state-warning-bg: rgba(245, 158, 11, 0.12);
+  --state-error: #ef4444;
+  --state-error-bg: rgba(239, 68, 68, 0.12);
+  --state-info: #3b82f6;
+  --state-info-bg: rgba(59, 130, 246, 0.12);
+
+  /* Radius */
+  --radius-sm: 4px;
+  --radius-md: 7px;
+  --radius-lg: 8px;
+  --radius-xl: 12px;
+  --radius-full: 999px;
+
+  /* Typography */
+  --font-sans: "Inter", ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+
+  --text-xs: 11px;
+  --text-sm: 12px;
+  --text-base: 13px;
+  --text-md: 14px;
+  --text-lg: 16px;
+  --text-xl: 20px;
+  --text-2xl: 28px;
+
+  --leading-tight: 1.25;
+  --leading-normal: 1.5;
+  --leading-relaxed: 1.625;
+  --leading-chat: 1.62;
+
+  /* Font Weights */
+  --fw-normal: 400;
+  --fw-medium: 500;
+  --fw-semibold: 620;
+  --fw-bold: 700;
+  --fw-extrabold: 800;
+  --fw-black: 850;
+
+  /* Shadows */
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.15);
+  --shadow-md: 0 10px 24px rgba(0, 0, 0, 0.25);
+  --shadow-lg: 0 24px 56px rgba(0, 0, 0, 0.35);
+  --shadow-composer: 0 16px 42px rgba(0, 0, 0, 0.3);
+
+  /* Spacing */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-10: 40px;
+  --space-14: 56px;
+  --space-18: 72px;
+
+  /* Layout */
+  --sidebar-width: 286px;
+  --topbar-height: 56px;
+  --composer-max-width: 760px;
+
+  /* Transitions */
+  --transition-fast: 120ms ease;
+  --transition-normal: 200ms ease;
+
+  /* Semantic aliases for Tailwind @theme inline bridge */
+  --color-background: var(--color-bg-app);
+  --color-foreground: var(--color-text-primary);
+  --color-card: var(--color-bg-elevated);
+  --color-muted: var(--color-text-muted);
+  --color-radius-sm: var(--radius-sm);
+  --color-radius-md: var(--radius-lg);
+  --color-radius-lg: var(--radius-xl);
+}
+
+    </style>
+    <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4.3.1/dist/index.global.js"></script>
+    <script src="https://unpkg.com/lucide@1.8.0/dist/umd/lucide.min.js"></script>
+    <style type="text/tailwindcss">
+  @theme inline {
+    --color-background: var(--color-background);
+    --color-foreground: var(--color-foreground);
+    --color-card: var(--color-card);
+    --color-primary: var(--color-primary);
+    --color-muted: var(--color-muted);
+    --color-border: var(--color-border);
+    --radius-sm: var(--color-radius-sm);
+    --radius-md: var(--color-radius-md);
+    --radius-lg: var(--color-radius-lg);
+  }
+  @layer base {
+    body { background: var(--color-background); color: var(--color-foreground); }
+    td, th { @apply break-words; word-break: break-all; word-break: auto-phrase; }
+    th { @apply whitespace-nowrap; }
+  }
+    </style>
+    <style id="semantic-token-fallback">
+      .bg-background { background-color: var(--color-background); }
+      .text-background { color: var(--color-background); }
+      .border-background { border-color: var(--color-background); }
+      .ring-background { --tw-ring-color: var(--color-background); }
+      .bg-foreground { background-color: var(--color-foreground); }
+      .text-foreground { color: var(--color-foreground); }
+      .border-foreground { border-color: var(--color-foreground); }
+      .ring-foreground { --tw-ring-color: var(--color-foreground); }
+      .bg-card { background-color: var(--color-card); }
+      .text-card { color: var(--color-card); }
+      .border-card { border-color: var(--color-card); }
+      .ring-card { --tw-ring-color: var(--color-card); }
+      .bg-primary { background-color: var(--color-primary); }
+      .text-primary { color: var(--color-primary); }
+      .border-primary { border-color: var(--color-primary); }
+      .ring-primary { --tw-ring-color: var(--color-primary); }
+      .bg-muted { background-color: var(--color-muted); }
+      .text-muted { color: var(--color-muted); }
+      .border-muted { border-color: var(--color-muted); }
+      .ring-muted { --tw-ring-color: var(--color-muted); }
+      .bg-border { background-color: var(--color-border); }
+      .text-border { color: var(--color-border); }
+      .border-border { border-color: var(--color-border); }
+      .ring-border { --tw-ring-color: var(--color-border); }
+    </style>
+    <style>
+      .no-scrollbar::-webkit-scrollbar { display: none; }
+      .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+      [data-icon] {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        -webkit-mask-size: contain;
+        mask-size: contain;
+        -webkit-mask-repeat: no-repeat;
+        mask-repeat: no-repeat;
+        -webkit-mask-position: center;
+        mask-position: center;
+        background-color: currentColor;
+      }
+    </style>
+    <style id="critical-layout">
+      /* Layout-critical static CSS — does not depend on Tailwind runtime compilation */
+      main[data-viewport-mode="app-shell"] {
+        display: grid;
+        grid-template-columns: 286px minmax(760px, 1fr);
+        height: 100vh;
+        overflow: hidden;
+      }
+      .resource-stats-grid {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: 12px;
+      }
+      .mcp-three-panel {
+        display: grid;
+        grid-template-columns: 280px minmax(0, 1fr) minmax(0, 1.4fr);
+        gap: 0;
+        height: 560px;
+        overflow: hidden;
+      }
+      .server-list-panel,
+      .inventory-panel,
+      .detail-panel {
+        display: flex;
+        flex-direction: column;
+        min-width: 0;
+        overflow: hidden;
+      }
+      .detail-meta-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 12px;
+      }
+      @media (prefers-reduced-motion: reduce) {
+        *, *::before, *::after {
+          transition-duration: 0.01ms !important;
+          animation-duration: 0.01ms !important;
+        }
+      }
+    </style>
+</head>
+<body style="margin:0; background:var(--color-bg-body); color:var(--color-text-primary); font-family:var(--font-sans); height:100vh; overflow:hidden;">
+    <main data-viewport-mode="app-shell">
+
+        <!-- ============ LEFT SIDEBAR (286px) ============ -->
+        <aside style="background:var(--color-bg-sidebar); border-right:1px solid var(--color-border); display:flex; flex-direction:column; padding:18px 12px 14px; overflow:hidden;">
+
+            <!-- Back button + title block -->
+            <div style="display:flex; flex-direction:column; gap:18px; padding-bottom:18px;">
+                <button class="ui-back-btn" style="display:inline-flex; align-items:center; gap:6px; min-height:32px; border-radius:var(--radius-md); color:var(--color-text-secondary); font-size:13px; font-weight:760; background:none; border:none; cursor:pointer; width:max-content; font-family:var(--font-sans); padding:0;">
+                    <i data-lucide="arrow-left" style="width:14px; height:14px;"></i>
+                    <span>返回</span>
+                </button>
+                <div>
+                    <div style="font-size:22px; font-weight:860; color:var(--color-text-body); line-height:1.2;">设置</div>
+                    <div style="font-size:12px; color:var(--color-text-secondary); font-weight:700; margin-top:2px;">桌面工作台配置</div>
+                </div>
+            </div>
+
+            <!-- Nav items -->
+            <nav style="display:grid; gap:3px;">
+
+                <button class="nav-item" style="display:grid; grid-template-columns:10px minmax(0,1fr) auto; gap:10px; align-items:center; min-height:56px; border:1px solid transparent; border-radius:var(--radius-lg); padding:10px; background:none; cursor:pointer; font-family:var(--font-sans);">
+                    <span class="nav-dot" style="width:8px; height:8px; border-radius:var(--radius-full); background:transparent;"></span>
+                    <div style="display:flex; align-items:center; gap:8px; min-width:0;">
+                        <i data-lucide="server" style="width:17px; height:17px; color:var(--color-text-secondary); flex-shrink:0;"></i>
+                        <strong style="font-size:14px; font-weight:820; color:var(--color-text-secondary); overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">连接</strong>
+                    </div>
+                    <span class="tag-neutral" style="display:inline-flex; align-items:center; justify-content:center; flex-shrink:0; white-space:nowrap; min-height:24px; border-radius:var(--radius-md); font-size:11px; font-weight:850; padding:0 8px; background:var(--color-bg-elevated); color:var(--color-text-muted); border:1px solid var(--color-border-subtle);">基础</span>
+                </button>
+
+                <button class="nav-item" style="display:grid; grid-template-columns:10px minmax(0,1fr) auto; gap:10px; align-items:center; min-height:56px; border:1px solid transparent; border-radius:var(--radius-lg); padding:10px; background:none; cursor:pointer; font-family:var(--font-sans);">
+                    <span class="nav-dot" style="width:8px; height:8px; border-radius:var(--radius-full); background:transparent;"></span>
+                    <div style="display:flex; align-items:center; gap:8px; min-width:0;">
+                        <i data-lucide="terminal" style="width:17px; height:17px; color:var(--color-text-secondary); flex-shrink:0;"></i>
+                        <strong style="font-size:14px; font-weight:820; color:var(--color-text-secondary); overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">Codex 管理</strong>
+                    </div>
+                    <span class="tag-neutral" style="display:inline-flex; align-items:center; justify-content:center; flex-shrink:0; white-space:nowrap; min-height:24px; border-radius:var(--radius-md); font-size:11px; font-weight:850; padding:0 8px; background:var(--color-bg-elevated); color:var(--color-text-muted); border:1px solid var(--color-border-subtle);">CLI</span>
+                </button>
+
+                <button class="nav-item" style="display:grid; grid-template-columns:10px minmax(0,1fr) auto; gap:10px; align-items:center; min-height:56px; border:1px solid transparent; border-radius:var(--radius-lg); padding:10px; background:none; cursor:pointer; font-family:var(--font-sans);">
+                    <span class="nav-dot" style="width:8px; height:8px; border-radius:var(--radius-full); background:transparent;"></span>
+                    <div style="display:flex; align-items:center; gap:8px; min-width:0;">
+                        <i data-lucide="network" style="width:17px; height:17px; color:var(--color-text-secondary); flex-shrink:0;"></i>
+                        <strong style="font-size:14px; font-weight:820; color:var(--color-text-secondary); overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">MCP 管理</strong>
+                    </div>
+                    <span class="tag-neutral" style="display:inline-flex; align-items:center; justify-content:center; flex-shrink:0; white-space:nowrap; min-height:24px; border-radius:var(--radius-md); font-size:11px; font-weight:850; padding:0 8px; background:var(--color-bg-elevated); color:var(--color-text-muted); border:1px solid var(--color-border-subtle);">全局</span>
+                </button>
+
+                <button class="nav-item" style="display:grid; grid-template-columns:10px minmax(0,1fr) auto; gap:10px; align-items:center; min-height:56px; border:1px solid transparent; border-radius:var(--radius-lg); padding:10px; background:none; cursor:pointer; font-family:var(--font-sans);">
+                    <span class="nav-dot" style="width:8px; height:8px; border-radius:var(--radius-full); background:transparent;"></span>
+                    <div style="display:flex; align-items:center; gap:8px; min-width:0;">
+                        <i data-lucide="shield" style="width:17px; height:17px; color:var(--color-text-secondary); flex-shrink:0;"></i>
+                        <strong style="font-size:14px; font-weight:820; color:var(--color-text-secondary); overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">安全与历史</strong>
+                    </div>
+                    <span class="tag-neutral" style="display:inline-flex; align-items:center; justify-content:center; flex-shrink:0; white-space:nowrap; min-height:24px; border-radius:var(--radius-md); font-size:11px; font-weight:850; padding:0 8px; background:var(--color-bg-elevated); color:var(--color-text-muted); border:1px solid var(--color-border-subtle);">保护</span>
+                </button>
+
+                <button class="nav-item" style="display:grid; grid-template-columns:10px minmax(0,1fr) auto; gap:10px; align-items:center; min-height:56px; border:1px solid transparent; border-radius:var(--radius-lg); padding:10px; background:none; cursor:pointer; font-family:var(--font-sans);">
+                    <span class="nav-dot" style="width:8px; height:8px; border-radius:var(--radius-full); background:transparent;"></span>
+                    <div style="display:flex; align-items:center; gap:8px; min-width:0;">
+                        <i data-lucide="activity" style="width:17px; height:17px; color:var(--color-text-secondary); flex-shrink:0;"></i>
+                        <strong style="font-size:14px; font-weight:820; color:var(--color-text-secondary); overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">AI 活跃记录</strong>
+                    </div>
+                    <span class="tag-neutral" style="display:inline-flex; align-items:center; justify-content:center; flex-shrink:0; white-space:nowrap; min-height:24px; border-radius:var(--radius-md); font-size:11px; font-weight:850; padding:0 8px; background:var(--color-bg-elevated); color:var(--color-text-muted); border:1px solid var(--color-border-subtle);">本地</span>
+                </button>
+
+                <button class="nav-item" style="display:grid; grid-template-columns:10px minmax(0,1fr) auto; gap:10px; align-items:center; min-height:56px; border:1px solid transparent; border-radius:var(--radius-lg); padding:10px; background:none; cursor:pointer; font-family:var(--font-sans);">
+                    <span class="nav-dot" style="width:8px; height:8px; border-radius:var(--radius-full); background:transparent;"></span>
+                    <div style="display:flex; align-items:center; gap:8px; min-width:0;">
+                        <i data-lucide="archive" style="width:17px; height:17px; color:var(--color-text-secondary); flex-shrink:0;"></i>
+                        <strong style="font-size:14px; font-weight:820; color:var(--color-text-secondary); overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">已归档对话</strong>
+                    </div>
+                    <span class="tag-neutral" style="display:inline-flex; align-items:center; justify-content:center; flex-shrink:0; white-space:nowrap; min-height:24px; border-radius:var(--radius-md); font-size:11px; font-weight:850; padding:0 8px; background:var(--color-bg-elevated); color:var(--color-text-muted); border:1px solid var(--color-border-subtle);">历史</span>
+                </button>
+
+                <button class="nav-item" style="display:grid; grid-template-columns:10px minmax(0,1fr) auto; gap:10px; align-items:center; min-height:56px; border:1px solid transparent; border-radius:var(--radius-lg); padding:10px; background:none; cursor:pointer; font-family:var(--font-sans);">
+                    <span class="nav-dot" style="width:8px; height:8px; border-radius:var(--radius-full); background:transparent;"></span>
+                    <div style="display:flex; align-items:center; gap:8px; min-width:0;">
+                        <i data-lucide="bar-chart-3" style="width:17px; height:17px; color:var(--color-text-secondary); flex-shrink:0;"></i>
+                        <strong style="font-size:14px; font-weight:820; color:var(--color-text-secondary); overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">用量统计</strong>
+                    </div>
+                    <span class="tag-neutral" style="display:inline-flex; align-items:center; justify-content:center; flex-shrink:0; white-space:nowrap; min-height:24px; border-radius:var(--radius-md); font-size:11px; font-weight:850; padding:0 8px; background:var(--color-bg-elevated); color:var(--color-text-muted); border:1px solid var(--color-border-subtle);">统计</span>
+                </button>
+
+                <button class="nav-item nav-active" aria-current="page" style="display:grid; grid-template-columns:10px minmax(0,1fr) auto; gap:10px; align-items:center; min-height:56px; border:1px solid var(--color-primary-muted); border-radius:var(--radius-lg); padding:10px; background:var(--color-bg-active); cursor:pointer; font-family:var(--font-sans); box-shadow:var(--shadow-sm);">
+                    <span class="nav-dot" style="width:8px; height:8px; border-radius:var(--radius-full); background:var(--color-border-active); box-shadow:0 0 0 4px var(--color-primary-muted);"></span>
+                    <div style="display:flex; align-items:center; gap:8px; min-width:0;">
+                        <i data-lucide="boxes" style="width:17px; height:17px; color:var(--color-text-body); flex-shrink:0;"></i>
+                        <strong style="font-size:14px; font-weight:820; color:var(--color-text-body); overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">资源中心</strong>
+                    </div>
+                    <span class="tag-primary" style="display:inline-flex; align-items:center; justify-content:center; flex-shrink:0; white-space:nowrap; min-height:24px; border-radius:var(--radius-md); font-size:11px; font-weight:850; padding:0 8px; background:var(--color-primary-muted); color:var(--color-primary); border:1px solid var(--color-primary-muted);">全局</span>
+                </button>
+
+            </nav>
+
+            <!-- Bottom sidebar card -->
+            <div style="margin-top:auto; border:1px solid var(--color-border); border-radius:var(--radius-lg); background:var(--color-bg-elevated); padding:14px;">
+                <div style="display:flex; align-items:center; gap:8px;">
+                    <i data-lucide="globe" style="width:15px; height:15px; color:var(--color-primary); flex-shrink:0;"></i>
+                    <div style="font-size:11px; font-weight:850; color:var(--color-text-muted); letter-spacing:0.02em;">全局资源</div>
+                </div>
+                <div style="font-size:12px; font-weight:760; color:var(--color-text-secondary); margin-top:6px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">对所有 Codex 会话生效</div>
+            </div>
+
+        </aside>
+
+        <!-- ============ RIGHT MAIN AREA ============ -->
+        <section style="background:var(--color-bg-content); display:flex; flex-direction:column; min-width:0; overflow:hidden;">
+
+            <div data-scroll-region="primary" class="overflow-y-auto" style="padding:28px 32px 32px; flex:1; min-height:0;">
+
+                <!-- ===== 1. PAGE HEADER ===== -->
+                <header style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:20px; gap:16px;">
+
+                    <div style="min-width:0;">
+                        <div style="font-size:12px; color:var(--color-primary); font-weight:750; margin-bottom:8px; letter-spacing:0.03em;">全局资源</div>
+                        <h1 style="font-size:26px; font-weight:620; color:var(--color-text-primary); line-height:1.2; margin:0;">资源中心</h1>
+                        <p style="font-size:14px; color:var(--color-text-secondary); margin:10px 0 0 0; line-height:1.5; max-width:560px;">管理对所有后续 Codex 会话生效的 MCP 服务与 Skills。</p>
+                    </div>
+
+                    <!-- Polished action bar -->
+                    <div style="display:flex; flex-direction:row; gap:10px; align-items:center; flex-shrink:0;">
+                        <div style="display:inline-flex; align-items:center; gap:7px; height:34px; padding:0 12px; border:1px solid var(--color-border-subtle); border-radius:6px; background:var(--color-bg-surface);">
+                            <span style="width:7px; height:7px; border-radius:var(--radius-full); background:var(--state-success); box-shadow:0 0 0 3px var(--state-success-bg); flex-shrink:0;"></span>
+                            <span style="font-size:12px; color:var(--color-text-secondary); white-space:nowrap; font-weight:600;">用户级配置</span>
+                        </div>
+                        <button class="ui-refresh-btn" style="display:inline-flex; align-items:center; gap:6px; height:34px; border:1px solid var(--color-border); background:var(--color-bg-elevated); color:var(--color-text-primary); border-radius:6px; padding:0 14px; font-size:13px; font-weight:650; cursor:pointer; font-family:var(--font-sans); white-space:nowrap;">
+                            <i data-lucide="refresh-cw" style="width:15px; height:15px;"></i>
+                            <span>刷新状态</span>
+                        </button>
+                    </div>
+
+                </header>
+
+                <!-- ===== 1b. STAT CARDS ROW ===== -->
+                <div class="resource-stats-grid" style="margin-bottom:22px;">
+
+                    <!-- Stat: MCP 服务器 -->
+                    <div style="border:1px solid var(--color-border-subtle); border-radius:8px; background:var(--color-bg-surface); padding:13px 14px; display:flex; align-items:center; gap:11px; min-width:0;">
+                        <div style="width:32px; height:32px; border-radius:6px; background:var(--color-primary-soft); display:inline-flex; align-items:center; justify-content:center; flex-shrink:0;">
+                            <i data-lucide="server" style="width:16px; height:16px; color:var(--color-primary);"></i>
+                        </div>
+                        <div style="min-width:0;">
+                            <div style="font-size:11px; color:var(--color-text-muted); font-weight:650;">MCP 服务器</div>
+                            <div style="font-size:20px; font-weight:760; color:var(--color-text-primary); line-height:1.1; margin-top:1px;">5</div>
+                        </div>
+                    </div>
+
+                    <!-- Stat: 就绪 -->
+                    <div style="border:1px solid var(--color-border-subtle); border-radius:8px; background:var(--color-bg-surface); padding:13px 14px; display:flex; align-items:center; gap:11px; min-width:0;">
+                        <div style="width:32px; height:32px; border-radius:6px; background:var(--state-success-bg); display:inline-flex; align-items:center; justify-content:center; flex-shrink:0;">
+                            <i data-lucide="check-circle-2" style="width:16px; height:16px; color:var(--state-success);"></i>
+                        </div>
+                        <div style="min-width:0;">
+                            <div style="font-size:11px; color:var(--color-text-muted); font-weight:650;">就绪</div>
+                            <div style="font-size:20px; font-weight:760; color:var(--state-success); line-height:1.1; margin-top:1px;">4</div>
+                        </div>
+                    </div>
+
+                    <!-- Stat: 需认证 -->
+                    <div style="border:1px solid var(--color-border-subtle); border-radius:8px; background:var(--color-bg-surface); padding:13px 14px; display:flex; align-items:center; gap:11px; min-width:0;">
+                        <div style="width:32px; height:32px; border-radius:6px; background:var(--state-warning-bg); display:inline-flex; align-items:center; justify-content:center; flex-shrink:0;">
+                            <i data-lucide="alert-circle" style="width:16px; height:16px; color:var(--state-warning);"></i>
+                        </div>
+                        <div style="min-width:0;">
+                            <div style="font-size:11px; color:var(--color-text-muted); font-weight:650;">需认证</div>
+                            <div style="font-size:20px; font-weight:760; color:var(--state-warning); line-height:1.1; margin-top:1px;">1</div>
+                        </div>
+                    </div>
+
+                    <!-- Stat: 工具总数 -->
+                    <div style="border:1px solid var(--color-border-subtle); border-radius:8px; background:var(--color-bg-surface); padding:13px 14px; display:flex; align-items:center; gap:11px; min-width:0;">
+                        <div style="width:32px; height:32px; border-radius:6px; background:var(--color-bg-elevated); display:inline-flex; align-items:center; justify-content:center; flex-shrink:0;">
+                            <i data-lucide="wrench" style="width:16px; height:16px; color:var(--color-text-secondary);"></i>
+                        </div>
+                        <div style="min-width:0;">
+                            <div style="font-size:11px; color:var(--color-text-muted); font-weight:650;">工具总数</div>
+                            <div style="font-size:20px; font-weight:760; color:var(--color-text-primary); line-height:1.1; margin-top:1px;">41</div>
+                        </div>
+                    </div>
+
+                </div>
+
+                <!-- ===== 2. TAB NAVIGATION ===== -->
+                <nav style="display:flex; gap:4px; border-bottom:1px solid var(--color-border); margin-bottom:22px;">
+
+                    <button class="tab-btn tab-active" style="min-width:148px; padding:10px 13px 12px; text-align:left; position:relative; background:none; border:none; cursor:pointer; font-family:var(--font-sans);">
+                        <div style="display:flex; align-items:center; gap:8px;">
+                            <span style="font-size:14px; font-weight:750; color:var(--color-text-primary); line-height:1.3;">MCP</span>
+                            <span style="display:inline-flex; align-items:center; justify-content:center; min-width:20px; height:18px; padding:0 6px; border-radius:var(--radius-full); background:var(--color-primary-muted); color:var(--color-primary); font-size:11px; font-weight:800;">5</span>
+                        </div>
+                        <div style="font-size:12px; color:var(--color-text-secondary); margin-top:3px;">服务、工具与认证</div>
+                    </button>
+
+                    <button class="tab-btn" style="min-width:148px; padding:10px 13px 12px; text-align:left; position:relative; background:none; border:none; cursor:pointer; font-family:var(--font-sans);">
+                        <div style="display:flex; align-items:center; gap:8px;">
+                            <span style="font-size:14px; font-weight:750; color:var(--color-text-secondary); line-height:1.3;">Skills</span>
+                            <span style="display:inline-flex; align-items:center; justify-content:center; min-width:20px; height:18px; padding:0 6px; border-radius:var(--radius-full); background:var(--color-bg-elevated); color:var(--color-text-muted); font-size:11px; font-weight:800;">0</span>
+                        </div>
+                        <div style="font-size:12px; color:var(--color-text-muted); margin-top:3px;">技能、依赖与目录</div>
+                    </button>
+
+                </nav>
+
+                <!-- ===== 3. MCP TAB CONTENT ===== -->
+                <div>
+
+                    <!-- 3b. THREE-PANEL MCP LAYOUT -->
+                    <div class="mcp-three-panel" style="border:1px solid var(--color-border); border-radius:10px; box-shadow:var(--shadow-md);">
+
+                        <!-- ----- PANEL 1: SERVER LIST ----- -->
+                        <div class="server-list-panel" style="border-right:1px solid var(--color-border-subtle); background:var(--color-bg-surface);">
+
+                            <!-- Header -->
+                            <div style="padding:14px 16px; border-bottom:1px solid var(--color-border-subtle); display:flex; justify-content:space-between; align-items:center; gap:8px;">
+                                <strong style="font-size:14px; font-weight:700; color:var(--color-text-primary);">Server 列表</strong>
+                                <span style="display:inline-flex; align-items:center; justify-content:center; min-width:22px; height:20px; padding:0 7px; border-radius:var(--radius-full); background:var(--color-bg-elevated); color:var(--color-text-muted); font-size:11px; font-weight:800; border:1px solid var(--color-border-subtle);">5</span>
+                            </div>
+
+                            <!-- Search -->
+                            <div style="padding:12px 14px 10px;">
+                                <label class="search-input" style="display:flex; align-items:center; gap:8px; height:34px; background:var(--color-bg-input); border:1px solid var(--color-border); border-radius:6px; padding:0 10px; transition:border-color var(--transition-fast), box-shadow var(--transition-fast);">
+                                    <i data-lucide="search" style="width:14px; height:14px; color:var(--color-text-muted); flex-shrink:0;"></i>
+                                    <input type="text" placeholder="搜索服务..." style="width:100%; min-width:0; background:transparent; border:none; outline:none; color:var(--color-text-primary); font-size:12px; font-family:var(--font-sans);" />
+                                </label>
+                            </div>
+
+                            <!-- Server list -->
+                            <div style="display:flex; flex-direction:column; gap:4px; overflow-y:auto; flex-grow:1; min-height:0; padding:0 8px 8px;">
+
+                                <!-- Server 1 ACTIVE -->
+                                <button class="server-row server-active" style="position:relative; padding:11px 12px 11px 14px; text-align:left; border-radius:8px; background:var(--color-bg-active); border:none; cursor:pointer; font-family:var(--font-sans); overflow:hidden;">
+                                    <span class="server-border" style="position:absolute; left:0; top:6px; bottom:6px; width:3px; border-radius:var(--radius-full); background:var(--color-primary);"></span>
+                                    <div style="font-size:13px; font-weight:700; color:var(--color-text-primary); line-height:1.3;">GitHub</div>
+                                    <div style="font-size:11px; color:var(--color-text-muted); font-family:var(--font-mono); margin-top:2px;">github-mcp</div>
+                                    <div style="display:flex; align-items:center; gap:8px; margin-top:7px; flex-wrap:wrap;">
+                                        <span style="display:inline-flex; align-items:center; gap:4px;">
+                                            <span style="width:7px; height:7px; border-radius:var(--radius-full); background:var(--state-success); flex-shrink:0;"></span>
+                                            <span style="font-size:11px; color:var(--color-text-secondary);">就绪</span>
+                                        </span>
+                                        <span style="font-size:11px; color:var(--color-text-secondary);">OAuth</span>
+                                        <span style="font-size:11px; color:var(--color-text-muted);">12 工具</span>
+                                    </div>
+                                </button>
+
+                                <!-- Server 2 -->
+                                <button class="server-row" style="position:relative; padding:11px 12px 11px 14px; text-align:left; border-radius:8px; background:transparent; border:none; cursor:pointer; font-family:var(--font-sans); overflow:hidden;">
+                                    <span class="server-border" style="position:absolute; left:0; top:6px; bottom:6px; width:3px; border-radius:var(--radius-full); background:var(--state-success);"></span>
+                                    <div style="font-size:13px; font-weight:700; color:var(--color-text-primary); line-height:1.3;">文件系统</div>
+                                    <div style="font-size:11px; color:var(--color-text-muted); font-family:var(--font-mono); margin-top:2px;">filesystem</div>
+                                    <div style="display:flex; align-items:center; gap:8px; margin-top:7px; flex-wrap:wrap;">
+                                        <span style="display:inline-flex; align-items:center; gap:4px;">
+                                            <span style="width:7px; height:7px; border-radius:var(--radius-full); background:var(--state-success); flex-shrink:0;"></span>
+                                            <span style="font-size:11px; color:var(--color-text-secondary);">就绪</span>
+                                        </span>
+                                        <span style="font-size:11px; color:var(--color-text-secondary);">本地</span>
+                                        <span style="font-size:11px; color:var(--color-text-muted);">8 工具</span>
+                                    </div>
+                                </button>
+
+                                <!-- Server 3 -->
+                                <button class="server-row" style="position:relative; padding:11px 12px 11px 14px; text-align:left; border-radius:8px; background:transparent; border:none; cursor:pointer; font-family:var(--font-sans); overflow:hidden;">
+                                    <span class="server-border" style="position:absolute; left:0; top:6px; bottom:6px; width:3px; border-radius:var(--radius-full); background:var(--state-success);"></span>
+                                    <div style="font-size:13px; font-weight:700; color:var(--color-text-primary); line-height:1.3;">数据库</div>
+                                    <div style="font-size:11px; color:var(--color-text-muted); font-family:var(--font-mono); margin-top:2px;">postgres-mcp</div>
+                                    <div style="display:flex; align-items:center; gap:8px; margin-top:7px; flex-wrap:wrap;">
+                                        <span style="display:inline-flex; align-items:center; gap:4px;">
+                                            <span style="width:7px; height:7px; border-radius:var(--radius-full); background:var(--state-success); flex-shrink:0;"></span>
+                                            <span style="font-size:11px; color:var(--color-text-secondary);">就绪</span>
+                                        </span>
+                                        <span style="font-size:11px; color:var(--color-text-secondary);">API Key</span>
+                                        <span style="font-size:11px; color:var(--color-text-muted);">15 工具</span>
+                                    </div>
+                                </button>
+
+                                <!-- Server 4 -->
+                                <button class="server-row" style="position:relative; padding:11px 12px 11px 14px; text-align:left; border-radius:8px; background:transparent; border:none; cursor:pointer; font-family:var(--font-sans); overflow:hidden;">
+                                    <span class="server-border" style="position:absolute; left:0; top:6px; bottom:6px; width:3px; border-radius:var(--radius-full); background:var(--state-warning);"></span>
+                                    <div style="font-size:13px; font-weight:700; color:var(--color-text-primary); line-height:1.3;">Slack</div>
+                                    <div style="font-size:11px; color:var(--color-text-muted); font-family:var(--font-mono); margin-top:2px;">slack-mcp</div>
+                                    <div style="display:flex; align-items:center; gap:8px; margin-top:7px; flex-wrap:wrap;">
+                                        <span style="display:inline-flex; align-items:center; gap:4px;">
+                                            <span style="width:7px; height:7px; border-radius:var(--radius-full); background:var(--state-warning); flex-shrink:0;"></span>
+                                            <span style="font-size:11px; color:var(--color-text-secondary);">需认证</span>
+                                        </span>
+                                        <span style="font-size:11px; color:var(--color-text-secondary);">OAuth</span>
+                                        <span style="font-size:11px; color:var(--color-text-muted);">6 工具</span>
+                                    </div>
+                                </button>
+
+                                <!-- Server 5 -->
+                                <button class="server-row" style="position:relative; padding:11px 12px 11px 14px; text-align:left; border-radius:8px; background:transparent; border:none; cursor:pointer; font-family:var(--font-sans); overflow:hidden;">
+                                    <span class="server-border" style="position:absolute; left:0; top:6px; bottom:6px; width:3px; border-radius:var(--radius-full); background:var(--color-text-muted);"></span>
+                                    <div style="font-size:13px; font-weight:700; color:var(--color-text-primary); line-height:1.3;">浏览器</div>
+                                    <div style="font-size:11px; color:var(--color-text-muted); font-family:var(--font-mono); margin-top:2px;">puppeteer-mcp</div>
+                                    <div style="display:flex; align-items:center; gap:8px; margin-top:7px; flex-wrap:wrap;">
+                                        <span style="display:inline-flex; align-items:center; gap:4px;">
+                                            <span style="width:7px; height:7px; border-radius:var(--radius-full); background:var(--color-text-muted); flex-shrink:0;"></span>
+                                            <span style="font-size:11px; color:var(--color-text-secondary);">未启动</span>
+                                        </span>
+                                        <span style="font-size:11px; color:var(--color-text-secondary);">无</span>
+                                        <span style="font-size:11px; color:var(--color-text-muted);">0 工具</span>
+                                    </div>
+                                </button>
+
+                            </div>
+
+                        </div>
+
+                        <!-- ----- PANEL 2: INVENTORY ----- -->
+                        <div class="inventory-panel" style="border-right:1px solid var(--color-border-subtle); background:var(--color-bg-surface);">
+
+                            <!-- Header -->
+                            <div style="padding:14px 16px; border-bottom:1px solid var(--color-border-subtle);">
+
+                                <!-- Row 1: title + controls -->
+                                <div style="display:flex; justify-content:space-between; align-items:center; gap:8px; margin-bottom:12px;">
+                                    <strong style="font-size:14px; font-weight:700; color:var(--color-text-primary);">清单</strong>
+                                    <div style="display:flex; align-items:center; gap:10px;">
+                                        <!-- Language toggle -->
+                                        <div style="display:inline-flex; gap:2px;">
+                                            <button class="seg-btn seg-active" style="min-height:26px; min-width:30px; border:1px solid var(--color-border-active); border-radius:var(--radius-md); background:var(--color-primary-muted); color:var(--color-primary); font-size:11px; font-weight:820; padding:0 7px; cursor:pointer; font-family:var(--font-sans);">中</button>
+                                            <button class="seg-btn" style="min-height:26px; min-width:30px; border:1px solid var(--color-border); border-radius:var(--radius-md); background:transparent; color:var(--color-text-secondary); font-size:11px; font-weight:820; padding:0 7px; cursor:pointer; font-family:var(--font-sans);">EN</button>
+                                        </div>
+                                        <!-- Advanced toggle -->
+                                        <label style="display:inline-flex; align-items:center; gap:6px; cursor:pointer;">
+                                            <span class="toggle-switch checked"></span>
+                                            <span style="font-size:11px; color:var(--color-text-secondary); white-space:nowrap;">高级</span>
+                                        </label>
+                                    </div>
+                                </div>
+
+                                <!-- Row 2: sub-tabs -->
+                                <div style="display:flex; gap:2px;">
+                                    <button class="sub-tab sub-tab-active" style="font-size:12px; padding:6px 10px; color:var(--color-primary); border:none; border-bottom:2px solid var(--color-primary); background:transparent; cursor:pointer; font-family:var(--font-sans); font-weight:700;">工具</button>
+                                    <button class="sub-tab" style="font-size:12px; padding:6px 10px; color:var(--color-text-secondary); border:none; border-bottom:2px solid transparent; background:transparent; cursor:pointer; font-family:var(--font-sans); font-weight:700;">资源</button>
+                                    <button class="sub-tab" style="font-size:12px; padding:6px 10px; color:var(--color-text-secondary); border:none; border-bottom:2px solid transparent; background:transparent; cursor:pointer; font-family:var(--font-sans); font-weight:700;">模板</button>
+                                </div>
+
+                            </div>
+
+                            <!-- Category label -->
+                            <div style="padding:10px 16px 6px; font-size:11px; color:var(--color-text-muted); font-weight:700; letter-spacing:0.02em;">GitHub 工具 (12)</div>
+
+                            <!-- Inventory list -->
+                            <div style="overflow-y:auto; flex-grow:1; min-height:0; padding:0 8px 8px;">
+
+                                <!-- Tool 1 ACTIVE -->
+                                <button class="tool-row tool-active" style="padding:12px 14px; text-align:left; border-radius:8px; background:var(--color-bg-active); border:none; cursor:pointer; font-family:var(--font-sans); width:100%;">
+                                    <div style="display:flex; justify-content:space-between; align-items:center; gap:8px;">
+                                        <div style="font-size:13px; font-weight:650; color:var(--color-text-primary); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; min-width:0; font-family:var(--font-mono);">create_issue</div>
+                                        <span style="font-size:10px; color:var(--color-primary); background:var(--color-primary-muted); padding:2px 7px; border-radius:4px; flex-shrink:0; font-weight:700;">tool</span>
+                                    </div>
+                                    <div style="font-size:11px; color:var(--color-text-secondary); margin-top:4px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">创建 GitHub Issue</div>
+                                </button>
+
+                                <!-- Tool 2 -->
+                                <button class="tool-row" style="padding:12px 14px; text-align:left; border-radius:8px; background:transparent; border:none; cursor:pointer; font-family:var(--font-sans); width:100%;">
+                                    <div style="display:flex; justify-content:space-between; align-items:center; gap:8px;">
+                                        <div style="font-size:13px; font-weight:650; color:var(--color-text-primary); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; min-width:0; font-family:var(--font-mono);">list_issues</div>
+                                        <span style="font-size:10px; color:var(--color-text-muted); background:var(--color-bg-elevated); padding:2px 7px; border-radius:4px; flex-shrink:0; font-weight:700;">tool</span>
+                                    </div>
+                                    <div style="font-size:11px; color:var(--color-text-secondary); margin-top:4px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">列出仓库 Issues</div>
+                                </button>
+
+                                <!-- Tool 3 -->
+                                <button class="tool-row" style="padding:12px 14px; text-align:left; border-radius:8px; background:transparent; border:none; cursor:pointer; font-family:var(--font-sans); width:100%;">
+                                    <div style="display:flex; justify-content:space-between; align-items:center; gap:8px;">
+                                        <div style="font-size:13px; font-weight:650; color:var(--color-text-primary); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; min-width:0; font-family:var(--font-mono);">create_pull_request</div>
+                                        <span style="font-size:10px; color:var(--color-text-muted); background:var(--color-bg-elevated); padding:2px 7px; border-radius:4px; flex-shrink:0; font-weight:700;">tool</span>
+                                    </div>
+                                    <div style="font-size:11px; color:var(--color-text-secondary); margin-top:4px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">创建 Pull Request</div>
+                                </button>
+
+                                <!-- Tool 4 -->
+                                <button class="tool-row" style="padding:12px 14px; text-align:left; border-radius:8px; background:transparent; border:none; cursor:pointer; font-family:var(--font-sans); width:100%;">
+                                    <div style="display:flex; justify-content:space-between; align-items:center; gap:8px;">
+                                        <div style="font-size:13px; font-weight:650; color:var(--color-text-primary); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; min-width:0; font-family:var(--font-mono);">get_file_contents</div>
+                                        <span style="font-size:10px; color:var(--color-text-muted); background:var(--color-bg-elevated); padding:2px 7px; border-radius:4px; flex-shrink:0; font-weight:700;">tool</span>
+                                    </div>
+                                    <div style="font-size:11px; color:var(--color-text-secondary); margin-top:4px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">获取文件内容</div>
+                                </button>
+
+                                <!-- Tool 5 -->
+                                <button class="tool-row" style="padding:12px 14px; text-align:left; border-radius:8px; background:transparent; border:none; cursor:pointer; font-family:var(--font-sans); width:100%;">
+                                    <div style="display:flex; justify-content:space-between; align-items:center; gap:8px;">
+                                        <div style="font-size:13px; font-weight:650; color:var(--color-text-primary); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; min-width:0; font-family:var(--font-mono);">search_code</div>
+                                        <span style="font-size:10px; color:var(--color-text-muted); background:var(--color-bg-elevated); padding:2px 7px; border-radius:4px; flex-shrink:0; font-weight:700;">tool</span>
+                                    </div>
+                                    <div style="font-size:11px; color:var(--color-text-secondary); margin-top:4px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">搜索代码</div>
+                                </button>
+
+                                <!-- Tool 6 -->
+                                <button class="tool-row" style="padding:12px 14px; text-align:left; border-radius:8px; background:transparent; border:none; cursor:pointer; font-family:var(--font-sans); width:100%;">
+                                    <div style="display:flex; justify-content:space-between; align-items:center; gap:8px;">
+                                        <div style="font-size:13px; font-weight:650; color:var(--color-text-primary); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; min-width:0; font-family:var(--font-mono);">create_branch</div>
+                                        <span style="font-size:10px; color:var(--color-text-muted); background:var(--color-bg-elevated); padding:2px 7px; border-radius:4px; flex-shrink:0; font-weight:700;">tool</span>
+                                    </div>
+                                    <div style="font-size:11px; color:var(--color-text-secondary); margin-top:4px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">创建分支</div>
+                                </button>
+
+                                <!-- Tool 7 -->
+                                <button class="tool-row" style="padding:12px 14px; text-align:left; border-radius:8px; background:transparent; border:none; cursor:pointer; font-family:var(--font-sans); width:100%;">
+                                    <div style="display:flex; justify-content:space-between; align-items:center; gap:8px;">
+                                        <div style="font-size:13px; font-weight:650; color:var(--color-text-primary); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; min-width:0; font-family:var(--font-mono);">list_commits</div>
+                                        <span style="font-size:10px; color:var(--color-text-muted); background:var(--color-bg-elevated); padding:2px 7px; border-radius:4px; flex-shrink:0; font-weight:700;">tool</span>
+                                    </div>
+                                    <div style="font-size:11px; color:var(--color-text-secondary); margin-top:4px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">查看提交历史</div>
+                                </button>
+
+                                <!-- Tool 8 -->
+                                <button class="tool-row" style="padding:12px 14px; text-align:left; border-radius:8px; background:transparent; border:none; cursor:pointer; font-family:var(--font-sans); width:100%;">
+                                    <div style="display:flex; justify-content:space-between; align-items:center; gap:8px;">
+                                        <div style="font-size:13px; font-weight:650; color:var(--color-text-primary); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; min-width:0; font-family:var(--font-mono);">merge_pull_request</div>
+                                        <span style="font-size:10px; color:var(--color-text-muted); background:var(--color-bg-elevated); padding:2px 7px; border-radius:4px; flex-shrink:0; font-weight:700;">tool</span>
+                                    </div>
+                                    <div style="font-size:11px; color:var(--color-text-secondary); margin-top:4px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">合并 Pull Request</div>
+                                </button>
+
+                                <!-- Tool 9 -->
+                                <button class="tool-row" style="padding:12px 14px; text-align:left; border-radius:8px; background:transparent; border:none; cursor:pointer; font-family:var(--font-sans); width:100%;">
+                                    <div style="display:flex; justify-content:space-between; align-items:center; gap:8px;">
+                                        <div style="font-size:13px; font-weight:650; color:var(--color-text-primary); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; min-width:0; font-family:var(--font-mono);">add_comment</div>
+                                        <span style="font-size:10px; color:var(--color-text-muted); background:var(--color-bg-elevated); padding:2px 7px; border-radius:4px; flex-shrink:0; font-weight:700;">tool</span>
+                                    </div>
+                                    <div style="font-size:11px; color:var(--color-text-secondary); margin-top:4px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">添加评论</div>
+                                </button>
+
+                                <!-- Tool 10 -->
+                                <button class="tool-row" style="padding:12px 14px; text-align:left; border-radius:8px; background:transparent; border:none; cursor:pointer; font-family:var(--font-sans); width:100%;">
+                                    <div style="display:flex; justify-content:space-between; align-items:center; gap:8px;">
+                                        <div style="font-size:13px; font-weight:650; color:var(--color-text-primary); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; min-width:0; font-family:var(--font-mono);">list_repositories</div>
+                                        <span style="font-size:10px; color:var(--color-text-muted); background:var(--color-bg-elevated); padding:2px 7px; border-radius:4px; flex-shrink:0; font-weight:700;">tool</span>
+                                    </div>
+                                    <div style="font-size:11px; color:var(--color-text-secondary); margin-top:4px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">列出仓库</div>
+                                </button>
+
+                                <!-- Tool 11 -->
+                                <button class="tool-row" style="padding:12px 14px; text-align:left; border-radius:8px; background:transparent; border:none; cursor:pointer; font-family:var(--font-sans); width:100%;">
+                                    <div style="display:flex; justify-content:space-between; align-items:center; gap:8px;">
+                                        <div style="font-size:13px; font-weight:650; color:var(--color-text-primary); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; min-width:0; font-family:var(--font-mono);">get_user_profile</div>
+                                        <span style="font-size:10px; color:var(--color-text-muted); background:var(--color-bg-elevated); padding:2px 7px; border-radius:4px; flex-shrink:0; font-weight:700;">tool</span>
+                                    </div>
+                                    <div style="font-size:11px; color:var(--color-text-secondary); margin-top:4px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">获取用户资料</div>
+                                </button>
+
+                                <!-- Tool 12 -->
+                                <button class="tool-row" style="padding:12px 14px; text-align:left; border-radius:8px; background:transparent; border:none; cursor:pointer; font-family:var(--font-sans); width:100%;">
+                                    <div style="display:flex; justify-content:space-between; align-items:center; gap:8px;">
+                                        <div style="font-size:13px; font-weight:650; color:var(--color-text-primary); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; min-width:0; font-family:var(--font-mono);">create_review</div>
+                                        <span style="font-size:10px; color:var(--color-text-muted); background:var(--color-bg-elevated); padding:2px 7px; border-radius:4px; flex-shrink:0; font-weight:700;">tool</span>
+                                    </div>
+                                    <div style="font-size:11px; color:var(--color-text-secondary); margin-top:4px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">创建代码审查</div>
+                                </button>
+
+                            </div>
+
+                        </div>
+
+                        <!-- ----- PANEL 3: DETAIL ----- -->
+                        <div class="detail-panel" style="background:var(--color-bg-surface);">
+
+                            <!-- Header -->
+                            <div style="padding:16px 20px; border-bottom:1px solid var(--color-border-subtle);">
+                                <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:10px;">
+                                    <div style="min-width:0;">
+                                        <h3 style="font-size:15px; font-weight:700; color:var(--color-text-primary); margin:0; line-height:1.3; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">create_issue</h3>
+                                        <div style="font-size:12px; color:var(--color-text-muted); margin-top:4px; font-family:var(--font-mono);">github-mcp · tool</div>
+                                    </div>
+                                    <span style="display:inline-flex; align-items:center; gap:5px; background:var(--state-success-bg); color:var(--state-success); padding:4px 10px; border-radius:var(--radius-full); font-size:12px; font-weight:700; white-space:nowrap; flex-shrink:0;">
+                                        <span style="width:6px; height:6px; border-radius:var(--radius-full); background:var(--state-success);"></span>
+                                        就绪
+                                    </span>
+                                </div>
+                            </div>
+
+                            <!-- Topology bar -->
+                            <div style="padding:11px 20px; display:flex; flex-direction:row; gap:8px; align-items:center; border-bottom:1px solid var(--color-border-subtle); font-size:11px; overflow-x:auto; white-space:nowrap;">
+                                <span style="color:var(--color-text-muted); font-weight:650;">Server</span>
+                                <i data-lucide="chevron-right" style="width:12px; height:12px; color:var(--color-text-muted); flex-shrink:0;"></i>
+                                <span style="color:var(--color-primary); font-weight:700;">Tools</span>
+                                <i data-lucide="chevron-right" style="width:12px; height:12px; color:var(--color-text-muted); flex-shrink:0;"></i>
+                                <span style="color:var(--color-text-muted); font-weight:650;">Resources</span>
+                                <i data-lucide="chevron-right" style="width:12px; height:12px; color:var(--color-text-muted); flex-shrink:0;"></i>
+                                <span style="color:var(--color-text-muted); font-weight:650;">Auth</span>
+                            </div>
+
+                            <!-- Detail body -->
+                            <div style="padding:18px 20px; overflow-y:auto; flex-grow:1; min-height:0;">
+
+                                <!-- Section: 认证状态 -->
+                                <div style="display:flex; justify-content:space-between; align-items:center; gap:8px; margin-bottom:14px;">
+                                    <div style="display:flex; align-items:center; gap:8px;">
+                                        <i data-lucide="key-round" style="width:14px; height:14px; color:var(--color-text-secondary); flex-shrink:0;"></i>
+                                        <strong style="font-size:13px; font-weight:700; color:var(--color-text-primary);">认证状态</strong>
+                                    </div>
+                                    <button class="oauth-btn" style="display:inline-flex; align-items:center; gap:6px; height:30px; background:var(--color-primary); color:var(--color-text-inverse); border:1px solid var(--color-primary); border-radius:6px; font-size:12px; font-weight:700; padding:0 12px; cursor:pointer; font-family:var(--font-sans); white-space:nowrap; box-shadow:var(--shadow-sm);">
+                                        <i data-lucide="log-in" style="width:14px; height:14px;"></i>
+                                        <span>OAuth 登录</span>
+                                    </button>
+                                </div>
+
+                                <!-- Meta grid -->
+                                <div class="detail-meta-grid">
+                                    <div style="border:1px solid var(--color-border-subtle); border-radius:8px; background:var(--color-bg-input); padding:11px 13px; min-width:0;">
+                                        <div style="font-size:11px; color:var(--color-text-muted); font-weight:650;">认证</div>
+                                        <div style="font-size:13px; font-weight:700; color:var(--color-text-primary); margin-top:4px;">OAuth</div>
+                                    </div>
+                                    <div style="border:1px solid var(--color-border-subtle); border-radius:8px; background:var(--color-bg-input); padding:11px 13px; min-width:0;">
+                                        <div style="font-size:11px; color:var(--color-text-muted); font-weight:650;">版本</div>
+                                        <div style="font-size:13px; font-weight:700; color:var(--color-text-primary); margin-top:4px;">1.2.0</div>
+                                    </div>
+                                    <div style="border:1px solid var(--color-border-subtle); border-radius:8px; background:var(--color-bg-input); padding:11px 13px; min-width:0;">
+                                        <div style="font-size:11px; color:var(--color-text-muted); font-weight:650;">工具</div>
+                                        <div style="font-size:13px; font-weight:700; color:var(--color-text-primary); margin-top:4px;">12</div>
+                                    </div>
+                                    <div style="border:1px solid var(--color-border-subtle); border-radius:8px; background:var(--color-bg-input); padding:11px 13px; min-width:0;">
+                                        <div style="font-size:11px; color:var(--color-text-muted); font-weight:650;">资源</div>
+                                        <div style="font-size:13px; font-weight:700; color:var(--color-text-primary); margin-top:4px;">3</div>
+                                    </div>
+                                </div>
+
+                                <!-- Divider -->
+                                <div style="height:1px; background:var(--color-border-subtle); margin:18px 0 16px;"></div>
+
+                                <!-- Section: 元数据 -->
+                                <div style="display:flex; justify-content:space-between; align-items:center; gap:8px; margin-bottom:10px;">
+                                    <div style="display:flex; align-items:center; gap:8px;">
+                                        <i data-lucide="info" style="width:14px; height:14px; color:var(--color-text-secondary); flex-shrink:0;"></i>
+                                        <strong style="font-size:13px; font-weight:700; color:var(--color-text-primary);">元数据</strong>
+                                    </div>
+                                    <span style="display:inline-flex; align-items:center; background:var(--color-bg-elevated); color:var(--color-text-muted); padding:2px 7px; border-radius:var(--radius-sm); font-size:11px; font-weight:700; border:1px solid var(--color-border-subtle);">只读</span>
+                                </div>
+
+                                <!-- Dense table -->
+                                <div style="display:grid; grid-template-columns:80px 1fr; gap:10px 12px; margin-top:8px; align-items:center;">
+                                    <span style="font-size:12px; color:var(--color-text-muted); font-weight:650;">名称</span>
+                                    <code style="font-family:var(--font-mono); font-size:12px; color:var(--color-text-body); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; min-width:0;">create_issue</code>
+                                    <span style="font-size:12px; color:var(--color-text-muted); font-weight:650;">简介</span>
+                                    <code style="font-family:var(--font-mono); font-size:12px; color:var(--color-text-body); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; min-width:0;">创建 GitHub Issue</code>
+                                </div>
+
+                                <!-- Divider -->
+                                <div style="height:1px; background:var(--color-border-subtle); margin:18px 0 16px;"></div>
+
+                                <!-- Section: 输入 Schema -->
+                                <div style="display:flex; justify-content:space-between; align-items:center; gap:8px; margin-bottom:10px;">
+                                    <div style="display:flex; align-items:center; gap:8px;">
+                                        <i data-lucide="braces" style="width:14px; height:14px; color:var(--color-text-secondary); flex-shrink:0;"></i>
+                                        <strong style="font-size:13px; font-weight:700; color:var(--color-text-primary);">输入 Schema</strong>
+                                    </div>
+                                    <span style="display:inline-flex; align-items:center; gap:5px; background:var(--color-bg-elevated); color:var(--color-text-secondary); padding:2px 8px; border-radius:var(--radius-sm); font-size:11px; font-weight:700; border:1px solid var(--color-border-subtle); font-family:var(--font-mono);">
+                                        <i data-lucide="file-json" style="width:11px; height:11px;"></i>
+                                        JSON
+                                    </span>
+                                </div>
+
+                                <!-- Code block with header bar -->
+                                <div style="border:1px solid var(--color-border-subtle); border-radius:8px; overflow:hidden; background:var(--color-bg-input);">
+                                    <div style="display:flex; align-items:center; justify-content:space-between; padding:8px 12px; background:var(--color-bg-elevated); border-bottom:1px solid var(--color-border-subtle);">
+                                        <span style="font-size:11px; color:var(--color-text-muted); font-weight:650; font-family:var(--font-mono);">schema.json</span>
+                                        <i data-lucide="copy" style="width:13px; height:13px; color:var(--color-text-muted); cursor:pointer;"></i>
+                                    </div>
+                                    <pre style="padding:14px; font-family:var(--font-mono); font-size:11px; color:var(--color-text-body); margin:0; line-height:1.65; overflow:auto;"><code>{
+  "type": "object",
+  "properties": {
+    "title": { "type": "string", "description": "Issue 标题" },
+    "body": { "type": "string", "description": "Issue 内容" },
+    "labels": { "type": "array", "items": { "type": "string" } },
+    "assignees": { "type": "array", "items": { "type": "string" } }
+  },
+  "required": ["title"]
+}</code></pre>
+                                </div>
+
+                            </div>
+
+                        </div>
+
+                    </div>
+
+                </div>
+
+            </div>
+
+        </section>
+
+    </main>
+
+    <style>
+        /* Hover states & transitions */
+        .nav-item, .server-row, .tool-row, .ui-refresh-btn, .ui-back-btn, .tab-btn, .seg-btn, .sub-tab, .oauth-btn { transition: background var(--transition-fast), border-color var(--transition-fast), color var(--transition-fast), transform var(--transition-fast), box-shadow var(--transition-fast); }
+        .nav-item:hover, .server-row:hover, .tool-row:hover { background: var(--color-bg-hover) !important; }
+        .ui-refresh-btn:hover { background: var(--color-bg-hover); border-color: var(--color-border-active); }
+        .ui-back-btn:hover { color: var(--color-text-primary); }
+        .oauth-btn:hover { background: var(--color-primary-hover); border-color: var(--color-primary-hover); }
+        .server-row:active, .tool-row:active { transform: translateY(1px); }
+
+        /* Active server row keeps primary tint on hover */
+        .server-row.server-active:hover { background: var(--color-bg-active) !important; }
+        .tool-row.tool-active:hover { background: var(--color-bg-active) !important; }
+
+        /* Focus states */
+        .nav-item:focus-visible, .server-row:focus-visible, .tool-row:focus-visible, .tab-btn:focus-visible, .seg-btn:focus-visible, .ui-refresh-btn:focus-visible, .oauth-btn:focus-visible, input:focus-visible { outline: 2px solid var(--color-primary-ring); outline-offset: 2px; }
+
+        /* Search input focus */
+        .search-input:focus-within { border-color: var(--color-border-active); box-shadow: 0 0 0 3px var(--color-primary-ring); }
+
+        /* Tab active underline */
+        .tab-btn.tab-active::after {
+            content: '';
+            position: absolute;
+            left: 0;
+            right: 0;
+            bottom: -1px;
+            height: 2px;
+            background: var(--color-primary);
+            border-radius: var(--radius-full) var(--radius-full) 0 0;
+        }
+
+        /* Sub-tab hover */
+        .sub-tab:hover { color: var(--color-text-primary); }
+
+        /* Seg button hover */
+        .seg-btn:hover { background: var(--color-bg-hover); }
+
+        /* Toggle switch */
+        .toggle-switch {
+            width: 30px;
+            height: 17px;
+            border-radius: var(--radius-full);
+            background: var(--color-text-muted);
+            position: relative;
+            transition: background var(--transition-fast);
+            flex-shrink: 0;
+            display: inline-block;
+        }
+        .toggle-switch::after {
+            content: '';
+            position: absolute;
+            top: 2px;
+            left: 2px;
+            width: 13px;
+            height: 13px;
+            border-radius: var(--radius-full);
+            background: var(--color-text-inverse);
+            transition: transform var(--transition-fast);
+        }
+        .toggle-switch.checked {
+            background: var(--color-primary);
+        }
+        .toggle-switch.checked::after {
+            transform: translateX(13px);
+        }
+
+        /* Scrollbar styling */
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: var(--color-bg-elevated); border-radius: 3px; }
+        ::-webkit-scrollbar-thumb:hover { background: var(--color-text-muted); }
+
+        @media (prefers-reduced-motion: reduce) {
+            .nav-item, .server-row, .tool-row, .tab-btn, .seg-btn, .sub-tab, .toggle-switch, .oauth-btn, .ui-refresh-btn { transition-duration: 0.01ms; }
+        }
+    </style>
+    <script>lucide.createIcons();</script>
+</body>
+</html>

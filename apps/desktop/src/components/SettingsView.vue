@@ -339,11 +339,12 @@ async function runProviderAction(row: ProviderRow) {
   }
 }
 
-function providerIcon(providerId: string) {
-  if (providerId === "codex") return providerCodexIcon;
-  if (providerId === "claude") return providerClaudeIcon;
-  if (providerId === "opencode") return providerOpencodeIcon;
-  if (providerId === "mimo") return providerMimoIcon;
+function providerIcon(providerId: string, providerName = "") {
+  const providerKey = `${providerId} ${providerName}`.trim().toLowerCase();
+  if (providerKey.includes("codex")) return providerCodexIcon;
+  if (providerKey.includes("claude")) return providerClaudeIcon;
+  if (providerKey.includes("opencode")) return providerOpencodeIcon;
+  if (providerKey.includes("mimo")) return providerMimoIcon;
   return aiProvidersIcon;
 }
 
@@ -1122,7 +1123,7 @@ onMounted(() => {
                 <article v-for="row in providerRows" :key="row.provider.id" class="settings-provider-card">
                   <div class="settings-provider-card-head">
                     <div class="settings-provider-card-id">
-                      <img class="settings-provider-card-icon" :src="providerIcon(row.provider.id)" alt="" aria-hidden="true" />
+                      <img class="settings-provider-card-icon" :src="providerIcon(row.provider.id, row.provider.name)" alt="" aria-hidden="true" />
                       <strong>{{ row.provider.name }}</strong>
                     </div>
                     <span class="settings-provider-card-platform">{{ desktopPlatformLabel }}</span>

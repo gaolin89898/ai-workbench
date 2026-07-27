@@ -395,7 +395,7 @@ export function registerIpcHandlers(win?: BrowserWindow): void {
       terminalSessionId: req.terminalSessionId ?? null,
       title: req.title,
       status: "idle",
-      summary: sessionProjectPath,
+      projectPath: sessionProjectPath,
     });
 
     // Immediately push the updated session list to the cloud so mobile clients
@@ -409,7 +409,7 @@ export function registerIpcHandlers(win?: BrowserWindow): void {
     db.updateLocalAiSession(args[0], {
       status: "idle",
       providerSessionId: null,
-      summary: null,
+      projectPath: null,
     })
   );
 

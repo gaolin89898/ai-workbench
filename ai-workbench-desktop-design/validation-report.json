@@ -16,10 +16,11 @@
   },
   "operatingMode": "free-explore",
   "renderBlockingErrorCount": 0,
-  "softWarningCount": 13,
+  "softWarningCount": 14,
   "renderBlockingErrors": [],
   "errorSignatures": [],
   "softWarnings": [
+    "[html-head-style] resource-center-v2.html: found 1 custom <style> block(s) in <head>. The <head> is owned by apply-html-head-contract.mjs; move custom styles before </body> or re-run apply-html-head-contract.mjs <css-path> <html-file> --replace-head to relocate them.",
     "[html-quality] colors_and_type.css: ordinary/static shadow tokens must keep every shadow alpha <= 0.05; deeper shadows are allowed only for floating-layer tokens such as modal/popover/dropdown/drawer/overlay (--shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.15), --shadow-md: 0 10px 24px rgba(0, 0, 0, 0.25), --shadow-lg: 0 24px 56px rgba(0, 0, 0, 0.35), --shadow-composer: 0 16px 42px rgba(0, 0, 0, 0.3)).",
     "[html-quality] account-menu.html: hardcoded colors are forbidden outside <style id=\"theme-vars\">. Use brand CSS variables from the token reference.",
     "[html-quality] chat-empty-session.html: hardcoded colors are forbidden outside <style id=\"theme-vars\">. Use brand CSS variables from the token reference.",
@@ -194,9 +195,10 @@
   ],
   "repairActionTable": [],
   "errorCount": 0,
-  "warningCount": 13,
+  "warningCount": 14,
   "errors": [],
   "warnings": [
+    "[html-head-style] resource-center-v2.html: found 1 custom <style> block(s) in <head>. The <head> is owned by apply-html-head-contract.mjs; move custom styles before </body> or re-run apply-html-head-contract.mjs <css-path> <html-file> --replace-head to relocate them.",
     "[html-quality] colors_and_type.css: ordinary/static shadow tokens must keep every shadow alpha <= 0.05; deeper shadows are allowed only for floating-layer tokens such as modal/popover/dropdown/drawer/overlay (--shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.15), --shadow-md: 0 10px 24px rgba(0, 0, 0, 0.25), --shadow-lg: 0 24px 56px rgba(0, 0, 0, 0.35), --shadow-composer: 0 16px 42px rgba(0, 0, 0, 0.3)).",
     "[html-quality] account-menu.html: hardcoded colors are forbidden outside <style id=\"theme-vars\">. Use brand CSS variables from the token reference.",
     "[html-quality] chat-empty-session.html: hardcoded colors are forbidden outside <style id=\"theme-vars\">. Use brand CSS variables from the token reference.",
@@ -247,7 +249,7 @@
       "read_status": "ok"
     },
     "renderBlockingErrorCount": 0,
-    "softWarningCount": 13,
+    "softWarningCount": 14,
     "renderBlockingErrors": [],
     "repairActionTable": [],
     "nextCheck": {
@@ -264,9 +266,9 @@
     ]
   },
   "projectFileHashes": {
-    "ai-workbench-desktop.design": "a828d455701ba672a48855690559e61008aaade2cccdba0aa51cafc41e737d57",
+    "ai-workbench-desktop.design": "62ec4ca97892630404845bf476080c8bc9dcf0da353516bb52188b22e655d9e6",
     "colors_and_type.css": "ede29e4a835304fae882c3874fb9c91aa64a1cae5bb59375dc4c172ac3b9af82",
-    "runtime-orchestration-summary.json": "fd6d1262bcb1b2ea89183c8cdec40dded1b5a4d9431653b2cdd213d7ecd0eabb",
+    "runtime-orchestration-summary.json": "fe53fd7bb590e048b9878a3dd3213bbc3a5973348574a86251b50cb88dba433b",
     "pages/account-menu.html": "e4316c1d6e9690c2d932452e2a5c6293ee8485be0eb51e40d84006c41e7c23d4",
     "pages/ai-activity-records.html": "7d6c547f9908bc68fb2f54f2af4b2630ec6f2980f6d470a7c0b9892a51c1e497",
     "pages/chat-empty-session.html": "91b55e20410f8496d76c2e32516038d1e25d306b4525a06c6d26e16422a2ad91",
@@ -283,6 +285,7 @@
     "pages/login.html": "bee429bc8b8ec3035e86ebaefe2f2b1d8e7d0620b122a20c1ce9c88095808d56",
     "pages/project-menu-and-files.html": "99365c0543e89a04cc32f0705ee24b06f28b3a977d614f159722e226a9b0b304",
     "pages/providers.html": "be4c2fc096376311a1f1c04846d32b78b58f9b00d3e8f1231a7658acc1f8c803",
+    "pages/resource-center-v2.html": "30a021da010140bd5eeda202ffc9744ef0adec0232f571e069541cacafeb1247",
     "pages/resource-center.html": "9cf4b271b2adeea7e9eb3a5bb95cd7d863b8835d2c5d1416676ddafbda072eb0",
     "pages/session-context-menu.html": "947f30a34d2ae58cb2d611d31b2fed2dddadccd560bdf6bc5d57297f350c7f27",
     "pages/session-management.html": "fb83191840fafc60eb92b7c61adaec03c2396771ffd878a5f19cf7974bace745",
@@ -296,7 +299,7 @@
     "pages/ultra-agent-inspector.html": "972659a0f83a6cfdde90c4faa90680ac2856c91daf869cade8a6d5a06c2dd968"
   },
   "designDir": "c:\\Users\\32891\\Desktop\\ai-workbench\\ai-workbench-desktop-design",
-  "expectedPages": 27,
+  "expectedPages": 28,
   "requireInteractions": null,
-  "checkedAt": "2026-07-25T06:40:46.518Z"
+  "checkedAt": "2026-07-27T06:53:20.458Z"
 }
