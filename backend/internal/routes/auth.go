@@ -85,11 +85,11 @@ type desktopPairingStatusResponse struct {
 	AccessToken *string   `json:"accessToken"`
 }
 
-// validateCredentials mirrors auth::validate_credentials: email must contain
-// "@", password must be at least 6 characters.
+// validateCredentials mirrors auth::validate_credentials: identifier (email
+// or account) must be non-empty, password must be at least 6 characters.
 func validateCredentials(email, password string) error {
-	if !strings.Contains(email, "@") {
-		return errors.New("email is invalid")
+	if strings.TrimSpace(email) == "" {
+		return errors.New("account is required")
 	}
 	if len(password) < 6 {
 		return errors.New("password must be at least 6 characters")
