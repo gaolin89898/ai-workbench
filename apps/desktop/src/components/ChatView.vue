@@ -167,6 +167,7 @@ const claudeReasoningLevel = ref<ClaudeReasoningEffort>(claudeEffortPreference(r
 const codexGoalEnabled = ref(false);
 const codexGoal = ref("");
 const codexGoalStatus = ref<CodexGoalStatus>("active");
+const pipelineModeEnabled = ref(false);
 const codexThreadGoal = ref<CodexThreadGoal | null>(null);
 const codexGoalBusy = ref(false);
 const codexGoalLoading = ref(false);
@@ -294,6 +295,25 @@ const showAcpRunControls = computed(() => {
 const acpProviderId = computed(() => ws.activeAiSession.value?.providerId ?? selectedProvider.value?.id ?? ws.selectedProviderId.value ?? "opencode");
 const showModelRunControls = computed(() => showCodexRunControls.value || showClaudeRunControls.value || showAcpRunControls.value);
 const codexModelOptions = computed(() => codexModels.value.filter((model) => model.model.trim().length > 0));
+
+const pipelineStepsForActiveSession = computed(() => {
+  const sessionId = ws.activeAiSession.value?.id;
+  if (!sessionId) return [];
+  return ws.pipelineSteps.value[sessionId] ?? [];
+});
+const pipelineCompletedCount = computed(() =>
+  pipelineStepsForActiveSession.value.filter((s) => s.status === "completed").length
+);
+function pipelineStepStatusLabel(status: string): string {
+  switch (status) {
+    case "pending": return "等待中";
+    case "running": return "执行中";
+    case "completed": return "已完成";
+    case "failed": return "失败";
+    case "skipped": return "已跳过";
+    default: return status;
+  }
+}
 const environmentBranchLabel = computed(() => (
   environmentInfo.value?.branch
   ?? currentProject.value?.gitBranch
@@ -2178,6 +2198,7 @@ onMounted(() => {
   void desktopApi.onCodexAdminEvent(handleCodexAdminEvent).then((remove) => {
     removeCodexAdminEventListener = remove;
   });
+  void ws.loadPipelineTemplates();
 });
 
 onBeforeUnmount(() => {
@@ -2248,6 +2269,16 @@ async function send() {
   contextAttachments.value = [];
   pendingPromptAnchorKey = latestUserAnchor()?.key ?? "__empty__";
   try {
+    if (pipelineModeEnabled.value) {
+      const sent = await ws.sendPipelinePrompt(value, images, attachments, contexts);
+      if (!sent) {
+        prompt.value = value;
+        imageAttachments.value = images;
+        fileAttachments.value = attachments;
+        contextAttachments.value = contexts;
+      }
+      return;
+    }
     const sent = await ws.sendPrompt(value, images, attachments, contexts, runOptions);
     if (!sent) {
       prompt.value = value;
@@ -2988,6 +3019,25 @@ function selectSlashPanelReasoning(level: string) {
         >
           <div class="chat-conversation-view">
             <div ref="chatScroll" class="terminal-preview" @scroll.passive="handleChatScroll">
+          <div v-if="pipelineStepsForActiveSession.length" class="pipeline-progress-panel">
+            <div class="pipeline-progress-header">
+              <strong>多角色流水线</strong>
+              <span>{{ pipelineCompletedCount }}/{{ pipelineStepsForActiveSession.length }} 步完成</span>
+            </div>
+            <div class="pipeline-progress-steps">
+              <div
+                v-for="(step, index) in pipelineStepsForActiveSession"
+                :key="index"
+                class="pipeline-step-item"
+                :class="`pipeline-step-${step.status}`"
+              >
+                <span class="pipeline-step-index">{{ index + 1 }}</span>
+                <span class="pipeline-step-role">{{ step.roleName }}</span>
+                <span class="pipeline-step-provider">{{ step.providerId }}</span>
+                <span class="pipeline-step-status">{{ pipelineStepStatusLabel(step.status) }}</span>
+              </div>
+            </div>
+          </div>
           <div v-if="!ws.activeAiSession.value && ws.chatMessages.value.length === 1 && ws.chatMessages.value[0]?.role === 'system'" class="chat-welcome">
             <h2>从一个项目开始聊天</h2>
             <p>左侧选择本地项目，然后新建 AI 会话。聊天页支持 Codex / Claude Code，终端页只提供项目 shell。</p>
@@ -3401,6 +3451,31 @@ function selectSlashPanelReasoning(level: string) {
                 <span>目标</span>
                 <small>已开启</small>
               </button>
+              <button
+                v-if="showModelRunControls"
+                class="codex-mode-chip pipeline-mode-chip"
+                :class="{ active: pipelineModeEnabled }"
+                :title="pipelineModeEnabled ? '关闭多角色流水线' : '开启多角色流水线'"
+                type="button"
+                @click="pipelineModeEnabled = !pipelineModeEnabled"
+              >
+                <svg viewBox="0 0 16 16" fill="none" aria-hidden="true">
+                  <circle cx="4" cy="4" r="2" stroke="currentColor" stroke-width="1.2" />
+                  <circle cx="12" cy="8" r="2" stroke="currentColor" stroke-width="1.2" />
+                  <circle cx="4" cy="12" r="2" stroke="currentColor" stroke-width="1.2" />
+                  <path d="M5.5 5 10.5 7M5.5 11 10.5 9" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" />
+                </svg>
+                <span>流水线</span>
+                <small>{{ pipelineModeEnabled ? "已开启" : "未开启" }}</small>
+              </button>
+              <select
+                v-if="showModelRunControls && pipelineModeEnabled"
+                v-model="ws.selectedPipelineTemplateId.value"
+                class="pipeline-template-select"
+                aria-label="选择流水线模板"
+              >
+                <option v-for="tpl in ws.pipelineTemplates.value" :key="tpl.id" :value="tpl.id">{{ tpl.name }}</option>
+              </select>
             </div>
             <div class="chat-composer-toolbar-right">
               <div v-if="showModelRunControls" class="codex-model-picker codex-model-picker-custom" :title="modelPickerTitle">

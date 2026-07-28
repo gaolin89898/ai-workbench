@@ -1,6 +1,6 @@
 import { computed, ref, watch } from "vue";
 import router from "../router";
-import { desktopApi, type AiChatOptions, type AiChatOutputEvent, type AiProvider, type AiProviderTrace, type AiSession, type AiTraceUpdateEvent, type AppUpdateDownloadProgress, type AppUpdateInfo, type ChatContextAttachment, type ChatFileAttachment, type ChatImageAttachment, type ChatMessage, type ChatSegment, type CodexUserInputRequestEvent, type ProviderStatus, type TerminalSession, type ViewName, type WorkspaceProject } from "../services/desktop";
+import { desktopApi, type AiChatOptions, type AiChatOutputEvent, type AiProvider, type AiProviderTrace, type AiSession, type AiTraceUpdateEvent, type AppUpdateDownloadProgress, type AppUpdateInfo, type ChatContextAttachment, type ChatFileAttachment, type ChatImageAttachment, type ChatMessage, type ChatSegment, type CodexUserInputRequestEvent, type PipelineStepUpdateEvent, type PipelineTemplate, type ProviderStatus, type TerminalSession, type ViewName, type WorkspaceProject } from "../services/desktop";
 import { decodeAssistantMessageFromStorage, encodeAssistantMessageForStorage, extractAssistantText } from "../utils/chat";
 
 export type QueuedAiMessage = {
@@ -53,6 +53,9 @@ const chatDebugEvents = ref<string[]>([]);
 const chatRunStates = ref<Record<string, ChatRunState>>({});
 const queuedAiMessagesBySessionId = ref<Record<string, QueuedAiMessage[]>>({});
 const pendingCodexUserInputs = ref<Record<string, CodexUserInputRequestEvent>>({});
+const pipelineSteps = ref<Record<string, PipelineStepUpdateEvent[]>>({});
+const pipelineTemplates = ref<PipelineTemplate[]>([]);
+const selectedPipelineTemplateId = ref<string>("");
 
 const PIN_STORAGE_KEY = "ai-workbench.pinnedSessions";
 const UNREAD_STORAGE_KEY = "ai-workbench.unreadSessions";
@@ -2005,6 +2008,12 @@ async function initAiEventListeners() {
     desktopApi.onAiTraceUpdate((event) => {
       void handleAiTraceUpdateEvent(event);
     }),
+    desktopApi.onPipelineStepUpdate((event) => {
+      const steps = pipelineSteps.value[event.aiSessionId] ?? [];
+      const updated = [...steps];
+      updated[event.stepIndex] = event;
+      pipelineSteps.value = { ...pipelineSteps.value, [event.aiSessionId]: updated };
+    }),
     desktopApi.onCodexUserInputRequest((event) => {
       pendingCodexUserInputs.value = { ...pendingCodexUserInputs.value, [event.aiSessionId]: event };
       thinkingSessionIds.value = { ...thinkingSessionIds.value, [event.aiSessionId]: true };
@@ -2620,6 +2629,132 @@ function switchView(view: ViewName) {
   if (router.currentRoute.value.path !== path) void router.push(path);
 }
 
+async function loadPipelineTemplates(): Promise<void> {
+  try {
+    pipelineTemplates.value = await desktopApi.listPipelineTemplates();
+    if (!selectedPipelineTemplateId.value && pipelineTemplates.value.length > 0) {
+      selectedPipelineTemplateId.value = pipelineTemplates.value[0].id;
+    }
+  } catch {
+    // 忽略 - pipeline 功能可选
+  }
+}
+
+async function sendPipelinePrompt(
+  prompt: string,
+  images: ChatImageAttachment[] = [],
+  attachments: ChatFileAttachment[] = [],
+  contexts: ChatContextAttachment[] = [],
+): Promise<boolean> {
+  await initAiEventListeners();
+  const trimmed = prompt.trim();
+  if (!trimmed) return false;
+  const targetSession = activeAiSession.value;
+  if (!targetSession) return false;
+
+  const template = pipelineTemplates.value.find((t) => t.id === selectedPipelineTemplateId.value);
+  if (!template) return false;
+
+  const sessionId = targetSession.id;
+  const projectPath = targetSession.projectPath || selectedProjectPath.value || "";
+
+  // 重置步骤状态
+  pipelineSteps.value = { ...pipelineSteps.value, [sessionId]: [] };
+
+  // 追加用户消息
+  appendChatMessageForSession(sessionId, { role: "user", text: trimmed, images, attachments, contexts });
+  await desktopApi.appendLocalAiMessage(sessionId, "user", encodeAssistantMessageForStorage({ text: trimmed, images, attachments, contexts }));
+
+  // 追加一个占位 assistant 消息，显示流水线进度
+  const assistantClientId = chatClientId("assistant");
+  const assistantMessage: ChatMessage = {
+    clientId: assistantClientId,
+    role: "assistant",
+    pending: true,
+    segments: [{
+      type: "status",
+      stepId: "pipeline-start",
+      label: `流水线「${template.name}」启动中...`,
+      icon: "think",
+    }],
+  };
+  appendChatMessageForSession(sessionId, assistantMessage);
+  pendingAssistants.set(sessionId, {
+    clientId: assistantClientId,
+    message: assistantMessage,
+    prompt: trimmed,
+    steps: new Map([["pipeline-start", assistantMessage.segments![0]]]),
+    finalText: "",
+    currentAgentMessageStepId: null,
+    startedAt: performance.now(),
+    hasBackendStatus: false,
+    lastStatusText: "",
+  });
+
+  thinkingSessionIds.value = { ...thinkingSessionIds.value, [sessionId]: true };
+  setChatRunState(sessionId, {
+    active: true,
+    phase: "starting",
+    title: `流水线执行中`,
+    detail: `正在按「${template.name}」执行 ${template.roles.length} 个角色...`,
+    startedAt: performance.now(),
+  });
+
+  try {
+    await desktopApi.runPipelineChat({
+      aiSessionId: sessionId,
+      projectPath,
+      prompt: trimmed,
+      images,
+      attachments,
+      contexts,
+      pipeline: template,
+    });
+
+    // 流水线完成
+    const steps = pipelineSteps.value[sessionId] ?? [];
+    const completedOutputs = steps
+      .filter((s) => s.status === "completed" && s.output)
+      .map((s) => `【${s.roleName}】\n${s.output}`)
+      .join("\n\n---\n\n");
+
+    const pending = pendingAssistants.get(sessionId);
+    if (pending) {
+      replacePendingAssistantText(sessionId, completedOutputs || "流水线执行完成", true);
+      completePendingAssistantFromExec(sessionId);
+    }
+
+    setChatRunState(sessionId, {
+      active: false,
+      phase: "done",
+      title: "流水线已完成",
+      detail: `「${template.name}」执行结束。`,
+    });
+    thinkingSessionIds.value = { ...thinkingSessionIds.value, [sessionId]: false };
+    void loadAiSessionHistory(sessionId, { force: true });
+    return true;
+  } catch (error) {
+    const pending = pendingAssistants.get(sessionId);
+    if (pending) {
+      patchPendingAssistant(sessionId, {
+        pending: false,
+        role: "error",
+        segments: [{ type: "error", title: "流水线执行失败", message: String(error) }],
+        text: `流水线执行失败：${String(error)}`,
+      });
+      pendingAssistants.delete(sessionId);
+    }
+    thinkingSessionIds.value = { ...thinkingSessionIds.value, [sessionId]: false };
+    setChatRunState(sessionId, {
+      active: false,
+      phase: "error",
+      title: "流水线执行失败",
+      detail: String(error),
+    });
+    return false;
+  }
+}
+
 export function useWorkspace() {
   return {
     providers,
@@ -2722,5 +2857,10 @@ export function useWorkspace() {
     checkAppUpdate,
     installAppUpdate,
     switchView,
+    pipelineSteps,
+    pipelineTemplates,
+    selectedPipelineTemplateId,
+    loadPipelineTemplates,
+    sendPipelinePrompt,
   };
 }

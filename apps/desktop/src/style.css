@@ -8244,6 +8244,120 @@ body.chat-terminal-resizing {
   color: var(--color-text-body);
 }
 
+/* ---------- Pipeline mode ---------- */
+
+.pipeline-mode-chip.active {
+  border-color: var(--color-primary);
+  background: var(--color-primary-muted);
+  color: var(--color-primary);
+}
+
+.pipeline-template-select {
+  height: 28px;
+  padding: 0 8px;
+  border: 1px solid var(--color-border-subtle);
+  border-radius: 8px;
+  background: var(--color-bg-elevated);
+  color: var(--color-text-body);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.pipeline-progress-panel {
+  margin: 8px 16px;
+  padding: 12px 14px;
+  border: 1px solid var(--color-border-subtle);
+  border-radius: 10px;
+  background: var(--color-bg-elevated);
+}
+
+.pipeline-progress-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+  font-size: 13px;
+}
+
+.pipeline-progress-header span {
+  color: var(--color-text-muted);
+  font-size: 12px;
+}
+
+.pipeline-progress-steps {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.pipeline-step-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  border-radius: 8px;
+  background: var(--color-bg-surface);
+  font-size: 12px;
+}
+
+.pipeline-step-index {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: var(--color-border-subtle);
+  color: var(--color-text-muted);
+  font-weight: var(--fw-medium);
+  font-size: 11px;
+  flex-shrink: 0;
+}
+
+.pipeline-step-role {
+  font-weight: var(--fw-medium);
+  color: var(--color-text-body);
+}
+
+.pipeline-step-provider {
+  color: var(--color-text-muted);
+  font-size: 11px;
+  text-transform: uppercase;
+}
+
+.pipeline-step-status {
+  margin-left: auto;
+  font-size: 11px;
+  color: var(--color-text-muted);
+}
+
+.pipeline-step-running .pipeline-step-index {
+  background: var(--color-primary);
+  color: #fff;
+}
+
+.pipeline-step-running .pipeline-step-status {
+  color: var(--color-primary);
+}
+
+.pipeline-step-completed .pipeline-step-index {
+  background: var(--color-success, #22c55e);
+  color: #fff;
+}
+
+.pipeline-step-completed .pipeline-step-status {
+  color: var(--color-success, #22c55e);
+}
+
+.pipeline-step-failed .pipeline-step-index {
+  background: var(--color-danger, #ef4444);
+  color: #fff;
+}
+
+.pipeline-step-failed .pipeline-step-status {
+  color: var(--color-danger, #ef4444);
+}
+
 .codex-composer-add-menu {
   position: absolute;
   left: 0;
