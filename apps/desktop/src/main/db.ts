@@ -54,6 +54,8 @@ db.exec(`
     status TEXT NOT NULL,
     summary TEXT,
     project_path TEXT,
+    orchestration_mode TEXT DEFAULT 'single',
+    pipeline_config TEXT,
     archived_at TEXT,
     updated_at TEXT NOT NULL
   );
@@ -67,6 +69,22 @@ try {
     // 将旧数据中复用为项目路径的 summary 迁移到 project_path，并清空 summary 以恢复其摘要语义
     db.exec("UPDATE local_ai_sessions SET project_path = summary, summary = NULL WHERE summary IS NOT NULL");
   }
+  if (!columns.some((col) => col.name === "orchestration_mode")) {
+    db.exec("ALTER TABLE local_ai_sessions ADD COLUMN orchestration_mode TEXT DEFAULT 'single'");
+  }
+  if (!columns.some((col) => col.name === "pipeline_config")) {
+    db.exec("ALTER TABLE local_ai_sessions ADD COLUMN pipeline_config TEXT");
+  }
+} catch {
+  // 忽略迁移错误，保持启动健壮
+}
+
+// 迁移：为消息表补充 agent_role 列
+try {
+  const msgColumns = db.prepare("PRAGMA table_info(local_ai_messages)").all() as Array<{ name: string }>;
+  if (!msgColumns.some((col) => col.name === "agent_role")) {
+    db.exec("ALTER TABLE local_ai_messages ADD COLUMN agent_role TEXT");
+  }
 } catch {
   // 忽略迁移错误，保持启动健壮
 }
@@ -77,6 +95,7 @@ db.exec(`
     ai_session_id TEXT NOT NULL,
     role TEXT NOT NULL,
     content TEXT NOT NULL,
+    agent_role TEXT,
     created_at TEXT NOT NULL
   );
 
@@ -126,6 +145,8 @@ interface SessionRow {
   status: string;
   summary: string | null;
   project_path: string | null;
+  orchestration_mode: string | null;
+  pipeline_config: string | null;
   archived_at: string | null;
   updated_at: string;
 }
@@ -135,6 +156,7 @@ interface MessageRow {
   ai_session_id: string;
   role: string;
   content: string;
+  agent_role: string | null;
   created_at: string;
 }
 
@@ -172,6 +194,8 @@ function rowToSession(row: SessionRow): AiSession {
     status: row.status,
     summary: row.summary,
     projectPath: row.project_path,
+    orchestrationMode: row.orchestration_mode ?? "single",
+    pipelineConfig: row.pipeline_config,
     archivedAt: row.archived_at,
     updatedAt: row.updated_at,
   };
@@ -182,6 +206,7 @@ function rowToMessage(row: MessageRow): AiHistoryMessage {
     role: row.role as AiHistoryMessage["role"],
     content: row.content,
     createdAt: row.created_at,
+    agentRole: row.agent_role,
   };
 }
 
@@ -313,13 +338,15 @@ export function createLocalAiSession(params: {
   status: string;
   summary?: string | null;
   projectPath?: string | null;
+  orchestrationMode?: string | null;
+  pipelineConfig?: string | null;
   updatedAt?: string | null;
 }): AiSession {
   const now = params.updatedAt || new Date().toISOString();
   db.prepare(
     `INSERT INTO local_ai_sessions
-      (id, provider_id, terminal_session_id, provider_session_id, title, status, summary, project_path, archived_at, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, NULL, ?)`
+      (id, provider_id, terminal_session_id, provider_session_id, title, status, summary, project_path, orchestration_mode, pipeline_config, archived_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?)`
   ).run(
     params.id,
     params.providerId,
@@ -329,6 +356,8 @@ export function createLocalAiSession(params: {
     params.status,
     params.summary ?? null,
     params.projectPath ?? null,
+    params.orchestrationMode ?? "single",
+    params.pipelineConfig ?? null,
     now
   );
   const row = db
@@ -767,9 +796,10 @@ export function getAiActivitySummary(): AiActivitySummary {
 export function appendLocalAiMessage(
   aiSessionId: string,
   role: ChatMessage["role"],
-  content: string
+  content: string,
+  agentRole?: string | null
 ): void {
-  if (role === "assistant") {
+  if (role === "assistant" && !agentRole) {
     const previous = db
       .prepare("SELECT rowid AS id, role, content FROM local_ai_messages WHERE ai_session_id = ? ORDER BY rowid DESC LIMIT 1")
       .get(aiSessionId) as { id: number; role: string; content: string } | undefined;
@@ -789,9 +819,9 @@ export function appendLocalAiMessage(
   }
   const now = new Date().toISOString();
   db.prepare(
-    `INSERT INTO local_ai_messages (ai_session_id, role, content, created_at)
-     VALUES (?, ?, ?, ?)`
-  ).run(aiSessionId, role, content, now);
+    `INSERT INTO local_ai_messages (ai_session_id, role, content, agent_role, created_at)
+     VALUES (?, ?, ?, ?, ?)`
+  ).run(aiSessionId, role, content, agentRole ?? null, now);
   writeLocalAiSessionLog(aiSessionId);
 }
 

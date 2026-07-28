@@ -415,9 +415,9 @@ export function registerIpcHandlers(win?: BrowserWindow): void {
 
   handle(
     "append_local_ai_message",
-    async (_event, args: [string, ChatMessage["role"], string]) => {
-      const [aiSessionId, role, content] = args;
-      db.appendLocalAiMessage(aiSessionId, role, content);
+    async (_event, args: [string, ChatMessage["role"], string, string?]) => {
+      const [aiSessionId, role, content, agentRole] = args;
+      db.appendLocalAiMessage(aiSessionId, role, content, agentRole);
       getSender().send("ai-history-changed", { aiSessionId });
       await getDesktopCloudSync()?.pushAiHistory(aiSessionId);
     }

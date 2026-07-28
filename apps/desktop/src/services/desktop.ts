@@ -130,7 +130,41 @@ export type AiSession = {
   summary?: string | null;
   projectPath?: string | null;
   archivedAt?: string | null;
+  orchestrationMode?: string | null;
+  pipelineConfig?: string | null;
   updatedAt?: string;
+};
+
+// ---------- Multi-agent pipeline types ----------
+
+export type AgentRole = {
+  id: string;
+  name: string;
+  description: string;
+  providerId: string;
+  systemPrompt: string;
+  chatOptions: AiChatOptions;
+};
+
+export type PipelineTemplate = {
+  id: string;
+  name: string;
+  description: string;
+  roles: AgentRole[];
+};
+
+export type PipelineStepStatus = "pending" | "running" | "completed" | "failed" | "skipped";
+
+export type PipelineStepUpdateEvent = {
+  aiSessionId: string;
+  stepIndex: number;
+  totalSteps: number;
+  roleId: string;
+  roleName: string;
+  providerId: string;
+  status: PipelineStepStatus;
+  output?: string;
+  error?: string;
 };
 
 export type ProviderSessionCatalogEntry = {
@@ -314,6 +348,7 @@ export type ChatMessage = {
   images?: ChatImageAttachment[];
   attachments?: ChatFileAttachment[];
   contexts?: ChatContextAttachment[];
+  agentRole?: string | null;
 };
 
 export type CodexTraceItem = {
@@ -414,6 +449,7 @@ export type AiHistoryMessage = {
   role: "user" | "assistant" | "system" | "error";
   content: string;
   createdAt: string;
+  agentRole?: string | null;
 };
 
 export type CreateAiSessionRequest = {
@@ -877,6 +913,16 @@ export type RunAiChatRequest = {
   contexts?: ChatContextAttachment[];
 } & AiChatOptions;
 
+export type RunPipelineChatRequest = {
+  aiSessionId: string;
+  projectPath?: string | null;
+  prompt: string;
+  images?: ChatImageAttachment[];
+  attachments?: ChatFileAttachment[];
+  contexts?: ChatContextAttachment[];
+  pipeline: PipelineTemplate;
+};
+
 export type AcpConfigOption = {
   value: string;
   name: string;
@@ -1114,8 +1160,8 @@ export const desktopApi = {
     ipc<AiSession>("create_ai_session", req),
   restartAiSession: (aiSessionId: string): Promise<AiSession> =>
     ipc<AiSession>("restart_ai_session", aiSessionId),
-  appendLocalAiMessage: (aiSessionId: string, role: ChatMessage["role"], content: string): Promise<void> =>
-    ipc<void>("append_local_ai_message", aiSessionId, role, content),
+  appendLocalAiMessage: (aiSessionId: string, role: ChatMessage["role"], content: string, agentRole?: string | null): Promise<void> =>
+    ipc<void>("append_local_ai_message", aiSessionId, role, content, agentRole ?? null),
   startShellPty: (req: StartShellPtyRequest): Promise<void> =>
     ipc<void>("start_shell_pty", req),
   sendShellInput: (req: ShellInputRequest): Promise<void> =>
@@ -1128,6 +1174,10 @@ export const desktopApi = {
     ipc<string>("run_ai_chat", req),
   runCodexChat: (req: RunCodexChatRequest): Promise<string> =>
     ipc<string>("run_codex_chat", req),
+  runPipelineChat: (req: RunPipelineChatRequest): Promise<void> =>
+    ipc<void>("run_pipeline_chat", req),
+  listPipelineTemplates: (): Promise<PipelineTemplate[]> =>
+    ipc<PipelineTemplate[]>("list_pipeline_templates"),
   steerCodexChat: (req: SteerCodexChatRequest): Promise<boolean> =>
     ipc<boolean>("steer_codex_chat", req),
   listCodexThreads: (req: CodexThreadListRequest): Promise<CodexThreadListResponse> =>
@@ -1252,6 +1302,8 @@ export const desktopApi = {
     Promise.resolve(on("ai-chat-output", handler as (event: unknown) => void)),
   onAiTraceUpdate: (handler: (event: AiTraceUpdateEvent) => void): Promise<() => void> =>
     Promise.resolve(on("ai-trace-update", handler as (event: unknown) => void)),
+  onPipelineStepUpdate: (handler: (event: PipelineStepUpdateEvent) => void): Promise<() => void> =>
+    Promise.resolve(on("pipeline-step-update", handler as (event: unknown) => void)),
   onCodexUserInputRequest: (handler: (event: CodexUserInputRequestEvent) => void): Promise<() => void> =>
     Promise.resolve(on("codex-user-input-request", handler as (event: unknown) => void)),
   onCodexUserInputResolved: (handler: (event: CodexUserInputResolvedEvent) => void): Promise<() => void> =>
