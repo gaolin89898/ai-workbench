@@ -91,6 +91,22 @@ async function copyUserMessage() {
     copyResetTimer = null;
   }, 1200);
 }
+
+const AGENT_ROLE_NAMES: Record<string, string> = {
+  planner: "规划师",
+  coder: "编码师",
+  reviewer: "审查师",
+  tester: "测试师",
+};
+const agentRoleName = computed(() => {
+  const id = props.message.agentRole;
+  if (!id) return "";
+  return AGENT_ROLE_NAMES[id] ?? id;
+});
+const agentRoleInitial = computed(() => {
+  const name = agentRoleName.value;
+  return name ? name.charAt(0) : "?";
+});
 const rawSegments = computed<ChatSegmentType[]>(() => {
   const sourceSegments = props.message.segments ?? [];
   if (props.message.role === "user" && isPlanExecutionRequest(props.message.text ?? "")) {
@@ -1040,17 +1056,23 @@ function countCommandOutputSignals(text: string) {
     </template>
     <div v-else class="chat-process-panel-empty">该执行过程已不可用。</div>
   </div>
-  <div v-else class="chat-message-row" :class="[message.role, { pending: message.pending }]">
-    <span v-if="message.role === 'assistant'" class="chat-ai-avatar" aria-hidden="true">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-        <path d="M12 3l1.9 5.8a2 2 0 0 0 1.3 1.3L21 12l-5.8 1.9a2 2 0 0 0-1.3 1.3L12 21l-1.9-5.8a2 2 0 0 0-1.3-1.3L3 12l5.8-1.9a2 2 0 0 0 1.3-1.3L12 3z" />
-        <path d="M5 3v4" />
-        <path d="M19 17v4" />
-        <path d="M3 5h4" />
-        <path d="M17 19h4" />
-      </svg>
+  <div v-else class="chat-message-row" :class="[message.role, { pending: message.pending, 'has-agent-role': !!message.agentRole }]">
+    <span v-if="message.role === 'assistant'" class="chat-ai-avatar" :class="{ 'agent-role-avatar': !!message.agentRole }" aria-hidden="true">
+      <template v-if="message.agentRole">
+        <span class="agent-role-initial">{{ agentRoleInitial }}</span>
+      </template>
+      <template v-else>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M12 3l1.9 5.8a2 2 0 0 0 1.3 1.3L21 12l-5.8 1.9a2 2 0 0 0-1.3 1.3L12 21l-1.9-5.8a2 2 0 0 0-1.3-1.3L3 12l5.8-1.9a2 2 0 0 0 1.3-1.3L12 3z" />
+          <path d="M5 3v4" />
+          <path d="M19 17v4" />
+          <path d="M3 5h4" />
+          <path d="M17 19h4" />
+        </svg>
+      </template>
     </span>
     <div class="chat-message-body">
+      <div v-if="message.agentRole" class="agent-role-label">{{ agentRoleName }}</div>
       <template v-for="(group, index) in contentGroups" :key="index">
         <ChatSegment v-if="group.type === 'segment'" :segment="group.segment" :ai-session-id="aiSessionId" />
         <div v-else-if="processGroupIsThinkingOnly(group)" class="chat-process-group thinking-only">

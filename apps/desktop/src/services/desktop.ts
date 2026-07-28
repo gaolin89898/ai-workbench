@@ -167,6 +167,38 @@ export type PipelineStepUpdateEvent = {
   error?: string;
 };
 
+// ---------- Chatroom types ----------
+
+export type ChatroomConfig = {
+  roles: AgentRole[];
+  /** 当用户消息没有 @提及时，默认响应的角色 ID 列表；为空则不自动响应 */
+  defaultResponderRoleIds: string[];
+};
+
+export type RunChatroomTurnRequest = {
+  aiSessionId: string;
+  projectPath?: string | null;
+  prompt: string;
+  images?: ChatImageAttachment[];
+  attachments?: ChatFileAttachment[];
+  contexts?: ChatContextAttachment[];
+  config: ChatroomConfig;
+};
+
+export type ChatroomTurnStatus = "pending" | "running" | "completed" | "failed" | "skipped";
+
+export type ChatroomResponseEvent = {
+  aiSessionId: string;
+  roleId: string;
+  roleName: string;
+  providerId: string;
+  status: ChatroomTurnStatus;
+  output?: string;
+  error?: string;
+};
+
+export type ChatMode = "single" | "pipeline" | "chatroom";
+
 export type ProviderSessionCatalogEntry = {
   key: string;
   providerId: string;
@@ -1178,6 +1210,10 @@ export const desktopApi = {
     ipc<void>("run_pipeline_chat", req),
   listPipelineTemplates: (): Promise<PipelineTemplate[]> =>
     ipc<PipelineTemplate[]>("list_pipeline_templates"),
+  runChatroomTurn: (req: RunChatroomTurnRequest): Promise<void> =>
+    ipc<void>("run_chatroom_turn", req),
+  listChatroomRoles: (): Promise<AgentRole[]> =>
+    ipc<AgentRole[]>("list_chatroom_roles"),
   steerCodexChat: (req: SteerCodexChatRequest): Promise<boolean> =>
     ipc<boolean>("steer_codex_chat", req),
   listCodexThreads: (req: CodexThreadListRequest): Promise<CodexThreadListResponse> =>
@@ -1304,6 +1340,8 @@ export const desktopApi = {
     Promise.resolve(on("ai-trace-update", handler as (event: unknown) => void)),
   onPipelineStepUpdate: (handler: (event: PipelineStepUpdateEvent) => void): Promise<() => void> =>
     Promise.resolve(on("pipeline-step-update", handler as (event: unknown) => void)),
+  onChatroomResponse: (handler: (event: ChatroomResponseEvent) => void): Promise<() => void> =>
+    Promise.resolve(on("chatroom-response", handler as (event: unknown) => void)),
   onCodexUserInputRequest: (handler: (event: CodexUserInputRequestEvent) => void): Promise<() => void> =>
     Promise.resolve(on("codex-user-input-request", handler as (event: unknown) => void)),
   onCodexUserInputResolved: (handler: (event: CodexUserInputResolvedEvent) => void): Promise<() => void> =>

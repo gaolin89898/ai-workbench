@@ -8358,6 +8358,120 @@ body.chat-terminal-resizing {
   color: var(--color-danger, #ef4444);
 }
 
+/* ---------- Chatroom mode ---------- */
+
+.chatroom-mode-chip.active {
+  border-color: var(--color-primary);
+  background: var(--color-primary-muted);
+  color: var(--color-primary);
+}
+
+.chatroom-role-bar {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+
+.chatroom-role-chip {
+  display: inline-flex;
+  align-items: center;
+  height: 24px;
+  padding: 0 8px;
+  border: 1px solid var(--color-border-subtle);
+  border-radius: 999px;
+  background: var(--color-bg-elevated);
+  color: var(--color-text-muted);
+  font-size: 11px;
+  font-weight: var(--fw-medium);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.chatroom-role-chip:hover {
+  border-color: var(--color-border-strong, var(--color-border-subtle));
+  color: var(--color-text-body);
+}
+
+.chatroom-role-chip.active {
+  border-color: var(--color-primary);
+  background: var(--color-primary-soft);
+  color: var(--color-primary);
+}
+
+/* @提及自动补全菜单 */
+.mention-autocomplete-menu {
+  position: absolute;
+  bottom: 100%;
+  left: 0;
+  z-index: 35;
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  max-width: 320px;
+  max-height: 200px;
+  overflow-y: auto;
+  border: 1px solid var(--color-border-subtle);
+  border-radius: 10px;
+  background: var(--color-bg-elevated);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12);
+  margin-bottom: 4px;
+}
+
+.mention-autocomplete-option {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  padding: 8px 12px;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  text-align: left;
+  transition: background 0.1s ease;
+}
+
+.mention-autocomplete-option:hover,
+.mention-autocomplete-option.active {
+  background: var(--color-primary-soft);
+}
+
+.mention-autocomplete-name {
+  font-size: 13px;
+  font-weight: var(--fw-medium);
+  color: var(--color-text-body);
+}
+
+.mention-autocomplete-desc {
+  font-size: 11px;
+  color: var(--color-text-muted);
+}
+
+/* 角色消息样式 */
+.chat-message-row.has-agent-role .agent-role-label {
+  font-size: 12px;
+  font-weight: var(--fw-medium);
+  color: var(--color-primary);
+  margin-bottom: 4px;
+}
+
+.chat-ai-avatar.agent-role-avatar {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: var(--color-primary);
+  color: #fff;
+}
+
+.agent-role-initial {
+  font-size: 14px;
+  font-weight: var(--fw-bold);
+  line-height: 1;
+}
+
 .codex-composer-add-menu {
   position: absolute;
   left: 0;

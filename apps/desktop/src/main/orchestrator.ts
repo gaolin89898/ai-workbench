@@ -252,24 +252,24 @@ async function runSingleStep(
 
   if (providerId === "codex") {
     const req: RunCodexChatRequest = {
+      ...(role.chatOptions as RunCodexChatRequest),
       aiSessionId,
       projectPath: projectPath ?? null,
       prompt,
       images,
       attachments,
       contexts,
-      ...(role.chatOptions as RunCodexChatRequest),
     };
     await runCodexChat(req, sender);
   } else {
     const req: RunAiChatRequest = {
+      ...(role.chatOptions as RunAiChatRequest),
       aiSessionId,
       projectPath: projectPath ?? null,
       prompt,
       images,
       attachments,
       contexts,
-      ...(role.chatOptions as RunAiChatRequest),
     };
     if (providerId === "opencode") {
       await runOpenCodeChat(req, sender, null);

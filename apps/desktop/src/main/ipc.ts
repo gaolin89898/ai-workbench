@@ -63,6 +63,7 @@ import { checkAppUpdate, getUpdateDownloadSize, installAppUpdate, initUpdater } 
 import { listProjectFiles, openProjectHtmlInBrowser, readProjectFileForViewer, readProjectFilePreview } from "./project_files";
 import { attachProviderSession, listProviderSessions } from "./provider_sessions";
 import { listPipelineTemplates, runPipelineChat, stopPipelineChat, hasLivePipelineChat } from "./orchestrator";
+import { listChatroomRoles, runChatroomTurn, stopChatroomTurn, hasLiveChatroom } from "./chatroom";
 import type {
   CreateAiSessionRequest,
   StartShellPtyRequest,
@@ -71,6 +72,7 @@ import type {
   RunAiChatRequest,
   RunCodexChatRequest,
   RunPipelineChatRequest,
+  RunChatroomTurnRequest,
   SteerCodexChatRequest,
   CodexApprovalResponseRequest,
   CodexUserInputResponseRequest,
@@ -521,6 +523,28 @@ export function registerIpcHandlers(win?: BrowserWindow): void {
     }
   });
 
+  // ---------- Chatroom ----------
+
+  handle("list_chatroom_roles", async () => listChatroomRoles());
+
+  handle("run_chatroom_turn", async (_event, args: [RunChatroomTurnRequest]) => {
+    const req = args[0];
+    const sync = getDesktopCloudSync();
+    sync?.beginAiTurn(req.aiSessionId);
+    const sender = sync?.createRendererAndMobileAiChatSender(getSender()) ?? getSender();
+    db.updateLocalAiSession(req.aiSessionId, { status: "running" });
+    try {
+      await runChatroomTurn(req, sender);
+      db.updateLocalAiSession(req.aiSessionId, { status: "completed" });
+    } catch (err) {
+      db.updateLocalAiSession(req.aiSessionId, { status: "failed" });
+      throw err;
+    } finally {
+      void sync?.pushSessionSnapshot();
+      void sync?.pushAiHistory(req.aiSessionId);
+    }
+  });
+
   // ---------- Codex management ----------
 
   handle("list_codex_threads", async (event, args: [CodexThreadListRequest]) =>
@@ -630,6 +654,7 @@ export function registerIpcHandlers(win?: BrowserWindow): void {
   handle("stop_ai_chat", async (_event, args: [string]) => {
     const aiSessionId = args[0];
     if (stopPipelineChat(aiSessionId)) return true;
+    if (stopChatroomTurn(aiSessionId)) return true;
     if (await stopCodexChat(aiSessionId)) return true;
     return stopOpenCodeChat(aiSessionId)
       || stopMimoChat(aiSessionId)
@@ -637,7 +662,7 @@ export function registerIpcHandlers(win?: BrowserWindow): void {
   });
 
   handle("has_live_ai_chat", async () =>
-    hasLivePipelineChat() || hasLiveCodexChat() || hasLiveOpenCodeChat() || hasLiveMimoChat() || hasLiveAiChat()
+    hasLivePipelineChat() || hasLiveChatroom() || hasLiveCodexChat() || hasLiveOpenCodeChat() || hasLiveMimoChat() || hasLiveAiChat()
   );
 
   const respondAiApproval = async (req: CodexApprovalResponseRequest) => {

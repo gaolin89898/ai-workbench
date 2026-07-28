@@ -168,6 +168,10 @@ const codexGoalEnabled = ref(false);
 const codexGoal = ref("");
 const codexGoalStatus = ref<CodexGoalStatus>("active");
 const pipelineModeEnabled = ref(false);
+const chatroomModeEnabled = ref(false);
+const mentionMenuVisible = ref(false);
+const mentionMenuIndex = ref(0);
+const mentionSearchText = ref("");
 const codexThreadGoal = ref<CodexThreadGoal | null>(null);
 const codexGoalBusy = ref(false);
 const codexGoalLoading = ref(false);
@@ -313,6 +317,48 @@ function pipelineStepStatusLabel(status: string): string {
     case "skipped": return "已跳过";
     default: return status;
   }
+}
+
+const chatroomResponsesForActiveSession = computed(() => {
+  const sessionId = ws.activeAiSession.value?.id;
+  if (!sessionId) return [];
+  return ws.chatroomResponses.value[sessionId] ?? [];
+});
+const chatroomCompletedCount = computed(() =>
+  chatroomResponsesForActiveSession.value.filter((r) => r.status === "completed").length
+);
+const filteredMentionRoles = computed(() => {
+  const search = mentionSearchText.value.toLowerCase();
+  return ws.chatroomRoles.value.filter((r) =>
+    r.name.toLowerCase().includes(search) || r.id.toLowerCase().includes(search)
+  );
+});
+function insertMention(roleId: string, roleName: string): void {
+  const text = prompt.value;
+  const atIdx = text.lastIndexOf("@", text.length - 1);
+  if (atIdx >= 0) {
+    prompt.value = text.slice(0, atIdx) + `@${roleName} ` + text.slice(atIdx + mentionSearchText.value.length + 1);
+  }
+  mentionMenuVisible.value = false;
+  mentionSearchText.value = "";
+  void nextTick(() => promptInput.value?.focus());
+}
+function onPromptInputForMention(): void {
+  const text = prompt.value;
+  const lastAt = text.lastIndexOf("@");
+  if (lastAt < 0) {
+    mentionMenuVisible.value = false;
+    return;
+  }
+  const afterAt = text.slice(lastAt + 1);
+  // 只在没有空格时显示菜单（表示正在输入@后面的名字）
+  if (afterAt.includes(" ") || afterAt.includes("\n")) {
+    mentionMenuVisible.value = false;
+    return;
+  }
+  mentionSearchText.value = afterAt;
+  mentionMenuVisible.value = true;
+  mentionMenuIndex.value = 0;
 }
 const environmentBranchLabel = computed(() => (
   environmentInfo.value?.branch
@@ -2199,6 +2245,7 @@ onMounted(() => {
     removeCodexAdminEventListener = remove;
   });
   void ws.loadPipelineTemplates();
+  void ws.loadChatroomRoles();
 });
 
 onBeforeUnmount(() => {
@@ -2269,6 +2316,16 @@ async function send() {
   contextAttachments.value = [];
   pendingPromptAnchorKey = latestUserAnchor()?.key ?? "__empty__";
   try {
+    if (chatroomModeEnabled.value) {
+      const sent = await ws.sendChatroomMessage(value, images, attachments, contexts);
+      if (!sent) {
+        prompt.value = value;
+        imageAttachments.value = images;
+        fileAttachments.value = attachments;
+        contextAttachments.value = contexts;
+      }
+      return;
+    }
     if (pipelineModeEnabled.value) {
       const sent = await ws.sendPipelinePrompt(value, images, attachments, contexts);
       if (!sent) {
@@ -3038,6 +3095,25 @@ function selectSlashPanelReasoning(level: string) {
               </div>
             </div>
           </div>
+          <div v-if="chatroomResponsesForActiveSession.length" class="pipeline-progress-panel chatroom-progress-panel">
+            <div class="pipeline-progress-header">
+              <strong>聊天室角色响应</strong>
+              <span>{{ chatroomCompletedCount }}/{{ chatroomResponsesForActiveSession.length }} 已回复</span>
+            </div>
+            <div class="pipeline-progress-steps">
+              <div
+                v-for="(resp, index) in chatroomResponsesForActiveSession"
+                :key="index"
+                class="pipeline-step-item"
+                :class="`pipeline-step-${resp.status}`"
+              >
+                <span class="pipeline-step-index">{{ index + 1 }}</span>
+                <span class="pipeline-step-role">{{ resp.roleName }}</span>
+                <span class="pipeline-step-provider">{{ resp.providerId }}</span>
+                <span class="pipeline-step-status">{{ pipelineStepStatusLabel(resp.status) }}</span>
+              </div>
+            </div>
+          </div>
           <div v-if="!ws.activeAiSession.value && ws.chatMessages.value.length === 1 && ws.chatMessages.value[0]?.role === 'system'" class="chat-welcome">
             <h2>从一个项目开始聊天</h2>
             <p>左侧选择本地项目，然后新建 AI 会话。聊天页支持 Codex / Claude Code，终端页只提供项目 shell。</p>
@@ -3357,13 +3433,30 @@ function selectSlashPanelReasoning(level: string) {
                 </div>
               </template>
             </section>
+            <div v-if="chatroomModeEnabled && mentionMenuVisible && filteredMentionRoles.length" class="mention-autocomplete-menu" role="listbox" aria-label="@提及角色">
+              <button
+                v-for="(role, index) in filteredMentionRoles"
+                :key="role.id"
+                type="button"
+                class="mention-autocomplete-option"
+                :class="{ active: index === mentionMenuIndex }"
+                role="option"
+                :aria-selected="index === mentionMenuIndex"
+                @mouseenter="mentionMenuIndex = index"
+                @click="insertMention(role.id, role.name)"
+              >
+                <span class="mention-autocomplete-name">{{ role.name }}</span>
+                <small class="mention-autocomplete-desc">{{ role.description }}</small>
+              </button>
+            </div>
             <textarea
               ref="promptInput"
               v-model="prompt"
               rows="3"
-              :placeholder="composerPlaceholder"
+              :placeholder="chatroomModeEnabled ? '输入消息，用 @角色名 指定谁来回复...' : composerPlaceholder"
               :disabled="composerInputLocked"
               @keydown="onPromptKeydown"
+              @input="onPromptInputForMention"
               @paste="onPromptPaste"
             ></textarea>
           </div>
@@ -3457,7 +3550,7 @@ function selectSlashPanelReasoning(level: string) {
                 :class="{ active: pipelineModeEnabled }"
                 :title="pipelineModeEnabled ? '关闭多角色流水线' : '开启多角色流水线'"
                 type="button"
-                @click="pipelineModeEnabled = !pipelineModeEnabled"
+                @click="pipelineModeEnabled = !pipelineModeEnabled; if (pipelineModeEnabled) chatroomModeEnabled = false"
               >
                 <svg viewBox="0 0 16 16" fill="none" aria-hidden="true">
                   <circle cx="4" cy="4" r="2" stroke="currentColor" stroke-width="1.2" />
@@ -3476,6 +3569,39 @@ function selectSlashPanelReasoning(level: string) {
               >
                 <option v-for="tpl in ws.pipelineTemplates.value" :key="tpl.id" :value="tpl.id">{{ tpl.name }}</option>
               </select>
+              <button
+                v-if="showModelRunControls"
+                class="codex-mode-chip chatroom-mode-chip"
+                :class="{ active: chatroomModeEnabled }"
+                :title="chatroomModeEnabled ? '关闭聊天室模式' : '开启聊天室模式'"
+                type="button"
+                @click="chatroomModeEnabled = !chatroomModeEnabled; if (chatroomModeEnabled) pipelineModeEnabled = false"
+              >
+                <svg viewBox="0 0 16 16" fill="none" aria-hidden="true">
+                  <path d="M2.5 4h11v7H6l-3 2.5V11H2.5V4Z" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round"/>
+                  <circle cx="5.5" cy="7.5" r="0.8" fill="currentColor"/>
+                  <circle cx="8" cy="7.5" r="0.8" fill="currentColor"/>
+                  <circle cx="10.5" cy="7.5" r="0.8" fill="currentColor"/>
+                </svg>
+                <span>聊天室</span>
+                <small>{{ chatroomModeEnabled ? "已开启" : "未开启" }}</small>
+              </button>
+              <div
+                v-if="showModelRunControls && chatroomModeEnabled"
+                class="chatroom-role-bar"
+              >
+                <button
+                  v-for="role in ws.chatroomRoles.value"
+                  :key="role.id"
+                  type="button"
+                  class="chatroom-role-chip"
+                  :class="{ active: ws.chatroomSelectedRoleIds.value.has(role.id) }"
+                  :title="role.description"
+                  @click="ws.toggleChatroomRole(role.id)"
+                >
+                  <span>{{ role.name }}</span>
+                </button>
+              </div>
             </div>
             <div class="chat-composer-toolbar-right">
               <div v-if="showModelRunControls" class="codex-model-picker codex-model-picker-custom" :title="modelPickerTitle">

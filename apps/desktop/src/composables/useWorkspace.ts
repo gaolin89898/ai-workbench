@@ -1,6 +1,6 @@
 import { computed, ref, watch } from "vue";
 import router from "../router";
-import { desktopApi, type AiChatOptions, type AiChatOutputEvent, type AiProvider, type AiProviderTrace, type AiSession, type AiTraceUpdateEvent, type AppUpdateDownloadProgress, type AppUpdateInfo, type ChatContextAttachment, type ChatFileAttachment, type ChatImageAttachment, type ChatMessage, type ChatSegment, type CodexUserInputRequestEvent, type PipelineStepUpdateEvent, type PipelineTemplate, type ProviderStatus, type TerminalSession, type ViewName, type WorkspaceProject } from "../services/desktop";
+import { desktopApi, type AiChatOptions, type AiChatOutputEvent, type AiProvider, type AiProviderTrace, type AiSession, type AiTraceUpdateEvent, type AppUpdateDownloadProgress, type AppUpdateInfo, type AgentRole, type ChatContextAttachment, type ChatFileAttachment, type ChatImageAttachment, type ChatMessage, type ChatSegment, type ChatroomResponseEvent, type CodexUserInputRequestEvent, type PipelineStepUpdateEvent, type PipelineTemplate, type ProviderStatus, type TerminalSession, type ViewName, type WorkspaceProject } from "../services/desktop";
 import { decodeAssistantMessageFromStorage, encodeAssistantMessageForStorage, extractAssistantText } from "../utils/chat";
 
 export type QueuedAiMessage = {
@@ -56,6 +56,10 @@ const pendingCodexUserInputs = ref<Record<string, CodexUserInputRequestEvent>>({
 const pipelineSteps = ref<Record<string, PipelineStepUpdateEvent[]>>({});
 const pipelineTemplates = ref<PipelineTemplate[]>([]);
 const selectedPipelineTemplateId = ref<string>("");
+const chatroomRoles = ref<AgentRole[]>([]);
+const chatroomSelectedRoleIds = ref<Set<string>>(new Set());
+const chatroomResponses = ref<Record<string, ChatroomResponseEvent[]>>({});
+const chatMode = ref<"single" | "pipeline" | "chatroom">("single");
 
 const PIN_STORAGE_KEY = "ai-workbench.pinnedSessions";
 const UNREAD_STORAGE_KEY = "ai-workbench.unreadSessions";
@@ -2014,6 +2018,14 @@ async function initAiEventListeners() {
       updated[event.stepIndex] = event;
       pipelineSteps.value = { ...pipelineSteps.value, [event.aiSessionId]: updated };
     }),
+    desktopApi.onChatroomResponse((event) => {
+      const responses = chatroomResponses.value[event.aiSessionId] ?? [];
+      const existingIdx = responses.findIndex((r) => r.roleId === event.roleId);
+      const updated = existingIdx >= 0
+        ? responses.map((r, i) => i === existingIdx ? event : r)
+        : [...responses, event];
+      chatroomResponses.value = { ...chatroomResponses.value, [event.aiSessionId]: updated };
+    }),
     desktopApi.onCodexUserInputRequest((event) => {
       pendingCodexUserInputs.value = { ...pendingCodexUserInputs.value, [event.aiSessionId]: event };
       thinkingSessionIds.value = { ...thinkingSessionIds.value, [event.aiSessionId]: true };
@@ -2755,6 +2767,147 @@ async function sendPipelinePrompt(
   }
 }
 
+async function loadChatroomRoles(): Promise<void> {
+  try {
+    chatroomRoles.value = await desktopApi.listChatroomRoles();
+    // 默认选中所有角色
+    if (chatroomSelectedRoleIds.value.size === 0 && chatroomRoles.value.length > 0) {
+      chatroomSelectedRoleIds.value = new Set(chatroomRoles.value.map((r) => r.id));
+    }
+  } catch {
+    // 忽略 - chatroom 功能可选
+  }
+}
+
+function toggleChatroomRole(roleId: string): void {
+  const next = new Set(chatroomSelectedRoleIds.value);
+  if (next.has(roleId)) {
+    next.delete(roleId);
+  } else {
+    next.add(roleId);
+  }
+  chatroomSelectedRoleIds.value = next;
+}
+
+async function sendChatroomMessage(
+  prompt: string,
+  images: ChatImageAttachment[] = [],
+  attachments: ChatFileAttachment[] = [],
+  contexts: ChatContextAttachment[] = [],
+): Promise<boolean> {
+  await initAiEventListeners();
+  const trimmed = prompt.trim();
+  if (!trimmed) return false;
+  const targetSession = activeAiSession.value;
+  if (!targetSession) return false;
+
+  const sessionId = targetSession.id;
+  const projectPath = targetSession.projectPath || selectedProjectPath.value || "";
+
+  // 获取参与角色
+  const roles = chatroomRoles.value.filter((r) => chatroomSelectedRoleIds.value.has(r.id));
+  if (roles.length === 0) return false;
+
+  // 重置响应状态
+  chatroomResponses.value = { ...chatroomResponses.value, [sessionId]: [] };
+
+  // 追加用户消息
+  appendChatMessageForSession(sessionId, { role: "user", text: trimmed, images, attachments, contexts });
+  await desktopApi.appendLocalAiMessage(sessionId, "user", encodeAssistantMessageForStorage({ text: trimmed, images, attachments, contexts }));
+
+  // 追加占位 assistant 消息
+  const assistantClientId = chatClientId("assistant");
+  const assistantMessage: ChatMessage = {
+    clientId: assistantClientId,
+    role: "assistant",
+    pending: true,
+    segments: [{
+      type: "status",
+      stepId: "chatroom-waiting",
+      label: `聊天室等待角色响应...`,
+      icon: "think",
+    }],
+  };
+  appendChatMessageForSession(sessionId, assistantMessage);
+  pendingAssistants.set(sessionId, {
+    clientId: assistantClientId,
+    message: assistantMessage,
+    prompt: trimmed,
+    steps: new Map([["chatroom-waiting", assistantMessage.segments![0]]]),
+    finalText: "",
+    currentAgentMessageStepId: null,
+    startedAt: performance.now(),
+    hasBackendStatus: false,
+    lastStatusText: "",
+  });
+
+  thinkingSessionIds.value = { ...thinkingSessionIds.value, [sessionId]: true };
+  setChatRunState(sessionId, {
+    active: true,
+    phase: "starting",
+    title: "聊天室执行中",
+    detail: `正在等待 ${roles.length} 个角色响应...`,
+    startedAt: performance.now(),
+  });
+
+  try {
+    await desktopApi.runChatroomTurn({
+      aiSessionId: sessionId,
+      projectPath,
+      prompt: trimmed,
+      images,
+      attachments,
+      contexts,
+      config: {
+        roles,
+        defaultResponderRoleIds: roles.map((r) => r.id),
+      },
+    });
+
+    // 完成
+    const responses = chatroomResponses.value[sessionId] ?? [];
+    const completedOutputs = responses
+      .filter((r) => r.status === "completed" && r.output)
+      .map((r) => `【${r.roleName}】\n${r.output}`)
+      .join("\n\n---\n\n");
+
+    const pending = pendingAssistants.get(sessionId);
+    if (pending) {
+      replacePendingAssistantText(sessionId, completedOutputs || "聊天室执行完成", true);
+      completePendingAssistantFromExec(sessionId);
+    }
+
+    setChatRunState(sessionId, {
+      active: false,
+      phase: "done",
+      title: "聊天室已完成",
+      detail: `${responses.filter((r) => r.status === "completed").length}/${roles.length} 个角色已回复。`,
+    });
+    thinkingSessionIds.value = { ...thinkingSessionIds.value, [sessionId]: false };
+    void loadAiSessionHistory(sessionId, { force: true });
+    return true;
+  } catch (error) {
+    const pending = pendingAssistants.get(sessionId);
+    if (pending) {
+      patchPendingAssistant(sessionId, {
+        pending: false,
+        role: "error",
+        segments: [{ type: "error", title: "聊天室执行失败", message: String(error) }],
+        text: `聊天室执行失败：${String(error)}`,
+      });
+      pendingAssistants.delete(sessionId);
+    }
+    thinkingSessionIds.value = { ...thinkingSessionIds.value, [sessionId]: false };
+    setChatRunState(sessionId, {
+      active: false,
+      phase: "error",
+      title: "聊天室执行失败",
+      detail: String(error),
+    });
+    return false;
+  }
+}
+
 export function useWorkspace() {
   return {
     providers,
@@ -2862,5 +3015,12 @@ export function useWorkspace() {
     selectedPipelineTemplateId,
     loadPipelineTemplates,
     sendPipelinePrompt,
+    chatroomRoles,
+    chatroomSelectedRoleIds,
+    chatroomResponses,
+    chatMode,
+    loadChatroomRoles,
+    toggleChatroomRole,
+    sendChatroomMessage,
   };
 }
