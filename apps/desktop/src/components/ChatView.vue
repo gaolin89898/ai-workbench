@@ -2407,8 +2407,24 @@ function toggleStartMenu() {
   }
 }
 
-function selectStartProvider(providerId = "codex") {
+async function selectStartProvider(providerId = "codex") {
   startMenuOpen.value = false;
+
+  // 切换 Provider 前自动归档当前会话
+  const currentSession = ws.activeAiSession.value;
+  if (currentSession && !currentSession.archivedAt) {
+    // 如果当前会话正在运行，提示用户先停止
+    if (ws.activeChatIsRunning.value) {
+      ws.chatMessages.value = [
+        ...ws.chatMessages.value,
+        { role: "error", text: "当前会话正在运行，请先停止任务后再切换 Provider。" }
+      ];
+      return;
+    }
+    // 自动归档当前会话
+    await ws.archiveAiSession(currentSession.id, true);
+  }
+
   ws.selectedProviderId.value = providerId;
 }
 
