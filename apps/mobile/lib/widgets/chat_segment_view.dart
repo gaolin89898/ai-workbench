@@ -2122,6 +2122,11 @@ class _ApprovalSegment extends StatelessWidget {
             const SizedBox(height: 8),
             _CodeBlock(segment.command!),
           ],
+          // 显示 diff 内容
+          if ((segment.diff ?? '').isNotEmpty) ...[
+            const SizedBox(height: 8),
+            _DiffBlock(segment.diff!),
+          ],
           if (segment.fileChanges.isNotEmpty) ...[
             const SizedBox(height: 8),
             for (final file in segment.fileChanges.take(5))
