@@ -1296,6 +1296,8 @@ export const desktopApi = {
     ipc<AiProviderTrace | null>("get_local_ai_trace", aiSessionId, traceKind),
   listLocalAiSessions: (): Promise<AiSession[]> =>
     ipc<AiSession[]>("list_local_ai_sessions"),
+  searchAiSessions: (query: string): Promise<AiSession[]> =>
+    ipc<AiSession[]>("search_ai_sessions", query),
   listProviderSessions: (): Promise<ProviderSessionCatalogEntry[]> =>
     ipc<ProviderSessionCatalogEntry[]>("list_provider_sessions"),
   attachProviderSession: (entry: ProviderSessionCatalogEntry): Promise<AiSession> =>

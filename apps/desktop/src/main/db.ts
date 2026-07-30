@@ -117,6 +117,55 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_local_ai_traces_session ON local_ai_traces(ai_session_id);
 `);
 
+// 迁移：创建 FTS5 全文搜索表
+try {
+  const tables = db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='local_ai_sessions_fts'").all() as Array<{ name: string }>;
+  if (tables.length === 0) {
+    // 创建会话搜索 FTS 表
+    db.exec(`
+      CREATE VIRTUAL TABLE local_ai_sessions_fts USING fts5(
+        id UNINDEXED,
+        title,
+        summary,
+        project_path,
+        content='local_ai_sessions',
+        content_rowid='rowid',
+        tokenize='unicode61'
+      );
+    `);
+
+    // 创建触发器保持 FTS 同步
+    db.exec(`
+      CREATE TRIGGER local_ai_sessions_fts_insert AFTER INSERT ON local_ai_sessions
+      BEGIN
+        INSERT INTO local_ai_sessions_fts(rowid, id, title, summary, project_path)
+        VALUES (NEW.rowid, NEW.id, NEW.title, NEW.summary, NEW.project_path);
+      END;
+
+      CREATE TRIGGER local_ai_sessions_fts_update AFTER UPDATE ON local_ai_sessions
+      BEGIN
+        UPDATE local_ai_sessions_fts
+        SET title=NEW.title, summary=NEW.summary, project_path=NEW.project_path
+        WHERE rowid=NEW.rowid;
+      END;
+
+      CREATE TRIGGER local_ai_sessions_fts_delete AFTER DELETE ON local_ai_sessions
+      BEGIN
+        DELETE FROM local_ai_sessions_fts WHERE rowid=OLD.rowid;
+      END;
+    `);
+
+    // 为现有数据建立索引
+    db.exec(`
+      INSERT INTO local_ai_sessions_fts(rowid, id, title, summary, project_path)
+      SELECT rowid, id, title, summary, project_path FROM local_ai_sessions;
+    `);
+  }
+} catch (error) {
+  console.error("FTS5 migration failed:", error);
+  // 忽略迁移错误，保持启动健壮
+}
+
 process.on("exit", () => {
   try {
     db.close();
@@ -370,6 +419,24 @@ export function listLocalAiSessions(): AiSession[] {
   const rows = db
     .prepare("SELECT * FROM local_ai_sessions ORDER BY updated_at DESC")
     .all() as SessionRow[];
+  return rows.map(rowToSession);
+}
+
+export function searchLocalAiSessions(query: string): AiSession[] {
+  const trimmedQuery = query.trim();
+  if (!trimmedQuery) {
+    return listLocalAiSessions();
+  }
+
+  // FTS5 查询语法：多个词用空格分隔会自动 AND，可以用 OR 连接
+  const rows = db
+    .prepare(`
+      SELECT s.* FROM local_ai_sessions s
+      JOIN local_ai_sessions_fts fts ON s.rowid = fts.rowid
+      WHERE local_ai_sessions_fts MATCH ?
+      ORDER BY rank, s.updated_at DESC
+    `)
+    .all(trimmedQuery) as SessionRow[];
   return rows.map(rowToSession);
 }
 

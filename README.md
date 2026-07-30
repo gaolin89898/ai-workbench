@@ -22,7 +22,7 @@ CodeHub AI 是一个面向本地项目的多 AI Agent 工作台。它把真正�
 
 - 桌面端运行 Codex。
 - 移动端同步桌面端的 Codex 会话状态。
-- 一轮回复稳定展示为“用户问题 / 执行过程 / 最终回答”。
+- 一轮回复稳定展示为"用户问题 / 执行过程 / 最终回答"。
 - 执行过程和最终回答不会在移动端拆成两条 assistant 消息。
 
 ## 产品体验
@@ -53,13 +53,30 @@ CodeHub AI 是一个面向本地项目的多 AI Agent 工作台。它把真正�
 AI_WORKBENCH_DB
 ```
 
+### 聊天室模式
+
+桌面端支持多角色聊天室模式，多个 AI Agent 可以在同一个会话中协作：
+
+- **内置角色**：规划师（需求分析、任务拆解）、编码师（代码实现）、审查员（代码审查）等。
+- **@提及**：在聊天室中通过 `@角色名` 指定特定 Agent 回复。
+- **共享历史**：所有角色共享同一段对话历史，确保上下文一致。
+- **角色管理**：支持自定义角色，可配置不同的 Provider 和系统提示词。
+
+### 流水线编排
+
+桌面端支持多步骤流水线编排模式：
+
+- **模板选择**：内置常用流水线模板，如"需求 → 编码 → 审查"。
+- **步骤进度**：可视化展示每个步骤的执行状态和结果。
+- **模式切换**：可在普通聊天和流水线模式之间自由切换。
+
 ### 移动端
 
 移动端用于远程查看和控制桌面端。
 
 你可以：
 
-- 登录账号。
+- 登录账号（支持账号密码和 Google OAuth 登录）。
 - 查看在线桌面设备。
 - 查看桌面端登记的项目。
 - 创建或进入 AI 会话。
@@ -83,7 +100,7 @@ AI_WORKBENCH_DB
 
 版本发布页可以分别配置桌面端和移动端的最新版本、最低可用版本、下载地址、Release 页面和更新说明。桌面端下载地址按 Windows/Linux 分开填写，移动端填写 APK 下载地址。保存后，在线客户端会收到更新通知。
 
-“最低可用版本”用于处理不兼容老版本：如果客户端当前版本低于这个值，服务端会返回必须更新，客户端提示用户更新后继续使用。
+"最低可用版本"用于处理不兼容老版本：如果客户端当前版本低于这个值，服务端会返回必须更新，客户端提示用户更新后继续使用。
 
 ## 跨端会话模型
 
@@ -106,7 +123,7 @@ CodeHub AI 把会话显示拆成两个层次：
   本轮 Codex 给出的最终回复
 ```
 
-移动端不会重新猜测哪些内容是“执行过程”、哪些内容是“最终回答”。桌面端负责整理本机 Codex 的真实运行状态，移动端只同步并展示同一份结果。
+移动端不会重新猜测哪些内容是"执行过程"、哪些内容是"最终回答"。桌面端负责整理本机 Codex 的真实运行状态，移动端只同步并展示同一份结果。
 
 ## 项目结构
 
@@ -144,7 +161,7 @@ docker compose up -d postgres
 启动后端服务：
 
 ```bash
-export DATABASE_URL=postgres://remote_term:remote_term@127.0.0.1:5432/remote_term
+export DATABASE_URL=postgres://remote_term:***@127.0.0.1:5432/remote_term
 export JWT_SECRET=change-this-in-production
 cd backend
 go run ./cmd/server
@@ -228,6 +245,20 @@ cd apps/desktop
 pnpm run build
 ```
 
+桌面端类型检查：
+
+```bash
+cd apps/desktop
+npx tsc -p tsconfig.node.json --noEmit
+```
+
+桌面端 E2E 测试：
+
+```bash
+cd apps/desktop
+pnpm test:e2e:core
+```
+
 桌面端打包 Linux 安装包：
 
 ```bash
@@ -261,12 +292,15 @@ pnpm run build
 - WebSocket 和消息协议：[docs/protocol.md](docs/protocol.md)
 - 桌面端自动更新：[docs/desktop-auto-update.md](docs/desktop-auto-update.md)
 - 服务器部署和运维：[docs/server-ops.md](docs/server-ops.md)
+- MiMo 接入计划：[docs/mimo-integration-plan.md](docs/mimo-integration-plan.md)
+- Codex 功能路线图：[docs/codex-feature-roadmap.md](docs/codex-feature-roadmap.md)
+- 差距分析：[docs/gap-analysis.md](docs/gap-analysis.md)
 
 ## 自动更新
 
-软件更新现在采用“服务端版本策略优先，GitHub Releases 兜底”的方式。
+软件更新现在采用"服务端版本策略优先，GitHub Releases 兜底"的方式。
 
-后台管理员在用户管理系统的“版本发布”里配置桌面端和移动端版本。客户端检查更新时会先请求当前登录服务器：
+后台管理员在用户管理系统的"版本发布"里配置桌面端和移动端版本。客户端检查更新时会先请求当前登录服务器：
 
 ```text
 GET /app/releases?platform=desktop|mobile&currentVersion=当前版本
@@ -280,7 +314,7 @@ GET /app/releases?platform=desktop|mobile&currentVersion=当前版本
 
 如果低于最低可用版本，客户端会显示必须更新。保存版本配置后，服务端还会通过 WebSocket 向在线客户端推送 `app.update.available`。
 
-桌面端仍保留 electron-updater/GitHub Releases 作为兜底。发布 `v*` 标签后，GitHub Actions 会构建 Electron 安装包并上传更新元信息，桌面端可在“设置 -> 应用更新”里检查、下载并重启安装。
+桌面端仍保留 electron-updater/GitHub Releases 作为兜底。发布 `v*` 标签后，GitHub Actions 会构建 Electron 安装包并上传更新元信息，桌面端可在"设置 -> 应用更新"里检查、下载并重启安装。
 
 桌面端版本配置可以分别维护 Windows 和 Linux 安装包地址。移动端会优先使用服务端配置的 APK 下载地址；服务端没有配置或请求失败时，再尝试从 GitHub Releases 查找 APK。
 
@@ -300,3 +334,9 @@ GET /app/releases?platform=desktop|mobile&currentVersion=当前版本
 - 面向插件或自定义 CLI 的 Provider 接入机制。
 
 欢迎围绕产品体验、跨端同步、Provider 接入和本地优先架构继续改进。
+
+## 开源协议
+
+MIT License - Copyright (c) 2026 林九序
+
+GitHub: https://github.com/gaolin89898/ai-workbench

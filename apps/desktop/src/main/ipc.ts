@@ -60,6 +60,7 @@ import { hasLiveAiChat, runAiChat, stopAiChat } from "./claude";
 import { hasLiveOpenCodeChat, listOpenCodeConfigOptions, runOpenCodeChat, stopOpenCodeChat } from "./acp";
 import { hasLiveMimoChat, listMimoConfigOptions, respondMimoApproval, runMimoChat, stopMimoChat } from "./mimo";
 import { checkAppUpdate, getUpdateDownloadSize, installAppUpdate, initUpdater } from "./updater";
+import { notifyTaskComplete } from "./notifications";
 import { listProjectFiles, openProjectHtmlInBrowser, readProjectFileForViewer, readProjectFilePreview } from "./project_files";
 import { attachProviderSession, listProviderSessions } from "./provider_sessions";
 import { listPipelineTemplates, runPipelineChat, stopPipelineChat, hasLivePipelineChat } from "./orchestrator";
@@ -460,22 +461,29 @@ export function registerIpcHandlers(win?: BrowserWindow): void {
     const sync = getDesktopCloudSync();
     sync?.beginAiTurn(req.aiSessionId);
     const sender = sync?.createRendererAndMobileAiChatSender(getSender()) ?? getSender();
-    // Resume an existing session if we have a providerSessionId stored.
     const session = db.getLocalAiSession(req.aiSessionId);
     const existingSessionId = session?.providerSessionId ?? null;
     const providerId = session?.providerId ?? "claude";
-    const providerSessionId = providerId === "opencode"
-      ? await runOpenCodeChat(req, sender, existingSessionId)
-      : providerId === "mimo"
-        ? await runMimoChat(req, sender, existingSessionId)
-        : await runAiChat(req, sender, existingSessionId);
-    db.updateLocalAiSession(req.aiSessionId, {
-      providerSessionId: providerSessionId || existingSessionId,
-      status: "completed",
-    });
-    void sync?.pushSessionSnapshot();
-    void sync?.pushAiHistory(req.aiSessionId);
-    return providerSessionId;
+    try {
+      const providerSessionId = providerId === "opencode"
+        ? await runOpenCodeChat(req, sender, existingSessionId)
+        : providerId === "mimo"
+          ? await runMimoChat(req, sender, existingSessionId)
+          : await runAiChat(req, sender, existingSessionId);
+      db.updateLocalAiSession(req.aiSessionId, {
+        providerSessionId: providerSessionId || existingSessionId,
+        status: "completed",
+      });
+      void sync?.pushSessionSnapshot();
+      void sync?.pushAiHistory(req.aiSessionId);
+      notifyTaskComplete(session?.title, "completed", session?.providerId);
+      return providerSessionId;
+    } catch (err) {
+      db.updateLocalAiSession(req.aiSessionId, { status: "failed" });
+      void sync?.pushSessionSnapshot();
+      notifyTaskComplete(session?.title, "failed", session?.providerId);
+      throw err;
+    }
   });
 
   handle("run_codex_chat", async (_event, args: [RunCodexChatRequest]) => {
@@ -485,14 +493,22 @@ export function registerIpcHandlers(win?: BrowserWindow): void {
     const sync = getDesktopCloudSync();
     sync?.beginAiTurn(req.aiSessionId);
     const sender = sync?.createRendererAndMobileAiChatSender(getSender()) ?? getSender();
-    const providerSessionId = await runCodexChat(req, sender);
-    db.updateLocalAiSession(req.aiSessionId, {
-      providerSessionId: providerSessionId || existingSessionId,
-      status: "completed",
-    });
-    void sync?.pushSessionSnapshot();
-    void sync?.pushAiHistory(req.aiSessionId);
-    return providerSessionId;
+    try {
+      const providerSessionId = await runCodexChat(req, sender);
+      db.updateLocalAiSession(req.aiSessionId, {
+        providerSessionId: providerSessionId || existingSessionId,
+        status: "completed",
+      });
+      void sync?.pushSessionSnapshot();
+      void sync?.pushAiHistory(req.aiSessionId);
+      notifyTaskComplete(session?.title, "completed", session?.providerId);
+      return providerSessionId;
+    } catch (err) {
+      db.updateLocalAiSession(req.aiSessionId, { status: "failed" });
+      void sync?.pushSessionSnapshot();
+      notifyTaskComplete(session?.title, "failed", session?.providerId);
+      throw err;
+    }
   });
 
   handle("list_codex_models", async () => listCodexModels());
@@ -510,12 +526,15 @@ export function registerIpcHandlers(win?: BrowserWindow): void {
     const sync = getDesktopCloudSync();
     sync?.beginAiTurn(req.aiSessionId);
     const sender = sync?.createRendererAndMobileAiChatSender(getSender()) ?? getSender();
+    const session = db.getLocalAiSession(req.aiSessionId);
     db.updateLocalAiSession(req.aiSessionId, { status: "running" });
     try {
       await runPipelineChat(req, sender);
       db.updateLocalAiSession(req.aiSessionId, { status: "completed" });
+      notifyTaskComplete(session?.title, "completed", session?.providerId);
     } catch (err) {
       db.updateLocalAiSession(req.aiSessionId, { status: "failed" });
+      notifyTaskComplete(session?.title, "failed", session?.providerId);
       throw err;
     } finally {
       void sync?.pushSessionSnapshot();
@@ -532,12 +551,15 @@ export function registerIpcHandlers(win?: BrowserWindow): void {
     const sync = getDesktopCloudSync();
     sync?.beginAiTurn(req.aiSessionId);
     const sender = sync?.createRendererAndMobileAiChatSender(getSender()) ?? getSender();
+    const session = db.getLocalAiSession(req.aiSessionId);
     db.updateLocalAiSession(req.aiSessionId, { status: "running" });
     try {
       await runChatroomTurn(req, sender);
       db.updateLocalAiSession(req.aiSessionId, { status: "completed" });
+      notifyTaskComplete(session?.title, "completed", session?.providerId);
     } catch (err) {
       db.updateLocalAiSession(req.aiSessionId, { status: "failed" });
+      notifyTaskComplete(session?.title, "failed", session?.providerId);
       throw err;
     } finally {
       void sync?.pushSessionSnapshot();
@@ -712,6 +734,7 @@ export function registerIpcHandlers(win?: BrowserWindow): void {
   );
 
   handle("list_local_ai_sessions", async () => db.listLocalAiSessions());
+  handle("search_ai_sessions", async (_event, args: [string]) => db.searchLocalAiSessions(args[0]));
 
   handle("list_provider_sessions", async (event) => listProviderSessions(event.sender));
 

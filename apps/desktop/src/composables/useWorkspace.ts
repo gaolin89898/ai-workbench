@@ -20,6 +20,9 @@ const aiSessions = ref<AiSession[]>([]);
 const terminalSessions = ref<TerminalSession[]>([]);
 const activeAiSession = ref<AiSession | null>(null);
 const showArchivedSessions = ref(false);
+const sessionSearchQuery = ref("");
+const sessionSearchResults = ref<AiSession[]>([]);
+const isSearchingSessions = ref(false);
 const selectedProjectPath = ref("");
 const selectedProviderId = ref("codex");
 const selectedCreationMode = ref("auto");
@@ -607,6 +610,50 @@ watch(selectedProjectPath, () => {
     selectedTerminalSessionId.value = "";
   }
 });
+
+let searchDebounceTimer: ReturnType<typeof setTimeout> | null = null;
+
+async function searchAiSessions(query: string) {
+  const trimmedQuery = query.trim();
+  if (!trimmedQuery) {
+    sessionSearchResults.value = [];
+    sessionSearchQuery.value = "";
+    return;
+  }
+
+  sessionSearchQuery.value = trimmedQuery;
+  isSearchingSessions.value = true;
+  try {
+    const results = await desktopApi.ipc.searchAiSessions(trimmedQuery);
+    sessionSearchResults.value = results;
+  } catch (error) {
+    console.error("Session search failed:", error);
+    sessionSearchResults.value = [];
+  } finally {
+    isSearchingSessions.value = false;
+  }
+}
+
+function onSessionSearchInput(query: string) {
+  if (searchDebounceTimer) clearTimeout(searchDebounceTimer);
+  if (!query.trim()) {
+    sessionSearchResults.value = [];
+    sessionSearchQuery.value = "";
+    return;
+  }
+  searchDebounceTimer = setTimeout(() => {
+    void searchAiSessions(query);
+  }, 300);
+}
+
+function clearSessionSearch() {
+  sessionSearchQuery.value = "";
+  sessionSearchResults.value = [];
+  if (searchDebounceTimer) {
+    clearTimeout(searchDebounceTimer);
+    searchDebounceTimer = null;
+  }
+}
 
 async function refreshWorkspace() {
   await initAiEventListeners();
@@ -2957,6 +3004,9 @@ export function useWorkspace() {
     projectShellSessionId,
     activeSessions,
     archivedSessions,
+    sessionSearchQuery,
+    sessionSearchResults,
+    isSearchingSessions,
     refreshWorkspace,
     loadProviders,
     loadLocalWorkspace,
@@ -2997,6 +3047,8 @@ export function useWorkspace() {
     resizeProjectShell,
     archiveAiSession,
     deleteAiSession,
+    onSessionSearchInput,
+    clearSessionSearch,
     renameAiSession,
     isSessionPinned,
     toggleSessionPinned,

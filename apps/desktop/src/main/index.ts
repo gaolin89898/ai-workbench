@@ -8,6 +8,7 @@ import { initDesktopCloudSync } from "./sync";
 import { startProviderAutoDetect } from "./providers";
 import { disposeCodexAdmin } from "./codex_admin";
 import { applyUtf8ProcessEnv } from "./windows-utf8-env";
+import { setNotificationWindow } from "./notifications";
 
 // Apply UTF-8 environment variables early so all child CLI processes
 // (Codex, Claude Code, OpenCode, MiMo) inherit a consistent encoding,
@@ -150,6 +151,7 @@ app.whenReady().then(() => {
 
   const mainWindow = createWindow();
   createTray(mainWindow);
+  setNotificationWindow(mainWindow);
   registerIpcHandlers(mainWindow);
   if (!isTestMode) {
     initDesktopCloudSync(mainWindow);

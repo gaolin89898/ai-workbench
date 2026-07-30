@@ -31,6 +31,12 @@ backend/.gocache/
 mobile-*.png
 --title
 
+# TypeScript 增量编译缓存
+*.tsbuildinfo
+
+# 临时构建文件
+_tmp_*
+
 # Electron release assets generated locally
 apps/desktop/release-assets/
 

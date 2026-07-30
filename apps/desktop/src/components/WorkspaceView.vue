@@ -6,8 +6,21 @@ import { useWorkspace } from "../composables/useWorkspace";
 const ws = useWorkspace();
 
 const installedCount = computed(() => ws.providerStatuses.value.filter((item) => item.installed).length);
-const visibleSessions = computed(() => (ws.showArchivedSessions.value ? ws.archivedSessions.value : ws.activeSessions.value));
+const visibleSessions = computed(() => {
+  // 如果正在搜索，显示搜索结果
+  if (ws.sessionSearchQuery.value.trim()) {
+    return ws.sessionSearchResults.value;
+  }
+  // 否则显示常规会话列表（活跃或已归档）
+  return ws.showArchivedSessions.value ? ws.archivedSessions.value : ws.activeSessions.value;
+});
 const firstProject = computed(() => ws.projects.value[0]);
+const sessionEmptyMessage = computed(() => {
+  if (ws.sessionSearchQuery.value.trim()) {
+    return `未找到匹配 "${ws.sessionSearchQuery.value}" 的会话`;
+  }
+  return ws.showArchivedSessions.value ? "没有已归档会话。" : "还没有 AI 会话。";
+});
 </script>
 
 <template>
@@ -82,8 +95,19 @@ const firstProject = computed(() => ws.projects.value[0]);
               已归档
             </button>
           </div>
+          <div class="session-search-box">
+            <input
+              :value="ws.sessionSearchQuery.value"
+              type="search"
+              placeholder="搜索会话标题、项目路径..."
+              @input="(e) => ws.onSessionSearchInput((e.target as HTMLInputElement).value)"
+            />
+            <span v-if="ws.sessionSearchQuery.value" class="search-count">
+              {{ ws.isSearchingSessions.value ? '搜索中...' : `找到 ${visibleSessions.length} 个` }}
+            </span>
+          </div>
           <div class="session-list">
-            <div v-if="!visibleSessions.length" class="empty-state">{{ ws.showArchivedSessions.value ? "没有已归档会话。" : "还没有 AI 会话。" }}</div>
+            <div v-if="!visibleSessions.length" class="empty-state">{{ sessionEmptyMessage }}</div>
             <article
               v-for="session in visibleSessions"
               :key="session.id"

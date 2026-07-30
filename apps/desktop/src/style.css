@@ -4533,6 +4533,41 @@ h2 {
   margin-top: 0;
 }
 
+.session-search-box {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 12px 0;
+  padding: 0;
+}
+
+.session-search-box input[type="search"] {
+  flex: 1;
+  padding: 8px 12px;
+  font-size: 13px;
+  color: var(--color-text-primary);
+  background: var(--color-bg-input);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  transition: border-color 0.15s ease;
+}
+
+.session-search-box input[type="search"]:focus {
+  outline: none;
+  border-color: var(--color-primary);
+  background: var(--color-bg-content);
+}
+
+.session-search-box input[type="search"]::placeholder {
+  color: var(--color-text-placeholder);
+}
+
+.session-search-box .search-count {
+  font-size: 12px;
+  color: var(--color-text-secondary);
+  white-space: nowrap;
+}
+
 .provider-card strong,
 .compact-row strong {
   display: block;
