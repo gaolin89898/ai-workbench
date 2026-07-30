@@ -12,7 +12,7 @@ CodeHub AI（仓库名 `ai-workbench`）是一个本地优先的多 AI 编程工
 - 完整聊天历史默认保存在桌面端 SQLite 中，不作为云端聊天备份。
 - 移动端读取历史、执行任务或浏览项目文件时，对应桌面端必须在线。
 
-当前桌面端版本为 `0.1.89`，移动端版本为 `0.1.89+89`。
+当前桌面端版本为 `0.2.1`，移动端版本为 `0.1.99+99`，管理后台版本为 `0.1.0`。
 
 ## 2. 系统组成
 
@@ -50,12 +50,12 @@ Electron 桌面端 ─── SQLite
 
 ## 4. Provider 对接现状
 
-| Provider | 当前接入方式 | 模型选择 | 会话与输出 |
-| --- | --- | --- | --- |
-| Codex | 本地 `codex app-server` | 通过 app-server 的模型列表动态获取可用模型及推理强度 | 支持会话恢复、结构化执行轨迹和审批 |
-| Claude Code | `@anthropic-ai/claude-agent-sdk` 的 `query()` | 当前界面使用静态别名；SDK 已提供动态模型信息 | 支持会话恢复、流式消息、Hook 事件和执行轨迹 |
-| OpenCode | 本地 OpenCode ACP | 当前按客户端配置传递模型和运行参数 | 支持会话恢复和结构化事件 |
-| MiMo Code | 本地 CLI JSON 协议 | 当前传递 `provider/model` 和 variant | 支持会话恢复、结构化事件和审批 |
+| Provider | 当前接入方式 | 模型选择 | 会话与输出 | 近期功能 |
+| --- | --- | --- | --- | --- |
+| Codex | 本地 `codex app-server` | 通过 app-server 的模型列表动态获取可用模型及推理强度 | 支持会话恢复、结构化执行轨迹和审批 | 支持 Skills 管理面板、Pipeline 编排、Chatroom 多角色协作模式 |
+| Claude Code | `@anthropic-ai/claude-agent-sdk` 的 `query()` | 当前界面使用静态别名；SDK 已提供动态模型信息 | 支持会话恢复、流式消息、Hook 事件和执行轨迹 | - |
+| OpenCode | 本地 OpenCode ACP | 当前按客户端配置传递模型和运行参数 | 支持会话恢复和结构化事件 | - |
+| MiMo Code | 本地 CLI JSON 协议 | 当前传递 `provider/model` 和 variant | 支持会话恢复、结构化事件和审批 | - |
 
 ### Claude Code 为什么当前没有显示具体模型名
 
@@ -178,7 +178,15 @@ pnpm dev
 (cd user-admin-system && pnpm build)
 ```
 
-## 9. 当前限制与后续重点
+## 9. 最近新增功能（v0.2.x）
+
+桌面端 0.2.x 版本新增以下 Codex 相关能力：
+
+- **Pipeline 编排**：支持多代理流水线任务的创建、模板选择、步骤进度展示和结果汇总（commit 0aecff8, be2d398）。
+- **Chatroom 模式**：多角色协作模式，支持 @mention、共享历史和角色管理（commit 9b9a07c）。
+- **Skills 管理面板**：已接入 Skills 发现、查看、启停和额外目录管理（`SkillsManagementPanel.vue` 和 `codex_skills.ts`）。
+
+## 10. 当前限制与后续重点
 
 - 移动端远程执行、完整历史和文件浏览依赖桌面端在线，当前不是离线云工作区。
 - 云端不保存完整聊天内容，不能作为桌面端数据库损坏或丢失后的恢复来源。

@@ -1,6 +1,6 @@
 # Codex 功能接入路线图
 
-更新日期：2026-07-11
+更新日期：2026-07-30
 
 ## 目标
 
@@ -50,7 +50,7 @@
 | 11 | Goal Mode 完整控制 | 已接入：支持读取、设置、清除、暂停、恢复、状态及用量展示 | 已完成 | 已完成 |
 | 12 | 上下文压缩 | 已接入：支持对空闲 Codex Thread 发起 `thread/compact/start` 并展示执行反馈 | 已完成 | 已完成 |
 | 13 | 权限配置与动态授权 | 已接入：保留 Codex 原生四项权限菜单，后台读取权限档位并遵循管理员禁用状态；支持展示文件读写和网络权限申请，并可按本轮或本会话授权 | 已完成 | 已完成 |
-| 14 | Skills 管理 | 缺发现、查看、启停、额外目录和实时刷新 | 中 | P1 |
+| 14 | Skills 管理 | 已接入：支持发现、查看、启停、额外目录和实时刷新（SkillsManagementPanel.vue、codex_skills.ts） | 已完成 | 已完成 |
 | 15 | Hooks 管理 | 缺查看、信任审查、启停和执行状态 | 中 | P1 |
 | 16 | Claude Code 配置迁移 | 缺配置、Skills、MCP、Hooks、命令和历史会话导入 | 中 | P1 |
 | 17 | 原生代码审查 | 未接入 `review/start`、审查模式和行内评论 | 中 | P1 |
@@ -82,16 +82,17 @@
 
 1. 原生归档和删除已完成；会话分叉、Side Chat 待接入。
 2. Goal Mode 完整控制和上下文压缩已完成。
-3. Codex 配置中心已完成；权限、Skills 和 Hooks 管理界面待接入。
+3. Codex 配置中心、权限配置和 Skills 管理已完成；Hooks 管理界面待接入。
 4. 接入 Claude Code 配置迁移。
 5. 文件附件发送已完成；原生代码审查待接入。
 
-### 第三阶段：高级代理能力
+### 第三阶段：高级代理能力（部分已实现）
 
-1. 接入 Subagents 任务树和 Ultra 并行执行视图。
-2. 增加定时任务和 Git Worktree 隔离。
-3. 评估 Browser、Chrome、CDP 和 Computer Use。
-4. 评估 Remote、SSH、多仓库项目和跨设备任务迁移。
+1. Pipeline 编排和 Chatroom 多角色协作模式已接入（desktop v0.2.x）。
+2. 接入 Subagents 任务树和 Ultra 并行执行视图。
+3. 增加定时任务和 Git Worktree 隔离。
+4. 评估 Browser、Chrome、CDP 和 Computer Use。
+5. 评估 Remote、SSH、多仓库项目和跨设备任务迁移。
 
 ## 接入注意事项
 
