@@ -296,7 +296,7 @@ function handleLogout() {
                   <path d="M4 20c0-4 4-6 8-6s8 2 8 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
                 </svg>
               </span>
-              <input v-model="email" type="email" autocomplete="username" placeholder="请输入账号" class="desktop-login-input" />
+              <input v-model="email" type="text" autocomplete="username" placeholder="请输入账号" class="desktop-login-input" />
             </div>
           </label>
           <label class="desktop-login-field">

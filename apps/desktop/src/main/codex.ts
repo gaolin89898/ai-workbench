@@ -10,7 +10,7 @@ import * as fsSync from "node:fs";
 import * as fs from "node:fs/promises";
 import * as os from "node:os";
 import * as path from "node:path";
-import type { RunCodexChatRequest, SteerCodexChatRequest, ChatContextAttachment, ChatFileAttachment, ChatImageAttachment, ChatSegment, CodexApprovalDecision, CodexApprovalMode, CodexTraceSnapshot, CodexModelOption, CodexReasoningEffort, CodexReasoningEffortOption, CodexServiceTierOption, CodexPermissionGrantScope, CodexRequestedPermissions, CodexUserInputQuestion } from "../services/desktop";
+import type { RunCodexChatRequest, SteerCodexChatRequest, ChatContextAttachment, ChatFileAttachment, ChatImageAttachment, ChatSegment, CodexApprovalDecision, CodexApprovalMode, CodexTraceSnapshot, CodexFileSystemPermissionEntry, CodexModelOption, CodexReasoningEffort, CodexReasoningEffortOption, CodexServiceTierOption, CodexPermissionGrantScope, CodexRequestedPermissions, CodexUserInputQuestion } from "../services/desktop";
 import { formatChatContext } from "../shared/chat_context";
 import { reportTokenUsage } from "./sync";
 import { getLocalAiSession, resetLocalAiTrace, upsertLocalAiTrace } from "./db";
@@ -424,6 +424,10 @@ function arrayOfStrings(v: unknown): string[] {
   return v.filter((item): item is string => typeof item === "string" && item.trim().length > 0);
 }
 
+function fileSystemAccessOrNull(v: unknown): CodexFileSystemPermissionEntry["access"] | null {
+  return v === "read" || v === "write" || v === "deny" ? v : null;
+}
+
 interface PendingUserInput {
   requestId: number;
   questions: CodexUserInputQuestion[];
@@ -721,13 +725,15 @@ function userInputQuestionsFromParams(params: unknown): CodexUserInputQuestion[]
   if (!record || !Array.isArray(record["questions"])) return null;
   const questions = record["questions"].flatMap((value) => {
     const question = recordOrNull(value);
-    const id = question ? strOrUndef(question["id"])?.trim() : undefined;
-    const prompt = question ? strOrUndef(question["question"])?.trim() : undefined;
+    if (!question) return [];
+    const id = strOrUndef(question["id"])?.trim();
+    const prompt = strOrUndef(question["question"])?.trim();
     if (!id || !prompt) return [];
     const options = Array.isArray(question["options"])
       ? question["options"].flatMap((option) => {
         const entry = recordOrNull(option);
-        const label = entry ? strOrUndef(entry["label"])?.trim() : undefined;
+        if (!entry) return [];
+        const label = strOrUndef(entry["label"])?.trim();
         if (!label) return [];
         return [{ label, description: strOrUndef(entry["description"])?.trim() ?? "" }];
       })
@@ -791,9 +797,9 @@ function requestedPermissionsFromApproval(params: Record<string, unknown>): Code
       ? fileSystem["entries"].flatMap((value) => {
         if (!value || typeof value !== "object" || Array.isArray(value)) return [];
         const entry = value as Record<string, unknown>;
-        const access = entry["access"];
+        const access = fileSystemAccessOrNull(entry["access"]);
         const pathValue = entry["path"];
-        if (access !== "read" && access !== "write" && access !== "deny") return [];
+        if (!access) return [];
         if (!pathValue || typeof pathValue !== "object" || Array.isArray(pathValue)) return [];
         const pathRecord = pathValue as Record<string, unknown>;
         const displayPath = strOrUndef(pathRecord["path"]) ?? strOrUndef(pathRecord["pattern"]) ?? strOrUndef(pathRecord["value"]);
@@ -1087,12 +1093,7 @@ async function findCodexSessionFile(threadId: string): Promise<string | null> {
 }
 
 async function collectCodexRolloutFiles(dir: string): Promise<string[]> {
-  let entries: Awaited<ReturnType<typeof fs.readdir>>;
-  try {
-    entries = await fs.readdir(dir, { withFileTypes: true });
-  } catch {
-    return [];
-  }
+  const entries = await fs.readdir(dir, { withFileTypes: true }).catch(() => []);
   const files: string[] = [];
   for (const entry of entries) {
     const fullPath = path.join(dir, entry.name);

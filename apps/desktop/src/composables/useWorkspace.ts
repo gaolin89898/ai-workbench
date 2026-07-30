@@ -2542,8 +2542,8 @@ async function loginDesktop(server: string, email: string, password: string) {
       pairResult.value = "密码不正确。";
     } else if (message.includes("password must be at least 6 characters")) {
       pairResult.value = "密码至少需要 6 位。";
-    } else if (message.includes("email is invalid")) {
-      pairResult.value = "邮箱格式不正确。";
+    } else if (message.includes("account is required")) {
+      pairResult.value = "请填写账号。";
     } else {
       pairResult.value = `登录失败：${message}`;
     }

@@ -64,13 +64,11 @@ class _ChatMessageContentState extends State<ChatMessageContent> {
 
   void _maybeStartTimer() {
     if (widget.message.pending) {
-      if (_timer == null) {
-        _timer = Timer.periodic(const Duration(seconds: 1), (_) {
-          setState(() {
-            _nowTick = DateTime.now().millisecondsSinceEpoch;
-          });
+      _timer ??= Timer.periodic(const Duration(seconds: 1), (_) {
+        setState(() {
+          _nowTick = DateTime.now().millisecondsSinceEpoch;
         });
-      }
+      });
     } else {
       _timer?.cancel();
       _timer = null;
@@ -756,18 +754,27 @@ String _toolOperationKind(ChatSegment segment) {
   final command = _normalizeCommandForTitle(segment.command ?? '');
   final fileChanges = _extractFileChangePaths(segment.diff);
   final toolName = segment.toolName ?? '';
-  if (toolName.contains('修改') || (fileChanges?.isNotEmpty ?? false))
+  if (toolName.contains('修改') || (fileChanges?.isNotEmpty ?? false)) {
     return 'edit';
+  }
   if (RegExp(r'^(Get-Content|cat|type|head|tail|sed\b|Select-String\b)',
           caseSensitive: false)
-      .hasMatch(command)) return 'read';
+      .hasMatch(command)) {
+    return 'read';
+  }
   if (RegExp(r'^(rg|grep|findstr|fd|find\b|Get-ChildItem|ls\b|dir\b)',
           caseSensitive: false)
-      .hasMatch(command)) return 'search';
+      .hasMatch(command)) {
+    return 'search';
+  }
   if (RegExp(r'\b(Get-Content|cat|type)\b', caseSensitive: false)
-      .hasMatch(command)) return 'read';
+      .hasMatch(command)) {
+    return 'read';
+  }
   if (RegExp(r'\b(rg|grep|findstr|Get-ChildItem)\b', caseSensitive: false)
-      .hasMatch(command)) return 'search';
+      .hasMatch(command)) {
+    return 'search';
+  }
   return 'command';
 }
 
@@ -822,8 +829,9 @@ String _commandOperationTitle(String command, String status) {
   if (RegExp(r'^(Get-Content|cat|type|head|tail|sed\b|Select-String\b)',
           caseSensitive: false)
       .hasMatch(command)) {
-    if (status == 'error')
+    if (status == 'error') {
       return target.isNotEmpty ? '读取 $target 失败' : '读取文件失败';
+    }
     return target.isNotEmpty ? '$verb读取 $target' : '$verb读取文件';
   }
   if (RegExp(r'^(rg|grep|findstr|fd|find\b|Get-ChildItem|ls\b|dir\b)',
@@ -834,8 +842,9 @@ String _commandOperationTitle(String command, String status) {
   }
   if (RegExp(r'\b(Get-Content|cat|type)\b', caseSensitive: false)
       .hasMatch(command)) {
-    if (status == 'error')
+    if (status == 'error') {
       return target.isNotEmpty ? '读取 $target 失败' : '读取文件失败';
+    }
     return target.isNotEmpty ? '$verb读取 $target' : '$verb读取文件';
   }
   if (RegExp(r'\b(rg|grep|findstr|Get-ChildItem)\b', caseSensitive: false)
@@ -901,13 +910,6 @@ bool _processStageRunning(List<ChatSegment> segments) {
 
 bool _processStageStoppedByUser(List<ChatSegment> segments) {
   return segments.any(_isUserStoppedStatus);
-}
-
-int? _processStageDurationMs(List<ChatSegment> segments) {
-  if (_isThinkingStage(segments)) return null;
-  final duration = segments.fold<int>(
-      0, (total, segment) => total + (segment.durationMs ?? 0));
-  return duration <= 0 ? null : duration;
 }
 
 bool _isThinkingStage(List<ChatSegment> segments) {
@@ -2765,12 +2767,6 @@ String _approvalMeta(ChatSegment segment) {
     parts.add('${segment.fileChanges.length} 个文件');
   }
   return parts.join(' · ');
-}
-
-String _formatDuration(int durationMs) {
-  if (durationMs < 1000) return '${durationMs}ms';
-  final seconds = durationMs / 1000;
-  return '${seconds.toStringAsFixed(seconds < 10 ? 1 : 0)}s';
 }
 
 String _shortenCommand(String? command) {

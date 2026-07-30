@@ -932,7 +932,7 @@ class WorkspaceController extends ChangeNotifier {
   }
 
   void _notifyApproval(String sessionId, ChatSegment segment) {
-    final key = segment.approvalId ?? '${sessionId}:${segment.stepId ?? segment.title ?? segment.command ?? 'approval'}';
+    final key = segment.approvalId ?? '$sessionId:${segment.stepId ?? segment.title ?? segment.command ?? 'approval'}';
     if (!_notifiedApprovalIds.add(key)) return;
     final action = segment.title ??
         segment.command ??

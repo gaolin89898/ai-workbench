@@ -681,9 +681,10 @@ export function registerIpcHandlers(win?: BrowserWindow): void {
     return respondAiApproval(req);
   });
 
-  handle("respond_codex_user_input", async (_event, args: [CodexUserInputResponseRequest]) =>
-    respondCodexUserInput(args[0])
-  );
+  handle("respond_codex_user_input", async (_event, args: [CodexUserInputResponseRequest]) => {
+    const req = args[0];
+    return respondCodexUserInput(req.aiSessionId, req.requestId, req.answers);
+  });
 
   // Simplified warmup: return the current session record. (Full pre-warm of
   // the provider subprocess is handled lazily on the first chat turn.)

@@ -3,6 +3,7 @@
 // share the same renderer/mobile path as Codex traces.
 
 import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
+import { randomUUID } from "node:crypto";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
@@ -212,7 +213,7 @@ function emitFailure(aiSessionId: string, sender: Sender, error: unknown): void 
     modelUsage: {},
     permission_denials: [],
     errors: [message],
-    uuid: `error-${Date.now()}`,
+    uuid: randomUUID(),
     session_id: activeClaudeRuns.get(aiSessionId)?.snapshot?.threadId ?? "",
   });
 }
