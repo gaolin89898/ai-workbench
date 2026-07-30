@@ -872,6 +872,18 @@ class DesktopCloudSync {
       case "project.file.preview.request":
         void this.handleProjectFilePreviewRequest(msg, deviceId);
         break;
+      case "git.status.request":
+        void this.handleGitStatusRequest(msg, deviceId);
+        break;
+      case "git.commit.request":
+        void this.handleGitCommitRequest(msg, deviceId);
+        break;
+      case "git.push.request":
+        void this.handleGitPushRequest(msg, deviceId);
+        break;
+      case "git.pull.request":
+        void this.handleGitPullRequest(msg, deviceId);
+        break;
       case "app.update.available":
         this.notify("app-update-available", {
           available: msg.available === true,
@@ -1007,6 +1019,114 @@ class DesktopCloudSync {
         projectId,
         requestId,
         preview: null,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
+
+  private async handleGitStatusRequest(msg: any, deviceId: string): Promise<void> {
+    const requestId = typeof msg.requestId === "string" ? msg.requestId : "";
+    const projectPath = typeof msg.projectPath === "string" ? msg.projectPath : "";
+    if (!requestId || !projectPath) return;
+
+    try {
+      const { gitStatusDetail } = await import("./projects");
+      const status = await gitStatusDetail(projectPath);
+      this.send({
+        type: "git.status.response",
+        deviceId,
+        requestId,
+        status,
+        error: null,
+      });
+    } catch (error) {
+      this.send({
+        type: "git.status.response",
+        deviceId,
+        requestId,
+        status: null,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
+
+  private async handleGitCommitRequest(msg: any, deviceId: string): Promise<void> {
+    const requestId = typeof msg.requestId === "string" ? msg.requestId : "";
+    const projectPath = typeof msg.projectPath === "string" ? msg.projectPath : "";
+    const message = typeof msg.message === "string" ? msg.message : "";
+    if (!requestId || !projectPath || !message.trim()) return;
+
+    try {
+      const { gitAddAll, gitCommit } = await import("./projects");
+      await gitAddAll(projectPath);
+      const result = await gitCommit(projectPath, message);
+      this.send({
+        type: "git.commit.response",
+        deviceId,
+        requestId,
+        result,
+        error: null,
+      });
+      this.notify("workspace-changed");
+    } catch (error) {
+      this.send({
+        type: "git.commit.response",
+        deviceId,
+        requestId,
+        result: null,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
+
+  private async handleGitPushRequest(msg: any, deviceId: string): Promise<void> {
+    const requestId = typeof msg.requestId === "string" ? msg.requestId : "";
+    const projectPath = typeof msg.projectPath === "string" ? msg.projectPath : "";
+    if (!requestId || !projectPath) return;
+
+    try {
+      const { gitPush } = await import("./projects");
+      await gitPush(projectPath);
+      this.send({
+        type: "git.push.response",
+        deviceId,
+        requestId,
+        success: true,
+        error: null,
+      });
+    } catch (error) {
+      this.send({
+        type: "git.push.response",
+        deviceId,
+        requestId,
+        success: false,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
+
+  private async handleGitPullRequest(msg: any, deviceId: string): Promise<void> {
+    const requestId = typeof msg.requestId === "string" ? msg.requestId : "";
+    const projectPath = typeof msg.projectPath === "string" ? msg.projectPath : "";
+    if (!requestId || !projectPath) return;
+
+    try {
+      const { gitPull } = await import("./projects");
+      await gitPull(projectPath);
+      this.send({
+        type: "git.pull.response",
+        deviceId,
+        requestId,
+        success: true,
+        error: null,
+      });
+      this.notify("workspace-changed");
+    } catch (error) {
+      this.send({
+        type: "git.pull.response",
+        deviceId,
+        requestId,
+        success: false,
         error: error instanceof Error ? error.message : String(error),
       });
     }

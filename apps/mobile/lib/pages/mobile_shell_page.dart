@@ -976,6 +976,16 @@ class _ProjectCard extends StatelessWidget {
                     visualDensity: VisualDensity.compact,
                     tooltip: 'AI 工具',
                   ),
+                  // Git 操作
+                  IconButton(
+                    onPressed: () => _showGitOperations(context, ws, project),
+                    icon: Icon(
+                      project.gitDirty ? Icons.sync_problem : Icons.check_circle_outline,
+                      color: project.gitDirty ? AppColors.warningDeep : AppColors.successDeep,
+                    ),
+                    visualDensity: VisualDensity.compact,
+                    tooltip: 'Git 操作',
+                  ),
                   // 新建 AI 会话
                   IconButton(
                     onPressed: () =>
@@ -1106,6 +1116,393 @@ const _builtInProviders = [
   ('opencode', 'OpenCode', Icons.code_outlined),
   ('mimo', 'MiMo Code', Icons.auto_fix_high_outlined),
 ];
+
+Future<void> _showGitOperations(
+  BuildContext context,
+  WorkspaceController ws,
+  WorkspaceProject project,
+) async {
+  await showModalBottomSheet(
+    context: context,
+    isScrollControlled: true,
+    backgroundColor: Colors.transparent,
+    builder: (_) => WorkspaceScope(
+      controller: ws,
+      child: _GitOperationsSheet(project: project),
+    ),
+  );
+}
+
+class _GitOperationsSheet extends StatefulWidget {
+  const _GitOperationsSheet({required this.project});
+
+  final WorkspaceProject project;
+
+  @override
+  State<_GitOperationsSheet> createState() => _GitOperationsSheetState();
+}
+
+class _GitOperationsSheetState extends State<_GitOperationsSheet> {
+  bool _loading = false;
+  String? _error;
+  GitStatusDetail? _status;
+  final _commitMessageController = TextEditingController();
+
+  @override
+  void initState() {
+    super.initState();
+    _loadGitStatus();
+  }
+
+  @override
+  void dispose() {
+    _commitMessageController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _loadGitStatus() async {
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+
+    try {
+      // TODO: 通过 WebSocket 获取 Git 状态
+      setState(() {
+        _status = GitStatusDetail(
+          branch: widget.project.gitBranch,
+          tracking: null,
+          files: [],
+          ahead: 0,
+          behind: 0,
+        );
+        _loading = false;
+      });
+    } catch (e) {
+      setState(() {
+        _error = '加载 Git 状态失败：$e';
+        _loading = false;
+      });
+    }
+  }
+
+  Future<void> _commit() async {
+    final message = _commitMessageController.text.trim();
+    if (message.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('请输入提交信息')),
+      );
+      return;
+    }
+
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+
+    try {
+      // TODO: 通过 WebSocket 发送 commit 请求
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('提交成功')),
+      );
+      _commitMessageController.clear();
+      await _loadGitStatus();
+    } catch (e) {
+      setState(() {
+        _error = '提交失败：$e';
+        _loading = false;
+      });
+    }
+  }
+
+  Future<void> _push() async {
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+
+    try {
+      // TODO: 通过 WebSocket 发送 push 请求
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('推送成功')),
+      );
+      await _loadGitStatus();
+    } catch (e) {
+      setState(() {
+        _error = '推送失败：$e';
+        _loading = false;
+      });
+    }
+  }
+
+  Future<void> _pull() async {
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+
+    try {
+      // TODO: 通过 WebSocket 发送 pull 请求
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('拉取成功')),
+      );
+      await _loadGitStatus();
+    } catch (e) {
+      setState(() {
+        _error = '拉取失败：$e';
+        _loading = false;
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return DraggableScrollableSheet(
+      initialChildSize: 0.7,
+      minChildSize: 0.5,
+      maxChildSize: 0.9,
+      builder: (context, scrollController) => Container(
+        decoration: const BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+        ),
+        child: ListView(
+          controller: scrollController,
+          padding: const EdgeInsets.all(20),
+          children: [
+            // 标题栏
+            Row(
+              children: [
+                const Icon(Icons.call_split, size: 24, color: AppColors.primary),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        'Git 操作',
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      Text(
+                        widget.project.name,
+                        style: const TextStyle(
+                          fontSize: 13,
+                          color: AppColors.muted,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                IconButton(
+                  icon: const Icon(Icons.refresh),
+                  onPressed: _loading ? null : _loadGitStatus,
+                  tooltip: '刷新状态',
+                ),
+                IconButton(
+                  icon: const Icon(Icons.close),
+                  onPressed: () => Navigator.of(context).pop(),
+                ),
+              ],
+            ),
+            const SizedBox(height: 20),
+
+            // 状态信息
+            if (_loading)
+              const Center(
+                child: Padding(
+                  padding: EdgeInsets.all(40),
+                  child: CircularProgressIndicator(),
+                ),
+              )
+            else if (_error != null)
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: AppColors.dangerSoft,
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(Icons.error_outline, size: 20, color: AppColors.danger),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Text(
+                        _error!,
+                        style: const TextStyle(color: AppColors.danger),
+                      ),
+                    ),
+                  ],
+                ),
+              )
+            else if (_status != null) ...[
+              // 分支信息卡片
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: AppColors.surface,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: AppColors.border),
+                ),
+                child: Column(
+                  children: [
+                    _InfoRow(
+                      icon: Icons.call_split,
+                      label: '当前分支',
+                      value: _status!.branch ?? 'main',
+                    ),
+                    if (_status!.tracking != null) ...[
+                      const Divider(height: 16),
+                      _InfoRow(
+                        icon: Icons.sync,
+                        label: '跟踪分支',
+                        value: _status!.tracking!,
+                      ),
+                    ],
+                    if (_status!.ahead > 0 || _status!.behind > 0) ...[
+                      const Divider(height: 16),
+                      _InfoRow(
+                        icon: Icons.compare_arrows,
+                        label: '同步状态',
+                        value: '${_status!.ahead > 0 ? "领先 $_status!.ahead" : ""}'
+                            '${_status!.ahead > 0 && _status!.behind > 0 ? "，" : ""}'
+                            '${_status!.behind > 0 ? "落后 $_status!.behind" : ""}',
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+              const SizedBox(height: 20),
+
+              // 提交信息输入
+              TextField(
+                controller: _commitMessageController,
+                decoration: InputDecoration(
+                  hintText: '输入提交信息...',
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  prefixIcon: const Icon(Icons.message_outlined),
+                ),
+                maxLines: 2,
+                enabled: !_loading,
+              ),
+              const SizedBox(height: 16),
+
+              // 操作按钮
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      onPressed: _loading ? null : _pull,
+                      icon: const Icon(Icons.download, size: 18),
+                      label: const Text('拉取'),
+                      style: OutlinedButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: FilledButton.icon(
+                      onPressed: _loading ? null : _commit,
+                      icon: const Icon(Icons.commit, size: 18),
+                      label: const Text('提交'),
+                      style: FilledButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      onPressed: _loading ? null : _push,
+                      icon: const Icon(Icons.upload, size: 18),
+                      label: const Text('推送'),
+                      style: OutlinedButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _InfoRow extends StatelessWidget {
+  const _InfoRow({
+    required this.icon,
+    required this.label,
+    required this.value,
+  });
+
+  final IconData icon;
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Icon(icon, size: 18, color: AppColors.muted),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                label,
+                style: const TextStyle(
+                  fontSize: 12,
+                  color: AppColors.muted,
+                ),
+              ),
+              Text(
+                value,
+                style: const TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class GitStatusDetail {
+  const GitStatusDetail({
+    required this.branch,
+    required this.tracking,
+    required this.files,
+    required this.ahead,
+    required this.behind,
+  });
+
+  final String? branch;
+  final String? tracking;
+  final List<dynamic> files;
+  final int ahead;
+  final int behind;
+}
 
 Future<void> _showProviderSelector(BuildContext context, WorkspaceController ws,
     WorkspaceProject project) async {

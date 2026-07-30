@@ -229,3 +229,77 @@ export async function openProjectWith(projectPath: string, target: ProjectOpenTa
 export function deriveProjectName(projectPath: string): string {
   return path.basename(projectPath) || projectPath;
 }
+
+// Git 操作：暂存所有更改
+export async function gitAddAll(projectPath: string): Promise<void> {
+  const git = simpleGit(projectPath);
+  const isRepo = await git.checkIsRepo();
+  if (!isRepo) throw new Error("该项目不是一个 Git 仓库");
+  await git.add(".");
+}
+
+// Git 操作：提交暂存的更改
+export async function gitCommit(projectPath: string, message: string): Promise<{ hash: string; summary: string }> {
+  const git = simpleGit(projectPath);
+  const isRepo = await git.checkIsRepo();
+  if (!isRepo) throw new Error("该项目不是一个 Git 仓库");
+  if (!message.trim()) throw new Error("提交信息不能为空");
+  const result = await git.commit(message);
+  return {
+    hash: result.commit,
+    summary: result.summary,
+  };
+}
+
+// Git 操作：推送到远程
+export async function gitPush(projectPath: string, remote = "origin", branch?: string): Promise<void> {
+  const git = simpleGit(projectPath);
+  const isRepo = await git.checkIsRepo();
+  if (!isRepo) throw new Error("该项目不是一个 Git 仓库");
+  if (branch) {
+    await git.push(remote, branch);
+  } else {
+    await git.push(remote);
+  }
+}
+
+// Git 操作：从远程拉取
+export async function gitPull(projectPath: string, remote = "origin", branch?: string): Promise<void> {
+  const git = simpleGit(projectPath);
+  const isRepo = await git.checkIsRepo();
+  if (!isRepo) throw new Error("该项目不是一个 Git 仓库");
+  if (branch) {
+    await git.pull(remote, branch);
+  } else {
+    await git.pull(remote);
+  }
+}
+
+// Git 操作：获取详细状态
+export async function gitStatusDetail(projectPath: string): Promise<{
+  branch: string | null;
+  tracking: string | null;
+  files: Array<{ path: string; status: string }>;
+  ahead: number;
+  behind: number;
+}> {
+  const git = simpleGit(projectPath);
+  const isRepo = await git.checkIsRepo();
+  if (!isRepo) throw new Error("该项目不是一个 Git 仓库");
+
+  const status = await git.status();
+  const branch = status.current || null;
+  const tracking = status.tracking || null;
+  const files = status.files.map((f) => ({
+    path: f.path,
+    status: f.index + f.working_dir,
+  }));
+
+  return {
+    branch,
+    tracking,
+    files,
+    ahead: status.ahead,
+    behind: status.behind,
+  };
+}

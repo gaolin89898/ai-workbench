@@ -163,6 +163,43 @@ class RealtimeClient {
     });
   }
 
+  void requestGitStatus(String deviceId, String projectPath, String requestId) {
+    send({
+      'type': 'git.status.request',
+      'deviceId': deviceId,
+      'projectPath': projectPath,
+      'requestId': requestId,
+    });
+  }
+
+  void requestGitCommit(String deviceId, String projectPath, String message, String requestId) {
+    send({
+      'type': 'git.commit.request',
+      'deviceId': deviceId,
+      'projectPath': projectPath,
+      'message': message,
+      'requestId': requestId,
+    });
+  }
+
+  void requestGitPush(String deviceId, String projectPath, String requestId) {
+    send({
+      'type': 'git.push.request',
+      'deviceId': deviceId,
+      'projectPath': projectPath,
+      'requestId': requestId,
+    });
+  }
+
+  void requestGitPull(String deviceId, String projectPath, String requestId) {
+    send({
+      'type': 'git.pull.request',
+      'deviceId': deviceId,
+      'projectPath': projectPath,
+      'requestId': requestId,
+    });
+  }
+
   void _scheduleReconnect() {
     _subscription?.cancel();
     _subscription = null;

@@ -1324,6 +1324,31 @@ export const desktopApi = {
     ipc<AppUpdateInfo>("check_app_update"),
   installAppUpdate: (): Promise<boolean> =>
     ipc<boolean>("install_app_update"),
+
+  // Git 操作
+  gitStatusDetail: (projectPath: string): Promise<{
+    branch: string | null;
+    tracking: string | null;
+    files: Array<{ path: string; status: string }>;
+    ahead: number;
+    behind: number;
+  }> =>
+    ipc<{
+      branch: string | null;
+      tracking: string | null;
+      files: Array<{ path: string; status: string }>;
+      ahead: number;
+      behind: number;
+    }>("git_status_detail", projectPath),
+  gitAddAll: (projectPath: string): Promise<boolean> =>
+    ipc<boolean>("git_add_all", projectPath),
+  gitCommit: (projectPath: string, message: string): Promise<{ hash: string; summary: string }> =>
+    ipc<{ hash: string; summary: string }>("git_commit", projectPath, message),
+  gitPush: (projectPath: string, remote?: string, branch?: string): Promise<boolean> =>
+    ipc<boolean>("git_push", projectPath, remote, branch),
+  gitPull: (projectPath: string, remote?: string, branch?: string): Promise<boolean> =>
+    ipc<boolean>("git_pull", projectPath, remote, branch),
+
   onAppUpdateDownloadProgress: (handler: (event: AppUpdateDownloadProgress) => void): Promise<() => void> =>
     Promise.resolve(on("download-progress", handler as (event: unknown) => void)),
   onAppUpdateDownloaded: (handler: (event: AppUpdateDownloadedInfo) => void): Promise<() => void> =>

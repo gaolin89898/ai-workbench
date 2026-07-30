@@ -814,4 +814,33 @@ export function registerIpcHandlers(win?: BrowserWindow): void {
   handle("check_app_update", async () => checkAppUpdate());
 
   handle("install_app_update", async () => installAppUpdate());
+
+  // Git 操作 handlers
+  handle("git_status_detail", async (_event, args: [string]) => {
+    const [projectPath] = args;
+    return projects.gitStatusDetail(projectPath);
+  });
+
+  handle("git_add_all", async (_event, args: [string]) => {
+    const [projectPath] = args;
+    await projects.gitAddAll(projectPath);
+    return true;
+  });
+
+  handle("git_commit", async (_event, args: [string, string]) => {
+    const [projectPath, message] = args;
+    return projects.gitCommit(projectPath, message);
+  });
+
+  handle("git_push", async (_event, args: [string, string?, string?]) => {
+    const [projectPath, remote, branch] = args;
+    await projects.gitPush(projectPath, remote ?? "origin", branch);
+    return true;
+  });
+
+  handle("git_pull", async (_event, args: [string, string?, string?]) => {
+    const [projectPath, remote, branch] = args;
+    await projects.gitPull(projectPath, remote ?? "origin", branch);
+    return true;
+  });
 }
