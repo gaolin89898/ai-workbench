@@ -41,3 +41,12 @@ apps/desktop/.playwright/
 
 # AI 工作记忆（本地）
 .workbuddy/
+
+# 凭据 / 密钥（含误操作生成的以令牌命名的文件）
+.env.*
+!.env.example
+*.pem
+*.key
+gh[pousr]_*
+github_pat_*
+sk-*
