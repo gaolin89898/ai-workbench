@@ -82,6 +82,7 @@ const themeMode = ref<"light" | "dark">("light");
 const sessionSearchQuery = ref("");
 const sessionSearchResults = ref<AiSession[]>([]);
 const isSearchingSessions = ref(false);
+const searchModalOpen = ref(false);
 let searchDebounceTimer: ReturnType<typeof setTimeout> | null = null;
 
 const loginAccountName = computed(() => {
@@ -134,14 +135,14 @@ async function searchAiSessions(query: string) {
   const trimmedQuery = query.trim();
   if (!trimmedQuery) {
     sessionSearchResults.value = [];
-    sessionSearchQuery.value = "";
     return;
   }
 
-  sessionSearchQuery.value = trimmedQuery;
   isSearchingSessions.value = true;
   try {
     const results = await desktopApi.ipc.searchAiSessions(trimmedQuery);
+    // 输入框可能在请求期间被清空或改动，丢弃过期结果
+    if (sessionSearchQuery.value.trim() !== trimmedQuery) return;
     sessionSearchResults.value = results;
   } catch (error) {
     console.error("Session search failed:", error);
@@ -153,12 +154,14 @@ async function searchAiSessions(query: string) {
 
 function onSessionSearchInput(event: Event) {
   const query = (event.target as HTMLInputElement).value;
+  sessionSearchQuery.value = query;
   if (searchDebounceTimer) clearTimeout(searchDebounceTimer);
   if (!query.trim()) {
     sessionSearchResults.value = [];
-    sessionSearchQuery.value = "";
+    isSearchingSessions.value = false;
     return;
   }
+  isSearchingSessions.value = true;
   searchDebounceTimer = setTimeout(() => {
     void searchAiSessions(query);
   }, 300);
@@ -171,6 +174,25 @@ function clearSessionSearch() {
     clearTimeout(searchDebounceTimer);
     searchDebounceTimer = null;
   }
+}
+
+function openSearchModal() {
+  searchModalOpen.value = true;
+  clearSessionSearch();
+  nextTick(() => {
+    const input = document.querySelector<HTMLInputElement>('.session-search-modal input[type="search"]');
+    input?.focus();
+  });
+}
+
+function closeSearchModal() {
+  searchModalOpen.value = false;
+  clearSessionSearch();
+}
+
+function selectSessionFromSearch(session: AiSession) {
+  selectSession(session);
+  closeSearchModal();
 }
 
 function sessionProjectPath(session: AiSession) {
@@ -465,6 +487,7 @@ function closeMenusOnEscape(event: KeyboardEvent) {
   openProjectMenuPath.value = null;
   openContextMenu.value = null;
   accountMenuOpen.value = false;
+  if (searchModalOpen.value) closeSearchModal();
 }
 
 function attachSession(path: string, terminalSession: TerminalSession) {
@@ -810,6 +833,51 @@ onBeforeUnmount(() => {
       </footer>
     </div>
   </div>
+  <div v-if="searchModalOpen" class="session-search-overlay" @click.self="closeSearchModal">
+    <div class="session-search-modal" role="dialog" aria-modal="true" aria-label="搜索会话">
+      <header class="session-search-modal-header">
+        <svg class="session-search-modal-icon" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+          <circle cx="7" cy="7" r="4.5" stroke="currentColor" stroke-width="1.4" />
+          <path d="m10.5 10.5 3 3" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" />
+        </svg>
+        <input
+          :value="sessionSearchQuery"
+          type="search"
+          placeholder="搜索会话标题、项目路径..."
+          @input="onSessionSearchInput"
+          @keydown.esc.prevent="closeSearchModal"
+        />
+        <button class="session-search-modal-close" type="button" aria-label="关闭" @click="closeSearchModal">×</button>
+      </header>
+      <div class="session-search-modal-body">
+        <p v-if="!sessionSearchQuery" class="session-search-modal-hint">输入关键词搜索本机全部会话</p>
+        <p v-else-if="isSearchingSessions" class="session-search-modal-hint">搜索中...</p>
+        <p v-else-if="!sessionSearchResults.length" class="session-search-modal-hint">没有找到匹配的会话</p>
+        <template v-else>
+          <div class="session-search-modal-count">找到 {{ sessionSearchResults.length }} 个会话</div>
+          <button
+            v-for="session in sessionSearchResults"
+            :key="session.id"
+            class="session-search-result"
+            :class="{ active: activeAiSession?.id === session.id }"
+            type="button"
+            @click="selectSessionFromSearch(session)"
+          >
+            <img
+              class="session-search-result-icon"
+              :src="projectSessionIcon(session)"
+              :alt="projectSessionIconLabel(session)"
+            />
+            <span class="session-search-result-copy">
+              <strong>{{ session.title }}</strong>
+              <small>{{ sessionProjectPath(session) || "自由会话" }}</small>
+            </span>
+            <small v-if="sessionTimeLabel(session)" class="session-search-result-time">{{ sessionTimeLabel(session) }}</small>
+          </button>
+        </template>
+      </div>
+    </div>
+  </div>
   <aside class="sidebar">
     <button
       class="tree-free-session"
@@ -895,74 +963,17 @@ onBeforeUnmount(() => {
     <section class="sidebar-section">
       <div class="sidebar-heading">
         <span>项目</span>
-        <button class="icon-button" title="选择本地项目" type="button" @click.stop="chooseProjectFromSidebar">＋</button>
-      </div>
-      <div class="session-search-box">
-        <input
-          :value="sessionSearchQuery"
-          type="search"
-          placeholder="搜索会话标题、项目路径..."
-          @input="onSessionSearchInput"
-        />
-        <span v-if="sessionSearchQuery" class="search-count">
-          {{ isSearchingSessions ? '搜索中...' : `找到 ${sessionSearchResults.length} 个` }}
-        </span>
-      </div>
-      <!-- 搜索结果显示 -->
-      <div v-if="sessionSearchQuery && sessionSearchResults.length > 0" class="search-results-section">
-        <div class="search-results-label">搜索结果</div>
-        <div
-          v-for="session in sessionSearchResults"
-          :key="session.id"
-          class="tree-chat"
-          :class="{ active: props.activeSession?.id === session.id }"
-        >
-          <button
-            type="button"
-            class="tree-chat-link"
-            @click="selectSession(session)"
-            @contextmenu.prevent="openSessionContextMenu($event, session)"
-          >
-            <span class="tree-chat-copy">
-              <span class="tree-chat-title">
-                <img
-                  class="tree-chat-provider-icon"
-                  :src="projectSessionIcon(session)"
-                  :alt="projectSessionIconLabel(session)"
-                  :title="projectSessionIconLabel(session)"
-                />
-                <i
-                  v-if="isSessionPinnedLocal(session)"
-                  class="tree-chat-pin"
-                  title="已置顶"
-                  aria-hidden="true"
-                >▾</i>
-                <span>{{ session.title }}</span>
-              </span>
-              <i v-if="isThinking(session)" class="tree-chat-spinner" aria-label="思考中"></i>
-              <i
-                v-else-if="isSessionUnreadLocal(session)"
-                class="tree-chat-unread"
-                title="未读"
-                aria-label="未读"
-              ></i>
-              <small v-else-if="sessionTimeLabel(session)">{{ sessionTimeLabel(session) }}</small>
-            </span>
+        <div class="sidebar-heading-actions">
+          <button class="icon-button" title="搜索会话" type="button" @click.stop="openSearchModal">
+            <svg viewBox="0 0 16 16" fill="none" aria-hidden="true">
+              <circle cx="7" cy="7" r="4.5" stroke="currentColor" stroke-width="1.4" />
+              <path d="m10.5 10.5 3 3" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" />
+            </svg>
           </button>
-          <button
-            class="tree-chat-action"
-            title="归档会话"
-            type="button"
-            @click.stop="archiveSession(session)"
-          >
-            <img :src="archiveBoxIcon" alt="" aria-hidden="true" />
-          </button>
+          <button class="icon-button" title="选择本地项目" type="button" @click.stop="chooseProjectFromSidebar">＋</button>
         </div>
       </div>
-      <div v-else-if="sessionSearchQuery && !isSearchingSessions" class="search-no-results">
-        没有找到匹配的会话
-      </div>
-      <div class="project-tree" :class="{ 'project-tree-file-mode': activeFileListProject }" v-show="!sessionSearchQuery">
+      <div class="project-tree" :class="{ 'project-tree-file-mode': activeFileListProject }">
         <button v-if="!activeFileListProject && !projects.length" class="tree-empty" type="button" @click.stop="chooseProjectFromSidebar">
           <img class="tree-empty-icon" :src="projectFolderIcon" alt="" aria-hidden="true" />
           <span>选择项目</span>
