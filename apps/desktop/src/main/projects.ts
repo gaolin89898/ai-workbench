@@ -1,4 +1,4 @@
-// Project / Git helpers for the Electron main process.
+﻿// Project / Git helpers for the Electron main process.
 // Handles folder selection dialogs, git status reading, and opening
 // a project in the host file manager.
 
@@ -247,7 +247,7 @@ export async function gitCommit(projectPath: string, message: string): Promise<{
   const result = await git.commit(message);
   return {
     hash: result.commit,
-    summary: result.summary,
+    summary: `${result.summary.changes} changes, ${result.summary.insertions} insertions, ${result.summary.deletions} deletions`,
   };
 }
 
@@ -303,3 +303,4 @@ export async function gitStatusDetail(projectPath: string): Promise<{
     behind: status.behind,
   };
 }
+
