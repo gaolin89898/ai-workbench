@@ -4568,6 +4568,26 @@ h2 {
   white-space: nowrap;
 }
 
+.search-results-section {
+  padding: 8px 0;
+}
+
+.search-results-label {
+  padding: 8px 16px 4px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--color-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.search-no-results {
+  padding: 24px 16px;
+  text-align: center;
+  font-size: 13px;
+  color: var(--color-muted);
+}
+
 .provider-card strong,
 .compact-row strong {
   display: block;
