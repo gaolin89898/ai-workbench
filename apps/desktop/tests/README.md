@@ -21,10 +21,11 @@ Use the smallest lane that matches the changed surface.
 ### `core` — background-friendly in-window UI
 
 Deterministic Electron UI coverage. This is the default lane. Currently covers
-app launch, login page form interactions, login IPC stub failure, and server URL
-persistence across app relaunch. Does not require a real backend or provider
-auth — the app runs in test mode (cloud sync and provider auto-detect are
-skipped via `AI_WORKBENCH_TEST_MODE=background`).
+app launch, login page form interactions, login IPC stub failure, server URL
+persistence across app relaunch, the main shell/sidebar after a stubbed login,
+session search modal, settings navigation, and the chat composer. Does not
+require a real backend or provider auth — the app runs in test mode (cloud sync
+and provider auto-detect are skipped via `AI_WORKBENCH_TEST_MODE=background`).
 
 ```bash
 pnpm --filter ai-workbench-desktop run test:e2e
@@ -35,8 +36,9 @@ pnpm --filter ai-workbench-desktop run test:e2e:core
 
 Real agent runtime and provider auth coverage. Use this when the change depends
 on an actual AI run, transcript item, tool call, or approval flow. Requires a
-running backend and valid provider credentials. Currently contains placeholder
-specs — set `AI_WORKBENCH_LIVE_AUTH=1` to opt in.
+running backend and valid provider credentials. Opt in with env vars:
+`AI_WORKBENCH_LIVE_AUTH=1`, `AI_WORKBENCH_LIVE_SERVER`, `AI_WORKBENCH_LIVE_EMAIL`,
+`AI_WORKBENCH_LIVE_PASSWORD` — otherwise the lane is skipped.
 
 ```bash
 pnpm --filter ai-workbench-desktop run test:e2e:live
@@ -46,8 +48,8 @@ pnpm --filter ai-workbench-desktop run test:e2e:live
 
 Opt-in higher-fidelity tests that run against a packaged `.exe` / `.AppImage`.
 Use these for release readiness checks: app launches, can navigate, persists
-state across relaunch. Currently contains placeholder specs — set
-`AI_WORKBENCH_PRODUCTION=1` to opt in.
+state across relaunch. Opt in with `AI_WORKBENCH_PRODUCTION=1` and
+`AI_WORKBENCH_PACKAGED_APP=<path-to-exe>` — otherwise the lane is skipped.
 
 ```bash
 pnpm --filter ai-workbench-desktop run test:e2e:production
@@ -75,9 +77,9 @@ pnpm --filter ai-workbench-desktop run test:e2e:all
 
 ## Lane Map
 
-- `tests/core/` — deterministic in-window behavior (app launch, login form, IPC stub failure, cross-relaunch persistence)
-- `tests/live/` — real agent/runtime behavior (placeholder, requires auth + backend)
-- `tests/production/` — packaged app smoke tests (placeholder, requires built installer)
+- `tests/core/` — deterministic in-window behavior (app launch, login form, IPC stub failure, cross-relaunch persistence, sidebar/settings/composer after stubbed login)
+- `tests/live/` — real agent/runtime behavior (opt-in via `AI_WORKBENCH_LIVE_AUTH=1`, requires auth + backend)
+- `tests/production/` — packaged app smoke tests (opt-in via `AI_WORKBENCH_PRODUCTION=1`, requires built installer)
 
 ## Adding a New Test
 

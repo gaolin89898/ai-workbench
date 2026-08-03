@@ -129,3 +129,63 @@ export async function stubLoginFailure(app: ElectronApplication, errorMessage = 
     { errorMessage, delayMs },
   );
 }
+
+/**
+ * The cloud config shape returned by `get_cloud_config`. `paired: true` with
+ * `authMode: "desktop-login"` is what App.vue checks to consider the desktop
+ * authenticated (see `authenticated` in App.vue).
+ */
+export type TestCloudConfig = {
+  serverUrl: string;
+  deviceId: string;
+  paired: boolean;
+  authMode: string;
+  displayName?: string;
+};
+
+export function defaultTestCloudConfig(): TestCloudConfig {
+  return {
+    serverUrl: "http://127.0.0.1:3000",
+    deviceId: "test-device-12345678",
+    paired: true,
+    authMode: "desktop-login",
+    displayName: "测试用户",
+  };
+}
+
+/**
+ * Stubs both IPC channels needed to get past the login page and into the main
+ * shell without a real backend:
+ *
+ *   - `login_desktop` resolves with a deviceId (the desktop pairing payload).
+ *   - `get_cloud_config` returns a paired config so `authenticated` flips true.
+ *
+ * Call this *before* clicking the login button.
+ */
+export async function stubLoginSuccess(app: ElectronApplication, config: TestCloudConfig = defaultTestCloudConfig()): Promise<void> {
+  await app.evaluate(
+    async ({ ipcMain }, cfg) => {
+      ipcMain.removeHandler("login_desktop");
+      ipcMain.handle("login_desktop", async () => ({ deviceId: cfg.deviceId }));
+      ipcMain.removeHandler("get_cloud_config");
+      ipcMain.handle("get_cloud_config", () => cfg);
+    },
+    config,
+  );
+}
+
+/**
+ * Fills the login form and submits it, then waits for the main shell
+ * (`.app-shell`) to become visible. Requires `stubLoginSuccess` (or the real
+ * backend) to be in place first.
+ */
+export async function loginToMainShell(
+  window: Page,
+  options?: { server?: string; email?: string; password?: string },
+): Promise<void> {
+  await window.locator('input[placeholder="请输入服务器地址"]').fill(options?.server ?? "http://127.0.0.1:3000");
+  await window.locator('input[autocomplete="username"]').fill(options?.email ?? "test@example.com");
+  await window.locator('input[autocomplete="current-password"]').fill(options?.password ?? "testpass123");
+  await window.locator("button.desktop-login-button").click();
+  await window.locator(".app-shell").waitFor({ state: "visible", timeout: 15_000 });
+}

@@ -16,8 +16,9 @@ test.describe("login page", () => {
   test("displays brand and form fields", async () => {
     const { window } = testApp;
 
-    // Brand
-    await expect(window.locator("h1")).toHaveText("CodeHub AI");
+    // Brand (split-panel layout: tagline h1 + form title h2).
+    await expect(window.locator("h1")).toHaveText("桌面端 AI 编程助手");
+    await expect(window.locator("h2.desktop-login-title")).toHaveText("登录到 CodeHub AI");
 
     // Server address field
     await expect(window.locator('input[autocomplete="url"]')).toBeVisible();
@@ -88,15 +89,14 @@ test.describe("login page", () => {
     await expect(window.locator(".desktop-login-error")).toBeVisible({ timeout: 5_000 });
   });
 
-  test("github tab shows github login button", async () => {
+  test("oauth section shows github and google login buttons", async () => {
     const { window } = testApp;
 
-    // Switch to the GitHub tab.
-    await window.locator("button.desktop-login-tab", { hasText: "GitHub 登录" }).click();
-
-    // The GitHub login button must appear.
+    // The split-panel login page shows OAuth buttons directly (no tabs).
     await expect(window.locator(".desktop-login-github-button")).toBeVisible();
-    await expect(window.locator(".desktop-login-github-button")).toContainText("使用 GitHub 登录");
+    await expect(window.locator(".desktop-login-github-button")).toContainText("GitHub");
+    await expect(window.locator(".desktop-login-google-button")).toBeVisible();
+    await expect(window.locator(".desktop-login-google-button")).toContainText("Google");
   });
 
   test("remember password checkbox toggles", async () => {

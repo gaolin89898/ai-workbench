@@ -239,7 +239,10 @@ export async function gitAddAll(projectPath: string): Promise<void> {
 }
 
 // Git 操作：提交暂存的更改
-export async function gitCommit(projectPath: string, message: string): Promise<{ hash: string; summary: string }> {
+export async function gitCommit(
+  projectPath: string,
+  message: string,
+): Promise<{ hash: string; summary: { changes: number; insertions: number; deletions: number } }> {
   const git = simpleGit(projectPath);
   const isRepo = await git.checkIsRepo();
   if (!isRepo) throw new Error("该项目不是一个 Git 仓库");

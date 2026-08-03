@@ -1342,8 +1342,13 @@ export const desktopApi = {
     }>("git_status_detail", projectPath),
   gitAddAll: (projectPath: string): Promise<boolean> =>
     ipc<boolean>("git_add_all", projectPath),
-  gitCommit: (projectPath: string, message: string): Promise<{ hash: string; summary: string }> =>
-    ipc<{ hash: string; summary: string }>("git_commit", projectPath, message),
+  gitCommit: (
+    projectPath: string,
+    message: string,
+  ): Promise<{
+    hash: string;
+    summary: { changes: number; insertions: number; deletions: number };
+  }> => ipc<{ hash: string; summary: { changes: number; insertions: number; deletions: number } }>("git_commit", projectPath, message),
   gitPush: (projectPath: string, remote?: string, branch?: string): Promise<boolean> =>
     ipc<boolean>("git_push", projectPath, remote, branch),
   gitPull: (projectPath: string, remote?: string, branch?: string): Promise<boolean> =>
