@@ -14,20 +14,84 @@ class WorkspaceController extends ChangeNotifier {
   WorkspaceController({
     required this.api,
     Duration historyRequestTimeout = const Duration(seconds: 12),
+    Duration gitRequestTimeout = const Duration(seconds: 20),
   })  : realtime = RealtimeClient(api),
-        _historyRequestTimeout = historyRequestTimeout {
+        _historyRequestTimeout = historyRequestTimeout,
+        _gitRequestTimeout = gitRequestTimeout {
     _persistenceLoaded = _loadPersistence();
   }
 
   final ApiClient api;
   final RealtimeClient realtime;
   final Duration _historyRequestTimeout;
+  final Duration _gitRequestTimeout;
   StreamSubscription<Map<String, dynamic>>? _events;
   static const _devicesReloadInterval = Duration(seconds: 5);
   static const _historyRefreshInterval = Duration(seconds: 5);
   static const _historyLoadingText = '正在从桌面端拉取本地历史...';
   static const _historyTimeoutText = '没有收到桌面端返回的历史。请确认桌面端已打开、已登录同一账号，并保持在线。';
   Timer? _historyRefreshTimer;
+
+  // Git 操作请求/响应关联：requestId -> completer。桌面端通过
+  // git.*.response 回包，_handleRealtime 按 requestId 完成对应 Future。
+  final Map<String, Completer<Map<String, dynamic>>> _gitPending = {};
+  static int _gitRequestSeq = 0;
+
+  String get _gitDeviceId {
+    final device = selectedDevice;
+    if (device == null) {
+      throw StateError('未选择设备');
+    }
+    return device.id;
+  }
+
+  String _newGitRequestId(String kind) =>
+      'git-$kind-${DateTime.now().microsecondsSinceEpoch}-${_gitRequestSeq++}';
+
+  /// 发送一个 Git 请求并等待桌面端响应。超时或桌面端离线时抛出异常。
+  Future<Map<String, dynamic>> _sendGitRequest(
+    String kind,
+    void Function(String requestId) send,
+  ) async {
+    final requestId = _newGitRequestId(kind);
+    final completer = Completer<Map<String, dynamic>>();
+    _gitPending[requestId] = completer;
+    try {
+      send(requestId);
+      return await completer.future.timeout(_gitRequestTimeout);
+    } on TimeoutException {
+      _gitPending.remove(requestId);
+      throw Exception('等待桌面端响应超时，请确认桌面端已在线');
+    } catch (_) {
+      _gitPending.remove(requestId);
+      rethrow;
+    }
+  }
+
+  /// 请求桌面端返回项目 Git 状态（branch/files/ahead/behind）。
+  Future<Map<String, dynamic>> requestGitStatus(String projectPath) =>
+      _sendGitRequest('status', (requestId) {
+        realtime.requestGitStatus(_gitDeviceId, projectPath, requestId);
+      });
+
+  /// 暂存全部更改并提交。
+  Future<Map<String, dynamic>> commitProject(
+          String projectPath, String message) =>
+      _sendGitRequest('commit', (requestId) {
+        realtime.requestGitCommit(_gitDeviceId, projectPath, message, requestId);
+      });
+
+  /// 推送到远程。
+  Future<Map<String, dynamic>> pushProject(String projectPath) =>
+      _sendGitRequest('push', (requestId) {
+        realtime.requestGitPush(_gitDeviceId, projectPath, requestId);
+      });
+
+  /// 从远程拉取。
+  Future<Map<String, dynamic>> pullProject(String projectPath) =>
+      _sendGitRequest('pull', (requestId) {
+        realtime.requestGitPull(_gitDeviceId, projectPath, requestId);
+      });
   Timer? _historyTimeoutTimer;
   String? _historyTimeoutSessionId;
   String? _openSessionId;
@@ -745,7 +809,20 @@ class WorkspaceController extends ChangeNotifier {
         json['deviceId'] != device.id) {
       return;
     }
-    switch (json['type']) {
+    // Git 操作响应按 requestId 完成对应的等待 Future。
+    final type = json['type'];
+    if (type == 'git.status.response' ||
+        type == 'git.commit.response' ||
+        type == 'git.push.response' ||
+        type == 'git.pull.response') {
+      final requestId = json['requestId'] as String?;
+      if (requestId != null) {
+        final completer = _gitPending.remove(requestId);
+        completer?.complete(json);
+      }
+      return;
+    }
+    switch (type) {
       case 'desktop.heartbeat':
         if (device != null) {
           selectedDevice = device.copyWith(

@@ -1128,15 +1128,16 @@ Future<void> _showGitOperations(
     backgroundColor: Colors.transparent,
     builder: (_) => WorkspaceScope(
       controller: ws,
-      child: _GitOperationsSheet(project: project),
+      child: _GitOperationsSheet(project: project, ws: ws),
     ),
   );
 }
 
 class _GitOperationsSheet extends StatefulWidget {
-  const _GitOperationsSheet({required this.project});
+  const _GitOperationsSheet({required this.project, required this.ws});
 
   final WorkspaceProject project;
+  final WorkspaceController ws;
 
   @override
   State<_GitOperationsSheet> createState() => _GitOperationsSheetState();
@@ -1167,15 +1168,15 @@ class _GitOperationsSheetState extends State<_GitOperationsSheet> {
     });
 
     try {
-      // TODO: 通过 WebSocket 获取 Git 状态
+      final response = await widget.ws.requestGitStatus(widget.project.path);
+      final error = response['error'] as String?;
+      if (error != null && error.isNotEmpty) {
+        throw Exception(error);
+      }
+      final statusJson =
+          (response['status'] as Map<String, dynamic>?) ?? const {};
       setState(() {
-        _status = GitStatusDetail(
-          branch: widget.project.gitBranch,
-          tracking: null,
-          files: [],
-          ahead: 0,
-          behind: 0,
-        );
+        _status = GitStatusDetail.fromResponse(statusJson);
         _loading = false;
       });
     } catch (e) {
@@ -1201,9 +1202,17 @@ class _GitOperationsSheetState extends State<_GitOperationsSheet> {
     });
 
     try {
-      // TODO: 通过 WebSocket 发送 commit 请求
+      final response =
+          await widget.ws.commitProject(widget.project.path, message);
+      final error = response['error'] as String?;
+      if (error != null && error.isNotEmpty) {
+        throw Exception(error);
+      }
+      final result = response['result'] as Map<String, dynamic>? ?? const {};
+      final hash = (result['hash'] as String?) ?? '';
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('提交成功')),
+        SnackBar(content: Text(hash.isNotEmpty ? '提交成功：$hash' : '提交成功')),
       );
       _commitMessageController.clear();
       await _loadGitStatus();
@@ -1222,7 +1231,12 @@ class _GitOperationsSheetState extends State<_GitOperationsSheet> {
     });
 
     try {
-      // TODO: 通过 WebSocket 发送 push 请求
+      final response = await widget.ws.pushProject(widget.project.path);
+      final error = response['error'] as String?;
+      if (error != null && error.isNotEmpty) {
+        throw Exception(error);
+      }
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('推送成功')),
       );
@@ -1242,7 +1256,12 @@ class _GitOperationsSheetState extends State<_GitOperationsSheet> {
     });
 
     try {
-      // TODO: 通过 WebSocket 发送 pull 请求
+      final response = await widget.ws.pullProject(widget.project.path);
+      final error = response['error'] as String?;
+      if (error != null && error.isNotEmpty) {
+        throw Exception(error);
+      }
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('拉取成功')),
       );
@@ -1502,6 +1521,17 @@ class GitStatusDetail {
   final List<dynamic> files;
   final int ahead;
   final int behind;
+
+  /// 解析桌面端 `git.status.response` 中的 status 载荷。
+  factory GitStatusDetail.fromResponse(Map<String, dynamic> json) {
+    return GitStatusDetail(
+      branch: json['branch'] as String?,
+      tracking: json['tracking'] as String?,
+      files: (json['files'] as List<dynamic>?) ?? const [],
+      ahead: (json['ahead'] as num?)?.toInt() ?? 0,
+      behind: (json['behind'] as num?)?.toInt() ?? 0,
+    );
+  }
 }
 
 Future<void> _showProviderSelector(BuildContext context, WorkspaceController ws,

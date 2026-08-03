@@ -11,6 +11,120 @@ void main() {
     SharedPreferences.setMockInitialValues({});
   });
 
+  group('git operations', () {
+    test('throws when no device is selected', () async {
+      final controller =
+          WorkspaceController(api: ApiClient(baseUrl: 'http://127.0.0.1:3000'));
+      await expectLater(
+        controller.requestGitStatus('/workspace/demo'),
+        throwsStateError,
+      );
+      await Future<void>.delayed(Duration.zero);
+      controller.dispose();
+    });
+
+    test('times out with a friendly message when desktop never responds',
+        () async {
+      final controller = WorkspaceController(
+        api: ApiClient(baseUrl: 'http://127.0.0.1:3000'),
+        gitRequestTimeout: const Duration(milliseconds: 100),
+      );
+      controller.selectedDevice = const DesktopDevice(
+        id: 'device-1',
+        name: 'desktop',
+        os: 'windows',
+        online: true,
+      );
+
+      await expectLater(
+        controller.requestGitStatus('/workspace/demo'),
+        throwsA(
+          isA<Exception>().having(
+            (e) => e.toString(),
+            'message',
+            contains('超时'),
+          ),
+        ),
+      );
+
+      await Future<void>.delayed(Duration.zero);
+      controller.dispose();
+    });
+
+    test('status response with unknown request id is safely ignored',
+        () async {
+      final controller = WorkspaceController(
+        api: ApiClient(baseUrl: 'http://127.0.0.1:3000'),
+        gitRequestTimeout: const Duration(milliseconds: 50),
+      );
+      controller.selectedDevice = const DesktopDevice(
+        id: 'device-1',
+        name: 'desktop',
+        os: 'windows',
+        online: true,
+      );
+
+      // A stray/duplicate response must not crash the dispatcher.
+      controller.handleRealtimeForTesting({
+        'type': 'git.status.response',
+        'deviceId': 'device-1',
+        'requestId': 'unknown-request',
+        'status': {
+          'branch': 'main',
+          'tracking': null,
+          'files': [],
+          'ahead': 0,
+          'behind': 0,
+        },
+        'error': null,
+      });
+
+      await Future<void>.delayed(const Duration(milliseconds: 120));
+      controller.dispose();
+    });
+
+    test('non-matching response keeps the request pending', () async {
+      final controller = WorkspaceController(
+        api: ApiClient(baseUrl: 'http://127.0.0.1:3000'),
+        gitRequestTimeout: const Duration(seconds: 2),
+      );
+      controller.selectedDevice = const DesktopDevice(
+        id: 'device-1',
+        name: 'desktop',
+        os: 'windows',
+        online: true,
+      );
+
+      final future = controller.requestGitStatus('/workspace/demo');
+      await Future<void>.delayed(Duration.zero);
+
+      // A response with the wrong requestId must not complete the pending
+      // request — only the exact requestId match resolves it.
+      controller.handleRealtimeForTesting({
+        'type': 'git.status.response',
+        'deviceId': 'device-1',
+        'requestId': 'does-not-match',
+        'status': {
+          'branch': 'main',
+          'tracking': null,
+          'files': [],
+          'ahead': 0,
+          'behind': 0,
+        },
+        'error': null,
+      });
+      var timedOut = false;
+      await future.timeout(const Duration(milliseconds: 200), onTimeout: () {
+        timedOut = true;
+        return const {};
+      });
+      expect(timedOut, isTrue);
+
+      await Future<void>.delayed(Duration.zero);
+      controller.dispose();
+    });
+  });
+
   test('run settings snapshot supports OpenCode and MiMo', () {
     final snapshot = AiRunSettingsSnapshot.fromJson({
       'deviceId': 'device-1',
