@@ -42,6 +42,7 @@ import {
   listCodexFeatures,
   listCodexSkills,
   listCodexMcpServers,
+  listCodexHooks,
   listCodexPermissionProfiles,
   listCodexThreads,
   readCodexConfig,
@@ -631,6 +632,10 @@ export function registerIpcHandlers(win?: BrowserWindow): void {
 
   handle("list_codex_mcp_servers", async (event) =>
     listCodexMcpServers(event.sender)
+  );
+
+  handle("list_codex_hooks", async (event) =>
+    listCodexHooks(event.sender)
   );
 
   handle("read_codex_mcp_resource", async (event, args: [CodexMcpResourceReadRequest]) =>

@@ -472,6 +472,28 @@ export type CodexReviewTarget =
   | { type: "commit"; sha: string; title?: string }
   | { type: "custom"; instructions: string };
 
+/** Codex Hooks（hooks/list 的 HookMetadata）。 */
+export type CodexHook = {
+  key: string;
+  eventName: string;
+  handlerType: "command" | "prompt" | "agent";
+  enabled: boolean;
+  trustStatus: string;
+  isManaged: boolean;
+  source: string;
+  sourcePath: string | null;
+  command: string | null;
+  matcher: string | null;
+  pluginId: string | null;
+  timeoutSec: number;
+  displayOrder: number;
+  currentHash: string;
+  statusMessage: string | null;
+  cwd: string;
+  errors: Array<{ message: string; path: string }>;
+  warnings: string[];
+};
+
 export type AiProviderTrace = {
   aiSessionId: string;
   providerId: string;
@@ -1264,6 +1286,8 @@ export const desktopApi = {
     ipc<boolean>("compact_codex_thread", threadId),
   listCodexMcpServers: (): Promise<CodexMcpServer[]> =>
     ipc<CodexMcpServer[]>("list_codex_mcp_servers"),
+  codexListHooks: (): Promise<CodexHook[]> =>
+    ipc<CodexHook[]>("list_codex_hooks"),
   readCodexMcpResource: (req: CodexMcpResourceReadRequest): Promise<CodexMcpResourceContent[]> =>
     ipc<CodexMcpResourceContent[]>("read_codex_mcp_resource", req),
   startCodexMcpOauth: (req: CodexMcpOauthRequest): Promise<CodexMcpOauthResponse> =>

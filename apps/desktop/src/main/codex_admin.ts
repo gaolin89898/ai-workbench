@@ -16,6 +16,7 @@ import type {
   CodexMcpResourceContent,
   CodexMcpResourceReadRequest,
   CodexMcpServer,
+  CodexHook,
   CodexSkill,
   CodexSkillEnabledRequest,
   CodexSkillsListEntry,
@@ -685,8 +686,7 @@ function mapMcpServer(value: unknown, client: CodexAdminClient): CodexMcpServer 
   };
 }
 
-export async function listCodexMcpServers(sender?: Sender): Promise<CodexMcpServer[]> {
-  const client = await getAdminClient(sender);
+export async function listCodexMcpServers(sender?: Sender): Promise<CodexMcpServer[]> {  const client = await getAdminClient(sender);
   const servers: CodexMcpServer[] = [];
   let cursor: string | null = null;
   do {
@@ -699,6 +699,62 @@ export async function listCodexMcpServers(sender?: Sender): Promise<CodexMcpServ
     cursor = stringValue(response.nextCursor);
   } while (cursor);
   return servers.sort((left, right) => left.displayName.localeCompare(right.displayName, "zh-CN"));
+}
+
+/**
+ * 列出 Codex Hooks（hooks/list）。返回跨目录展开的 hook 列表，
+ * 每个条目携带所属 cwd、错误与警告。
+ */
+export async function listCodexHooks(sender?: Sender): Promise<CodexHook[]> {
+  const client = await getAdminClient(sender);
+  const response = record(await client.request("hooks/list", { cwds: [] }));
+  const hooks: CodexHook[] = [];
+  if (!Array.isArray(response.data)) return hooks;
+  for (const entryValue of response.data) {
+    const entry = record(entryValue);
+    const cwd = stringValue(entry.cwd) ?? "";
+    const errors = Array.isArray(entry.errors)
+      ? entry.errors.flatMap((value) => {
+          const item = record(value);
+          const message = stringValue(item.message);
+          return message ? [{ message, path: stringValue(item.path) ?? "" }] : [];
+        })
+      : [];
+    const warnings = Array.isArray(entry.warnings)
+      ? entry.warnings.flatMap((value) => (typeof value === "string" ? [value] : []))
+      : [];
+    if (!Array.isArray(entry.hooks)) continue;
+    for (const hookValue of entry.hooks) {
+      const hook = record(hookValue);
+      const key = stringValue(hook.key);
+      if (!key) continue;
+      hooks.push({
+        key,
+        eventName: stringValue(hook.eventName) ?? "unknown",
+        handlerType: hook.handlerType === "prompt" || hook.handlerType === "agent" ? hook.handlerType : "command",
+        enabled: hook.enabled !== false,
+        trustStatus: stringValue(hook.trustStatus) ?? "unknown",
+        isManaged: hook.isManaged === true,
+        source: stringValue(hook.source) ?? "config",
+        sourcePath: stringValue(hook.sourcePath),
+        command: stringValue(hook.command),
+        matcher: stringValue(hook.matcher),
+        pluginId: stringValue(hook.pluginId),
+        timeoutSec: numberValue(hook.timeoutSec) ?? 0,
+        displayOrder: numberValue(hook.displayOrder) ?? 0,
+        currentHash: stringValue(hook.currentHash) ?? "",
+        statusMessage: stringValue(hook.statusMessage),
+        cwd,
+        errors,
+        warnings,
+      });
+    }
+  }
+  return hooks.sort((left, right) =>
+    left.eventName.localeCompare(right.eventName, "zh-CN") ||
+    left.displayOrder - right.displayOrder ||
+    left.key.localeCompare(right.key),
+  );
 }
 
 export async function readCodexMcpResource(

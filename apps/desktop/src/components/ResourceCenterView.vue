@@ -3,8 +3,9 @@ import { computed, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import CodexManagementPanel from "./CodexManagementPanel.vue";
 import SkillsManagementPanel from "./SkillsManagementPanel.vue";
+import HooksManagementPanel from "./HooksManagementPanel.vue";
 
-type ResourceTab = "mcp" | "skills";
+type ResourceTab = "mcp" | "skills" | "hooks";
 
 const props = defineProps<{ embedded?: boolean }>();
 
@@ -13,9 +14,13 @@ const router = useRouter();
 const activeTab = ref<ResourceTab>("mcp");
 const mcpPanel = ref<InstanceType<typeof CodexManagementPanel> | null>(null);
 const skillsPanel = ref<InstanceType<typeof SkillsManagementPanel> | null>(null);
+const hooksPanel = ref<InstanceType<typeof HooksManagementPanel> | null>(null);
 
-const tabFromRoute = computed<ResourceTab>(() => route.query.tab === "skills" ? "skills" : "mcp");
-const refreshLabel = computed(() => activeTab.value === "mcp" ? "刷新 MCP 状态" : "刷新 Skills");
+const tabFromRoute = computed<ResourceTab>(() => {
+  const tab = route.query.tab;
+  return tab === "skills" ? "skills" : tab === "hooks" ? "hooks" : "mcp";
+});
+const refreshLabel = computed(() => activeTab.value === "mcp" ? "刷新 MCP 状态" : activeTab.value === "hooks" ? "刷新 Hooks" : "刷新 Skills");
 
 watch(tabFromRoute, (tab) => {
   activeTab.value = tab;
@@ -32,6 +37,10 @@ function selectTab(tab: ResourceTab): void {
 function refreshActiveTab(): void {
   if (activeTab.value === "mcp") {
     void mcpPanel.value?.refresh();
+    return;
+  }
+  if (activeTab.value === "hooks") {
+    void hooksPanel.value?.refresh();
     return;
   }
   void skillsPanel.value?.refresh();
@@ -64,11 +73,16 @@ function refreshActiveTab(): void {
         <span>Skills</span>
         <small>技能、依赖与目录</small>
       </button>
+      <button :class="{ active: activeTab === 'hooks' }" type="button" role="tab" :aria-selected="activeTab === 'hooks'" @click="selectTab('hooks')">
+        <span>Hooks</span>
+        <small>事件钩子与信任状态</small>
+      </button>
     </nav>
 
     <section class="resource-workbench" :class="`resource-workbench-${activeTab}`">
       <CodexManagementPanel v-if="activeTab === 'mcp'" ref="mcpPanel" mode="mcp" />
-      <SkillsManagementPanel v-else ref="skillsPanel" />
+      <SkillsManagementPanel v-else-if="activeTab === 'skills'" ref="skillsPanel" />
+      <HooksManagementPanel v-else ref="hooksPanel" />
     </section>
   </main>
 </template>
