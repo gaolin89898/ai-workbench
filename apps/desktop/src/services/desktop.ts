@@ -472,9 +472,25 @@ export type CodexReviewTarget =
   | { type: "commit"; sha: string; title?: string }
   | { type: "custom"; instructions: string };
 
+/** Claude Code 配置迁移扫描结果（绝不含任何凭证字段）。 */
+export type ClaudeMigrationOverview = {
+  configDir: string;
+  exists: boolean;
+  settings: {
+    model: string | null;
+    permissionsAllow: string[];
+    permissionsDeny: string[];
+    envModelKeys: Array<{ key: string; value: string }>;
+  };
+  mcps: Array<{ name: string; type: string; command?: string; url?: string; enabled: boolean }>;
+  skills: Array<{ name: string; path: string }>;
+  commands: Array<{ name: string; path: string }>;
+  history: { sessionFiles: number; totalBytes: number; lastModifiedAt: string | null };
+  skippedSecrets: string[];
+};
+
 /** Codex Hooks（hooks/list 的 HookMetadata）。 */
-export type CodexHook = {
-  key: string;
+export type CodexHook = {  key: string;
   eventName: string;
   handlerType: "command" | "prompt" | "agent";
   enabled: boolean;
@@ -1288,6 +1304,17 @@ export const desktopApi = {
     ipc<CodexMcpServer[]>("list_codex_mcp_servers"),
   codexListHooks: (): Promise<CodexHook[]> =>
     ipc<CodexHook[]>("list_codex_hooks"),
+  scanClaudeConfig: (): Promise<ClaudeMigrationOverview> =>
+    ipc<ClaudeMigrationOverview>("scan_claude_config"),
+  migrateClaudeMcp: (
+    overview: ClaudeMigrationOverview,
+    serverNames: string[],
+  ): Promise<{ migratedMcps: string[]; failedMcps: Array<{ name: string; error: string }> }> =>
+    ipc<{ migratedMcps: string[]; failedMcps: Array<{ name: string; error: string }> }>(
+      "migrate_claude_mcp",
+      overview,
+      serverNames,
+    ),
   readCodexMcpResource: (req: CodexMcpResourceReadRequest): Promise<CodexMcpResourceContent[]> =>
     ipc<CodexMcpResourceContent[]>("read_codex_mcp_resource", req),
   startCodexMcpOauth: (req: CodexMcpOauthRequest): Promise<CodexMcpOauthResponse> =>

@@ -52,7 +52,7 @@
 | 13 | 权限配置与动态授权 | 已接入：保留 Codex 原生四项权限菜单，后台读取权限档位并遵循管理员禁用状态；支持展示文件读写和网络权限申请，并可按本轮或本会话授权 | 已完成 | 已完成 |
 | 14 | Skills 管理 | 已接入：支持发现、查看、启停、额外目录和实时刷新（SkillsManagementPanel.vue、codex_skills.ts） | 已完成 | 已完成 |
 | 15 | Hooks 管理 | 已接入：资源中心新增 Hooks tab（hooks/list），展示事件名、类型、启用状态、信任状态、来源路径、超时、命令与加载错误/警告，支持搜索与事件筛选；执行状态见 statusMessage。启停/信任修改走配置中心（config.toml hooks 段） | 已完成 | 已完成 |
-| 16 | Claude Code 配置迁移 | 缺配置、Skills、MCP、Hooks、命令和历史会话导入 | 中 | P1 |
+| 16 | Claude Code 配置迁移 | 已接入：设置 → 导入迁移。扫描 `~/.claude/`（CLAUDE_CONFIG_DIR 可覆盖），展示模型/权限/MCP/Skills/命令/历史统计；MCP 服务器一键迁移到 Codex（mcp_servers 配置）；严格过滤 token/key/secret 等凭证，绝不读取或展示 | 已完成 | 已完成 |
 | 17 | 原生代码审查 | 已接入：`review/start`（uncommittedChanges / baseBranch / commit / custom 四种 target，inline/detached delivery），审查进度与结果通过 `enteredReviewMode` / `exitedReviewMode` item 实时同步到执行过程 | 已完成 | 已完成 |
 | 18 | 文件附件发送 | 已接入：图片使用原生 image 输入，PDF、Office、Markdown 和代码使用本地 `mention` 附件输入 | 已完成 | 已完成 |
 | 19 | Codex 独立沙盒终端 | 不采用：与现有本机终端功能重复，不展示聊天任务运行步骤，已移除 `command/exec` 接入 | 不做 | 已取消 |

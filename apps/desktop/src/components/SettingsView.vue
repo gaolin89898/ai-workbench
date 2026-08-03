@@ -5,6 +5,7 @@ import { useRoute, useRouter } from "vue-router";
 import { useWorkspace } from "../composables/useWorkspace";
 import { desktopApi, type AiActivityProject, type AiActivitySummary, type AiProvider, type DesktopRuntimeInfo, type ProviderActionKind, type ProviderStatus, type TokenUsageDailyItem, type TokenUsageSummary, type TokenUsageSummaryItem } from "../services/desktop";
 import CodexManagementPanel from "./CodexManagementPanel.vue";
+import ClaudeMigrationPanel from "./ClaudeMigrationPanel.vue";
 import ResourceCenterView from "./ResourceCenterView.vue";
 
 const settingsIcon = new URL("../assets/icons/settings.svg", import.meta.url).href;
@@ -116,6 +117,13 @@ const settingsPanels: SettingsPanelItem[] = [
     label: "用量统计",
     eyebrow: "用量",
     description: "按 AI 工具聚合的 Token 用量,数据来自云端",
+    icon: aiProvidersIcon,
+  },
+  {
+    id: "migration",
+    label: "导入迁移",
+    eyebrow: "迁移",
+    description: "从 Claude Code 导入 MCP、Skills 与历史会话概览",
     icon: aiProvidersIcon,
   },
   {
@@ -1405,7 +1413,11 @@ onMounted(() => {
             </div>
           </section>
 
-          <section v-else-if="settingsPanel === 'codex'" class="settings-section">
+          <section v-else-if="settingsPanel === 'migration'" class="settings-section">
+    <ClaudeMigrationPanel />
+  </section>
+
+  <section v-else-if="settingsPanel === 'codex'" class="settings-section">
             <CodexManagementPanel :cwd="ws.selectedProjectPath.value" />
           </section>
 

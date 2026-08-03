@@ -15,6 +15,7 @@ import { randomUUID } from "node:crypto";
 import path from "node:path";
 import * as db from "./db";
 import * as pty from "./pty";
+import { migrateClaudeMcpToCodex, scanClaudeConfig, type ClaudeMigrationOverview } from "./claude_migration";
 import * as providers from "./providers";
 import * as projects from "./projects";
 import {
@@ -636,6 +637,13 @@ export function registerIpcHandlers(win?: BrowserWindow): void {
 
   handle("list_codex_hooks", async (event) =>
     listCodexHooks(event.sender)
+  );
+
+  // Claude Code 配置迁移：扫描（不读取任何凭证）与 MCP 迁移。
+  handle("scan_claude_config", async () => scanClaudeConfig());
+
+  handle("migrate_claude_mcp", async (event, args: [ClaudeMigrationOverview, string[]]) =>
+    migrateClaudeMcpToCodex(args[0], args[1], event.sender)
   );
 
   handle("read_codex_mcp_resource", async (event, args: [CodexMcpResourceReadRequest]) =>
