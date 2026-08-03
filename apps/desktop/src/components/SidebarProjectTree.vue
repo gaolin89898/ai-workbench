@@ -522,6 +522,46 @@ function removeProjectAction(project: WorkspaceProject) {
   };
 }
 
+// Git Worktree 任务隔离：为项目创建隔离工作区。
+async function createWorktreeAction(project: WorkspaceProject) {
+  openProjectMenuPath.value = null;
+  openContextMenu.value = null;
+  const branch = window.prompt("为新任务创建隔离工作区，输入分支名（例如 fix/login）：");
+  if (!branch?.trim()) return;
+  try {
+    const result = await desktopApi.gitWorktreeAdd(project.path, branch);
+    const entries = await desktopApi.gitWorktreeList(project.path).catch(() => []);
+    const lines = entries.map((entry) => `${entry.main ? "主工作区" : `分支 ${entry.branch}`} → ${entry.path}`).join("\n");
+    window.alert(`已创建隔离工作区：${result.path}\n\n当前工作区列表：\n${lines}\n\n提示：可在 AI 会话中把项目目录指向该工作区，任务改动将隔离在独立分支。`);
+  } catch (error) {
+    window.alert(`创建失败：${error instanceof Error ? error.message : String(error)}`);
+  }
+}
+
+// Git Worktree 任务隔离：移除指定工作区。
+async function removeWorktreeAction(project: WorkspaceProject) {
+  openProjectMenuPath.value = null;
+  openContextMenu.value = null;
+  try {
+    const entries = await desktopApi.gitWorktreeList(project.path);
+    const candidates = entries.filter((entry) => !entry.main);
+    if (!candidates.length) {
+      window.alert("该项目没有可移除的隔离工作区。");
+      return;
+    }
+    const hint = candidates.map((entry, index) => `${index + 1}. ${entry.branch} → ${entry.path}`).join("\n");
+    const input = window.prompt(`选择要移除的工作区编号（1-${candidates.length}）：\n${hint}`, "1");
+    const index = Number.parseInt(input ?? "", 10) - 1;
+    const target = candidates[index];
+    if (!target) return;
+    const force = window.confirm(`工作区 ${target.path} 有未提交改动时移除会失败。若确认强制移除请点确定，否则取消后先清理改动。`);
+    await desktopApi.gitWorktreeRemove(project.path, target.path, force);
+    window.alert(`已移除隔离工作区：${target.path}`);
+  } catch (error) {
+    window.alert(`移除失败：${error instanceof Error ? error.message : String(error)}`);
+  }
+}
+
 function closeConfirmDialog() {
   confirmDialog.value = null;
 }
@@ -1022,9 +1062,13 @@ onBeforeUnmount(() => {
                 <img class="tree-project-menu-icon" :src="folderOpenIcon" alt="" aria-hidden="true" />
                 <span>在文件管理器中打开</span>
               </button>
-              <button type="button" disabled title="稍后支持创建永久工作树">
+              <button type="button" title="创建隔离工作区，任务改动与主分支隔离" @click="createWorktreeAction(project)">
                 <img class="tree-project-menu-icon" :src="gitBranchIcon" alt="" aria-hidden="true" />
-                <span>创建永久工作树</span>
+                <span>创建隔离工作区</span>
+              </button>
+              <button type="button" title="列出并移除已创建的隔离工作区" @click="removeWorktreeAction(project)">
+                <img class="tree-project-menu-icon" :src="gitBranchIcon" alt="" aria-hidden="true" />
+                <span>移除隔离工作区</span>
               </button>
               <button type="button" title="修改项目在侧边栏显示的名称" @click="renameProjectAction(project)">
                 <img class="tree-project-menu-icon" :src="editIcon" alt="" aria-hidden="true" />

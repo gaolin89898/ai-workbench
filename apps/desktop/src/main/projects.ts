@@ -230,6 +230,7 @@ export function deriveProjectName(projectPath: string): string {
   return path.basename(projectPath) || projectPath;
 }
 
+
 // Git 操作：暂存所有更改
 export async function gitAddAll(projectPath: string): Promise<void> {
   const git = simpleGit(projectPath);

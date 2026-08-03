@@ -61,7 +61,7 @@
 | 22 | Ultra 并行模式 UI | 协议类型已有，但缺多代理执行视图 | 大 | P2 |
 | 23 | Plugins 与市场 | 未接入；app-server 的插件安装接口仍标注为开发中 | 大 | 暂缓 |
 | 24 | 定时任务 | 缺定时、事件触发、监控、运行历史和通知 | 大 | P2 |
-| 25 | Git Worktree 任务隔离 | 缺创建、切换、清理和任务迁移 | 大 | P2 |
+| 25 | Git Worktree 任务隔离 | 已接入：`git worktree add -b` 创建隔离工作区（默认放在项目同级 .ai-workbench-worktrees/）、`worktree list --porcelain` 解析列表、`worktree remove` 清理；项目菜单新增"创建隔离工作区 / 移除隔离工作区"；6 个真实 git 集成测试 | 已完成 | 已完成 |
 | 26 | Browser / Chrome / CDP | 缺页面预览、交互、截图、控制台和网络调试 | 很大 | P2 |
 | 27 | Computer Use | 缺 Windows/macOS 桌面应用控制 | 很大 | P2 |
 | 28 | Remote / SSH 主机 | 缺远程主机项目和远程 app-server 管理 | 很大 | P2 |

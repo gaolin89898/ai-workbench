@@ -18,6 +18,7 @@ import * as pty from "./pty";
 import { migrateClaudeMcpToCodex, scanClaudeConfig, type ClaudeMigrationOverview } from "./claude_migration";
 import * as providers from "./providers";
 import * as projects from "./projects";
+import * as gitWorktree from "./git_worktree";
 import {
   loginDesktop,
   githubLoginStart,
@@ -879,5 +880,21 @@ export function registerIpcHandlers(win?: BrowserWindow): void {
     const [projectPath, remote, branch] = args;
     await projects.gitPull(projectPath, remote ?? "origin", branch);
     return true;
+  });
+
+  // Git Worktree 任务隔离
+  handle("git_worktree_add", async (_event, args: [string, string, string?]) => {
+    const [projectPath, branch, targetPath] = args;
+    return gitWorktree.gitWorktreeAdd(projectPath, branch, targetPath);
+  });
+
+  handle("git_worktree_list", async (_event, args: [string]) => {
+    const [projectPath] = args;
+    return gitWorktree.gitWorktreeList(projectPath);
+  });
+
+  handle("git_worktree_remove", async (_event, args: [string, string, boolean?]) => {
+    const [projectPath, worktreePath, force] = args;
+    return gitWorktree.gitWorktreeRemove(projectPath, worktreePath, force ?? false);
   });
 }

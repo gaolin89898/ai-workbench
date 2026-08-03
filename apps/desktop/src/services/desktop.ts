@@ -490,7 +490,8 @@ export type ClaudeMigrationOverview = {
 };
 
 /** Codex Hooks（hooks/list 的 HookMetadata）。 */
-export type CodexHook = {  key: string;
+export type CodexHook = {
+  key: string;
   eventName: string;
   handlerType: "command" | "prompt" | "agent";
   enabled: boolean;
@@ -508,6 +509,14 @@ export type CodexHook = {  key: string;
   cwd: string;
   errors: Array<{ message: string; path: string }>;
   warnings: string[];
+};
+
+/** Git Worktree 条目（git worktree list --porcelain）。 */
+export type GitWorktreeEntry = {
+  path: string;
+  branch: string;
+  head: string | null;
+  main: boolean;
 };
 
 export type AiProviderTrace = {
@@ -1432,6 +1441,16 @@ export const desktopApi = {
     ipc<boolean>("git_push", projectPath, remote, branch),
   gitPull: (projectPath: string, remote?: string, branch?: string): Promise<boolean> =>
     ipc<boolean>("git_pull", projectPath, remote, branch),
+  gitWorktreeAdd: (
+    projectPath: string,
+    branch: string,
+    targetPath?: string,
+  ): Promise<{ path: string; branch: string }> =>
+    ipc<{ path: string; branch: string }>("git_worktree_add", projectPath, branch, targetPath),
+  gitWorktreeList: (projectPath: string): Promise<GitWorktreeEntry[]> =>
+    ipc<GitWorktreeEntry[]>("git_worktree_list", projectPath),
+  gitWorktreeRemove: (projectPath: string, worktreePath: string, force?: boolean): Promise<boolean> =>
+    ipc<boolean>("git_worktree_remove", projectPath, worktreePath, force ?? false),
 
   onAppUpdateDownloadProgress: (handler: (event: AppUpdateDownloadProgress) => void): Promise<() => void> =>
     Promise.resolve(on("download-progress", handler as (event: unknown) => void)),
