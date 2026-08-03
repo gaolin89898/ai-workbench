@@ -41,7 +41,7 @@ jobs:
         run: go test ./...
 
   desktop:
-    name: Desktop (typecheck + build)
+    name: Desktop (typecheck + build + E2E core)
     runs-on: ubuntu-22.04
     steps:
       - name: Checkout
@@ -63,6 +63,10 @@ jobs:
         working-directory: apps/desktop
         run: pnpm install --frozen-lockfile
 
+      - name: Install Electron system dependencies
+        working-directory: apps/desktop
+        run: sudo npx playwright install-deps electron
+
       - name: Typecheck main process
         working-directory: apps/desktop
         run: npx tsc -p tsconfig.node.json --noEmit
@@ -70,6 +74,12 @@ jobs:
       - name: Build
         working-directory: apps/desktop
         run: pnpm build
+
+      - name: Run E2E core lane (headless via xvfb)
+        working-directory: apps/desktop
+        env:
+          ELECTRON_DISABLE_SANDBOX: "1"
+        run: xvfb-run -a npx playwright test --project=core
 
   mobile:
     name: Mobile (analyze + test)
