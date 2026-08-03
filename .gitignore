@@ -56,3 +56,6 @@ apps/desktop/.playwright/
 gh[pousr]_*
 github_pat_*
 sk-*
+
+# Reasonix 工具运行时数据
+.reasonix/
