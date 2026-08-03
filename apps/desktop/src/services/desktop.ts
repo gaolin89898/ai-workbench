@@ -1252,6 +1252,8 @@ export const desktopApi = {
     ipc<boolean>("archive_codex_thread", req),
   deleteCodexThread: (threadId: string): Promise<boolean> =>
     ipc<boolean>("delete_codex_thread", threadId),
+  codexForkThread: (threadId: string, cwd?: string | null): Promise<{ threadId: string; title: string; cwd: string | null }> =>
+    ipc<{ threadId: string; title: string; cwd: string | null }>("fork_codex_thread", threadId, cwd ?? null),
   getCodexThreadGoal: (threadId: string): Promise<CodexThreadGoal | null> =>
     ipc<CodexThreadGoal | null>("get_codex_thread_goal", threadId),
   setCodexThreadGoal: (req: CodexThreadGoalSetRequest): Promise<CodexThreadGoal> =>

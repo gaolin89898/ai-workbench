@@ -572,6 +572,30 @@ export async function deleteCodexThread(threadId: string, sender?: Sender): Prom
   return true;
 }
 
+/**
+ * 会话分叉（thread/fork）：从现有 thread 复制出一个新 thread，
+ * 返回新 thread 的 id 与标题，原 thread 保持不变。
+ */
+export async function forkCodexThread(
+  threadId: string,
+  cwd?: string | null,
+  sender?: Sender,
+): Promise<{ threadId: string; title: string; cwd: string | null }> {
+  if (!threadId) throw new Error("Thread ID 不能为空");
+  const client = await getAdminClient(sender);
+  const params: Record<string, unknown> = { threadId };
+  if (cwd?.trim()) params.cwd = cwd.trim();
+  const response = record(await client.request("thread/fork", params));
+  const thread = record(response.thread);
+  const newThreadId = stringValue(thread.id);
+  if (!newThreadId) throw new Error("分叉失败：未返回新 Thread ID");
+  return {
+    threadId: newThreadId,
+    title: stringValue(thread.title) ?? "分叉会话",
+    cwd: stringValue(thread.cwd),
+  };
+}
+
 export async function getCodexThreadGoal(threadId: string, sender?: Sender): Promise<CodexThreadGoal | null> {
   if (!threadId) throw new Error("Thread ID 不能为空");
   const client = await getAdminClient(sender);

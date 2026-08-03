@@ -757,6 +757,21 @@ async function deleteSelectedThread(): Promise<void> {
   }
 }
 
+async function forkLocalSession(session: ProviderSessionCatalogEntry): Promise<void> {
+  if (threadActionBusy.value || !session.capabilities.resume) return;
+  if (!window.confirm(`分叉「${session.title || "未命名会话"}」？将复制当前会话创建一条新路线，原会话保持不变。`)) return;
+  threadActionBusy.value = true;
+  try {
+    const fork = await desktopApi.codexForkThread(session.id, session.cwd);
+    showNotice(`已创建分叉会话「${fork.title || "分叉会话"}」，可在列表中接入后继续对话。`);
+    await loadThreads(true);
+  } catch (error) {
+    showNotice(`分叉失败：${errorText(error)}`, true);
+  } finally {
+    threadActionBusy.value = false;
+  }
+}
+
 function mcpStatusLabel(server: CodexMcpServer): string {
   if (server.startupStatus === "ready") return "就绪";
   if (server.startupStatus === "starting") return "启动中";
@@ -1163,8 +1178,8 @@ defineExpose({
             <ArcoTableColumn title="更新时间" :width="170" align="center">
               <template #cell="{ record }"><span class="codex-thread-updated"><time>{{ localArchivedAtLabel(record.updatedAt) }}</time></span></template>
             </ArcoTableColumn>
-            <ArcoTableColumn title="操作" :width="130" align="right">
-              <template #cell="{ record }"><span class="codex-local-session-actions" @click.stop><ArcoButton type="text" size="mini" :disabled="!record.capabilities.resume" @click="openLocalSession(record)">{{ record.linkedAiSessionId ? "打开" : "接入" }}</ArcoButton><ArcoButton v-if="record.linkedAiSessionId && record.capabilities.archive" type="text" size="mini" :disabled="localArchiveRestoreBusy[record.key]" @click="setLocalSessionArchived(record, !record.archived)">{{ record.archived ? "恢复" : "归档" }}</ArcoButton></span></template>
+            <ArcoTableColumn title="操作" :width="200" align="right">
+              <template #cell="{ record }"><span class="codex-local-session-actions" @click.stop><ArcoButton type="text" size="mini" :disabled="!record.capabilities.resume" @click="openLocalSession(record)">{{ record.linkedAiSessionId ? "打开" : "接入" }}</ArcoButton><ArcoButton type="text" size="mini" :disabled="!record.capabilities.resume" @click="forkLocalSession(record)">分叉</ArcoButton><ArcoButton v-if="record.linkedAiSessionId && record.capabilities.archive" type="text" size="mini" :disabled="localArchiveRestoreBusy[record.key]" @click="setLocalSessionArchived(record, !record.archived)">{{ record.archived ? "恢复" : "归档" }}</ArcoButton></span></template>
             </ArcoTableColumn>
           </template>
         </ArcoTable>

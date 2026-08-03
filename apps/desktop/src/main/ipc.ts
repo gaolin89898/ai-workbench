@@ -37,6 +37,7 @@ import {
   clearCodexThreadGoal,
   compactCodexThread,
   deleteCodexThread,
+  forkCodexThread,
   getCodexThreadGoal,
   listCodexFeatures,
   listCodexSkills,
@@ -606,6 +607,10 @@ export function registerIpcHandlers(win?: BrowserWindow): void {
 
   handle("delete_codex_thread", async (event, args: [string]) =>
     deleteCodexThread(args[0], event.sender)
+  );
+
+  handle("fork_codex_thread", async (event, args: [string, string | null | undefined]) =>
+    forkCodexThread(args[0], args[1] ?? null, event.sender)
   );
 
   handle("get_codex_thread_goal", async (event, args: [string]) =>
