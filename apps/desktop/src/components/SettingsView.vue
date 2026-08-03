@@ -542,7 +542,31 @@ type TokenUsageRow = TokenUsageSummaryItem & {
   sharePercent: number;
   statusLabel: string;
   statusTone: "success" | "warning" | "neutral";
+  estimatedCostUsd: number;
 };
+
+// 各 Provider 的估算单价（USD / 百万 token，输入/输出分开）。
+// 仅为用量成本的粗略参考：实际价格取决于具体模型、缓存与供应商策略。
+const PROVIDER_COST_PER_MILLION: Record<string, { input: number; output: number }> = {
+  codex: { input: 3, output: 12 },
+  claude: { input: 3, output: 15 },
+  opencode: { input: 3, output: 12 },
+  mimo: { input: 0.4, output: 1.6 },
+};
+
+function estimateProviderCostUsd(row: TokenUsageSummaryItem): number {
+  const rate = PROVIDER_COST_PER_MILLION[row.providerId] ?? PROVIDER_COST_PER_MILLION.codex;
+  const inputMiss = Math.max(0, row.inputTokens - Math.max(0, row.cachedInputTokens ?? 0));
+  const outputTokens = Math.max(row.outputTokens, row.totalTokens - row.inputTokens, 0);
+  return (inputMiss / 1_000_000) * rate.input + (outputTokens / 1_000_000) * rate.output;
+}
+
+function formatCostUsd(value: number): string {
+  if (value <= 0) return "—";
+  if (value >= 100) return `$${value.toFixed(0)}`;
+  if (value >= 1) return `$${value.toFixed(2)}`;
+  return `$${value.toFixed(3)}`;
+}
 
 const tokenUsageRows = computed<TokenUsageRow[]>(() => {
   const rows = tokenUsageSummary.value?.providers ?? [];
@@ -565,10 +589,15 @@ const tokenUsageRows = computed<TokenUsageRow[]>(() => {
         sharePercent,
         statusLabel,
         statusTone: sharePercent >= 15 ? "success" as const : "neutral" as const,
+        estimatedCostUsd: estimateProviderCostUsd(row),
       };
     })
     .sort((left, right) => right.totalTokens - left.totalTokens);
 });
+
+const tokenEstimatedTotalCostUsd = computed(() =>
+  tokenUsageRows.value.reduce((sum, row) => sum + row.estimatedCostUsd, 0),
+);
 
 const tokenUsageTotals = computed<TokenUsageSummaryItem>(() => {
   return tokenUsageSummary.value?.totals ?? {
@@ -1286,6 +1315,7 @@ onMounted(() => {
 
             <div class="settings-token-usage-overview">
               <article class="settings-token-usage-card total"><span class="settings-token-usage-card-label">Token 合计</span><strong>{{ formatTokens(tokenUsageTotals.totalTokens) }}</strong><small>近 {{ tokenUsagePeriod }} 天</small></article>
+              <article class="settings-token-usage-card total"><span class="settings-token-usage-card-label">估算费用</span><strong>{{ formatCostUsd(tokenEstimatedTotalCostUsd) }}</strong><small>按模型单价估算 · 仅供参考</small></article>
               <article class="settings-token-usage-card"><span class="settings-token-usage-card-label">活跃会话</span><strong>{{ tokenUsageTotals.turnCount }}</strong><small>跨工具轮次</small></article>
               <article class="settings-token-usage-card"><span class="settings-token-usage-card-label">平均每轮</span><strong>{{ formatTokens(tokenAveragePerTurn) }}</strong><small>Token / turn</small></article>
               <article class="settings-token-usage-card"><span class="settings-token-usage-card-label">同步状态</span><strong class="status" :class="{ online: cloudPaired }">{{ cloudPaired ? '已同步' : '未连接' }}</strong><small>云端用量数据</small></article>
@@ -1345,6 +1375,9 @@ onMounted(() => {
                   </ArcoTableColumn>
                   <ArcoTableColumn title="合计" :width="110" align="right">
                     <template #cell="{ record }"><span class="settings-token-number total">{{ formatTokens(record.totalTokens) }}</span></template>
+                  </ArcoTableColumn>
+                  <ArcoTableColumn title="估算费用" :width="100" align="right">
+                    <template #cell="{ record }"><span class="settings-token-number cost" :title="`输入 $${(record.estimatedCostUsd || 0).toFixed(4)}`">{{ formatCostUsd(record.estimatedCostUsd) }}</span></template>
                   </ArcoTableColumn>
                   <ArcoTableColumn title="输入命中" :width="120" align="right">
                     <template #cell="{ record }"><span class="settings-token-number hit">{{ formatTokens(record.inputHitTokens) }}</span></template>
