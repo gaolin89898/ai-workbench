@@ -385,7 +385,7 @@ export type ChatMessage = {
 
 export type CodexTraceItem = {
   id: string;
-  type: "thinking" | "agent_message" | "command" | "tool" | "approval" | "status" | "error";
+  type: "thinking" | "agent_message" | "command" | "tool" | "approval" | "status" | "agent" | "error";
   title: string;
   status: "running" | "completed" | "failed" | "canceled";
   text: string;

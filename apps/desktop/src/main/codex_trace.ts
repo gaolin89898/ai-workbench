@@ -198,7 +198,12 @@ function traceItemType(rawType: string): CodexTraceItem["type"] {
     case "mcp_tool_call":
     case "dynamicToolCall":
     case "dynamic_tool_call":
+    case "collabAgentToolCall":
+    case "collab_agent_tool_call":
       return "tool";
+    case "subAgentActivity":
+    case "sub_agent_activity":
+      return "agent";
     default:
       return "status";
   }
@@ -270,6 +275,15 @@ function isNoisyTraceRawType(rawType: string | null | undefined): boolean {
 
 function traceItemTitle(rawType: string, item: Record<string, unknown>, parent: Record<string, unknown>) {
   if (/^(?:contextCompaction|context_compaction)$/i.test(rawType)) return "正在压缩上下文";
+  if (/^(?:subAgentActivity|sub_agent_activity)$/i.test(rawType)) {
+    const agentPath = firstString(item.agentPath, parent.agentPath) ?? "";
+    const name = agentPath.split("/").filter(Boolean).pop() ?? "子代理";
+    return `子代理：${name}`;
+  }
+  if (/^(?:collabAgentToolCall|collab_agent_tool_call)$/i.test(rawType)) {
+    const tool = firstString(item.tool, parent.tool) ?? "";
+    return tool ? `子代理工具：${tool}` : "子代理工具调用";
+  }
   const toolName = extractToolName(rawType, item, parent);
   if (isMcpToolCallRawType(rawType)) return toolName ? `MCP ${toolName}` : "MCP 工具调用";
   if (isDynamicToolCallRawType(rawType)) return toolName ?? "动态工具调用";
@@ -335,7 +349,14 @@ function itemFromParams(params: unknown, receivedAt: string): CodexTraceItem {
   const toolCall = isMcpToolCallRawType(rawType) || isDynamicToolCallRawType(rawType);
   const error = firstString(record(item.error).message, record(p.error).message, item.error, p.error) ?? null;
   const command = firstString(item.command, item.commandText, p.command, p.commandText) ?? extractFilePath(item, p);
-  const text = error ?? firstString(item.text, item.summary, item.review, item.message, item.detail, p.text, p.summary, p.review, p.message, p.detail) ?? "";
+  // 子代理活动：把 agentPath 与 kind 状态作为正文展示（kind 中文在段转换时映射）。
+  const text = rawType === "subAgentActivity"
+    ? (() => {
+        const agentPath = firstString(item.agentPath, p.agentPath) ?? "";
+        const kind = firstString(item.kind, p.kind) ?? "";
+        return kind ? `${agentPath}（${kind}）`.trim() : agentPath;
+      })()
+    : error ?? firstString(item.text, item.summary, item.review, item.message, item.detail, p.text, p.summary, p.review, p.message, p.detail) ?? "";
   const output = toolCall
     ? toolResultText(item.result ?? item.contentItems ?? p.result ?? p.contentItems) ?? null
     : firstString(item.output, item.result, p.output, p.result) ?? null;
@@ -885,11 +906,35 @@ export function codexTraceSnapshotToSegments(snapshot: CodexTraceSnapshot): Chat
       });
       continue;
     }
+    if (item.type === "agent") {
+      // 子代理活动：展示启动/交互/中断状态与代理路径。
+      const detail = item.text.replace(/（([^）]+)）$/, (_match, kind: string) => {
+        const label = ({
+          started: "已启动",
+          interacted: "已交互",
+          interrupted: "已中断",
+        } as Record<string, string>)[kind];
+        return label ? `（${label}）` : `（${kind}）`;
+      });
+      segments.push({
+        type: "status",
+        stepId: item.id,
+        label: item.title,
+        detail: detail || undefined,
+        icon: "think",
+        status: item.status,
+        startedAt: item.startedAt,
+        durationMs: itemDurationMs(item, snapshot.completedAt),
+        rawItemType: item.rawItemType,
+      });
+      continue;
+    }
     if (item.type === "tool") {
+      const isCollabAgentTool = /^(?:collabAgentToolCall|collab_agent_tool_call)$/i.test(item.rawItemType ?? "");
       segments.push({
         type: "tool",
         stepId: item.id,
-        toolName: item.toolName ?? (item.title.includes("文件") ? "修改文件" : item.title),
+        toolName: isCollabAgentTool ? item.title : item.toolName ?? (item.title.includes("文件") ? "修改文件" : item.title),
         command: item.command ?? undefined,
         status: traceStatusToToolStatus(item.status),
         summary: item.error || item.text || undefined,

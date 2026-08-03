@@ -173,6 +173,61 @@ describe("review mode", () => {
   });
 });
 
+describe("subagent activity", () => {
+  it("maps subAgentActivity items to agent segments with kind labels", () => {
+    let snapshot = reduceCodexTraceSnapshot(null, {
+      method: "item/started",
+      params: {
+        item: {
+          id: "agent-1",
+          type: "subAgentActivity",
+          agentPath: "agents/frontend",
+          agentThreadId: "thread-9",
+          kind: "started",
+        },
+      },
+      receivedAt: "2026-07-30T00:00:00.000Z",
+    });
+    expect(snapshot.items).toHaveLength(1);
+    expect(snapshot.items[0].type).toBe("agent");
+    expect(snapshot.items[0].text).toContain("agents/frontend");
+    expect(snapshot.items[0].text).toContain("started");
+
+    const segments = codexTraceSnapshotToSegments(snapshot);
+    const agent = segments.find((segment) => segment.stepId === "agent-1");
+    expect(agent).toBeDefined();
+    expect(agent?.type).toBe("status");
+    expect(agent?.label).toContain("子代理");
+    expect(agent?.label).toContain("frontend");
+    expect(agent?.detail).toContain("已启动");
+  });
+
+  it("maps collabAgentToolCall items to tool segments", () => {
+    const snapshot = reduceCodexTraceSnapshot(null, {
+      method: "item/started",
+      params: {
+        item: {
+          id: "collab-1",
+          type: "collabAgentToolCall",
+          tool: "spawnAgent",
+          senderThreadId: "thread-1",
+          receiverThreadIds: ["thread-9"],
+          status: "inProgress",
+        },
+      },
+      receivedAt: "2026-07-30T00:00:00.000Z",
+    });
+    expect(snapshot.items).toHaveLength(1);
+    expect(snapshot.items[0].type).toBe("tool");
+
+    const segments = codexTraceSnapshotToSegments(snapshot);
+    const tool = segments.find((segment) => segment.stepId === "collab-1");
+    expect(tool).toBeDefined();
+    expect(tool?.type).toBe("tool");
+    expect(tool?.toolName).toBe("子代理工具：spawnAgent");
+  });
+});
+
 describe("codexTraceSnapshotToSegments", () => {  it("emits a running status segment while the turn runs", () => {
     const segments = codexTraceSnapshotToSegments({
       provider: "codex",
