@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 
+import 'package:flutter/foundation.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
 
 import '../models/workbench_models.dart';
@@ -20,6 +21,10 @@ class RealtimeClient {
   Stream<Map<String, dynamic>> get events => _events.stream;
 
   bool get connected => _channel != null && _ready;
+
+  /// 未连接（或尚未 ready）时排队的待发送消息，测试用只读视图。
+  @visibleForTesting
+  List<String> get pendingSends => List.unmodifiable(_pendingSends);
 
   void connect() {
     if (_channel != null || api.token == null) return;
