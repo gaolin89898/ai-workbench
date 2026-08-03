@@ -1,6 +1,6 @@
 import { computed, ref, watch } from "vue";
 import router from "../router";
-import { desktopApi, type AiChatOptions, type AiChatOutputEvent, type AiProvider, type AiProviderTrace, type AiSession, type AiTraceUpdateEvent, type AppUpdateDownloadProgress, type AppUpdateInfo, type AgentRole, type ChatContextAttachment, type ChatFileAttachment, type ChatImageAttachment, type ChatMessage, type ChatSegment, type ChatroomResponseEvent, type CodexUserInputRequestEvent, type PipelineStepUpdateEvent, type PipelineTemplate, type ProviderStatus, type TerminalSession, type ViewName, type WorkspaceProject } from "../services/desktop";
+import { desktopApi, type AiChatOptions, type AiChatOutputEvent, type AiProvider, type AiProviderTrace, type AiSession, type AiTraceUpdateEvent, type AppUpdateDownloadProgress, type AppUpdateInfo, type AgentRole, type ChatContextAttachment, type ChatFileAttachment, type ChatImageAttachment, type ChatMessage, type ChatSegment, type ChatroomResponseEvent, type CodexReviewTarget, type CodexUserInputRequestEvent, type PipelineStepUpdateEvent, type PipelineTemplate, type ProviderStatus, type TerminalSession, type ViewName, type WorkspaceProject } from "../services/desktop";
 import { decodeAssistantMessageFromStorage, encodeAssistantMessageForStorage, extractAssistantText } from "../utils/chat";
 
 export type QueuedAiMessage = {
@@ -1396,9 +1396,65 @@ async function steerActiveCodexChat(
   return true;
 }
 
+function reviewTargetLabel(target: CodexReviewTarget): string {
+  switch (target.type) {
+    case "uncommittedChanges":
+      return "未提交的改动";
+    case "baseBranch":
+      return `与 ${target.branch} 分支的差异`;
+    case "commit":
+      return `提交 ${target.sha.slice(0, 8)}`;
+    case "custom":
+      return "自定义审查指令";
+  }
+}
+
+// 发起 Codex 原生代码审查（review/start）。审查在后台 thread 上运行，
+// 进度与结果通过 trace 流（ai.trace.update）实时同步到聊天界面。
+async function startCodexReviewForSession(
+  session: AiSession,
+  target: CodexReviewTarget,
+  delivery: "inline" | "detached" = "inline",
+): Promise<boolean> {
+  if (!session || !session.projectPath) {
+    if (session) {
+      appendChatMessageForSession(session.id, {
+        role: "error",
+        text: "代码审查需要会话绑定项目目录，请先为该会话选择项目。",
+      });
+    }
+    return false;
+  }
+  try {
+    await desktopApi.codexStartReview(session.id, session.projectPath, target, delivery);
+    appendChatMessageForSession(session.id, {
+      role: "system",
+      text: `已发起代码审查：${reviewTargetLabel(target)}。审查结果会实时显示在执行过程中。`,
+    });
+    setChatRunState(session.id, {
+      active: true,
+      phase: "running",
+      title: "代码审查中",
+      detail: "Codex 正在审查代码，结果将显示在执行过程中。",
+    });
+    return true;
+  } catch (error) {
+    appendChatMessageForSession(session.id, {
+      role: "error",
+      text: `代码审查失败：${String(error)}`,
+    });
+    setChatRunState(session.id, {
+      active: false,
+      phase: "idle",
+      title: "审查失败",
+      detail: String(error),
+    });
+    return false;
+  }
+}
+
 async function sendPrompt(
-  prompt: string,
-  images: ChatImageAttachment[] = [],
+  prompt: string,  images: ChatImageAttachment[] = [],
   attachments: ChatFileAttachment[] = [],
   contexts: ChatContextAttachment[] = [],
   chatOptions: AiChatOptions = {},
@@ -3033,6 +3089,8 @@ export function useWorkspace() {
     loadAiSessionHistory,
     sendPrompt,
     steerActiveCodexChat,
+    startCodexReview: startCodexReviewForSession,
+    appendChatMessageForSession,
     queuePrompt,
     updateQueuedPrompt,
     moveQueuedPrompt,

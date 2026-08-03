@@ -1207,7 +1207,43 @@ function toggleComposerToolsMenu() {
     modelSubmenuOpen.value = false;
     environmentPanelOpen.value = false;
     locationMenuOpen.value = false;
+    reviewMenuOpen.value = false;
   }
+}
+
+// ---------- 原生代码审查 ----------
+
+const reviewMenuOpen = ref(false);
+
+function toggleReviewMenu() {
+  reviewMenuOpen.value = !reviewMenuOpen.value;
+}
+
+async function startReview(target: "uncommittedChanges" | "baseBranch" | "custom") {
+  reviewMenuOpen.value = false;
+  composerToolsOpen.value = false;
+  const session = ws.activeAiSession.value;
+  if (!session || !session.projectPath) {
+    if (session) {
+      ws.appendChatMessageForSession(session.id, {
+        role: "error",
+        text: "代码审查需要会话绑定项目目录，请先为该会话选择项目。",
+      });
+    }
+    return;
+  }
+  if (target === "baseBranch") {
+    const branch = window.prompt("与哪个分支比较？（默认 main）", "main")?.trim() || "main";
+    await ws.startCodexReview(session, { type: "baseBranch", branch });
+    return;
+  }
+  if (target === "custom") {
+    const instructions = window.prompt("输入审查指令（例如：重点检查登录模块的安全性）")?.trim();
+    if (!instructions) return;
+    await ws.startCodexReview(session, { type: "custom", instructions });
+    return;
+  }
+  await ws.startCodexReview(session, { type: "uncommittedChanges" });
 }
 
 function toggleLocationMenu() {
@@ -2661,6 +2697,19 @@ function selectSlashPanelReasoning(level: string) {
                 <span>目标</span>
                 <small>{{ codexGoalEnabled ? "已开启" : "未开启" }}</small>
               </button>
+              <button type="button" @click="toggleReviewMenu">
+                <svg viewBox="0 0 16 16" fill="none" aria-hidden="true">
+                  <path d="M8 2.5 2 5.5v2.2c0 3.3 2.4 5.6 6 6.3 3.6-.7 6-3 6-6.3V5.5L8 2.5Z" stroke="currentColor" stroke-width="1.35" stroke-linejoin="round"/>
+                  <path d="M6 8.2l1.4 1.4L10.4 6.6" stroke="currentColor" stroke-width="1.35" stroke-linecap="round" stroke-linejoin="round"/>
+                </svg>
+                <span>代码审查</span>
+                <small>原生 review/start</small>
+              </button>
+              <div v-if="reviewMenuOpen" class="codex-review-scope-menu">
+                <button type="button" @click="startReview('uncommittedChanges')">审查未提交的改动</button>
+                <button type="button" @click="startReview('baseBranch')">与 base 分支比较</button>
+                <button type="button" @click="startReview('custom')">自定义审查指令</button>
+              </div>
             </div>
           </div>
           <button

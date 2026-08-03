@@ -457,7 +457,20 @@ export type CodexTraceSnapshot = {
   goal?: CodexTraceGoal | null;
   plan?: CodexTracePlan | null;
   finalText: string;
+  /** 原生代码审查模式状态（enteredReviewMode / exitedReviewMode item）。 */
+  reviewMode?: {
+    active: boolean;
+    review?: string | null;
+    updatedAt?: string | null;
+  } | null;
 };
+
+/** review/start 的审查目标（ReviewTarget）。 */
+export type CodexReviewTarget =
+  | { type: "uncommittedChanges" }
+  | { type: "baseBranch"; branch: string }
+  | { type: "commit"; sha: string; title?: string }
+  | { type: "custom"; instructions: string };
 
 export type AiProviderTrace = {
   aiSessionId: string;
@@ -1216,6 +1229,19 @@ export const desktopApi = {
     ipc<AgentRole[]>("list_chatroom_roles"),
   steerCodexChat: (req: SteerCodexChatRequest): Promise<boolean> =>
     ipc<boolean>("steer_codex_chat", req),
+  codexStartReview: (
+    aiSessionId: string,
+    projectPath: string,
+    target: CodexReviewTarget,
+    delivery: "inline" | "detached" = "inline",
+  ): Promise<{ reviewThreadId: string; turnId: string }> =>
+    ipc<{ reviewThreadId: string; turnId: string }>(
+      "codex_start_review",
+      aiSessionId,
+      projectPath,
+      target,
+      delivery,
+    ),
   listCodexThreads: (req: CodexThreadListRequest): Promise<CodexThreadListResponse> =>
     ipc<CodexThreadListResponse>("list_codex_threads", req),
   readCodexThread: (req: CodexThreadReadRequest): Promise<CodexNativeThread> =>

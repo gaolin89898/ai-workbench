@@ -10,7 +10,7 @@ import * as fsSync from "node:fs";
 import * as fs from "node:fs/promises";
 import * as os from "node:os";
 import * as path from "node:path";
-import type { RunCodexChatRequest, SteerCodexChatRequest, ChatContextAttachment, ChatFileAttachment, ChatImageAttachment, ChatSegment, CodexApprovalDecision, CodexApprovalMode, CodexTraceSnapshot, CodexFileSystemPermissionEntry, CodexModelOption, CodexReasoningEffort, CodexReasoningEffortOption, CodexServiceTierOption, CodexPermissionGrantScope, CodexRequestedPermissions, CodexUserInputQuestion } from "../services/desktop";
+import type { RunCodexChatRequest, SteerCodexChatRequest, ChatContextAttachment, ChatFileAttachment, ChatImageAttachment, ChatSegment, CodexApprovalDecision, CodexApprovalMode, CodexTraceSnapshot, CodexReviewTarget, CodexFileSystemPermissionEntry, CodexModelOption, CodexReasoningEffort, CodexReasoningEffortOption, CodexServiceTierOption, CodexPermissionGrantScope, CodexRequestedPermissions, CodexUserInputQuestion } from "../services/desktop";
 import { formatChatContext } from "../shared/chat_context";
 import { reportTokenUsage } from "./sync";
 import { getLocalAiSession, resetLocalAiTrace, upsertLocalAiTrace } from "./db";
@@ -73,6 +73,8 @@ interface CodexSession {
   turnResolver: { resolve: () => void; reject: (error: Error) => void } | null;
   errorEmitted: boolean;
   cancelled: boolean;
+  /** 原生代码审查（review/start）运行中：session 保持活跃直到 exitedReviewMode。 */
+  reviewActive: boolean;
   approvalMode: CodexApprovalMode;
   reportedTokenUsageKeys: Set<string>;
   currentTurnStartedAtMs: number | null;
@@ -389,6 +391,17 @@ function finishCodexSessionTrace(
 function errorMessage(err: unknown): string {
   if (err instanceof Error) return err.message;
   return String(err);
+}
+
+// recordValue / strValue：从任意载荷安全提取对象与字符串（review item 解析用）。
+function recordValue(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : {};
+}
+
+function strValue(value: unknown): string | undefined {
+  return typeof value === "string" && value.length > 0 ? value : undefined;
 }
 
 function delay(ms: number): Promise<void> {
@@ -1204,6 +1217,18 @@ function handleNotification(
       }
       break;
     }
+    case "item/completed": {
+      // 原生代码审查结束：exitedReviewMode item 到达后清理会话，让后续消息可复用。
+      const p = recordValue(params);
+      const item = recordValue(p.item ?? p);
+      if (strValue(item.type) === "exitedReviewMode" && session.reviewActive) {
+        session.reviewActive = false;
+        clearCodexTurnTimeout(session);
+        senderSafeSend(session, "codex-review-complete", { aiSessionId: session.aiSessionId });
+        void finishCodexReviewSession(session);
+      }
+      break;
+    }
     case "error": {
       const msg = extractErrorMessage(params) ?? "未知错误";
       if (!isCodexReconnectMessage(msg)) session.errorEmitted = true;
@@ -1248,6 +1273,7 @@ function createSession(
     turnResolver: null,
     errorEmitted: false,
     cancelled: false,
+    reviewActive: false,
     approvalMode,
     reportedTokenUsageKeys: new Set(),
     currentTurnStartedAtMs: null,
@@ -1654,6 +1680,105 @@ export async function runCodexChat(
     if (activeCodexSessions.get(aiSessionId) === session) {
       activeCodexSessions.delete(aiSessionId);
     }
+  }
+}
+
+// ---------- 原生代码审查（review/start） ----------
+
+// senderSafeSend 安全转发会话事件到 renderer（会话可能已关闭）。
+function senderSafeSend(session: CodexSession, channel: string, payload: unknown): void {
+  try {
+    session.sender.send(channel, payload);
+  } catch {
+    // renderer 已关闭或发送失败时忽略
+  }
+}
+
+// finishCodexReviewSession 在 exitedReviewMode 后清理审查会话，释放后续消息通道。
+async function finishCodexReviewSession(session: CodexSession): Promise<void> {
+  if (activeCodexSessions.get(session.aiSessionId) === session) {
+    activeCodexSessions.delete(session.aiSessionId);
+  }
+  killSession(session);
+}
+
+/**
+ * 启动 Codex 原生代码审查（review/start）。
+ *
+ * review 在指定 thread 上运行，事件（enteredReviewMode / exitedReviewMode
+ * item）通过既有 trace 流推送到 renderer。返回后 session 保持活跃，
+ * 直到 exitedReviewMode item 到达（见 handleNotification）才清理。
+ */
+export async function startCodexReview(
+  aiSessionId: string,
+  projectPath: string,
+  target: CodexReviewTarget,
+  delivery: "inline" | "detached",
+  sender: Sender,
+): Promise<{ reviewThreadId: string; turnId: string }> {
+  const existingSession = activeCodexSessions.get(aiSessionId);
+  if (existingSession && !existingSession.closed && !existingSession.cancelled) {
+    throw new Error("当前 Codex 会话仍在执行，请等待完成或先停止当前任务。");
+  }
+  const session = createSession(aiSessionId, resolveCodexCwd(projectPath).resolvedCwd, sender, true, "custom");
+  const now = new Date().toISOString();
+  const initialTrace = resetLocalAiTrace({
+    aiSessionId,
+    providerId: "codex",
+    traceKind: "codex",
+    status: "running",
+    snapshot: {
+      provider: "codex",
+      status: "running",
+      threadId: null,
+      turnId: null,
+      startedAt: now,
+      updatedAt: now,
+      completedAt: null,
+      items: [],
+      approvals: [],
+      errors: [],
+      finalText: "",
+      reviewMode: null,
+    },
+  });
+  session.traceSnapshot = initialTrace.snapshot as CodexTraceSnapshot;
+  sender.send("ai-trace-update", {
+    aiSessionId,
+    trace: {
+      ...initialTrace,
+      segments: codexTraceSnapshotToSegments(session.traceSnapshot),
+    },
+  });
+  activeCodexSessions.set(aiSessionId, session);
+  refreshCodexTurnTimeout(session);
+
+  try {
+    await sendRequestWithReconnectRetry(session, "initialize", CODEX_INITIALIZE_PARAMS);
+    await applyCodexSkillsExtraRoots(session);
+    const threadInfo = await ensureThread(session, aiSessionId);
+
+    session.reviewActive = true;
+    const response = await sendRequestWithReconnectRetry(session, "review/start", {
+      threadId: threadInfo.threadId,
+      target,
+      delivery,
+    });
+    const result = recordValue(response.result);
+    const reviewThreadId = strValue(result.reviewThreadId) ?? threadInfo.threadId;
+    const turn = recordValue(result.turn);
+    const turnId = strValue(turn.id) ?? "";
+    return { reviewThreadId, turnId };
+  } catch (err) {
+    session.reviewActive = false;
+    if (!session.cancelled) {
+      emitSessionError(session, errorMessage(err));
+    }
+    killSession(session);
+    if (activeCodexSessions.get(aiSessionId) === session) {
+      activeCodexSessions.delete(aiSessionId);
+    }
+    throw err;
   }
 }
 

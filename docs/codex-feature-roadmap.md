@@ -53,7 +53,7 @@
 | 14 | Skills 管理 | 已接入：支持发现、查看、启停、额外目录和实时刷新（SkillsManagementPanel.vue、codex_skills.ts） | 已完成 | 已完成 |
 | 15 | Hooks 管理 | 缺查看、信任审查、启停和执行状态 | 中 | P1 |
 | 16 | Claude Code 配置迁移 | 缺配置、Skills、MCP、Hooks、命令和历史会话导入 | 中 | P1 |
-| 17 | 原生代码审查 | 未接入 `review/start`、审查模式和行内评论 | 中 | P1 |
+| 17 | 原生代码审查 | 已接入：`review/start`（uncommittedChanges / baseBranch / commit / custom 四种 target，inline/detached delivery），审查进度与结果通过 `enteredReviewMode` / `exitedReviewMode` item 实时同步到执行过程 | 已完成 | 已完成 |
 | 18 | 文件附件发送 | 已接入：图片使用原生 image 输入，PDF、Office、Markdown 和代码使用本地 `mention` 附件输入 | 已完成 | 已完成 |
 | 19 | Codex 独立沙盒终端 | 不采用：与现有本机终端功能重复，不展示聊天任务运行步骤，已移除 `command/exec` 接入 | 不做 | 已取消 |
 | 20 | Fast 服务档位 | 已接入：按模型动态展示服务档位，支持默认/Fast 等档位选择、偏好保存、桌面与移动端同步并传入 `turn/start` | 已完成 | 已完成 |
@@ -84,7 +84,7 @@
 2. Goal Mode 完整控制和上下文压缩已完成。
 3. Codex 配置中心、权限配置和 Skills 管理已完成；Hooks 管理界面待接入。
 4. 接入 Claude Code 配置迁移。
-5. 文件附件发送已完成；原生代码审查待接入。
+5. 文件附件发送已完成；原生代码审查已接入（review/start + 审查模式状态同步，行内评论待产品化）。
 
 ### 第三阶段：高级代理能力（部分已实现）
 

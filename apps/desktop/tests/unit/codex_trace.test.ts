@@ -122,8 +122,58 @@ describe("replayCodexTraceEvents", () => {
   });
 });
 
-describe("codexTraceSnapshotToSegments", () => {
-  it("emits a running status segment while the turn runs", () => {
+describe("review mode", () => {
+  it("marks reviewMode active on enteredReviewMode and inactive on exitedReviewMode", () => {
+    let snapshot = reduceCodexTraceSnapshot(null, {
+      method: "item/started",
+      params: {
+        item: { id: "review-1", type: "enteredReviewMode", review: "开始审查" },
+      },
+      receivedAt: "2026-07-30T00:00:00.000Z",
+    });
+    expect(snapshot.reviewMode?.active).toBe(true);
+    expect(snapshot.reviewMode?.review).toBe("开始审查");
+    // 审查模式 item 不进入执行 items。
+    expect(snapshot.items).toHaveLength(0);
+
+    snapshot = reduceCodexTraceSnapshot(snapshot, {
+      method: "item/completed",
+      params: {
+        item: { id: "review-1", type: "exitedReviewMode", review: "发现 2 个问题" },
+      },
+      receivedAt: "2026-07-30T00:00:05.000Z",
+    });
+    expect(snapshot.reviewMode?.active).toBe(false);
+    expect(snapshot.reviewMode?.review).toBe("发现 2 个问题");
+  });
+
+  it("emits review status and result segments from the snapshot", () => {
+    const segments = codexTraceSnapshotToSegments({
+      provider: "codex",
+      status: "completed",
+      updatedAt: "2026-07-30T00:00:05.000Z",
+      items: [],
+      approvals: [],
+      errors: [],
+      finalText: "",
+      reviewMode: {
+        active: false,
+        review: "审查完成：登录模块存在弱口令风险",
+        updatedAt: "2026-07-30T00:00:05.000Z",
+      },
+    });
+    const result = segments.find((segment) => segment.stepId === "review-result");
+    expect(result).toBeDefined();
+    expect(result?.type).toBe("thought");
+    expect(result?.text).toContain("弱口令");
+    // 已完成的审查结果默认折叠
+    expect((result as { collapsed?: boolean }).collapsed).toBe(true);
+    // 非 active 状态不显示"代码审查中"
+    expect(segments.find((segment) => segment.stepId === "review-mode")).toBeUndefined();
+  });
+});
+
+describe("codexTraceSnapshotToSegments", () => {  it("emits a running status segment while the turn runs", () => {
     const segments = codexTraceSnapshotToSegments({
       provider: "codex",
       status: "running",

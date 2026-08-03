@@ -30,7 +30,7 @@ import {
   fetchDesktopAppRelease,
 } from "./sync";
 import { saveCredentials, loadCredentials, clearCredentials } from "./credentials";
-import { getCodexApprovalMode, hasLiveCodexChat, listCodexModels, respondCodexApproval, respondCodexUserInput, runCodexChat, steerCodexChat, stopCodexChat } from "./codex";
+import { getCodexApprovalMode, hasLiveCodexChat, listCodexModels, respondCodexApproval, respondCodexUserInput, runCodexChat, startCodexReview, steerCodexChat, stopCodexChat } from "./codex";
 import {
   archiveCodexThread,
   batchWriteCodexConfig,
@@ -89,6 +89,7 @@ import type {
   CodexThreadRenameRequest,
   CodexThreadArchiveRequest,
   CodexThreadGoalSetRequest,
+  CodexReviewTarget,
   ChatFileAttachment,
   ChatMessage,
   ProjectOpenTarget,
@@ -516,6 +517,24 @@ export function registerIpcHandlers(win?: BrowserWindow): void {
   handle("steer_codex_chat", async (_event, args: [SteerCodexChatRequest]) =>
     steerCodexChat(args[0])
   );
+
+  // 原生代码审查：review/start（target 见 CodexReviewTarget）。
+  handle("codex_start_review", async (_event, args: [string, string, CodexReviewTarget, "inline" | "detached"]) => {
+    const [aiSessionId, projectPath, target, delivery] = args;
+    const session = db.getLocalAiSession(aiSessionId);
+    const sync = getDesktopCloudSync();
+    sync?.beginAiTurn(aiSessionId);
+    const sender = sync?.createRendererAndMobileAiChatSender(getSender()) ?? getSender();
+    db.updateLocalAiSession(aiSessionId, { status: "running" });
+    try {
+      const result = await startCodexReview(aiSessionId, projectPath, target, delivery ?? "inline", sender);
+      db.updateLocalAiSession(aiSessionId, { status: "running", providerSessionId: session?.providerSessionId ?? result.reviewThreadId });
+      return result;
+    } catch (err) {
+      db.updateLocalAiSession(aiSessionId, { status: "failed" });
+      throw err;
+    }
+  });
 
   // ---------- Multi-agent pipeline ----------
 

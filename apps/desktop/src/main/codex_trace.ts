@@ -300,6 +300,7 @@ function snapshotBase(now: string): CodexTraceSnapshot {
     approvals: [],
     errors: [],
     finalText: "",
+    reviewMode: null,
   };
 }
 
@@ -334,7 +335,7 @@ function itemFromParams(params: unknown, receivedAt: string): CodexTraceItem {
   const toolCall = isMcpToolCallRawType(rawType) || isDynamicToolCallRawType(rawType);
   const error = firstString(record(item.error).message, record(p.error).message, item.error, p.error) ?? null;
   const command = firstString(item.command, item.commandText, p.command, p.commandText) ?? extractFilePath(item, p);
-  const text = error ?? firstString(item.text, item.summary, item.message, item.detail, p.text, p.summary, p.message, p.detail) ?? "";
+  const text = error ?? firstString(item.text, item.summary, item.review, item.message, item.detail, p.text, p.summary, p.review, p.message, p.detail) ?? "";
   const output = toolCall
     ? toolResultText(item.result ?? item.contentItems ?? p.result ?? p.contentItems) ?? null
     : firstString(item.output, item.result, p.output, p.result) ?? null;
@@ -424,6 +425,30 @@ export function reduceCodexTraceSnapshot(
     }
     case "item/started": {
       const item = itemFromParams(event.params, now);
+      // 原生代码审查模式：enteredReviewMode / exitedReviewMode 是模式状态 item，
+      // 不进入执行 items，只在 snapshot.reviewMode 上记录状态。
+      if (item.rawItemType === "enteredReviewMode") {
+        snapshot = {
+          ...snapshot,
+          reviewMode: {
+            active: true,
+            review: item.text || null,
+            updatedAt: now,
+          },
+        };
+        break;
+      }
+      if (item.rawItemType === "exitedReviewMode") {
+        snapshot = {
+          ...snapshot,
+          reviewMode: {
+            active: false,
+            review: item.text || snapshot.reviewMode?.review || null,
+            updatedAt: now,
+          },
+        };
+        break;
+      }
       if (!isInternalUserMessageRawType(item.rawItemType) && !isNoisyTraceRawType(item.rawItemType)) {
         snapshot = upsertItem(snapshot, item);
       }
@@ -531,6 +556,18 @@ export function reduceCodexTraceSnapshot(
     }
     case "item/completed": {
       const completed = itemFromParams(event.params, now);
+      // 审查模式退出：标记 reviewMode 结束，不进入执行 items。
+      if (completed.rawItemType === "exitedReviewMode") {
+        snapshot = {
+          ...snapshot,
+          reviewMode: {
+            active: false,
+            review: completed.text || snapshot.reviewMode?.review || null,
+            updatedAt: now,
+          },
+        };
+        break;
+      }
       if (isInternalUserMessageRawType(completed.rawItemType)) break;
       if (isNoisyTraceRawType(completed.rawItemType)) break;
       const current = snapshot.items.find((item) => item.id === completed.id);
@@ -781,6 +818,30 @@ export function codexTraceSnapshotToSegments(snapshot: CodexTraceSnapshot): Chat
       stepId: "active-goal",
       objective: snapshot.goal.objective,
     });
+  }
+
+  const reviewMode = snapshot.reviewMode;
+  if (reviewMode) {
+    if (reviewMode.active) {
+      segments.push({
+        type: "status",
+        stepId: "review-mode",
+        label: "代码审查中",
+        icon: "read",
+        status: "running",
+        startedAt: reviewMode.updatedAt ?? undefined,
+        rawItemType: "enteredReviewMode",
+      });
+    }
+    if (reviewMode.review?.trim()) {
+      segments.push({
+        type: "thought",
+        stepId: "review-result",
+        title: "审查结果",
+        text: reviewMode.review.trim(),
+        collapsed: !reviewMode.active,
+      });
+    }
   }
 
   for (const item of snapshot.items) {
