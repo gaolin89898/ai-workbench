@@ -96,6 +96,16 @@ func (h *Handler) authQuery(r *http.Request) (uuid.UUID, uuid.UUID, bool) {
 	if err != nil {
 		return uuid.Nil, uuid.Nil, false
 	}
+	// 被禁用的账号拒绝建立 WebSocket 连接（无 DB 的场景如单元测试跳过检查）。
+	if h.DB != nil {
+		var disabled bool
+		if err := h.DB.Pool.QueryRow(r.Context(), "SELECT disabled FROM users WHERE id = $1", userID.String()).Scan(&disabled); err != nil {
+			return uuid.Nil, uuid.Nil, false
+		}
+		if disabled {
+			return uuid.Nil, uuid.Nil, false
+		}
+	}
 	var deviceID uuid.UUID
 	if claims.DeviceID != "" {
 		if d, err := uuid.Parse(claims.DeviceID); err == nil {

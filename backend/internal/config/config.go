@@ -7,7 +7,10 @@
 // variable (default 3000) per the migration spec.
 package config
 
-import "os"
+import (
+	"errors"
+	"os"
+)
 
 // Config groups every runtime knob the relay server reads.
 type Config struct {
@@ -47,7 +50,7 @@ type Config struct {
 func Load() Config {
 	return Config{
 		DatabaseURL:   getenv("DATABASE_URL", "postgres://remote_term:remote_term@localhost:5432/remote_term"),
-		JWTSecret:     getenv("JWT_SECRET", "dev-secret-change-me"),
+		JWTSecret:     getenv("JWT_SECRET", ""),
 		Port:          getenv("PORT", "3000"),
 		CORSOrigins:   getenv("CORS_ORIGINS", "*"),
 		MigrationsDir: getenv("MIGRATIONS_DIR", "./migrations"),
@@ -95,4 +98,21 @@ func getenv(key, fallback string) string {
 		return v
 	}
 	return fallback
+}
+
+// ValidateJWTSecret 校验 JWT 密钥强度。生产环境不允许空值、已知默认值或
+// 过短的密钥——这些密钥公开或可预测，会导致任意伪造登录令牌。
+func ValidateJWTSecret(secret string) error {
+	if secret == "" {
+		return errors.New("JWT_SECRET is not set; set a random secret of at least 32 characters")
+	}
+	// 历史默认值（README 曾建议 change-this-in-production）一律拒绝。
+	switch secret {
+	case "dev-secret-change-me", "change-this-in-production", "secret":
+		return errors.New("JWT_SECRET uses a known default value; set a random secret of at least 32 characters")
+	}
+	if len(secret) < 32 {
+		return errors.New("JWT_SECRET is too short (need at least 32 characters)")
+	}
+	return nil
 }

@@ -30,6 +30,11 @@ import (
 func main() {
 	cfg := config.Load()
 
+	// 校验生产 JWT 密钥：默认值或过短的密钥直接拒绝启动，防止使用公开密钥签发令牌。
+	if err := config.ValidateJWTSecret(cfg.JWTSecret); err != nil {
+		log.Fatalf("jwt secret: %v", err)
+	}
+
 	// 1. Connect PostgreSQL.
 	ctx := context.Background()
 	database, err := db.New(ctx, cfg.DatabaseURL)

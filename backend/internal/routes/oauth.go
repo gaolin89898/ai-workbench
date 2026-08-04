@@ -288,6 +288,17 @@ func (h *Handler) githubPoll(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// 一次性领取：poll 拿到令牌后立即清空存储，防止 state 泄漏后重复换取。
+	if accessToken.Valid && status == "done" {
+		if _, err := h.DB.Pool.Exec(r.Context(),
+			`UPDATE oauth_states SET access_token = NULL, refresh_token = NULL WHERE state = $1 AND status = 'done'`,
+			state,
+		); err != nil {
+			writeInternal(w)
+			return
+		}
+	}
+
 	resp := githubPollResponse{Status: status}
 	if accessToken.Valid {
 		resp.AccessToken = accessToken.String
@@ -704,6 +715,17 @@ func (h *Handler) googlePoll(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		writeError(w, http.StatusNotFound, "state not found")
 		return
+	}
+
+	// 一次性领取：poll 拿到令牌后立即清空存储，防止 state 泄漏后重复换取。
+	if accessToken.Valid && status == "done" {
+		if _, err := h.DB.Pool.Exec(r.Context(),
+			`UPDATE oauth_states SET access_token = NULL, refresh_token = NULL WHERE state = $1 AND status = 'done'`,
+			state,
+		); err != nil {
+			writeInternal(w)
+			return
+		}
 	}
 
 	resp := googlePollResponse{Status: status}

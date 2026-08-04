@@ -97,6 +97,13 @@ func validateCredentials(email, password string) error {
 	return nil
 }
 
+// isReservedAccount 返回保留账号名。这些账号不允许通过注册或桌面登录自动创建，
+// 避免管理员账号被抢先注册（管理员身份由 users.is_admin 列决定，与账号名无关）。
+func isReservedAccount(email string) bool {
+	lower := strings.ToLower(strings.TrimSpace(email))
+	return lower == "admin" || strings.HasPrefix(lower, "admin@")
+}
+
 // authenticate extracts the user id from the Authorization header. Used by
 // routes that sit on the public mux but still require authentication
 // (approve_desktop_pairing_request). Returns ("", false) on failure.
@@ -124,6 +131,10 @@ func (h *Handler) register(w http.ResponseWriter, r *http.Request) {
 	}
 	if err := validateCredentials(req.Email, req.Password); err != nil {
 		writeBadRequest(w, err.Error())
+		return
+	}
+	if isReservedAccount(req.Email) {
+		writeBadRequest(w, "account is reserved")
 		return
 	}
 
@@ -240,14 +251,19 @@ func (h *Handler) loginDesktop(w http.ResponseWriter, r *http.Request) {
 
 // findOrCreateUser looks up the user by email. If not found, registers a new
 // user. If found, verifies the password. Returns userID on success.
+// 保留账号（如 admin）禁止自动注册；被禁用的账号拒绝登录。
 func (h *Handler) findOrCreateUser(r *http.Request, email, password string) (string, error) {
 	lowerEmail := strings.ToLower(email)
+	if isReservedAccount(lowerEmail) {
+		return "", errors.New("account is reserved")
+	}
 
 	var userID, passwordHash string
+	var disabled bool
 	err := h.DB.Pool.QueryRow(r.Context(),
-		"SELECT id, password_hash FROM users WHERE email = $1",
+		"SELECT id, password_hash, disabled FROM users WHERE email = $1",
 		lowerEmail,
-	).Scan(&userID, &passwordHash)
+	).Scan(&userID, &passwordHash, &disabled)
 
 	if errors.Is(err, pgx.ErrNoRows) {
 		// User doesn't exist — register them.
@@ -281,6 +297,11 @@ func (h *Handler) findOrCreateUser(r *http.Request, email, password string) (str
 
 	if err != nil {
 		return "", err
+	}
+
+	// 被禁用的账号拒绝登录（含桌面端登录自动注册路径）。
+	if disabled {
+		return "", errors.New("account is disabled")
 	}
 
 	// User exists — verify password.
@@ -361,16 +382,21 @@ func (h *Handler) findOrCreateDesktopDeviceTx(ctx context.Context, tx pgx.Tx, us
 
 func (h *Handler) verifyUserPassword(w http.ResponseWriter, r *http.Request, email, password string) (string, bool) {
 	var userID, passwordHash string
+	var disabled bool
 	err := h.DB.Pool.QueryRow(r.Context(),
-		"SELECT id, password_hash FROM users WHERE email = $1",
+		"SELECT id, password_hash, disabled FROM users WHERE email = $1",
 		strings.ToLower(email),
-	).Scan(&userID, &passwordHash)
+	).Scan(&userID, &passwordHash, &disabled)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			writeError(w, http.StatusNotFound, "user not found")
 			return "", false
 		}
 		writeInternal(w)
+		return "", false
+	}
+	if disabled {
+		writeError(w, http.StatusForbidden, "account is disabled")
 		return "", false
 	}
 	if err := auth.VerifyPassword(passwordHash, password); err != nil {

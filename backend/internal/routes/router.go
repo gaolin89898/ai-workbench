@@ -5,9 +5,14 @@
 package routes
 
 import (
+	"context"
 	"encoding/json"
+	"errors"
 	"log"
 	"net/http"
+	"time"
+
+	"github.com/jackc/pgx/v5"
 
 	"github.com/gaolin89898/ai-workbench/backend/internal/auth"
 	"github.com/gaolin89898/ai-workbench/backend/internal/db"
@@ -110,9 +115,25 @@ func (h *Handler) Router() http.Handler {
 	authed.HandleFunc("POST /token-usage", h.reportTokenUsage)
 	authed.HandleFunc("GET /token-usage/summary", h.getTokenUsageSummary)
 
-	mux.Handle("/", auth.AuthMiddleware(h.Secret, authed))
+	mux.Handle("/", auth.AuthMiddlewareWithCheck(h.Secret, func(ctx context.Context, userID string) (bool, error) {
+		if h.DB == nil {
+			// 无 DB 的场景（单元测试）跳过账号状态检查。
+			return false, nil
+		}
+		var disabled bool
+		err := h.DB.Pool.QueryRow(ctx, "SELECT disabled FROM users WHERE id = $1", userID).Scan(&disabled)
+		if err != nil {
+			if errors.Is(err, pgx.ErrNoRows) {
+				// 账号已被删除：视为禁用。
+				return true, nil
+			}
+			return false, err
+		}
+		return disabled, nil
+	}, authed))
 
-	return corsMiddleware(mux)
+	// 限流在最外层：默认 300 次/分钟/IP，防刷公共接口。
+	return rateLimitMiddleware(newRateLimiter(300, time.Minute), corsMiddleware(mux))
 }
 
 // corsMiddleware adds permissive CORS headers and short-circuits preflight

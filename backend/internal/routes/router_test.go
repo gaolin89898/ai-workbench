@@ -6,6 +6,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 
@@ -135,8 +136,7 @@ func TestCORSHeadersOnRegularResponse(t *testing.T) {
 	}
 }
 
-func TestUnknownRoute(t *testing.T) {
-	h := newTestHandler()
+func TestUnknownRoute(t *testing.T) {	h := newTestHandler()
 
 	t.Run("without token hits the auth wall first", func(t *testing.T) {
 		// Unknown paths fall through to the "/" root handler, which is wrapped
@@ -159,4 +159,48 @@ func TestUnknownRoute(t *testing.T) {
 			t.Fatalf("unknown route with token status = %d, want 404", rec.Code)
 		}
 	})
+}
+
+func TestRateLimit(t *testing.T) {
+	h := newTestHandler()
+	// 每个 Router() 新建限流器：构造一个只允许 3 次/窗口的实例。
+	limiter := newRateLimiter(3, time.Minute)
+	_ = h
+
+	// 直接验证限流器本身，避免依赖路由行为。
+	if !limiter.allow("10.0.0.1") || !limiter.allow("10.0.0.1") || !limiter.allow("10.0.0.1") {
+		t.Fatal("first three requests should be allowed")
+	}
+	if limiter.allow("10.0.0.1") {
+		t.Fatal("fourth request within the window should be rejected")
+	}
+	// 不同 IP 不受影响。
+	if !limiter.allow("10.0.0.2") {
+		t.Fatal("another IP should have its own budget")
+	}
+}
+
+func TestRateLimitHealthBypass(t *testing.T) {
+	h := newTestHandler()
+	limiter := newRateLimiter(1, time.Minute)
+	handler := rateLimitMiddleware(limiter, h.Router())
+
+	// health 不占配额。
+	for i := 0; i < 3; i++ {
+		r := httptest.NewRequest(http.MethodGet, "/health", nil)
+		rec := httptest.NewRecorder()
+		handler.ServeHTTP(rec, r)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("health request %d = %d, want 200", i, rec.Code)
+		}
+	}
+	// 其他请求超过配额后 429。
+	r := httptest.NewRequest(http.MethodGet, "/auth/login", nil)
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, r)
+	rec = httptest.NewRecorder()
+	handler.ServeHTTP(rec, r)
+	if rec.Code != http.StatusTooManyRequests {
+		t.Fatalf("rate-limited request = %d, want 429", rec.Code)
+	}
 }

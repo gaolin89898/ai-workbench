@@ -365,8 +365,13 @@ func (h *Handler) requireAdminUser(w http.ResponseWriter, r *http.Request) bool 
 		return false
 	}
 
-	var email string
-	err := h.DB.Pool.QueryRow(r.Context(), "SELECT email FROM users WHERE id = $1", userID).Scan(&email)
+	// 管理员身份由 users.is_admin 列决定（migration 0017），不再依赖
+	// "email == admin" 判断，防止通过自动注册抢占 admin 账号。
+	var isAdmin bool
+	err := h.DB.Pool.QueryRow(r.Context(),
+		"SELECT is_admin FROM users WHERE id = $1 AND NOT disabled",
+		userID,
+	).Scan(&isAdmin)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			writeError(w, http.StatusUnauthorized, "unauthorized")
@@ -375,7 +380,7 @@ func (h *Handler) requireAdminUser(w http.ResponseWriter, r *http.Request) bool 
 		writeInternal(w)
 		return false
 	}
-	if email != "admin" {
+	if !isAdmin {
 		writeForbidden(w)
 		return false
 	}

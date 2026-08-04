@@ -210,7 +210,8 @@ func (d *DB) UpsertProjects(ctx context.Context, deviceID string, projects []mod
             INSERT INTO workspace_projects (id, device_id, name, path, git_branch, git_dirty, updated_at)
             VALUES ($1, $2, $3, $4, $5, $6, $7)
             ON CONFLICT (id)
-            DO UPDATE SET device_id = EXCLUDED.device_id, name = EXCLUDED.name, path = EXCLUDED.path, git_branch = EXCLUDED.git_branch, git_dirty = EXCLUDED.git_dirty, updated_at = EXCLUDED.updated_at`
+            DO UPDATE SET device_id = EXCLUDED.device_id, name = EXCLUDED.name, path = EXCLUDED.path, git_branch = EXCLUDED.git_branch, git_dirty = EXCLUDED.git_dirty, updated_at = EXCLUDED.updated_at
+            WHERE workspace_projects.device_id = EXCLUDED.device_id`
 	for _, p := range projects {
 		if _, err := tx.Exec(ctx, sql,
 			p.Id, deviceID, p.Name, p.Path, p.GitBranch, p.GitDirty, p.UpdatedAt,
@@ -232,7 +233,8 @@ func (d *DB) UpsertAiSessions(ctx context.Context, userID, deviceID string, sess
             INSERT INTO ai_sessions (id, user_id, device_id, project_id, provider_id, terminal_session_id, provider_session_id, title, status, summary, archived_at, updated_at)
             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
             ON CONFLICT (id)
-            DO UPDATE SET device_id = EXCLUDED.device_id, project_id = EXCLUDED.project_id, provider_id = EXCLUDED.provider_id, terminal_session_id = EXCLUDED.terminal_session_id, provider_session_id = EXCLUDED.provider_session_id, title = EXCLUDED.title, status = EXCLUDED.status, summary = EXCLUDED.summary, archived_at = EXCLUDED.archived_at, updated_at = EXCLUDED.updated_at`
+            DO UPDATE SET device_id = EXCLUDED.device_id, project_id = EXCLUDED.project_id, provider_id = EXCLUDED.provider_id, terminal_session_id = EXCLUDED.terminal_session_id, provider_session_id = EXCLUDED.provider_session_id, title = EXCLUDED.title, status = EXCLUDED.status, summary = EXCLUDED.summary, archived_at = EXCLUDED.archived_at, updated_at = EXCLUDED.updated_at
+            WHERE ai_sessions.user_id = EXCLUDED.user_id AND ai_sessions.device_id = EXCLUDED.device_id`
 	for _, s := range sessions {
 		if _, err := tx.Exec(ctx, sql,
 			s.Id, userID, deviceID, s.ProjectId, s.ProviderId,

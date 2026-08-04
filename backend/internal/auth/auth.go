@@ -189,6 +189,13 @@ func VerifyPassword(hashed, password string) error {
 // `{"error":"unauthorized"}`, mirroring ApiError::Unauthorized in error.rs
 // and authenticate_headers in auth.rs.
 func AuthMiddleware(secret string, next http.Handler) http.Handler {
+	return AuthMiddlewareWithCheck(secret, nil, next)
+}
+
+// AuthMiddlewareWithCheck 在 AuthMiddleware 基础上增加可选的账号状态检查：
+// isDisabled 返回 true 时拒绝请求（403），用于禁用账号后使其现有 token 立即失效。
+// isDisabled 为 nil 时退化为纯 token 校验。
+func AuthMiddlewareWithCheck(secret string, isDisabled func(ctx context.Context, userID string) (bool, error), next http.Handler) http.Handler {
 	const prefix = "Bearer "
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		authHeader := r.Header.Get("Authorization")
@@ -202,6 +209,17 @@ func AuthMiddleware(secret string, next http.Handler) http.Handler {
 		if err != nil {
 			writeUnauthorized(w)
 			return
+		}
+		if isDisabled != nil {
+			disabled, checkErr := isDisabled(r.Context(), claims.UserID)
+			if checkErr != nil {
+				http.Error(w, `{"error":"internal"}`, http.StatusInternalServerError)
+				return
+			}
+			if disabled {
+				http.Error(w, `{"error":"account is disabled"}`, http.StatusForbidden)
+				return
+			}
 		}
 		ctx := context.WithValue(r.Context(), userIDContextKey, claims.UserID)
 		if claims.DeviceID != "" {
