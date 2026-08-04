@@ -251,7 +251,7 @@ export async function gitCommit(
   const result = await git.commit(message);
   return {
     hash: result.commit,
-    summary: result.summary,
+    summary: `${result.summary.changes} changes, ${result.summary.insertions} insertions, ${result.summary.deletions} deletions`,
   };
 }
 
