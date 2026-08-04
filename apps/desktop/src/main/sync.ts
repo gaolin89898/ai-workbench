@@ -1,5 +1,5 @@
 
-import { app, type BrowserWindow } from "electron";
+import { app, safeStorage, type BrowserWindow } from "electron";
 import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
@@ -25,11 +25,14 @@ import {
   getLocalAiSession,
   getLocalAiTrace,
   updateLocalAiSession,
-  resolveWorkspaceProjectPath,
+  findWorkspaceProjectForPath,
+  addWorkspaceProject,
 } from "./db";
 import { detectAiProviders } from "./providers";
 import { assessCommandRisk } from "./risk";
 import { listCodexModels, respondCodexApproval, runCodexChat, stopCodexChat, warmupCodexSession } from "./codex";
+import { stopPipelineChat } from "./orchestrator";
+import { stopChatroomTurn } from "./chatroom";
 import { clearCredentials } from "./credentials";
 import { syncCodexHistoryMirror } from "./codex_sessions";
 import { runAiChat, stopAiChat } from "./claude";
@@ -360,7 +363,17 @@ function loadStoredConfig(): StoredCloudConfig | null {
   try {
     if (!fs.existsSync(configPath)) return null;
     const raw = fs.readFileSync(configPath, "utf-8");
-    const config = JSON.parse(raw) as StoredCloudConfig;
+    // 优先尝试 safeStorage 解密（保存时若加密可用会写入 encrypted:true）。
+    let payload = raw;
+    try {
+      const parsed = JSON.parse(raw) as { encrypted?: boolean; data?: string };
+      if (parsed.encrypted && parsed.data && safeStorage.isEncryptionAvailable()) {
+        payload = safeStorage.decryptString(Buffer.from(parsed.data, "base64"));
+      }
+    } catch {
+      // 非加密历史文件或解密失败——按明文解析兜底
+    }
+    const config = JSON.parse(payload) as StoredCloudConfig;
     return config;
   } catch {
     return null;
@@ -369,7 +382,17 @@ function loadStoredConfig(): StoredCloudConfig | null {
 
 function saveStoredConfig(config: StoredCloudConfig): void {
   try {
-    fs.writeFileSync(configPath, JSON.stringify(config, null, 2), "utf-8");
+    // 使用 Electron safeStorage 加密 access token 等敏感字段；加密不可用
+    // （如 Linux 无 keyring）时降级为明文并标记，避免启动失败。
+    if (safeStorage.isEncryptionAvailable()) {
+      const encrypted = safeStorage.encryptString(JSON.stringify(config));
+      fs.writeFileSync(configPath, JSON.stringify({
+        encrypted: true,
+        data: encrypted.toString("base64"),
+      }), "utf-8");
+    } else {
+      fs.writeFileSync(configPath, JSON.stringify(config, null, 2), "utf-8");
+    }
   } catch (e) {
     console.error("Failed to save cloud config:", e);
   }
@@ -1138,7 +1161,10 @@ class DesktopCloudSync {
     const stopped = await stopCodexChat(aiSessionId)
       || stopOpenCodeChat(aiSessionId)
       || stopMimoChat(aiSessionId)
-      || stopAiChat(aiSessionId);
+      || stopAiChat(aiSessionId)
+      // 多代理模式：流水线编排与聊天室同样响应停止。
+      || stopPipelineChat(aiSessionId)
+      || stopChatroomTurn(aiSessionId);
     if (stopped) {
       updateLocalAiSession(aiSessionId, { status: "completed" });
     }
@@ -1171,7 +1197,11 @@ class DesktopCloudSync {
     const project = msg.project;
     if (!project?.path) return;
     try {
-      await resolveWorkspaceProjectPath(project.path);
+      // addWorkspaceProject 会校验目录在本机真实存在，拒绝任意路径注册。
+      const existing = findWorkspaceProjectForPath(project.path);
+      if (!existing) {
+        await addWorkspaceProject(project.path);
+      }
     } catch {
       // project path may not exist on this machine — ignore
     }
@@ -1189,13 +1219,16 @@ class DesktopCloudSync {
       let sessionProjectPath = projectPath ?? null;
 
       if (projectPath) {
-        // 如果移动端传入的是已有项目里的子文件夹，会归到已有项目，避免自动新增子项目。
-        try {
-          sessionProjectPath = await resolveWorkspaceProjectPath(projectPath);
-        } catch {
-          // project may not exist or git may be unavailable — ignore
+        // 只接受桌面端已注册的项目路径（或其中的子文件夹），不允许移动端
+        // 传入任意本机绝对路径触发自动注册——防止远程诱导 AI CLI 在
+        // 未授权目录运行。未注册的路径直接忽略。
+        const existing = findWorkspaceProjectForPath(projectPath);
+        if (existing) {
+          sessionProjectPath = existing.path;
+          this.sessionProjectPaths.set(aiSessionId, sessionProjectPath);
+        } else {
+          sessionProjectPath = null;
         }
-        this.sessionProjectPaths.set(aiSessionId, sessionProjectPath ?? projectPath);
       }
 
       if (!getLocalAiSession(aiSessionId)) {

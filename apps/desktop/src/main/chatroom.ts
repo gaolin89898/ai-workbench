@@ -173,6 +173,10 @@ export async function runChatroomTurn(
   sender: Sender,
 ): Promise<void> {
   const { aiSessionId, projectPath, prompt, images = [], attachments = [], contexts = [], config } = req;
+  // 同一会话不允许重复启动聊天室轮次，避免运行状态相互覆盖。
+  if (activeChatroomRuns.has(aiSessionId)) {
+    throw new Error("该聊天室会话正在运行，请等待完成或先停止。");
+  }
 
   const runState: ChatroomRunState = {
     aiSessionId,

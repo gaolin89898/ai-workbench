@@ -293,6 +293,11 @@ export function listWorkspaceProjects(): WorkspaceProject[] {
 export async function addWorkspaceProject(
   projectPath: string
 ): Promise<WorkspaceProject> {
+  // 只允许注册本机真实存在的目录，拒绝远程下发的任意路径（如项目创建
+  // 消息携带的路径），避免把不存在的目录登记为可运行 AI 的项目。
+  if (!fs.existsSync(projectPath) || !fs.statSync(projectPath).isDirectory()) {
+    throw new Error(`project directory does not exist: ${projectPath}`);
+  }
   const id = randomUUID();
   const name = path.basename(projectPath) || projectPath;
   const { branch, dirty } = await readGitStatus(projectPath);

@@ -13,7 +13,7 @@ import * as path from "node:path";
 import type { RunCodexChatRequest, SteerCodexChatRequest, ChatContextAttachment, ChatFileAttachment, ChatImageAttachment, ChatSegment, CodexApprovalDecision, CodexApprovalMode, CodexTraceSnapshot, CodexReviewTarget, CodexFileSystemPermissionEntry, CodexModelOption, CodexReasoningEffort, CodexReasoningEffortOption, CodexServiceTierOption, CodexPermissionGrantScope, CodexRequestedPermissions, CodexUserInputQuestion } from "../services/desktop";
 import { formatChatContext } from "../shared/chat_context";
 import { reportTokenUsage } from "./sync";
-import { getLocalAiSession, resetLocalAiTrace, upsertLocalAiTrace } from "./db";
+import { getLocalAiSession, resetLocalAiTrace, updateLocalAiSession, upsertLocalAiTrace } from "./db";
 import { codexTraceSnapshotToSegments, isCodexReconnectMessage, reduceCodexTraceSnapshot, type CodexRawTraceEvent } from "./codex_trace";
 
 // Structural sender — WebContents / BrowserWindow satisfy this, and test
@@ -1698,6 +1698,12 @@ function senderSafeSend(session: CodexSession, channel: string, payload: unknown
 async function finishCodexReviewSession(session: CodexSession): Promise<void> {
   if (activeCodexSessions.get(session.aiSessionId) === session) {
     activeCodexSessions.delete(session.aiSessionId);
+  }
+  // 审查结束：把本地会话状态从 running 恢复为 completed，避免侧边栏一直显示执行中。
+  try {
+    updateLocalAiSession(session.aiSessionId, { status: "completed" });
+  } catch {
+    // 本地记录缺失时忽略
   }
   killSession(session);
 }

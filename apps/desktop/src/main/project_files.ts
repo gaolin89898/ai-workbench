@@ -1,3 +1,4 @@
+import * as fs from "node:fs";
 import { readFile, readdir, stat } from "node:fs/promises";
 import path from "node:path";
 import { shell } from "electron";
@@ -22,6 +23,25 @@ function assertProjectChildPath(projectPath: string, targetPath: string): string
     throw new Error("path is outside project");
   }
   return target;
+}
+
+// assertProjectChildPathReal 在词法检查基础上解析 realpath，防止通过
+// 符号链接 / Windows Junction 逃出项目目录读取任意文件。
+function assertProjectChildPathReal(projectPath: string, targetPath: string): string {
+  const target = assertProjectChildPath(projectPath, targetPath);
+  let realTarget = target;
+  try {
+    realTarget = fs.realpathSync(target);
+  } catch {
+    // 目标不存在时无法解析 realpath——交给后续读取逻辑报错。
+    return target;
+  }
+  const rootReal = fs.realpathSync(projectRoot(projectPath));
+  const relative = path.relative(rootReal, realTarget);
+  if (relative === ".." || relative.startsWith(`..${path.sep}`) || path.isAbsolute(relative)) {
+    throw new Error("path escapes project via symlink");
+  }
+  return realTarget;
 }
 
 function previewMimeType(filePath: string): string {
@@ -59,7 +79,7 @@ export async function listProjectFiles(
   directoryPath?: string | null,
 ): Promise<WorkspaceFileEntry[]> {
   const root = projectRoot(projectPath);
-  const target = directoryPath ? assertProjectChildPath(projectPath, directoryPath) : root;
+  const target = directoryPath ? assertProjectChildPathReal(projectPath, directoryPath) : root;
   const targetStat = await stat(target);
   if (!targetStat.isDirectory()) throw new Error("target is not a directory");
   const entries = await readdir(target, { withFileTypes: true });
@@ -86,7 +106,7 @@ export async function readProjectFilePreview(
   projectPath: string,
   filePath: string,
 ): Promise<ProjectFilePreview> {
-  const target = assertProjectChildPath(projectPath, filePath);
+  const target = assertProjectChildPathReal(projectPath, filePath);
   const info = await stat(target);
   if (!info.isFile()) throw new Error("target is not a file");
   const mimeType = previewMimeType(target);
@@ -121,7 +141,7 @@ export async function readProjectFileForViewer(
   projectPath: string,
   filePath: string,
 ): Promise<ProjectFileViewerSource> {
-  const target = assertProjectChildPath(projectPath, filePath);
+  const target = assertProjectChildPathReal(projectPath, filePath);
   const info = await stat(target);
   if (!info.isFile()) throw new Error("target is not a file");
   const format = projectFileViewerFormat(target);
@@ -145,7 +165,7 @@ export async function openProjectHtmlInBrowser(
   projectPath: string,
   filePath: string,
 ): Promise<void> {
-  const target = assertProjectChildPath(projectPath, filePath);
+  const target = assertProjectChildPathReal(projectPath, filePath);
   const extension = path.extname(target).toLowerCase();
   if (extension !== ".html" && extension !== ".htm") {
     throw new Error("target is not an HTML file");

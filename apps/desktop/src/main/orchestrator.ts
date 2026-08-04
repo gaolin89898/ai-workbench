@@ -128,6 +128,10 @@ export async function runPipelineChat(
   sender: Sender,
 ): Promise<void> {
   const { aiSessionId, projectPath, prompt, images = [], attachments = [], contexts = [], pipeline } = req;
+  // 同一会话不允许重复启动流水线，避免运行状态相互覆盖。
+  if (activePipelineRuns.has(aiSessionId)) {
+    throw new Error("该流水线会话正在运行，请等待完成或先停止。");
+  }
   const totalSteps = pipeline.roles.length;
 
   const runState: PipelineRunState = {
